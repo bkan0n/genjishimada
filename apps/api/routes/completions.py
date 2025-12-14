@@ -434,7 +434,7 @@ async def _attempt_auto_verify(
     completion_id: int,
     data: CompletionCreateRequest,
 ) -> None:
-    hostname = "genjishimada-ocr" if os.getenv("API_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
+    hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
     try:
         async with (
             aiohttp.ClientSession() as session,

@@ -23,6 +23,8 @@ from middleware.auth import CustomAuthenticationMiddleware
 from routes import route_handlers
 from utilities.errors import CustomHTTPException
 
+APP_ENVIRONMENT = os.getenv("APP_ENVIRONMENT")
+
 RABBITMQ_USER = os.getenv("RABBITMQ_USER")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS")
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
@@ -30,8 +32,8 @@ RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
 POSTGRES_USER = os.getenv("POSTGRES_USER")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
-
-DEFAULT_DSN = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@genjishimada-db:5432/{POSTGRES_DB}"
+POSTGRES_HOST = "genjishimada-db" if APP_ENVIRONMENT == "production" else "genjishimada-db-dev"
+DEFAULT_DSN = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:5432/{POSTGRES_DB}"
 
 
 log = logging.getLogger(__name__)
@@ -131,9 +133,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         path="/docs",
         servers=[
             Server(
-                url="https://dev-api.genji.pk"
-                if os.getenv("API_ENVIRONMENT") == "development"
-                else "https://api.genji.pk",
+                url="https://dev-api.genji.pk" if APP_ENVIRONMENT == "development" else "https://api.genji.pk",
                 description="Default server",
             )
         ],
@@ -154,7 +154,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         traces_sample_rate=1.0,
         profile_session_sample_rate=1.0,
         profile_lifecycle="trace",
-        environment=os.getenv("API_ENVIRONMENT"),
+        environment=APP_ENVIRONMENT,
     )
 
     _app = Litestar(
