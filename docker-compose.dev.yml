@@ -1,5 +1,3 @@
-name: genjishimada-dev
-
 services:
   genjishimada-api-dev:
     build:
