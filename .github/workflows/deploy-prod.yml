@@ -1,0 +1,64 @@
+name: Prod Deployment
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  prod-deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_HOST_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Add remote host to known_hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.SERVER_HOST_IP }} >> ~/.ssh/known_hosts
+
+      - name: Set up Docker context for prod
+        run: |
+          docker context create prod-server \
+            --docker "host=ssh://${{ secrets.SERVER_HOST_USER }}@${{ secrets.SERVER_HOST_IP }}" \
+            --description "Prod server context"
+          docker context use prod-server
+
+      - name: Deploy full stack to Remote Prod Server
+        run: |
+          echo "Deploying API + Bot + RabbitMQ + DB to Prod Server..."
+          docker compose -f docker-compose.prod.yml up -d --build --no-deps --force-recreate
+        env:
+          # Shared
+          RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
+          RABBITMQ_PASS: ${{ secrets.RABBITMQ_PASS }}
+          RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          APP_ENVIRONMENT: ${{ secrets.APP_ENVIRONMENT }}
+
+          # API env
+          IP_HASH_SECRET: ${{ secrets.IP_HASH_SECRET }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+
+          # Bot env
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_FEEDBACK_URL: ${{ secrets.SENTRY_FEEDBACK_URL }}
+          API_KEY: ${{ secrets.API_KEY }}
+
+          # RabbitMQ env
+          RABBITMQ_ERLANG_COOKIE: ${{ secrets.RABBITMQ_ERLANG_COOKIE }}
+
+          # DB env
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASS }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}

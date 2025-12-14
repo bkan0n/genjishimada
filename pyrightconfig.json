@@ -1,0 +1,13 @@
+{
+  "pythonVersion": "3.13",
+  "exclude": [
+    "__pycache__",
+    ".venv",
+    ".github",
+    ".idea",
+    ".cache",
+    "**/.cache",
+    "**/.pytest_cache"
+  ],
+  "typeCheckingMode": "basic"
+}

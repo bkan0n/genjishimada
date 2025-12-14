@@ -1,0 +1,57 @@
+[tool.uv.workspace]
+members = [
+    "apps/api",
+    "apps/bot",
+    "libs/sdk",
+]
+
+[tool.uv.sources]
+genjishimada-sdk = { workspace = true }
+
+[dependency-groups]
+dev-common = [
+    "basedpyright>=1.29.4",
+    "ruff>=0.12.0",
+    "complexipy>=4.0.2",
+]
+
+[tool.ruff]
+exclude = ["tests"]
+line-length = 120
+target-version = "py313"
+
+lint.select = [
+    "E",
+    "F",
+    "W",
+    "A",
+    "PL",
+    "I",
+    "SIM",
+    "RUF",
+    "ASYNC",
+    "C4",
+    "INP",
+    "ERA",
+    "SLF",
+    "PIE",
+    "PYI",
+    "ANN",
+    "N",
+    "D",
+]
+lint.ignore = [
+    "ANN002",
+    "ANN003",
+    "D203",
+    "D100",
+    "D101",
+    "D104",
+    "RUF012",
+    "TC002",
+    "D213",
+    "TC001",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

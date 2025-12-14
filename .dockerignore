@@ -1,0 +1,70 @@
+# Python bytecode / caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+.venv*/
+ENV/
+env/
+venv/
+
+# uv caches / environments
+.uv/
+.uv_cache/
+.uv_cache*/
+.uv_tool/
+.uv/
+uv.lock.bak
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.whl
+
+# Editor / OS cruft
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Git metadata
+.git/
+.gitignore
+.gitattributes
+
+# CI metadata
+.github/
+
+# Test artifacts
+htmlcov/
+coverage.xml
+.pytest_cache/
+
+# Env files (sensitive)
+.env
+.env.*
+*.secret
+*.key
+
+# Docs build output
+site/
+docs/_build/
+
+# Node / frontend junk (if exists)
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-lock.yaml
+
+# Docker cache noise
+docker-compose*.yml~
+Dockerfile~
+
+# Files you explicitly do NOT want injected into the Docker build
+*.log
+*.sqlite3
+tmp/

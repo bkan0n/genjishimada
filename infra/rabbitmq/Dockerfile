@@ -1,0 +1,5 @@
+FROM rabbitmq:4-management
+COPY definitions.json /etc/rabbitmq/definitions.json
+COPY rabbit-init.sh /usr/local/bin/rabbit-init.sh
+RUN chmod +x /usr/local/bin/rabbit-init.sh
+RUN rabbitmq-plugins enable --offline rabbitmq_shovel rabbitmq_shovel_management
