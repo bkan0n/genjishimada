@@ -115,9 +115,7 @@ services:
 
 volumes:
   genjishimada_db_prod_data:
-    external: true
   genjishimada_rabbitmq_prod_data:
-    external: true
 networks:
   genji-network:
     external: true
