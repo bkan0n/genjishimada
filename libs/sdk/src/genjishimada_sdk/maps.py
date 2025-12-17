@@ -156,6 +156,12 @@ OverwatchMap = Literal[
     "Numbani",
     "Adlersbrunn",
     "Aatlis",
+    "Arena Victoriae",
+    "Redwood Dam",
+    "Thames District",
+    "Gogadoro",
+    "Powder Keg Mine",
+    "Place Lacroix",
 ]
 
 Mechanics = Literal[
