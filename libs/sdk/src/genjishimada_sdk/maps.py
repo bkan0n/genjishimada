@@ -1042,4 +1042,4 @@ def get_map_banner(map_name: str) -> str:
     """Get the applicable map banner."""
     _map = re.sub(r"[^a-zA-Z0-9]", "", map_name)
     sanitized_name = _map.lower().strip().replace(" ", "")
-    return f"https://bkan0n.com/assets/images/map_banners/{sanitized_name}.png"
+    return f"https://cdn.genji.pk/assets/map_banners/{sanitized_name}.png"
