@@ -31,7 +31,7 @@ from genjishimada_sdk.completions import (
     UpvoteCreateRequest,
     UpvoteSubmissionJobResponse,
 )
-from genjishimada_sdk.difficulties import DifficultyAll
+from genjishimada_sdk.difficulties import DifficultyAll, DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
 from litestar import Controller, Request, get, patch, post, put
@@ -66,7 +66,7 @@ class CompletionsController(Controller):
         self,
         svc: CompletionsService,
         user_id: int,
-        difficulty: DifficultyAll | None = None,
+        difficulty: DifficultyTop | None = None,
         page_size: Literal[10, 20, 25, 50, 100000] = 10,
         page_number: int = 1,
     ) -> list[CompletionResponse]:
@@ -75,7 +75,7 @@ class CompletionsController(Controller):
         Args:
             svc (CompletionsService): Service layer for completions.
             user_id (int): ID of the user to fetch completions for.
-            difficulty (DifficultyAll | None): Optional difficulty filter.
+            difficulty (DifficultyTop | None): Optional difficulty filter.
             page_size (int): Page size; one of 10, 20, 25, 50.
             page_number (int): 1-based page number.
 

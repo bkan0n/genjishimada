@@ -38,7 +38,7 @@ from genjishimada_sdk.completions import (
     UpvoteUpdateEvent,
     VerificationChangedEvent,
 )
-from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, DifficultyAll
+from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, DifficultyTop
 from genjishimada_sdk.maps import MapMasteryCreateRequest, OverwatchCode
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedRecord, NewsfeedRole
 from genjishimada_sdk.users import Notification, RankDetailResponse
@@ -1088,7 +1088,7 @@ class CompletionsCog(BaseCog):
         self,
         itx: GenjiItx,
         user: app_commands.Transform[int, transformers.UserTransformer],
-        difficulty: DifficultyAll | None = None,
+        difficulty: DifficultyTop | None = None,
     ) -> None:
         """Get verified completions for a user.
 

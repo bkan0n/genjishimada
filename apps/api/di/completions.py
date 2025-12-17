@@ -18,7 +18,7 @@ from genjishimada_sdk.completions import (
     UpvoteUpdateEvent,
     VerificationChangedEvent,
 )
-from genjishimada_sdk.difficulties import DifficultyAll
+from genjishimada_sdk.difficulties import DifficultyAll, DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
 from litestar import Request
@@ -35,7 +35,7 @@ class CompletionsService(BaseService):
     async def get_completions_for_user(
         self,
         user_id: int,
-        difficulty: DifficultyAll | None = None,
+        difficulty: DifficultyTop | None = None,
         page_size: int = 10,
         page_number: int = 1,
     ) -> list[CompletionResponse]:
@@ -43,7 +43,7 @@ class CompletionsService(BaseService):
 
         Args:
             user_id (int): ID of the user to fetch completions for.
-            difficulty (DifficultyAll | None): Optional difficulty filter.
+            difficulty (DifficultyTop | None): Optional difficulty filter.
             page_size (int): Page size; one of 10, 20, 25, 50.
             page_number (int): 1-based page number.
 
