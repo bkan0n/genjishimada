@@ -1,0 +1,28 @@
+name: Weekly Dev Refresh (dev <- prod)
+
+on:
+  schedule:
+    - cron: "0 8 * * 0" # Sundays at 2:00 AM America/Chicago
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_HOST_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Add remote host to known_hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.SERVER_HOST_IP }} >> ~/.ssh/known_hosts
+
+      - name: Run backup script on server
+        run: |
+          ssh "${SERVER_HOST_USER}@${SERVER_HOST_IP}" \
+            "bash -lc '/opt/genji/scripts/refresh_dev_from_prod.sh'"
+        env:
+          SSH_HOST: ${{ secrets.SERVER_HOST_IP }}
+          SSH_USER: ${{ secrets.SERVER_HOST_USER }}

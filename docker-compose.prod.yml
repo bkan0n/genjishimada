@@ -108,6 +108,7 @@ services:
       start_period: 20s
     volumes:
       - genjishimada_db_prod_data:/var/lib/postgresql/data
+      - /var/backups/genji/postgres:/backups
     ports:
       - "55432:5432"
     networks:
