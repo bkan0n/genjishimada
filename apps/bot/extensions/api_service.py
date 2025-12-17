@@ -544,7 +544,7 @@ class APIService:
             "page_size": page_size,
             "page_number": page_number,
         }
-        maps = await self.get_maps(**params)
+        maps = await self.get_maps(**params)  # type: ignore
         if maps:
             return maps[0]
         raise ValueError("No maps were found.")
@@ -935,7 +935,7 @@ class APIService:
             user_id=user_id,
             notification_type=notification_type,
         )
-        return self._request(r, data=data)  # pyright: ignore[reportArgumentType]
+        return self._request(r, data=data)  # type: ignore
 
     def check_user_is_creator(self, user_id: int) -> Response[bool]:
         """Check if user is a creator.
@@ -1121,7 +1121,7 @@ class APIService:
         return self._request(
             r,
             response_model=list[CompletionUserFormattable],
-            params={"user_id": user_id, "difficulty": difficulty},
+            params={"user_id": user_id, "difficulty": difficulty, "page_size": 100000},
         )
 
     def get_world_records_for_user(self, user_id: int) -> Response[list[CompletionUserFormattable]]:

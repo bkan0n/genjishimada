@@ -17,12 +17,11 @@ class AutocompleteService(BaseService):
         """Get similar map names.
 
         Args:
-            conn (Connection): Database connection.
             search (str): The input string to compare.
             limit (int, optional): Maximum number of results. Defaults to 5.
 
         Returns:
-            list[OverwatchMap] | None: A list of matching map names or `None` if no matches found.
+            list[OverwatchMap] | None: A list of matching map names or `None` if no matches are found.
 
         """
         query = "SELECT name FROM maps.names ORDER BY similarity(name, $1::text) DESC LIMIT $2;"
@@ -35,11 +34,10 @@ class AutocompleteService(BaseService):
         """Transform a map name into an OverwatchMap.
 
         Args:
-            conn (Connection): Database connection.
             search (str): Input string to transform.
 
         Returns:
-            OverwatchMap | None: The closest matching map name, or `None` if no matches found.
+            OverwatchMap | None: The closest matching map name, or `None` if no matches are found.
 
         """
         query = "SELECT name FROM maps.names ORDER BY similarity(name, $1::text) DESC LIMIT 1;"
@@ -56,12 +54,11 @@ class AutocompleteService(BaseService):
         """Get similar map restrictions.
 
         Args:
-            conn (Connection): Database connection.
             search (str): Input string to compare.
             limit (int, optional): Maximum number of results. Defaults to 5.
 
         Returns:
-            list[Restrictions] | None: Matching restriction names, or `None` if none found.
+            list[Restrictions] | None: Matching restriction names, or `None` if no matches are found.
 
         """
         query = "SELECT name FROM maps.restrictions ORDER BY similarity(name, $1::text) DESC LIMIT $2;"
@@ -74,11 +71,10 @@ class AutocompleteService(BaseService):
         """Transform a map name into a Restriction.
 
         Args:
-            conn (Connection): Database connection.
             search (str): Input string to transform.
 
         Returns:
-            Restrictions | None: The closest matching restriction, or `None` if none found.
+            Restrictions | None: The closest matching restriction, or `None` if no matches are found.
 
         """
         query = "SELECT name FROM maps.restrictions ORDER BY similarity(name, $1::text) DESC LIMIT 1;"
@@ -91,12 +87,11 @@ class AutocompleteService(BaseService):
         """Get similar map mechanics.
 
         Args:
-            conn (Connection): Database connection.
             search (str): Input string to compare.
             limit (int, optional): Maximum number of results. Defaults to 5.
 
         Returns:
-            list[Mechanics] | None: Matching mechanics, or `None` if none found.
+            list[Mechanics] | None: Matching mechanics, or `None` if no matches are found.
 
         """
         query = "SELECT name FROM maps.mechanics ORDER BY similarity(name, $1::text) DESC LIMIT $2;"
@@ -109,11 +104,10 @@ class AutocompleteService(BaseService):
         """Transform a map name into a Mechanic.
 
         Args:
-            conn (Connection): Database connection.
             search (str): Input string to transform.
 
         Returns:
-            Mechanics | None: The closest matching mechanic, or `None` if none found.
+            Mechanics | None: The closest matching mechanic, or `None` if no matches are found.
 
         """
         query = "SELECT name FROM maps.mechanics ORDER BY similarity(name, $1::text) DESC LIMIT 1;"
@@ -133,7 +127,6 @@ class AutocompleteService(BaseService):
         """Get similar map codes.
 
         Args:
-            conn (Connection): Database connection.
             search (str): Input string to compare.
             archived (bool | None, optional): Filter by archived flag, or `None` for no filter.
             hidden (bool | None, optional): Filter by hidden flag, or `None` for no filter.
@@ -141,7 +134,7 @@ class AutocompleteService(BaseService):
             limit (int, optional): Maximum number of results. Defaults to 5.
 
         Returns:
-            list[OverwatchCode] | None: Matching map codes, or `None` if none found.
+            list[OverwatchCode] | None: Matching map codes, or `None` if no matches are found.
 
         """
         query = """
@@ -174,7 +167,6 @@ class AutocompleteService(BaseService):
         """Transform a map name into a code.
 
         Args:
-            conn (Connection): Database connection.
             search (str): Input string to transform.
             archived (bool | None, optional): Filter by archived flag, or `None` for no filter.
             hidden (bool | None, optional): Filter by hidden flag, or `None` for no filter.
@@ -182,7 +174,7 @@ class AutocompleteService(BaseService):
             use_pool (bool): Use a pool instead of a route-based connection.
 
         Returns:
-            OverwatchCode | None: The closest matching map code, or `None` if none found.
+            OverwatchCode | None: The closest matching map code, or `None` if no matches are found.
 
         """
         query = """
@@ -218,15 +210,14 @@ class AutocompleteService(BaseService):
         """Get similar users by nickname, global name, or Overwatch username.
 
         Args:
-            conn (Connection): Database connection.
             search (str): Input string to compare.
             limit (int, optional): Maximum number of results. Defaults to 10.
-            fake_users_only (bool): Filter out actualy discord users and display fake members only.
+            fake_users_only (bool): Filter out actually discord users and display fake members only.
             use_pool (bool): Use a pool instead of a route-based connection.
             ignore_fake_users: Ignore fake users
 
         Returns:
-            list[tuple[int, str]] | None: A list of `(user_id, display_name)` tuples, or `None` if no matches found.
+            list[tuple[int, str]] | None: A list of `(user_id, display_name)` tuples, or `None` if no matches are found.
 
         """
         query = """

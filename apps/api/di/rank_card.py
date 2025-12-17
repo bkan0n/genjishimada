@@ -230,7 +230,8 @@ class RankCardService(BaseService):
         assert row
         return XPData(row["xp"], row["prestige_level"], row["community_rank"])
 
-    def _find_highest_rank(self, data: list[RankDetailResponse]) -> Rank:
+    @staticmethod
+    def _find_highest_rank(data: list[RankDetailResponse]) -> Rank:
         """Determine the highest rank achieved by a user.
 
         Args:
@@ -239,7 +240,7 @@ class RankCardService(BaseService):
         Returns:
             Rank: The name of the highest achieved rank.
         """
-        highest = "Ninja"
+        highest: Rank = "Ninja"
         for row in data:
             if row.rank_met:
                 highest = DIFFICULTY_TO_RANK_MAP[row.difficulty]
@@ -279,7 +280,7 @@ class RankCardService(BaseService):
                 LEFT JOIN users.overwatch_usernames own ON own.user_id = dn.user_id AND own.is_primary = TRUE
                 WHERE dn.user_id = $1;
             """
-        return await self._conn.fetchval(nickname_query, user_id)
+        return await self._conn.fetchval(nickname_query, user_id) or "Unknown User"
 
     async def _get_map_totals(self) -> list[asyncpg.Record]:
         """Get the total count of official, non-archived maps by difficulty.
@@ -325,7 +326,7 @@ class RankCardService(BaseService):
             )
             SELECT count(*) FROM all_records WHERE user_id = $1 AND pos = 1
         """
-        return await self._conn.fetchval(query, user_id)
+        return await self._conn.fetchval(query, user_id) or 0
 
     async def _get_maps_created_count(self, user_id: int) -> int:
         """Count how many official maps a user has created.
@@ -342,7 +343,7 @@ class RankCardService(BaseService):
             LEFT JOIN maps.creators mc ON m.id = mc.map_id
             WHERE user_id = $1 AND official = TRUE
         """
-        return await self._conn.fetchval(query, user_id)
+        return await self._conn.fetchval(query, user_id) or 0
 
     async def _get_playtests_voted_count(self, user_id: int) -> int:
         """Count how many playtests a user has voted in.
@@ -389,7 +390,6 @@ class RankCardService(BaseService):
         badges = await self.fetch_badges_settings(user_id)
         totals = await self._get_map_totals()
         xp_data = await self._fetch_community_rank_xp(user_id)
-
         data = {
             "rank_name": rank,
             "nickname": nickname,
