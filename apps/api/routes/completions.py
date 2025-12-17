@@ -67,7 +67,7 @@ class CompletionsController(Controller):
         svc: CompletionsService,
         user_id: int,
         difficulty: DifficultyAll | None = None,
-        page_size: Literal[10, 20, 25, 50] = 10,
+        page_size: Literal[10, 20, 25, 50, 100000] = 10,
         page_number: int = 1,
     ) -> list[CompletionResponse]:
         """Get completions for a specific user.
