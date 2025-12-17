@@ -1106,13 +1106,13 @@ class APIService:
         return self._request(r, response_model=list[CompletionLeaderboardFormattable], params={"page_size": 0})
 
     def get_completions_for_user(
-        self, user_id: int, difficulty: DifficultyAll | None
+        self, user_id: int, difficulty: DifficultyTop | None
     ) -> Response[list[CompletionUserFormattable]]:
         """Fetch the completions for a specific user id.
 
         Args:
             user_id (int): The user_id to filter by.
-            difficulty (DifficultyAll): The difficulty to filter by.
+            difficulty (DifficultyTop): The difficulty to filter by.
 
         Returns:
             Response[list[CompletionUserFormattable]]: The completions data for a specific user.
