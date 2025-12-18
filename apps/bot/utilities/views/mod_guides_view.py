@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import re
 from logging import getLogger
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Any, Sequence, cast
 
 from discord import ButtonStyle, ui
+from discord.app_commands import AppCommandError
 from genjishimada_sdk.maps import URL_REGEX, GuideFullResponse, OverwatchCode
 
 from apps.bot.utilities.errors import UserFacingError
@@ -199,3 +200,8 @@ class ModGuidePaginatorView(PaginatorView[FormattableGuide]):
         self.rebuild_data(data)
         self.rebuild_components()
         await itx.edit_original_response(view=self)
+
+    async def on_error(self, itx: GenjiItx, error: Exception, item: ui.Item[Any], /) -> None:
+        """Handle errors."""
+        log.debug("Did this run?")
+        await itx.client.tree.on_error(itx, cast("AppCommandError", error))
