@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic, Literal, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, Sequence, TypeVar, cast
 
 import discord
 from discord import AllowedMentions, ButtonStyle, ui
+from discord.app_commands import AppCommandError
 
 from utilities.base import BaseView
 from utilities.formatter import FormattableProtocol
@@ -261,3 +262,7 @@ class PaginatorView(BaseView, Generic[T]):
         self._previous_button = _PreviousButton()
         self._page_number_button = _PageNumberButton(len(self.pages))
         self._next_button = _NextButton()
+
+    async def on_error(self, itx: GenjiItx, error: Exception, item: ui.Item[Any], /) -> None:
+        """Handle errors."""
+        await itx.client.tree.on_error(itx, cast("AppCommandError", error))
