@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Sequence
 from discord import ButtonStyle, ui
 from genjishimada_sdk.maps import URL_REGEX, GuideFullResponse, OverwatchCode
 
+from apps.bot.utilities.errors import UserFacingError
 from utilities.base import ConfirmationView
 from utilities.formatter import FilteredFormatter
 from utilities.paginator import PaginatorView
@@ -168,10 +169,9 @@ class ModGuidePaginatorView(PaginatorView[FormattableGuide]):
         Returns:
             Sequence[ui.Item]: The list of UI components to display.
         """
-        if self._pages:
-            guides = self.current_page
-        else:
-            raise UserWarning("No guides found for this map.")
+        if not self._pages:
+            UserFacingError("No guides found for this map.")
+        guides = self.current_page
         res = []
         for guide in guides:
             guide.code = self._code
