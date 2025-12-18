@@ -169,10 +169,8 @@ class ModGuidePaginatorView(PaginatorView[FormattableGuide]):
         Returns:
             Sequence[ui.Item]: The list of UI components to display.
         """
-        log.debug(self._pages)
-        log.debug(self._current_page_index)
         if not self._pages:
-            UserFacingError("No guides found for this map.")
+            raise UserFacingError("No guides found for this map.")
         guides = self.current_page
         res = []
         for guide in guides:
