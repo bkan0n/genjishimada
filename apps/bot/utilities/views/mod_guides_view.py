@@ -171,7 +171,7 @@ class ModGuidePaginatorView(PaginatorView[FormattableGuide]):
             Sequence[ui.Item]: The list of UI components to display.
         """
         if not self._pages:
-            raise UserFacingError("No guides found for this map.")
+            return []
         guides = self.current_page
         res = []
         for guide in guides:
@@ -200,8 +200,3 @@ class ModGuidePaginatorView(PaginatorView[FormattableGuide]):
         self.rebuild_data(data)
         self.rebuild_components()
         await itx.edit_original_response(view=self)
-
-    async def on_error(self, itx: GenjiItx, error: Exception, item: ui.Item[Any], /) -> None:
-        """Handle errors."""
-        log.debug("Did this run?")
-        await itx.client.tree.on_error(itx, cast("AppCommandError", error))
