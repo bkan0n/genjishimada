@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import re
 from logging import getLogger
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Any, Sequence, cast
 
 from discord import ButtonStyle, ui
+from discord.app_commands import AppCommandError
 from genjishimada_sdk.maps import URL_REGEX, GuideFullResponse, OverwatchCode
 
+from apps.bot.utilities.errors import UserFacingError
 from utilities.base import ConfirmationView
 from utilities.formatter import FilteredFormatter
 from utilities.paginator import PaginatorView
@@ -168,6 +170,8 @@ class ModGuidePaginatorView(PaginatorView[FormattableGuide]):
         Returns:
             Sequence[ui.Item]: The list of UI components to display.
         """
+        if not self._pages:
+            return []
         guides = self.current_page
         res = []
         for guide in guides:
