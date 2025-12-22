@@ -232,7 +232,6 @@ class UserService(BaseService):
             WHERE user_id = $1
             ORDER BY is_primary DESC;
         """
-        rows = await self._conn.fetch(query, user_id)
 
         if use_pool:
             async with self._pool.acquire() as conn:
