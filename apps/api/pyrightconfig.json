@@ -7,9 +7,8 @@
     ".idea",
     ".cache",
     "**/.cache",
-    "**/.pytest_cache"
+    "**/.pytest_cache",
+    "tests"
   ],
-  "typeCheckingMode": "basic",
-  "venvPath": ".",
-  "venv": ".venv"
+  "typeCheckingMode": "basic"
 }

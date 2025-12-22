@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from discord import Attachment, app_commands
 from genjishimada_sdk.maps import GuideResponse, MapCategory, OverwatchCode, OverwatchMap
+
 from utilities import transformers
 from utilities.base import BaseCog, ConfirmationView
 from utilities.maps import MapSubmissionView, PartialMapCreateModel

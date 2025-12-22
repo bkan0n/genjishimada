@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Literal, Sequence, cast, get_args
 from discord import ButtonStyle, app_commands, ui
 from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.maps import GuideURL, MapCategory, Mechanics, OverwatchCode, OverwatchMap, Restrictions
+
+from extensions.api_service import CompletionFilter, MedalFilter, OfficialFilter, PlaytestFilter
 from utilities import transformers
 from utilities.base import BaseCog
 from utilities.emojis import generate_all_star_rating_strings
@@ -14,8 +16,6 @@ from utilities.formatter import FilteredFormatter, FormattableProtocol
 from utilities.maps import MapModel
 from utilities.paginator import PaginatorView
 from utilities.views.mod_guides_view import FormattableGuide
-
-from extensions.api_service import CompletionFilter, MedalFilter, OfficialFilter, PlaytestFilter
 
 if TYPE_CHECKING:
     from core import Genji

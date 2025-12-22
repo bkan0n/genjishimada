@@ -4,11 +4,12 @@ from logging import getLogger
 from typing import Annotated, Literal
 
 import litestar
-from di import NewsfeedService, provide_newsfeed_service
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedEventType, PublishNewsfeedJobResponse
 from litestar import Controller, Request
 from litestar.di import Provide
 from litestar.params import Parameter
+
+from di import NewsfeedService, provide_newsfeed_service
 
 log = getLogger(__name__)
 

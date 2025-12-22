@@ -6,6 +6,7 @@ from genjishimada_sdk.helpers import sanitize_string
 from genjishimada_sdk.rank_card import AvatarResponse, BackgroundResponse, RankCardBadgeSettings, RankCardResponse
 from genjishimada_sdk.users import RankDetailResponse
 from litestar.datastructures import State
+
 from utilities.shared_queries import get_map_mastery_data, get_user_rank_data
 
 from .base import BaseService

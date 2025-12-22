@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING
 from genjishimada_sdk.users import Notification
 
 if TYPE_CHECKING:
-    import core
     import discord
+
+    import core
 
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from ._types import GenjiItx
 
-__all__ = ("BaseCog",)
+__all__ = ("BaseCog", "BaseService", "BaseView", "ConfirmationButton", "ConfirmationCancelButton", "ConfirmationView")
 
 log = getLogger(__name__)
 
@@ -160,6 +160,7 @@ class ConfirmationView(BaseView):
         self.add_item(container)
 
     async def on_error(self, itx: GenjiItx, error: Exception, item: ui.Button | ui.Select, /) -> None:
+        """Handle errors."""
         await itx.client.tree.on_error(itx, cast("AppCommandError", error))
 
 

@@ -12,6 +12,7 @@ from discord.app_commands import Transform, command
 from discord.ext import tasks
 from genjishimada_sdk.change_requests import ChangeRequestResponse, ChangeRequestType
 from genjishimada_sdk.maps import OverwatchCode
+
 from utilities.base import BaseCog, BaseView
 from utilities.change_requests import FormattableChangeRequest, FormattableStaleChangeRequest
 from utilities.errors import UserFacingError

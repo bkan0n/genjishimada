@@ -9,7 +9,5 @@
     "**/.cache",
     "**/.pytest_cache"
   ],
-  "typeCheckingMode": "basic",
-  "venvPath": ".",
-  "venv": ".venv"
+  "typeCheckingMode": "basic"
 }

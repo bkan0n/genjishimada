@@ -19,6 +19,7 @@ from genjishimada_sdk.users import (
 )
 from litestar.datastructures import State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
+
 from utilities.errors import CustomHTTPException, parse_pg_detail
 from utilities.shared_queries import get_user_rank_data
 
@@ -210,11 +211,12 @@ class UserService(BaseService):
                 item.is_primary,
             )
 
-    async def fetch_overwatch_usernames(self, user_id: int) -> list[OverwatchUsernameItem]:
+    async def fetch_overwatch_usernames(self, user_id: int, use_pool: bool = False) -> list[OverwatchUsernameItem]:
         """Fetch Overwatch usernames for a user.
 
         Args:
             user_id (int): The ID of the user.
+            use_pool (bool, optional): If True, use a connection pool to fetch the usernames. Defaults to False.
 
         Returns:
             list[OverwatchUsernameItem]: The list of username records for the user.
@@ -231,6 +233,13 @@ class UserService(BaseService):
             ORDER BY is_primary DESC;
         """
         rows = await self._conn.fetch(query, user_id)
+
+        if use_pool:
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(query, user_id)
+        else:
+            rows = await self._conn.fetch(query, user_id)
+
         return msgspec.convert(rows, list[OverwatchUsernameItem])
 
     async def get_overwatch_usernames_response(self, user_id: int) -> OverwatchUsernamesResponse:

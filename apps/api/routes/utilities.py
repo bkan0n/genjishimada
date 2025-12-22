@@ -7,8 +7,6 @@ from typing import Annotated, Any
 
 import msgspec
 from asyncpg import Connection
-from di import AutocompleteService, provide_autocomplete_service
-from di.image_storage import ImageStorageService, provide_image_storage_service
 from genjishimada_sdk.logs import LogCreateRequest, MapClickCreateRequest
 from genjishimada_sdk.maps import Mechanics, OverwatchCode, OverwatchMap, PlaytestStatus, Restrictions
 from litestar import Controller, MediaType, get, post
@@ -16,6 +14,9 @@ from litestar.datastructures import UploadFile
 from litestar.di import Provide
 from litestar.enums import RequestEncodingType
 from litestar.params import Body
+
+from di import AutocompleteService, provide_autocomplete_service
+from di.image_storage import ImageStorageService, provide_image_storage_service
 
 log = getLogger(__name__)
 
