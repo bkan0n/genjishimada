@@ -520,7 +520,7 @@ async def _attempt_auto_verify(  # noqa: PLR0913
             user_match=user_match,
             extracted_code_cleaned=extracted_code_cleaned,
             extracted_time=extracted.time,
-            extracted_user_id=data.user_id,
+            usernames=user_names,
         ),
         headers=request.headers,
         idempotency_key=None,

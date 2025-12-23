@@ -432,4 +432,4 @@ class FailedAutoverifyEvent(Struct):
     user_match: bool
     extracted_code_cleaned: str | None
     extracted_time: float | None
-    extracted_user_id: int | None
+    usernames: list[str] | None

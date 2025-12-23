@@ -516,7 +516,7 @@ class CompletionsService(BaseService):
             f"`Extracted Time` {event.extracted_time} "
             f"{'✅' if event.time_match else '❌'}\n"
             f"`User ID` {event.user_id}\n"
-            f"`Extracted User` {event.extracted_user_id} "
+            f"`Usernames` {event.usernames} "
             f"{'✅' if event.user_match else '❌'}\n"
             f"`Extracted Raw`\n"
             "```json\n"
