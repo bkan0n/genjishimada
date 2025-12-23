@@ -11,6 +11,7 @@ from genjishimada_sdk.users import (
     OverwatchUsernamesResponse,
     OverwatchUsernamesUpdateRequest,
 )
+
 from utilities.base import BaseCog, BaseView
 
 if typing.TYPE_CHECKING:

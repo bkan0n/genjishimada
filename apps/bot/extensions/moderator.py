@@ -21,6 +21,7 @@ from genjishimada_sdk.maps import (
     UnlinkMapsCreateRequest,
 )
 from msgspec import UNSET
+
 from utilities import transformers
 from utilities.base import BaseCog, ConfirmationView
 from utilities.errors import APIHTTPError, UserFacingError

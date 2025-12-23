@@ -1,4 +1,3 @@
-from di import LootboxService, provide_lootbox_service
 from genjishimada_sdk.lootbox import (
     LootboxKeyType,
     LootboxKeyTypeResponse,
@@ -10,6 +9,8 @@ from genjishimada_sdk.maps import XPMultiplierRequest
 from genjishimada_sdk.xp import TierChangeResponse, XpGrantRequest, XpGrantResponse
 from litestar import Controller, Request, get, patch, post
 from litestar.di import Provide
+
+from di import LootboxService, provide_lootbox_service
 
 
 class LootboxController(Controller):

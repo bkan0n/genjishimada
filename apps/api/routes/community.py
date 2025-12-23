@@ -1,6 +1,5 @@
 from typing import Annotated, Literal
 
-from di import CommunityService, provide_community_service
 from genjishimada_sdk.completions import MapRecordProgressionResponse, TimePlayedPerRankResponse
 from genjishimada_sdk.maps import (
     MapCompletionStatisticsResponse,
@@ -14,6 +13,8 @@ from genjishimada_sdk.users import CommunityLeaderboardResponse
 from genjishimada_sdk.xp import PlayersPerSkillTierResponse, PlayersPerXPTierResponse
 from litestar import Controller, get
 from litestar.params import Parameter
+
+from di import CommunityService, provide_community_service
 
 
 class CommunityController(Controller):

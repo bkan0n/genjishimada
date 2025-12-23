@@ -1,4 +1,17 @@
-from . import _types, change_requests, completions, config, emojis, maps, transformers, views
+from . import (
+    _types,
+    change_requests,
+    completions,
+    config,
+    emojis,
+    errors,
+    extra,
+    formatter,
+    maps,
+    paginator,
+    transformers,
+    views,
+)
 from .base import BaseCog, BaseService, BaseView
 from .extra import time_convert
 
@@ -11,8 +24,12 @@ __all__ = (
     "completions",
     "config",
     "emojis",
+    "errors",
+    "extra",
+    "formatter",
     "maps",
+    "paginator",
     "time_convert",
     "transformers",
-    "views"
+    "views",
 )

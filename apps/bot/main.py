@@ -11,8 +11,9 @@ import os
 from typing import Iterator
 
 import aiohttp
-import core
 import discord
+
+import core
 from utilities.errors import on_command_error
 
 SENTRY_DSN = os.getenv("SENTRY_DSN")

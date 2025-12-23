@@ -18,15 +18,15 @@ from genjishimada_sdk.completions import (
     UpvoteUpdateEvent,
     VerificationChangedEvent,
 )
-from genjishimada_sdk.difficulties import DifficultyAll, DifficultyTop
+from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
 from litestar import Request
 from litestar.datastructures import State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
-from utilities.errors import CustomHTTPException
 
 from di.base import BaseService
+from utilities.errors import CustomHTTPException
 
 log = getLogger(__name__)
 

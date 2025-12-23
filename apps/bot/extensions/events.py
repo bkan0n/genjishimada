@@ -10,6 +10,7 @@ from discord.app_commands import Command, ContextMenu
 from discord.ext import commands, tasks
 from genjishimada_sdk.newsfeed import NewsfeedAnnouncement, NewsfeedEvent
 from genjishimada_sdk.users import UserCreateRequest, UserUpdateRequest
+
 from utilities.base import BaseCog
 
 if TYPE_CHECKING:

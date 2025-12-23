@@ -5,15 +5,9 @@ from typing import Literal
 
 import aiohttp
 import msgspec
+import rapidfuzz.fuzz
+import rapidfuzz.process
 from asyncpg import Connection
-from di import (
-    AutocompleteService,
-    CompletionsService,
-    provide_autocomplete_service,
-    provide_completions_service,
-    provide_map_service,
-    provide_user_service,
-)
 from genjishimada_sdk.completions import (
     CompletionCreatedEvent,
     CompletionCreateRequest,
@@ -31,13 +25,23 @@ from genjishimada_sdk.completions import (
     UpvoteCreateRequest,
     UpvoteSubmissionJobResponse,
 )
-from genjishimada_sdk.difficulties import DifficultyAll, DifficultyTop
+from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
 from litestar import Controller, Request, get, patch, post, put
 from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
+
+from di import (
+    AutocompleteService,
+    CompletionsService,
+    UserService,
+    provide_autocomplete_service,
+    provide_completions_service,
+    provide_map_service,
+    provide_user_service,
+)
 from utilities.errors import CustomHTTPException
 
 log = getLogger(__name__)
@@ -108,12 +112,13 @@ class CompletionsController(Controller):
         return await svc.get_world_records_per_user(user_id)
 
     @post(path="/", summary="Submit Completion", description="Submit a new completion record and publish an event.")
-    async def submit_completion(
+    async def submit_completion(  # noqa: PLR0913
         self,
         svc: CompletionsService,
         request: Request,
         data: CompletionCreateRequest,
         autocomplete: AutocompleteService,
+        users: UserService,
         conn: Connection,
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion.
@@ -123,6 +128,8 @@ class CompletionsController(Controller):
             request (Request): Request.
             data (CompletionCreateDTO): DTO with completion details.
             autocomplete (AutocompleteService): Service for autocomplete.
+            users (UserService): Service for users.
+            conn (Connection): Database connection.
 
         Returns:
             int: ID of the newly inserted completion.
@@ -146,6 +153,7 @@ class CompletionsController(Controller):
                     request=request,
                     svc=svc,
                     autocomplete=autocomplete,
+                    users=users,
                     completion_id=completion_id,
                     data=data,
                 )
@@ -427,10 +435,11 @@ class CompletionsController(Controller):
         return await svc.get_upvotes_from_message_id(message_id)
 
 
-async def _attempt_auto_verify(
+async def _attempt_auto_verify(  # noqa: PLR0913
     request: Request,
     svc: CompletionsService,
     autocomplete: AutocompleteService,
+    users: UserService,
     completion_id: int,
     data: CompletionCreateRequest,
 ) -> None:
@@ -445,25 +454,40 @@ async def _attempt_auto_verify(
             ocr_data = msgspec.json.decode(raw_ocr_data, type=OcrResponse)
 
         extracted = ocr_data.extracted
-        extracted_user_cleaned = await autocomplete.get_similar_users(
-            extracted.name or "", use_pool=True, ignore_fake_users=True
-        )
+
+        user_name_response = await users.fetch_overwatch_usernames(data.user_id, use_pool=True)
+        user_names = [x.username.upper() for x in user_name_response]
+        name_match = False
+        if extracted.name and user_names:
+            # noinspection PyTypeChecker
+            best_match = rapidfuzz.process.extractOne(
+                extracted.name,
+                user_names,
+                scorer=rapidfuzz.fuzz.ratio,
+                score_cutoff=60,
+            )
+
+            if best_match:
+                matched_name, score, _ = best_match
+                log.debug(f"Name fuzzy match: '{extracted.name}' → '{matched_name}' (score: {score})")
+                name_match = True
+            else:
+                log.debug(f"No name match found for '{extracted.name}' against {user_names}")
+
         extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "", use_pool=True)
         if extracted_code_cleaned:
             extracted_code_cleaned = extracted_code_cleaned.replace('"', "")
-            extracted_user_id: int | None = extracted_user_cleaned[0][0] if extracted_user_cleaned else None
 
-        # --- Compute condition flags once ---
         code_match = data.code == extracted_code_cleaned
         time_match = data.time == extracted.time
-        user_match = extracted_user_id == data.user_id
+        user_match = name_match
 
         log.debug(f"extracted: {extracted}")
         log.debug(f"data: {data}")
         log.debug(f"extracted_code_cleaned: {extracted_code_cleaned}")
         log.debug(f"code_match: {code_match} ({data.code=} vs {extracted_code_cleaned=})")
         log.debug(f"time_match: {time_match} ({data.time=} vs {extracted.time=})")
-        log.debug(f"user_match: {user_match} ({data.user_id=} vs {extracted_user_id=})")
+        log.debug(f"user_match: {user_match} ({name_match=})")
 
         if code_match and time_match and user_match:
             verification_data = CompletionVerificationUpdateRequest(
@@ -496,7 +520,7 @@ async def _attempt_auto_verify(
             user_match=user_match,
             extracted_code_cleaned=extracted_code_cleaned,
             extracted_time=extracted.time,
-            extracted_user_id=extracted_user_id,
+            extracted_user_id=data.user_id,
         ),
         headers=request.headers,
         idempotency_key=None,

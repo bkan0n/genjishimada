@@ -2,20 +2,17 @@ from __future__ import annotations
 
 import re
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Sequence, cast
+from typing import TYPE_CHECKING, Sequence
 
 from discord import ButtonStyle, ui
-from discord.app_commands import AppCommandError
 from genjishimada_sdk.maps import URL_REGEX, GuideFullResponse, OverwatchCode
 
-from apps.bot.utilities.errors import UserFacingError
-from utilities.base import ConfirmationView
-from utilities.formatter import FilteredFormatter
-from utilities.paginator import PaginatorView
+from ..base import ConfirmationView
+from ..formatter import FilteredFormatter
+from ..paginator import PaginatorView
 
 if TYPE_CHECKING:
     from core import Genji
-
     from utilities._types import GenjiItx
 
 log = getLogger(__name__)

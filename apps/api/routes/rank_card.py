@@ -1,9 +1,10 @@
-from di import provide_rank_card_service
-from di.rank_card import RankCardService
 from genjishimada_sdk.rank_card import AvatarResponse, BackgroundResponse, RankCardBadgeSettings, RankCardResponse
 from litestar import Controller, get, put
 from litestar.di import Provide
 from msgspec import Struct
+
+from di import provide_rank_card_service
+from di.rank_card import RankCardService
 
 
 class BackgroundBody(Struct):

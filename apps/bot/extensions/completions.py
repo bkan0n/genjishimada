@@ -42,6 +42,8 @@ from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, DifficultyTop
 from genjishimada_sdk.maps import MapMasteryCreateRequest, OverwatchCode
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedRecord, NewsfeedRole
 from genjishimada_sdk.users import Notification, RankDetailResponse
+
+from extensions._queue_registry import queue_consumer
 from utilities import transformers
 from utilities.base import (
     BaseCog,
@@ -63,10 +65,9 @@ from utilities.extra import poll_job_until_complete
 from utilities.formatter import FilteredFormatter
 from utilities.paginator import PaginatorView
 
-from extensions._queue_registry import queue_consumer
-
 if TYPE_CHECKING:
     from aio_pika.abc import AbstractIncomingMessage
+
     from core.genji import Genji
     from utilities._types import GenjiItx
 

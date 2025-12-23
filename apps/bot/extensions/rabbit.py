@@ -15,8 +15,9 @@ from discord import TextChannel
 from extensions._queue_registry import QueueHandler
 
 if TYPE_CHECKING:
-    import core
     from aio_pika.abc import AbstractRobustConnection
+
+    import core
 
 log = getLogger(__name__)
 

@@ -41,15 +41,15 @@ from genjishimada_sdk.newsfeed import (
     NewsfeedUnarchive,
     NewsfeedUnlinkedMap,
 )
+
+from extensions._queue_registry import queue_consumer
 from utilities.completions import get_completion_icon_url
 from utilities.formatter import FilteredFormatter, FormattableProtocol
 
-from extensions._queue_registry import queue_consumer
-
 if TYPE_CHECKING:
-    import core
     from aio_pika.abc import AbstractIncomingMessage
 
+    import core
     from extensions.playtest import PlaytestCog
 
 log = getLogger(__name__)

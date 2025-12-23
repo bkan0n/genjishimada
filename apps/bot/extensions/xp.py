@@ -9,10 +9,10 @@ from discord import TextChannel, app_commands, utils
 from discord.ext import commands
 from genjishimada_sdk.users import Notification
 from genjishimada_sdk.xp import XP_AMOUNTS, XP_TYPES, XpGrantEvent, XpGrantRequest
-from utilities import transformers
-from utilities.base import BaseService
 
 from extensions._queue_registry import queue_consumer
+from utilities import transformers
+from utilities.base import BaseService
 
 if TYPE_CHECKING:
     import core

@@ -37,17 +37,18 @@ from genjishimada_sdk.maps import (
 )
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedNewMap
 from genjishimada_sdk.users import Notification
+
+from extensions._queue_registry import queue_consumer
 from utilities import BaseCog, BaseService
 from utilities.base import ConfirmationView
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.formatter import FilteredFormatter
 from utilities.maps import MapModel
 
-from extensions._queue_registry import queue_consumer
-
 if TYPE_CHECKING:
-    import core
     from aio_pika.abc import AbstractIncomingMessage
+
+    import core
     from utilities._types import GenjiItx
 
 GENJI_API_KEY: str = os.getenv("GENJI_API_KEY", "")

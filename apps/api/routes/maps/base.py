@@ -8,10 +8,6 @@ from typing import Any, Awaitable, Callable, Iterable, Literal
 import litestar
 import msgspec
 from asyncpg import Connection
-from di.jobs import InternalJobsService, provide_internal_jobs_service
-from di.maps import CompletionFilter, MapSearchFilters, MapService, MedalFilter, PlaytestFilter, provide_map_service
-from di.newsfeed import NewsfeedService, provide_newsfeed_service
-from di.users import UserService, provide_user_service
 from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import (
@@ -56,6 +52,11 @@ from litestar.datastructures import Headers
 from litestar.di import Provide
 from litestar.response import Response, Stream
 from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST
+
+from di.jobs import InternalJobsService, provide_internal_jobs_service
+from di.maps import CompletionFilter, MapSearchFilters, MapService, MedalFilter, PlaytestFilter, provide_map_service
+from di.newsfeed import NewsfeedService, provide_newsfeed_service
+from di.users import UserService, provide_user_service
 from utilities.errors import CustomHTTPException
 from utilities.jobs import wait_for_job_completion
 
@@ -335,6 +336,7 @@ class BaseMapsController(litestar.Controller):
             force_filters (bool) If True, do not return early if map code is given.
             page_size (Literal[10, 20, 25, 50]): Page size.
             page_number (int): Page number.
+            force_filters (bool): If True, do not return early if map code is given.
 
         Returns:
             list[MapReadDTO] | None: Paged results or all results, depending on `return_all`.

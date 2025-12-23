@@ -92,13 +92,13 @@ from genjishimada_sdk.users import (
 )
 from genjishimada_sdk.xp import TierChangeResponse, XpGrantRequest, XpGrantResponse
 from multidict import MultiDict
+
+from extensions.completions import CompletionLeaderboardFormattable, CompletionUserFormattable
 from utilities.change_requests import FormattableChangeRequest, FormattableStaleChangeRequest
 from utilities.completions import CompletionSubmissionModel, SuspiciousCompletionModel
 from utilities.errors import APIHTTPError, APIUnavailableError
 from utilities.maps import MapCreateModel, MapModel
 from utilities.views.mod_guides_view import FormattableGuide
-
-from extensions.completions import CompletionLeaderboardFormattable, CompletionUserFormattable
 
 if TYPE_CHECKING:
     import core

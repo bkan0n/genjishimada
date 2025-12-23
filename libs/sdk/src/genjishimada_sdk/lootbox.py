@@ -5,11 +5,6 @@ from typing import Literal
 
 from msgspec import Struct
 
-import datetime as dt
-from typing import Literal
-
-from msgspec import Struct
-
 from .helpers import sanitize_string
 
 __all__ = (

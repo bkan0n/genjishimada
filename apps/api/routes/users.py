@@ -4,7 +4,6 @@ import logging
 from typing import Annotated
 
 import litestar
-from di import UserService, provide_user_service
 from genjishimada_sdk.users import (
     NOTIFICATION_TYPES,
     OverwatchUsernamesResponse,
@@ -21,6 +20,8 @@ from litestar.params import Body
 from litestar.response import Response
 from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from msgspec import UNSET
+
+from di import UserService, provide_user_service
 
 log = logging.getLogger(__name__)
 

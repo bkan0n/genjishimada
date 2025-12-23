@@ -27,6 +27,7 @@ from genjishimada_sdk.tags import (
     TagsSearchFilters,
     TagsSearchResponse,
 )
+
 from utilities.base import ConfirmationView
 
 from .tags_paginator import SimplePages

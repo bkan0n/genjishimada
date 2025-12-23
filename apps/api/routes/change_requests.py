@@ -1,4 +1,3 @@
-from di import ChangeRequestsService, provide_change_requests_service
 from genjishimada_sdk.change_requests import (
     ChangeRequestCreateRequest,
     ChangeRequestResponse,
@@ -7,6 +6,8 @@ from genjishimada_sdk.change_requests import (
 from genjishimada_sdk.maps import OverwatchCode
 from litestar import Controller, get, patch, post
 from litestar.di import Provide
+
+from di import ChangeRequestsService, provide_change_requests_service
 
 
 class ChangeRequestsController(Controller):
