@@ -27,7 +27,7 @@ services:
         condition: service_healthy
         restart: true
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthcheck"]
+      test: [ "CMD", "curl", "-fsS", "http://localhost:8000/healthcheck" ]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -101,7 +101,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB" ]
       interval: 2s
       timeout: 3s
       retries: 20
@@ -110,7 +110,7 @@ services:
       - genjishimada_db_prod_data:/var/lib/postgresql/data
       - /var/backups/genji/postgres:/backups
     ports:
-      - "55432:5432"
+      - "127.0.0.1:55432:5432"
     networks:
       - genji-network
 
