@@ -455,8 +455,8 @@ async def _attempt_auto_verify(  # noqa: PLR0913
 
         extracted = ocr_data.extracted
 
-        user_name_response = await users.fetch_overwatch_usernames(data.user_id, use_pool=True)
-        user_names = [x.username.upper() for x in user_name_response]
+        user_name_response = await users.fetch_all_user_names(data.user_id, use_pool=True)
+        user_names = [x.upper() for x in user_name_response]
         name_match = False
         if extracted.name and user_names:
             # noinspection PyTypeChecker

@@ -241,6 +241,38 @@ class UserService(BaseService):
 
         return msgspec.convert(rows, list[OverwatchUsernameItem])
 
+    async def fetch_all_user_names(self, user_id: int, use_pool: bool = False) -> list[str]:
+        """Fetch all display names for a user, including Overwatch usernames."""
+        query = """
+                SELECT DISTINCT name
+                FROM (
+                    SELECT username AS name
+                    FROM core.users u
+                    LEFT JOIN users.overwatch_usernames owu ON u.id = owu.user_id
+                    WHERE u.id = $1 AND username IS NOT NULL
+
+                    UNION
+
+                    SELECT global_name AS name
+                    FROM core.users
+                    WHERE id = $1 AND global_name IS NOT NULL
+
+                    UNION
+
+                    SELECT nickname AS name
+                    FROM core.users
+                    WHERE id = $1 AND nickname IS NOT NULL
+                ) all_names;
+                """
+
+        if use_pool:
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(query, user_id)
+        else:
+            rows = await self._conn.fetch(query, user_id)
+
+        return msgspec.convert(rows, list[str])
+
     async def get_overwatch_usernames_response(self, user_id: int) -> OverwatchUsernamesResponse:
         """Build an OverwatchUsernamesReadDTO for a user.
 
