@@ -271,7 +271,8 @@ class UserService(BaseService):
         else:
             rows = await self._conn.fetch(query, user_id)
 
-        return msgspec.convert(rows, list[str])
+        res = [row["name"] for row in rows]
+        return res
 
     async def get_overwatch_usernames_response(self, user_id: int) -> OverwatchUsernamesResponse:
         """Build an OverwatchUsernamesReadDTO for a user.
