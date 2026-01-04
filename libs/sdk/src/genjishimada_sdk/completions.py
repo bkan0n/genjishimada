@@ -76,6 +76,25 @@ class CompletionCreateRequest(Struct):
     video: GuideURL | None
 
 
+class CompletionCreateRequest2(Struct):
+    """Request payload for submitting a completion.
+
+    Attributes:
+        code: Workshop code for the map.
+        user_id: Identifier for the submitting user.
+        time: Completion time in seconds.
+        screenshot: Proof screenshot URL.
+        video: Optional video proof URL.
+    """
+
+    completion_id: int
+    code: OverwatchCode
+    user_id: int
+    time: float
+    screenshot: GuideURL
+    video: GuideURL | None
+
+
 class CompletionResponse(Struct):
     """Represents a completion entry with verification metadata.
 

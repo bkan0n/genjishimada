@@ -11,6 +11,7 @@ from asyncpg import Connection
 from genjishimada_sdk.completions import (
     CompletionCreatedEvent,
     CompletionCreateRequest,
+    CompletionCreateRequest2,
     CompletionPatchRequest,
     CompletionResponse,
     CompletionSubmissionJobResponse,
@@ -110,6 +111,50 @@ class CompletionsController(Controller):
 
         """
         return await svc.get_world_records_per_user(user_id)
+
+    @post("/testing/testing")
+    async def testing_testing(  # noqa: PLR0913
+        self,
+        svc: CompletionsService,
+        request: Request,
+        data: CompletionCreateRequest2,
+        autocomplete: AutocompleteService,
+        users: UserService,
+        conn: Connection,
+    ) -> CompletionSubmissionJobResponse:
+        completion_id = data.completion_id
+        data2 = CompletionCreateRequest(
+            code=data.code,
+            user_id=data.user_id,
+            time=data.time,
+            screenshot=data.screenshot,
+            video=data.video,
+        )
+        if not data.video:
+            task = asyncio.create_task(
+                _attempt_auto_verify(
+                    request=request,
+                    svc=svc,
+                    autocomplete=autocomplete,
+                    users=users,
+                    completion_id=completion_id,
+                    data=data2,
+                )
+            )
+            self._tasks.add(task)
+            task.add_done_callback(lambda t: self._tasks.remove(t))
+
+            return CompletionSubmissionJobResponse(None, completion_id)
+
+        idempotency_key = f"completion:submission:{data.user_id}:{completion_id}2"
+        job_status = await svc.publish_message(
+            routing_key="api.completion.submission",
+            data=CompletionCreatedEvent(completion_id),
+            headers=request.headers,
+            idempotency_key=idempotency_key,
+            use_pool=True,
+        )
+        return CompletionSubmissionJobResponse(job_status, completion_id)
 
     @post(path="/", summary="Submit Completion", description="Submit a new completion record and publish an event.")
     async def submit_completion(  # noqa: PLR0913
