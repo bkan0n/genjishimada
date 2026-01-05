@@ -7,7 +7,7 @@ import discord
 from discord import TextChannel, app_commands, ui
 from discord.ext import commands
 
-from extensions.playtest import PlaytestCog
+from extensions.playtest import PlaytestCog, PlaytestComponentsV2View
 from utilities.base import BaseCog
 
 if TYPE_CHECKING:
@@ -135,6 +135,14 @@ class HousekeepingCog(BaseCog):
         ):
             if _view := cog.playtest_views.get(message.id):
                 await message.edit(view=_view)
+            else:
+                thread_id = message.thread.id
+                playtest_data = await self.bot.api.get_map(playtest_thread_id=thread_id)
+                file = await self.bot.api.get_plot_file(code=playtest_data.code)
+                view = PlaytestComponentsV2View(data=playtest_data, thread_id=thread_id)
+                playtest = await self.bot.api.get_playtest(thread_id)
+                cog.playtest_views[playtest.id] = view
+                await message.edit(view=view, attachments=[file], content=None)
 
         await itx.edit_original_response(content="The view has been repaired.")
 
