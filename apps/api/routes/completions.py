@@ -130,6 +130,7 @@ class CompletionsController(Controller):
             screenshot=data.screenshot,
             video=data.video,
         )
+
         if not data.video:
             task = asyncio.create_task(
                 _attempt_auto_verify(
@@ -192,7 +193,9 @@ class CompletionsController(Controller):
         if not completion_id:
             raise ValueError("Some how completion ID is null?")
 
-        if not data.video:
+        suspicious_flags = await svc.get_suspicious_flags(data.user_id)
+
+        if not (data.video or suspicious_flags):
             task = asyncio.create_task(
                 _attempt_auto_verify(
                     request=request,
