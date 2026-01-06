@@ -3,7 +3,7 @@ name: Prod Deployment
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   prod-deploy:
@@ -57,6 +57,8 @@ jobs:
 
           # RabbitMQ env
           RABBITMQ_ERLANG_COOKIE: ${{ secrets.RABBITMQ_ERLANG_COOKIE }}
+          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
 
           # DB env
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
