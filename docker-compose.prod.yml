@@ -18,6 +18,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      FROM_EMAIL: noreply@genji.pk
     restart: unless-stopped
     depends_on:
       genjishimada-db:

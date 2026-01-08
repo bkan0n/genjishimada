@@ -449,7 +449,7 @@ class UserService(BaseService):
         WITH next_id AS (
           SELECT COALESCE(MAX(id) + 1, 1) AS id
           FROM core.users
-          WHERE id < 1000000000000000
+          WHERE id < 100000000
         )
         INSERT INTO core.users (id, nickname, global_name)
         SELECT id, $1, $1
