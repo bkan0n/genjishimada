@@ -1,4 +1,4 @@
-"""Authentication routes for email-based users."""
+"""Authentication routes for email-based users and Discord OAuth."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from typing import Annotated
 import httpx
 import litestar
 from genjishimada_sdk.auth import (
-    AuthUserResponse,
     EmailAuthStatus,
     EmailLoginRequest,
     EmailRegisterRequest,
@@ -27,18 +26,9 @@ from di.auth import AuthService, provide_auth_service
 
 log = logging.getLogger(__name__)
 
-# =============================================================================
-# Configuration
-# =============================================================================
-
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 SITE_URL = os.getenv("SITE_URL", "https://genji.pk")
-FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@genji.pk")
-
-
-# =============================================================================
-# Email Helpers
-# =============================================================================
+FROM_EMAIL = os.getenv("FROM_EMAIL", "noreply@notifications.genji.pk")
 
 
 async def send_email_via_resend(to: str, subject: str, html: str) -> bool:
@@ -71,9 +61,17 @@ async def send_email_via_resend(to: str, subject: str, html: str) -> bool:
                     "html": html,
                 },
             )
+
+            # Log the response for debugging
+            if not response.is_success:
+                log.error(f"Resend API error: {response.status_code} - {response.text}")
+
             response.raise_for_status()
             log.info(f"Email sent successfully to {to}")
             return True
+        except httpx.HTTPStatusError as e:
+            log.error(f"Failed to send email to {to}: {e} - Response: {e.response.text}")
+            return False
         except Exception as e:
             log.error(f"Failed to send email to {to}: {e}")
             return False
@@ -149,20 +147,12 @@ def build_password_reset_email(username: str, token: str) -> str:
     """
 
 
-# =============================================================================
-# Auth Controller
-# =============================================================================
-
-
 class AuthController(litestar.Controller):
-    """Email-based authentication endpoints."""
+    """Email-based authentication and Discord OAuth endpoints."""
 
     tags = ["Authentication"]
     path = "/auth"
     dependencies = {"svc": Provide(provide_auth_service)}
-    # =========================================================================
-    # Registration & Login
-    # =========================================================================
 
     @litestar.post(
         path="/register",
@@ -246,10 +236,6 @@ class AuthController(litestar.Controller):
             status_code=HTTP_200_OK,
         )
 
-    # =========================================================================
-    # Email Verification
-    # =========================================================================
-
     @litestar.post(
         path="/verify-email",
         summary="Verify Email",
@@ -320,10 +306,6 @@ class AuthController(litestar.Controller):
             {"message": "If an account exists with this email, a verification email has been sent."},
             status_code=HTTP_200_OK,
         )
-
-    # =========================================================================
-    # Password Reset
-    # =========================================================================
 
     @litestar.post(
         path="/forgot-password",
@@ -398,10 +380,6 @@ class AuthController(litestar.Controller):
             status_code=HTTP_200_OK,
         )
 
-    # =========================================================================
-    # Auth Status
-    # =========================================================================
-
     @litestar.get(
         path="/status/{user_id:int}",
         summary="Get Auth Status",
@@ -418,10 +396,6 @@ class AuthController(litestar.Controller):
             EmailAuthStatus if user has email auth, None otherwise.
         """
         return await svc.get_auth_status(user_id)
-
-    # =========================================================================
-    # Session Management (for Laravel custom session driver)
-    # =========================================================================
 
     @litestar.get(
         path="/sessions/{session_id:str}",

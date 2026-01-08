@@ -33,10 +33,6 @@ from .base import BaseService
 
 log = logging.getLogger(__name__)
 
-# =============================================================================
-# Configuration
-# =============================================================================
-
 VERIFICATION_TOKEN_EXPIRY_HOURS = 24
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1
 SESSION_LIFETIME_MINUTES = 120  # 2 hours, matching Laravel default
@@ -76,10 +72,6 @@ USERNAME_MAX_LENGTH = 20
 
 class AuthService(BaseService):
     """Service for email-based authentication."""
-
-    # =========================================================================
-    # Validation Helpers
-    # =========================================================================
 
     @staticmethod
     def validate_password(password: str) -> None:
@@ -159,10 +151,6 @@ class AuthService(BaseService):
                 status_code=HTTP_400_BAD_REQUEST,
             )
 
-    # =========================================================================
-    # Password Hashing
-    # =========================================================================
-
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt.
@@ -189,10 +177,6 @@ class AuthService(BaseService):
         """
         return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
-    # =========================================================================
-    # Token Generation
-    # =========================================================================
-
     @staticmethod
     def generate_token() -> tuple[str, str]:
         """Generate a secure token and its hash.
@@ -215,10 +199,6 @@ class AuthService(BaseService):
             SHA256 hash of the token.
         """
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-    # =========================================================================
-    # Rate Limiting
-    # =========================================================================
 
     async def check_rate_limit(self, identifier: str, action: str) -> None:
         """Check if an action is rate-limited.
@@ -263,10 +243,6 @@ class AuthService(BaseService):
             VALUES (LOWER($1), $2, $3)
         """
         await self._conn.execute(query, identifier, action, success)
-
-    # =========================================================================
-    # User Registration
-    # =========================================================================
 
     async def register(self, data: EmailRegisterRequest, client_ip: str | None = None) -> tuple[AuthUserResponse, str]:
         """Register a new email-based user.
@@ -352,10 +328,6 @@ class AuthService(BaseService):
             ),
             token,
         )
-
-    # =========================================================================
-    # Email Verification
-    # =========================================================================
 
     async def verify_email(self, data: EmailVerifyRequest) -> AuthUserResponse:
         """Verify a user's email address.
@@ -485,10 +457,6 @@ class AuthService(BaseService):
         await self.record_attempt(identifier, "verification_resend", success=True)
         return token, row["nickname"]
 
-    # =========================================================================
-    # Login
-    # =========================================================================
-
     async def login(self, data: EmailLoginRequest, client_ip: str | None = None) -> AuthUserResponse:
         """Authenticate a user with email and password.
 
@@ -539,10 +507,6 @@ class AuthService(BaseService):
             email_verified=row["email_verified_at"] is not None,
             coins=row["coins"],
         )
-
-    # =========================================================================
-    # Password Reset
-    # =========================================================================
 
     async def request_password_reset(
         self, data: PasswordResetRequest, client_ip: str | None = None
@@ -668,10 +632,6 @@ class AuthService(BaseService):
             coins=row["coins"],
         )
 
-    # =========================================================================
-    # User Lookup
-    # =========================================================================
-
     async def get_auth_status(self, user_id: int) -> EmailAuthStatus | None:
         """Get email authentication status for a user.
 
@@ -699,10 +659,6 @@ class AuthService(BaseService):
             email_verified=row["email_verified_at"] is not None,
             email=masked_email,
         )
-
-    # =========================================================================
-    # Session Management (for Laravel custom session driver)
-    # =========================================================================
 
     async def session_read(self, session_id: str) -> str | None:
         """Read session data by ID.
