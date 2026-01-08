@@ -484,6 +484,7 @@ class AuthController(litestar.Controller):
         path="/sessions/{session_id:str}",
         summary="Destroy Session",
         description="Destroy a session. Used by Laravel session driver.",
+        status_code=HTTP_200_OK,
     )
     async def session_destroy(self, svc: AuthService, session_id: str) -> Response:
         """Destroy a session.
@@ -543,6 +544,7 @@ class AuthController(litestar.Controller):
         path="/sessions/user/{user_id:int}",
         summary="Destroy All User Sessions",
         description="Logout user from all devices.",
+        status_code=HTTP_200_OK,
     )
     async def destroy_user_sessions(
         self,
