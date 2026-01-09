@@ -578,11 +578,13 @@ class CompletionsService(BaseService):
                 with contextlib.suppress(discord.Forbidden):
                     await member.send(view=_view)
 
+            map_data = await self.bot.api.get_map(code=_data.code)
+            xp_grant_permitted = map_data.official is True
             # Completion
-            if completion_data.completion:
+            if completion_data.completion and xp_grant_permitted:
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Completion")
             # World Record
-            if not completion_data.completion and completion_data.hypothetical_rank == 1:
+            if not completion_data.completion and completion_data.hypothetical_rank == 1 and xp_grant_permitted:
                 previously_granted = await self.bot.api.check_for_previous_world_record_xp(
                     completion_data.code, completion_data.user_id
                 )
@@ -597,11 +599,13 @@ class CompletionsService(BaseService):
                 not completion_data.completion
                 and completion_data.hypothetical_rank
                 and completion_data.hypothetical_rank > 1
+                and xp_grant_permitted
             ):
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Record")
                 await self._emit_newsfeed_for_record(completion_data)
 
-            await self._process_map_mastery(completion_data.user_id)
+            if xp_grant_permitted:
+                await self._process_map_mastery(completion_data.user_id)
 
         elif should_notify and member:
             completion_data = await self.bot.api.get_completion_submission(event.completion_id)

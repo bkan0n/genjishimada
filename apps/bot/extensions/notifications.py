@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+DISCORD_USER_ID_LOWER_LIMIT = 1_000_000_000_000_000
+
 
 class NotificationService:
     def __init__(self, bot: core.Genji) -> None:
@@ -37,6 +39,8 @@ class NotificationService:
 
     async def notify_dm(self, user_id: int, notification: Notification, message: str) -> bool:
         """Send a DM to the user if the given notification type is enabled."""
+        if user_id < DISCORD_USER_ID_LOWER_LIMIT:
+            return False
         if await self.should_notify(user_id, notification):
             try:
                 user = self.bot.get_user(user_id)
@@ -59,6 +63,8 @@ class NotificationService:
         **kwargs,
     ) -> bool:
         """Send a message in the channel that pings the user if the notification is enabled."""
+        if user_id < DISCORD_USER_ID_LOWER_LIMIT:
+            return False
         if await self.should_notify(user_id, notification):
             try:
                 await channel.send(f"<@{user_id}> {message}", **kwargs)
@@ -79,6 +85,8 @@ class NotificationService:
         **kwargs,
     ) -> None:
         """Send a message in the channel that pings the user, or sends message without a ping."""
+        if user_id < DISCORD_USER_ID_LOWER_LIMIT:
+            return
         success = await self.notify_channel(channel, user_id, notification, message)
         if not success:
             if not channel:

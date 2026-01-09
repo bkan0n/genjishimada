@@ -165,7 +165,7 @@ class UserService(BaseService):
             CustomHTTPException: If a duplicate primary key (users_pkey) is detected.
 
         """
-        fake_user_id_limit = 1000000000000000
+        fake_user_id_limit = 100_000_000
         if data.id < fake_user_id_limit:
             raise CustomHTTPException(
                 detail="Please use create fake member endpoint for user ids less than 1000000000000000.",
