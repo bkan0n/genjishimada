@@ -21,6 +21,7 @@ from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR, HTTP_503_SERVI
 from litestar_asyncpg import AsyncpgConfig, AsyncpgConnection, AsyncpgPlugin, PoolConfig
 
 from middleware.auth import CustomAuthenticationMiddleware
+from middleware.guards import scope_guard
 from routes import route_handlers
 from utilities.errors import CustomHTTPException
 
@@ -179,6 +180,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         lifespan=[rabbitmq_connection],
         logging_config=logging_config,
         middleware=[auth_middleware],
+        guards=[scope_guard],
     )
     logging.getLogger("uvicorn.access").addFilter(HealthcheckEndpointFilter())
     return _app

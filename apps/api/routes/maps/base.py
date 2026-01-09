@@ -277,6 +277,7 @@ class BaseMapsController(litestar.Controller):
             "creators, mechanics, restrictions, difficulty, medals, and completion context. Supports pagination "
             "or returning all results."
         ),
+        opt={"required_scopes": {"maps:read"}},
     )
     async def get_maps(  # noqa: PLR0913
         self,

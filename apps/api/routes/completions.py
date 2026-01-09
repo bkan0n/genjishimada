@@ -66,6 +66,7 @@ class CompletionsController(Controller):
         path="/",
         summary="Get User Completions",
         description="Retrieve all verified completions for a given user, optionally filtered by difficulty.",
+        opt={"required_scopes": {"completions:read"}},
     )
     async def get_completions_for_user(
         self,
@@ -94,6 +95,7 @@ class CompletionsController(Controller):
         path="/world-records",
         summary="Get User World Records",
         description="Retrieve all verified World Records for a given user.",
+        opt={"required_scopes": {"completions:read"}},
     )
     async def get_world_records_per_user(
         self,
@@ -317,6 +319,7 @@ class CompletionsController(Controller):
         path="/{code:str}",
         summary="Get Map Leaderboard",
         description="Retrieve the leaderboard for a given map, including ranks and medals.",
+        opt={"required_scopes": {"completions:read"}},
     )
     async def get_completions_leaderboard(
         self,

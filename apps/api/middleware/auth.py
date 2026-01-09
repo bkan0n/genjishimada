@@ -17,6 +17,8 @@ class AuthUser(msgspec.Struct):
 
 class AuthToken(msgspec.Struct):
     api_key: str
+    is_superuser: bool = False
+    scopes: tuple[str, ...] = ()
 
 
 class CustomAuthenticationMiddleware(AbstractAuthenticationMiddleware):
@@ -29,7 +31,7 @@ class CustomAuthenticationMiddleware(AbstractAuthenticationMiddleware):
             raise NotAuthorizedException("Missing API key")
 
         query = """
-            SELECT u.id, u.username, u.info, t.api_key
+            SELECT u.id, u.username, u.info, t.api_key, t.is_superuser, t.scopes
             FROM public.api_tokens t
             JOIN public.auth_users u ON t.user_id = u.id
             WHERE t.api_key = $1
@@ -41,5 +43,9 @@ class CustomAuthenticationMiddleware(AbstractAuthenticationMiddleware):
             raise NotAuthorizedException("Invalid API key")
 
         user = AuthUser(id=row["id"], username=row["username"], info=row["info"])
-        token = AuthToken(api_key=row["api_key"])
+        token = AuthToken(
+            api_key=row["api_key"],
+            is_superuser=row["is_superuser"] or False,
+            scopes=tuple(row["scopes"] or []),
+        )
         return AuthenticationResult(user=user, auth=token)
