@@ -419,6 +419,7 @@ class CompletionView(ui.LayoutView):
         reason: str | None = None,
         verifier_name: str = "",
         playtest_jump_url: str | None = None,
+        official_map: bool = True,
     ) -> None:
         """Initialize the view displaying a completion.
 
@@ -436,6 +437,7 @@ class CompletionView(ui.LayoutView):
         self.verifier_name = verifier_name
         self.like_button = CompletionLikeButton(data.id)
         self.playtest_jump_url = playtest_jump_url
+        self.official_map = official_map
         self.rebuild_components()
 
     def rebuild_components(self) -> None:
@@ -453,6 +455,7 @@ class CompletionView(ui.LayoutView):
             if self.playtest_jump_url
             else ""
         )
+        color = discord.Color.yellow() if self.official_map else discord.Color.blue()
         container = ui.Container(
             ui.Section(
                 ui.TextDisplay(
@@ -470,6 +473,7 @@ class CompletionView(ui.LayoutView):
             ui.Separator(),
             ui.MediaGallery(MediaGalleryItem(self._data.screenshot)),
             *((ui.ActionRow(self.like_button),) if self._data.verified and not self.is_dm else ()),  # pyright: ignore[reportArgumentType]
+            accent_color=color,
         )
 
         self.add_item(container)
@@ -569,17 +573,19 @@ class CompletionsService(BaseService):
             completion_data.user_id, Notification.DM_ON_VERIFICATION
         )
         view = CompletionView(completion_data, verifier_name=verifier_name)
+        map_data = await self.bot.api.get_map(code=_data.code)
+        xp_grant_permitted = map_data.official is True
         if event.verified:
             message = await self.submission_channel.send(view=view)
             await self.bot.api.edit_completion(event.completion_id, data=CompletionPatchRequest(message_id=message.id))
             if should_notify and member:
                 completion_data = await self.bot.api.get_completion_submission(event.completion_id)
-                _view = CompletionView(completion_data, is_dm=True, verifier_name=verifier_name)
+                _view = CompletionView(
+                    completion_data, is_dm=True, verifier_name=verifier_name, official_map=xp_grant_permitted
+                )
                 with contextlib.suppress(discord.Forbidden):
                     await member.send(view=_view)
 
-            map_data = await self.bot.api.get_map(code=_data.code)
-            xp_grant_permitted = map_data.official is True
             # Completion
             if completion_data.completion and xp_grant_permitted:
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Completion")
