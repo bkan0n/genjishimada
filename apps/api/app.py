@@ -157,6 +157,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         profile_session_sample_rate=1.0,
         profile_lifecycle="trace",
         environment=APP_ENVIRONMENT,
+        release=os.getenv("SENTRY_RELEASE", "unknown"),
     )
 
     _app = Litestar(

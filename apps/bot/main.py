@@ -80,6 +80,7 @@ async def main() -> None:
             AsyncioIntegration(),
         ],
         debug=APP_ENVIRONMENT != "production",
+        release=os.getenv("SENTRY_RELEASE", "unknown"),
     )
 
     logging.getLogger("discord.gateway").setLevel("WARNING")
