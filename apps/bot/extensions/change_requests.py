@@ -728,12 +728,11 @@ class ChangeRequestsCog(BaseCog):
         for row in rows:
             thread = self.bot.get_channel(row.thread_id)
             if not thread:
-                thread = self.bot.fetch_channel(row.thread_id)
+                thread = await self.bot.fetch_channel(row.thread_id)
             if not thread:
                 log.warning("Stale CR alert: id=%s exists in db but no Thread exists. Skipping.", row.thread_id)
                 continue
-            if not isinstance(thread, discord.Thread):
-                return
+            assert isinstance(thread, discord.Thread)
             await thread.send(
                 f"{row.creator_mentions}<@&{self.bot.config.roles.mentionable.modmail}>\n"
                 "# This change request is now stale. "
