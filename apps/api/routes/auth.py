@@ -546,7 +546,6 @@ class AuthController(litestar.Controller):
         path="/remember-token",
         summary="Create Remember Token",
         description="Create a long-lived token for persistent login.",
-        opt={"exclude_from_auth": False},  # Requires API key
     )
     async def create_remember_token(
         self,
@@ -554,6 +553,7 @@ class AuthController(litestar.Controller):
         request: litestar.Request,
         data: Annotated[dict, Body(title="User ID")],
     ) -> Response:
+        """Create a remember token for a user."""
         client_ip = request.client.host if request.client else None
         user_agent = request.headers.get("User-Agent")
 
@@ -575,6 +575,7 @@ class AuthController(litestar.Controller):
         svc: AuthService,
         data: Annotated[dict, Body(title="Token")],
     ) -> Response:
+        """Validate a remember token and return user ID."""
         user_id = await svc.validate_remember_token(data["token"])
 
         if user_id is None:
@@ -589,5 +590,6 @@ class AuthController(litestar.Controller):
         status_code=HTTP_200_OK,
     )
     async def revoke_remember_tokens(self, svc: AuthService, user_id: int) -> Response:
+        """Revoke all remember tokens for a user."""
         count = await svc.revoke_remember_tokens(user_id)
         return Response({"revoked_count": count}, status_code=HTTP_200_OK)

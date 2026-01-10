@@ -124,6 +124,7 @@ class CompletionsController(Controller):
         users: UserService,
         conn: Connection,
     ) -> CompletionSubmissionJobResponse:
+        """Test."""
         completion_id = data.completion_id
         data2 = CompletionCreateRequest(
             code=data.code,

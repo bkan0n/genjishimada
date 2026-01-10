@@ -411,7 +411,7 @@ class CompletionLikeButton(ui.DynamicItem[ui.Button["CompletionView"]], template
 
 
 class CompletionView(ui.LayoutView):
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         data: CompletionSubmissionModel,
         *,
@@ -429,6 +429,7 @@ class CompletionView(ui.LayoutView):
             reason (str | None, optional): Rejection reason if applicable. Defaults to None.
             verifier_name (str, optional): Name of the verifier. Defaults to "".
             playtest_jump_url (str): A jump URL if a current playtest exists.
+            official_map (bool | None): Whether the map is official.
         """
         super().__init__(timeout=None)
         self._data = data
