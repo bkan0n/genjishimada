@@ -6,7 +6,7 @@ from middleware.auth import AuthToken
 
 
 def scope_guard(connection: ASGIConnection, route_handler: BaseRouteHandler) -> None:
-    if route_handler.opt.get("exclude_from_auth"):
+    if route_handler.opt.get("exclude_from_auth", False):
         return
 
     auth: AuthToken = connection.auth
