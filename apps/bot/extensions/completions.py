@@ -411,7 +411,7 @@ class CompletionLikeButton(ui.DynamicItem[ui.Button["CompletionView"]], template
 
 
 class CompletionView(ui.LayoutView):
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         data: CompletionSubmissionModel,
         *,
@@ -419,6 +419,7 @@ class CompletionView(ui.LayoutView):
         reason: str | None = None,
         verifier_name: str = "",
         playtest_jump_url: str | None = None,
+        official_map: bool | None = None,
     ) -> None:
         """Initialize the view displaying a completion.
 
@@ -428,6 +429,7 @@ class CompletionView(ui.LayoutView):
             reason (str | None, optional): Rejection reason if applicable. Defaults to None.
             verifier_name (str, optional): Name of the verifier. Defaults to "".
             playtest_jump_url (str): A jump URL if a current playtest exists.
+            official_map (bool | None): Whether the map is official.
         """
         super().__init__(timeout=None)
         self._data = data
@@ -436,6 +438,7 @@ class CompletionView(ui.LayoutView):
         self.verifier_name = verifier_name
         self.like_button = CompletionLikeButton(data.id)
         self.playtest_jump_url = playtest_jump_url
+        self.official_map = official_map
         self.rebuild_components()
 
     def rebuild_components(self) -> None:
@@ -449,10 +452,22 @@ class CompletionView(ui.LayoutView):
 
         formatted_model = FilteredFormatter(self._data).format()
         playtest_text = (
-            (f"Visit the playtest thread for this map and vote if you haven't already.\n{self.playtest_jump_url}")
+            f"Visit the playtest thread for this map and vote if you haven't already.\n{self.playtest_jump_url}"
             if self.playtest_jump_url
             else ""
         )
+        user_type_disclaimer = ()
+        if self.official_map is None:
+            color = None
+        elif self.official_map:
+            color = discord.Color.yellow()
+        else:
+            color = discord.Color.blue()
+            user_type_disclaimer = (ui.TextDisplay("-# CN Submission"),)
+
+        log.info(self.official_map)
+        log.info(color)
+
         container = ui.Container(
             ui.Section(
                 ui.TextDisplay(
@@ -467,9 +482,11 @@ class CompletionView(ui.LayoutView):
                     )
                 ),
             ),
+            *(user_type_disclaimer if self.official_map is not None else ()),
             ui.Separator(),
             ui.MediaGallery(MediaGalleryItem(self._data.screenshot)),
             *((ui.ActionRow(self.like_button),) if self._data.verified and not self.is_dm else ()),  # pyright: ignore[reportArgumentType]
+            accent_color=color,
         )
 
         self.add_item(container)
@@ -568,7 +585,11 @@ class CompletionsService(BaseService):
         should_notify = await self.bot.notifications.should_notify(
             completion_data.user_id, Notification.DM_ON_VERIFICATION
         )
-        view = CompletionView(completion_data, verifier_name=verifier_name)
+        map_data = await self.bot.api.get_map(code=_data.code)
+        log.info(map_data)
+        log.info(map_data.official)
+        view = CompletionView(completion_data, verifier_name=verifier_name, official_map=map_data.official)
+
         if event.verified:
             message = await self.submission_channel.send(view=view)
             await self.bot.api.edit_completion(event.completion_id, data=CompletionPatchRequest(message_id=message.id))
@@ -579,10 +600,10 @@ class CompletionsService(BaseService):
                     await member.send(view=_view)
 
             # Completion
-            if completion_data.completion:
+            if completion_data.completion and map_data.official:
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Completion")
             # World Record
-            if not completion_data.completion and completion_data.hypothetical_rank == 1:
+            if not completion_data.completion and completion_data.hypothetical_rank == 1 and map_data.official:
                 previously_granted = await self.bot.api.check_for_previous_world_record_xp(
                     completion_data.code, completion_data.user_id
                 )
@@ -597,11 +618,13 @@ class CompletionsService(BaseService):
                 not completion_data.completion
                 and completion_data.hypothetical_rank
                 and completion_data.hypothetical_rank > 1
+                and map_data.official
             ):
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Record")
                 await self._emit_newsfeed_for_record(completion_data)
 
-            await self._process_map_mastery(completion_data.user_id)
+            if map_data.official:
+                await self._process_map_mastery(completion_data.user_id)
 
         elif should_notify and member:
             completion_data = await self.bot.api.get_completion_submission(event.completion_id)

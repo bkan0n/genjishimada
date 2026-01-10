@@ -3,6 +3,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
 from . import (
+    auth,
     change_requests,
     completions,
     difficulties,
@@ -17,6 +18,7 @@ from . import (
 )
 
 __all__ = [
+    "auth",
     "change_requests",
     "completions",
     "difficulties",

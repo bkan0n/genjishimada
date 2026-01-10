@@ -26,7 +26,7 @@ from uuid import UUID
 import aiohttp
 import discord
 import msgspec
-from genjishimada_sdk.change_requests import ChangeRequestResponse
+from genjishimada_sdk.change_requests import ChangeRequestResponse, StaleChangeRequestResponse
 from genjishimada_sdk.completions import (
     CompletionCreateRequest,
     CompletionPatchRequest,
@@ -94,7 +94,7 @@ from genjishimada_sdk.xp import TierChangeResponse, XpGrantRequest, XpGrantRespo
 from multidict import MultiDict
 
 from extensions.completions import CompletionLeaderboardFormattable, CompletionUserFormattable
-from utilities.change_requests import FormattableChangeRequest, FormattableStaleChangeRequest
+from utilities.change_requests import FormattableChangeRequest
 from utilities.completions import CompletionSubmissionModel, SuspiciousCompletionModel
 from utilities.errors import APIHTTPError, APIUnavailableError
 from utilities.maps import MapCreateModel, MapModel
@@ -1368,14 +1368,14 @@ class APIService:
         r = Route("GET", "/change-requests")
         return self._request(r, response_model=list[FormattableChangeRequest], params={"code": code})
 
-    def get_stale_change_requests(self) -> Response[list[FormattableStaleChangeRequest]]:
+    def get_stale_change_requests(self) -> Response[list[StaleChangeRequestResponse]]:
         """Fetch all stale change requests.
 
         Returns:
-            Response[list[FormattableStaleChangeRequest]]: List of stale requests.
+            Response[list[StaleChangeRequestResponse]]: List of stale requests.
         """
         r = Route("GET", "/change-requests/stale")
-        return self._request(r, response_model=list[FormattableStaleChangeRequest])
+        return self._request(r, response_model=list[StaleChangeRequestResponse])
 
     def update_alerted_change_request(self, thread_id: int) -> Response[None]:
         """Mark a change request thread as alerted.

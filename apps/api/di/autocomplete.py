@@ -227,13 +227,13 @@ class AutocompleteService(BaseService):
             CROSS JOIN LATERAL (
                 VALUES (u.nickname), (u.global_name)
             ) AS name_list(name)
-            WHERE ($3 IS FALSE OR id < 10000000000000) AND ($4 IS FALSE OR id > 10000000000000)
+            WHERE ($3 IS FALSE OR id < 1000000000000000) AND ($4 IS FALSE OR id > 1000000000000000)
 
             UNION ALL
 
             SELECT o.user_id, o.username AS name, similarity(o.username, $1) AS sim
             FROM users.overwatch_usernames o
-            WHERE ($3 IS FALSE OR user_id < 10000000000000) AND ($4 IS FALSE OR user_id > 10000000000000)
+            WHERE ($3 IS FALSE OR user_id < 1000000000000000) AND ($4 IS FALSE OR user_id > 1000000000000000)
         ),
         ranked_users AS (
             SELECT user_id, MAX(sim) AS sim
