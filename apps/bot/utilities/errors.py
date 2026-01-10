@@ -4,6 +4,7 @@ import contextlib
 import logging
 import os
 import traceback
+from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 import discord
@@ -70,27 +71,20 @@ class ReportIssueButton(ui.Button["ErrorView"]):
         """Callback."""
         modal = ReportIssueModal(original_itx=itx)
         await itx.response.send_modal(modal)
-        with sentry_sdk.push_scope() as scope:
-            scope.set_user({"id": str(self.view.exception_itx.user.id), "username": self.view.exception_itx.user.name})
-            scope.set_tag(
-                "command", self.view.exception_itx.command.name if self.view.exception_itx.command else "unknown"
-            )
-            if self.view.exception_itx.namespace:
-                scope.set_context("Command Args", {"Args": dict(self.view.exception_itx.namespace.__dict__.items())})
+        await modal.wait()
 
-            print(self.view.sentry_event_id)
-            await modal.wait()
-
-            if modal.feedback.value is not None:
+        if modal.feedback.value is not None and self.view.sentry_event_id is not None:
+            try:
                 data = {
                     "name": f"{self.view.exception_itx.user.name} ({self.view.exception_itx.user.id})",
                     "email": "genjishimada@bkan0n.com",
                     "comments": modal.feedback.value,
+                    "event_id": self.view.sentry_event_id,
                 }
-                if self.view.sentry_event_id is not None:
-                    data["event_id"] = self.view.sentry_event_id
-                print(SENTRY_FEEDBACK_URL)
-                print(data)
+
+                log.debug("Submitting feedback to Sentry: %s", SENTRY_FEEDBACK_URL)
+                log.debug("Feedback data: %s", data)
+
                 resp = await itx.client.session.post(
                     SENTRY_FEEDBACK_URL,
                     headers={
@@ -99,9 +93,26 @@ class ReportIssueButton(ui.Button["ErrorView"]):
                     },
                     json=data,
                 )
-                t = await resp.text()
-                print(t)
-            self.view.stop()
+
+                response_text = await resp.text()
+
+                if resp.status >= HTTPStatus.BAD_REQUEST.value:
+                    log.error(
+                        "Failed to submit Sentry feedback. Status: %s, Response: %s",
+                        resp.status,
+                        response_text,
+                    )
+                else:
+                    log.info(
+                        "Successfully submitted feedback for event %s by user %s",
+                        self.view.sentry_event_id,
+                        self.view.exception_itx.user.id,
+                    )
+
+            except Exception as e:
+                log.error("Exception while submitting Sentry feedback: %s", e, exc_info=True)
+
+        self.view.stop()
 
 
 class ErrorView(BaseView):
@@ -158,7 +169,23 @@ class ErrorView(BaseView):
 async def on_command_error(itx: GenjiItx, error: Exception) -> None:
     """Handle application command errors."""
     exception = getattr(error, "original", error)
-    event_id = sentry_sdk.capture_exception(exception)
+
+    # Set user context before capturing the exception
+    with sentry_sdk.isolation_scope() as scope:
+        scope.set_user(
+            {
+                "id": str(itx.user.id),
+                "username": itx.user.name,
+            }
+        )
+        scope.set_tag("command", itx.command.name if itx.command else "unknown")
+
+        if itx.namespace:
+            scope.set_context("Command Args", {"Args": dict(itx.namespace.__dict__.items())})
+
+        # Capture the exception with all the context
+        event_id = sentry_sdk.capture_exception(exception)
+
     if isinstance(exception, UserFacingError):
         view = ErrorView(event_id, exception, itx, description=str(exception))
         view.original_interaction = itx
@@ -174,7 +201,6 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
     with contextlib.suppress(HTTPException, NotFound):
         if itx.response.is_done():
             await itx.edit_original_response(content=None, view=view)  # type: ignore
-
         else:
             await itx.response.send_message(view=view, ephemeral=True)
 
