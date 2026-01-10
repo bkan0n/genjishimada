@@ -732,7 +732,8 @@ class ChangeRequestsCog(BaseCog):
             if not thread:
                 log.warning("Stale CR alert: id=%s exists in db but no Thread exists. Skipping.", row.thread_id)
                 continue
-            assert isinstance(thread, discord.Thread)
+            if not isinstance(thread, discord.Thread):
+                return
             await thread.send(
                 f"{row.creator_mentions}<@&{self.bot.config.roles.mentionable.modmail}>\n"
                 "# This change request is now stale. "
