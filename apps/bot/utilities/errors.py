@@ -183,7 +183,7 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
         # Tag UserFacingErrors so they can be filtered out in Sentry
         if isinstance(exception, UserFacingError):
             scope.set_tag("user_facing", True)
-            scope.level = "info"  # Set as info level instead of error
+            scope.set_level("info")  # Set as info level instead of error
 
         if itx.namespace:
             scope.set_context("Command Args", {"Args": dict(itx.namespace.__dict__.items())})
