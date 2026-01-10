@@ -37,7 +37,7 @@ VERIFICATION_TOKEN_EXPIRY_HOURS = 24
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1
 SESSION_LIFETIME_MINUTES = 120  # 2 hours, matching Laravel default
 BCRYPT_ROUNDS = 12
-
+REMEMBER_TOKEN_LIFETIME_DAYS = 30
 # Rate limit configuration: (max_attempts, window_seconds)
 RATE_LIMITS = {
     "register": (5, 3600),  # 5 attempts per hour
@@ -785,6 +785,76 @@ class AuthService(BaseService):
                 user_id,
             )
 
+        try:
+            return int(result.split()[1])
+        except (IndexError, ValueError):
+            return 0
+
+    REMEMBER_TOKEN_LIFETIME_DAYS = 30
+
+    async def create_remember_token(
+        self, user_id: int, ip_address: str | None = None, user_agent: str | None = None
+    ) -> str:
+        """Create a long-lived remember token for persistent login.
+
+        Returns:
+            The plaintext token to store in a cookie.
+        """
+        token, token_hash = self.generate_token()
+        expires_at = datetime.now(timezone.utc) + timedelta(days=REMEMBER_TOKEN_LIFETIME_DAYS)
+
+        await self._conn.execute(
+            """
+            INSERT INTO users.remember_tokens (
+                user_id, token_hash, expires_at, ip_address, user_agent
+            )
+            VALUES (
+                $1, $2, $3, $4, $5
+            )
+            """,
+            user_id,
+            token_hash,
+            expires_at,
+            ip_address,
+            user_agent,
+        )
+
+        return token
+
+    async def validate_remember_token(self, token: str) -> int | None:
+        """Validate a remember token and return the user_id if valid.
+
+        Returns:
+            User ID if token is valid, None otherwise.
+        """
+        token_hash = self.hash_token(token)
+
+        row = await self._conn.fetchrow(
+            """
+            SELECT user_id, expires_at
+            FROM users.remember_tokens
+            WHERE token_hash = $1 AND expires_at > now()
+            """,
+            token_hash,
+        )
+
+        if not row:
+            return None
+
+        # Update last_used_at
+        await self._conn.execute(
+            "UPDATE users.remember_tokens SET last_used_at = now() WHERE token_hash = $1",
+            token_hash,
+        )
+
+        return row["user_id"]
+
+    async def revoke_remember_tokens(self, user_id: int) -> int:
+        """Revoke all remember tokens for a user (logout everywhere)."""
+        result = await self._conn.execute(
+            "DELETE FROM users.remember_tokens WHERE user_id = $1",
+            user_id,
+        )
         try:
             return int(result.split()[1])
         except (IndexError, ValueError):

@@ -541,3 +541,53 @@ class AuthController(litestar.Controller):
             {"destroyed_count": count},
             status_code=HTTP_200_OK,
         )
+
+    @litestar.post(
+        path="/remember-token",
+        summary="Create Remember Token",
+        description="Create a long-lived token for persistent login.",
+        opt={"exclude_from_auth": False},  # Requires API key
+    )
+    async def create_remember_token(
+        self,
+        svc: AuthService,
+        request: litestar.Request,
+        data: Annotated[dict, Body(title="User ID")],
+    ) -> Response:
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("User-Agent")
+
+        token = await svc.create_remember_token(
+            user_id=data["user_id"],
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+
+        return Response({"token": token}, status_code=HTTP_201_CREATED)
+
+    @litestar.post(
+        path="/remember-token/validate",
+        summary="Validate Remember Token",
+        description="Check if a remember token is valid and return user_id.",
+    )
+    async def validate_remember_token(
+        self,
+        svc: AuthService,
+        data: Annotated[dict, Body(title="Token")],
+    ) -> Response:
+        user_id = await svc.validate_remember_token(data["token"])
+
+        if user_id is None:
+            return Response({"valid": False, "user_id": None}, status_code=HTTP_200_OK)
+
+        return Response({"valid": True, "user_id": user_id}, status_code=HTTP_200_OK)
+
+    @litestar.delete(
+        path="/remember-token/user/{user_id:int}",
+        summary="Revoke All Remember Tokens",
+        description="Logout user from all devices by revoking all remember tokens.",
+        status_code=HTTP_200_OK,
+    )
+    async def revoke_remember_tokens(self, svc: AuthService, user_id: int) -> Response:
+        count = await svc.revoke_remember_tokens(user_id)
+        return Response({"revoked_count": count}, status_code=HTTP_200_OK)
