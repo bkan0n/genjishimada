@@ -147,7 +147,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         log_exceptions="always",
     )
 
-    auth_middleware = DefineMiddleware(CustomAuthenticationMiddleware, exclude=["docs"])
+    auth_middleware = DefineMiddleware(CustomAuthenticationMiddleware, exclude=["/docs", "/schema", "/healthcheck"])
 
     sentry_sdk.init(
         dsn=os.getenv("SENTRY_DSN"),
