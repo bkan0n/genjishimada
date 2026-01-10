@@ -451,7 +451,7 @@ class CompletionView(ui.LayoutView):
 
         formatted_model = FilteredFormatter(self._data).format()
         playtest_text = (
-            (f"Visit the playtest thread for this map and vote if you haven't already.\n{self.playtest_jump_url}")
+            f"Visit the playtest thread for this map and vote if you haven't already.\n{self.playtest_jump_url}"
             if self.playtest_jump_url
             else ""
         )
@@ -463,6 +463,9 @@ class CompletionView(ui.LayoutView):
         else:
             color = discord.Color.blue()
             user_type_disclaimer = (ui.TextDisplay("-# CN Submission"),)
+
+        log.info(self.official_map)
+        log.info(color)
 
         container = ui.Container(
             ui.Section(
@@ -478,7 +481,7 @@ class CompletionView(ui.LayoutView):
                     )
                 ),
             ),
-            *(user_type_disclaimer if self._data.verified and not self.is_dm else ()),
+            *(user_type_disclaimer if self.official_map is not None else ()),
             ui.Separator(),
             ui.MediaGallery(MediaGalleryItem(self._data.screenshot)),
             *((ui.ActionRow(self.like_button),) if self._data.verified and not self.is_dm else ()),  # pyright: ignore[reportArgumentType]
@@ -582,8 +585,9 @@ class CompletionsService(BaseService):
             completion_data.user_id, Notification.DM_ON_VERIFICATION
         )
         map_data = await self.bot.api.get_map(code=_data.code)
-        xp_grant_permitted = map_data.official is True
-        view = CompletionView(completion_data, verifier_name=verifier_name, official_map=xp_grant_permitted)
+        log.info(map_data)
+        log.info(map_data.official)
+        view = CompletionView(completion_data, verifier_name=verifier_name, official_map=map_data.official)
 
         if event.verified:
             message = await self.submission_channel.send(view=view)
@@ -595,10 +599,10 @@ class CompletionsService(BaseService):
                     await member.send(view=_view)
 
             # Completion
-            if completion_data.completion and xp_grant_permitted:
+            if completion_data.completion and map_data.official:
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Completion")
             # World Record
-            if not completion_data.completion and completion_data.hypothetical_rank == 1 and xp_grant_permitted:
+            if not completion_data.completion and completion_data.hypothetical_rank == 1 and map_data.official:
                 previously_granted = await self.bot.api.check_for_previous_world_record_xp(
                     completion_data.code, completion_data.user_id
                 )
@@ -613,12 +617,12 @@ class CompletionsService(BaseService):
                 not completion_data.completion
                 and completion_data.hypothetical_rank
                 and completion_data.hypothetical_rank > 1
-                and xp_grant_permitted
+                and map_data.official
             ):
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Record")
                 await self._emit_newsfeed_for_record(completion_data)
 
-            if xp_grant_permitted:
+            if map_data.official:
                 await self._process_map_mastery(completion_data.user_id)
 
         elif should_notify and member:
