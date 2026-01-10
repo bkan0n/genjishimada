@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile.api
     container_name: genjishimada-api
     environment:
+      SENTRY_RELEASE: ${SENTRY_RELEASE}
       APP_ENVIRONMENT: ${APP_ENVIRONMENT}
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASS: ${RABBITMQ_PASS}
@@ -43,6 +44,7 @@ services:
       dockerfile: Dockerfile.bot
     container_name: genjishimada-bot
     environment:
+      SENTRY_RELEASE: ${SENTRY_RELEASE}
       SENTRY_DSN: ${SENTRY_DSN}
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       APP_ENVIRONMENT: ${APP_ENVIRONMENT}

@@ -66,3 +66,29 @@ jobs:
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
 
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          SENTRY_RELEASE: ${{ github.sha }}
+
+      - name: Report Release to Sentry
+        if: success()  # Only if deployment succeeded
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: bkan0n
+          SENTRY_PROJECT: genjishimada
+        run: |
+          # Install Sentry CLI
+          curl -sL https://sentry.io/get-cli/ | sh
+
+          # Use git commit SHA as release version
+          export SENTRY_RELEASE="${{ github.sha }}"
+
+          # Create release (won't error if already exists)
+          sentry-cli releases new "$SENTRY_RELEASE" --project "$SENTRY_PROJECT" || true
+
+          # Associate commits automatically
+          sentry-cli releases set-commits "$SENTRY_RELEASE" --auto --project "$SENTRY_PROJECT" || true
+
+          # Finalize the release (marks it as complete)
+          sentry-cli releases finalize "$SENTRY_RELEASE" --project "$SENTRY_PROJECT"
+
+          # Mark as deployed to production environment
+          sentry-cli releases deploys "$SENTRY_RELEASE" new -e production --project "$SENTRY_PROJECT"
