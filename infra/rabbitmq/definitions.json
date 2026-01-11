@@ -271,6 +271,17 @@
         "x-dead-letter-routing-key": "api.playtest.vote.cast.dlq",
         "x-queue-type": "classic"
       }
+    },
+    {
+      "name": "api.notifications.delivery",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "api.notifications.delivery.dlq",
+        "x-queue-type": "classic"
+      }
     }
   ]
 }
