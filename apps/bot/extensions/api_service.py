@@ -72,6 +72,15 @@ from genjishimada_sdk.maps import (
     UnlinkMapsCreateRequest,
 )
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedEventType, PublishNewsfeedJobResponse
+from genjishimada_sdk.notifications import (
+    NOTIFICATION_CHANNEL,
+    NOTIFICATION_EVENT_TYPE,
+    NotificationCreateRequest,
+    NotificationDeliveryResultRequest,
+    NotificationEventResponse,
+    NotificationPreferencesResponse,
+    ShouldDeliverResponse,
+)
 from genjishimada_sdk.tags import (
     TagsAutocompleteRequest,
     TagsAutocompleteResponse,
@@ -1606,6 +1615,135 @@ class APIService:
         """Unlink two map codes."""
         r = Route("DELETE", "/maps/link-codes")
         return self._request(r, data=data)
+
+    def create_notification(  # noqa: PLR0913
+        self,
+        user_id: int,
+        event_type: NOTIFICATION_EVENT_TYPE,
+        title: str,
+        body: str,
+        discord_message: str | None = None,
+        metadata: dict | None = None,
+    ) -> Response[NotificationEventResponse]:
+        """Create a notification event via API.
+
+        The API will store the notification and dispatch it to RabbitMQ
+        for Discord delivery if applicable.
+
+        Args:
+            user_id: Target user ID.
+            event_type: Type of notification event.
+            title: Notification title.
+            body: Notification body.
+            discord_message: Optional Discord-specific message override.
+            metadata: Optional metadata dict.
+
+        Returns:
+            Response[NotificationEventResponse]: The created notification.
+        """
+        r = Route("POST", "/notifications/events")
+        data = NotificationCreateRequest(
+            user_id=user_id,
+            event_type=event_type,
+            title=title,
+            body=body,
+            discord_message=discord_message,
+            metadata=metadata,
+        )
+        return self._request(r, response_model=NotificationEventResponse, data=data)
+
+    def should_deliver_notification(
+        self,
+        user_id: int,
+        event_type: str,
+        channel: str,
+    ) -> Response[bool]:
+        """Check if a notification should be delivered to a channel.
+
+        Args:
+            user_id: Target user ID.
+            event_type: Type of notification event.
+            channel: Delivery channel to check.
+
+        Returns:
+            Response[bool]: Whether the notification should be delivered.
+        """
+        r = Route("GET", "/notifications/users/{user_id}/should-deliver", user_id=user_id)
+        params = {"event_type": event_type, "channel": channel}
+
+        async def _inner() -> bool:
+            resp = await self._request(r, response_model=ShouldDeliverResponse, params=params)
+            return resp.should_deliver
+
+        return _inner()
+
+    def record_notification_delivery_result(
+        self,
+        event_id: int,
+        channel: NOTIFICATION_CHANNEL,
+        status: Literal["delivered", "failed", "skipped"],
+        error_message: str | None = None,
+    ) -> Response[None]:
+        """Record the result of a notification delivery attempt.
+
+        Called by the bot after attempting to deliver a notification
+        via Discord DM or channel ping.
+
+        Args:
+            event_id: ID of the notification event.
+            channel: Delivery channel that was attempted.
+            status: Result status ('delivered', 'failed', 'skipped').
+            error_message: Optional error message if failed.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("POST", "/notifications/events/{event_id}/delivery-result", event_id=event_id)
+        data = NotificationDeliveryResultRequest(
+            channel=channel,
+            status=status,
+            error_message=error_message,
+        )
+        return self._request(r, data=data)
+
+    def get_notification_preferences(self, user_id: int) -> Response[list]:
+        """Get all notification preferences for a user.
+
+        Args:
+            user_id: Target user ID.
+
+        Returns:
+            Response[list]: List of NotificationPreferencesResponse.
+        """
+        r = Route("GET", "/notifications/users/{user_id}/preferences", user_id=user_id)
+        return self._request(r, response_model=list[NotificationPreferencesResponse])
+
+    def update_notification_preference(
+        self,
+        user_id: int,
+        event_type: str,
+        channel: str,
+        enabled: bool,
+    ) -> Response[None]:
+        """Update a single notification preference.
+
+        Args:
+            user_id: Target user ID.
+            event_type: Event type to update.
+            channel: Channel to update.
+            enabled: Whether the preference should be enabled.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route(
+            "PUT",
+            "/notifications/users/{user_id}/preferences/{event_type}/{channel}",
+            user_id=user_id,
+            event_type=event_type,
+            channel=channel,
+        )
+        return self._request(r, params={"enabled": enabled})
 
 
 async def setup(bot: core.Genji) -> None:

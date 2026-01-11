@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from aio_pika.abc import AbstractIncomingMessage
 from discord import TextChannel, app_commands, utils
 from discord.ext import commands
-from genjishimada_sdk.users import Notification
+from genjishimada_sdk.notifications import NotificationEventType
 from genjishimada_sdk.xp import XP_AMOUNTS, XP_TYPES, XpGrantEvent, XpGrantRequest
 
 from extensions._queue_registry import queue_consumer
@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 log = getLogger(__name__)
 
 
-# TODO: Make alerts into cv2, pretty
 class XPService(BaseService):
     xp_channel: TextChannel
 
@@ -113,11 +112,16 @@ class XPService(BaseService):
         multiplier = await self.bot.api.get_xp_multiplier()
         amount = floor(event.amount * multiplier)
 
-        await self.bot.notifications.notify_channel_default_to_no_ping(
-            self.xp_channel,
-            event.user_id,
-            Notification.PING_ON_XP_GAIN,
-            f"<:_:976917981009440798> {user.display_name} has gained **{amount} XP** ({event.type})!",
+        # XP Gain notification (channel ping + web tray + potential DM)
+        await self.bot.notifications.notify_with_channel_ping(
+            channel=self.xp_channel,
+            user_id=event.user_id,
+            event_type=NotificationEventType.XP_GAIN,
+            title="XP Gained",
+            body=f"You gained {amount} XP from {event.type}!",
+            metadata={"amount": amount, "type": event.type},
+            ping_message=f"<:_:976917981009440798> {user.display_name} has gained **{amount} XP** ({event.type})!",
+            fallback_message=f"<:_:976917981009440798> {user.display_name} has gained **{amount} XP** ({event.type})!",
         )
 
         xp_data = await self.bot.api.get_xp_tier_change(event.previous_amount, event.new_amount)
@@ -129,20 +133,33 @@ class XPService(BaseService):
             await self.bot.api.grant_active_key_to_user(event.user_id)
             await self._update_xp_roles_for_user(event.user_id, xp_data.old_main_tier_name, xp_data.new_main_tier_name)
 
-            await self.bot.notifications.notify_dm(
-                event.user_id,
-                Notification.DM_ON_LOOTBOX_GAIN,
-                (
+            # Lootbox earned DM notification
+            await self.bot.notifications.notify_dm_only(
+                user_id=event.user_id,
+                event_type=NotificationEventType.LOOTBOX_EARNED,
+                title="Lootbox Earned!",
+                body=f"You ranked up to {new_rank} and earned a lootbox!",
+                discord_message=(
                     f"Congratulations! You have ranked up to **{new_rank}**!\n"
                     "[Log into the website to open your lootbox!](https://genji.pk/lootbox)"
                 ),
+                metadata={"old_rank": old_rank, "new_rank": new_rank, "reason": "rank_up"},
             )
 
-            await self.bot.notifications.notify_channel_default_to_no_ping(
-                self.xp_channel,
-                event.user_id,
-                Notification.PING_ON_COMMUNITY_RANK_UPDATE,
-                f"<:_:976468395505614858> {user.display_name} has ranked up! **{old_rank}** -> **{new_rank}**\n",
+            # Rank up channel ping notification
+            await self.bot.notifications.notify_with_channel_ping(
+                channel=self.xp_channel,
+                user_id=event.user_id,
+                event_type=NotificationEventType.RANK_UP,
+                title="Rank Up!",
+                body=f"You ranked up from {old_rank} to {new_rank}!",
+                metadata={"old_rank": old_rank, "new_rank": new_rank},
+                ping_message=(
+                    f"<:_:976468395505614858> {user.display_name} has ranked up! **{old_rank}** -> **{new_rank}**"
+                ),
+                fallback_message=(
+                    f"<:_:976468395505614858> {user.display_name} has ranked up! **{old_rank}** -> **{new_rank}**"
+                ),
             )
 
         if xp_data.prestige_change:
@@ -157,20 +174,40 @@ class XPService(BaseService):
                 event.user_id, xp_data.old_prestige_level, xp_data.new_prestige_level
             )
 
-            await self.bot.notifications.notify_dm(
-                event.user_id,
-                Notification.DM_ON_LOOTBOX_GAIN,
-                (
+            # Prestige lootbox DM notification
+            await self.bot.notifications.notify_dm_only(
+                user_id=event.user_id,
+                event_type=NotificationEventType.LOOTBOX_EARNED,
+                title="Prestige Lootboxes Earned!",
+                body=f"You prestiged to level {xp_data.new_prestige_level} and earned 15 lootboxes!",
+                discord_message=(
                     f"Congratulations! You have prestiged up to **{xp_data.new_prestige_level}**!\n"
                     "[Log into the website to open your 15 lootboxes!](https://genji.pk/lootbox)"
                 ),
+                metadata={
+                    "old_prestige": xp_data.old_prestige_level,
+                    "new_prestige": xp_data.new_prestige_level,
+                    "lootbox_count": 15,
+                },
             )
 
-            await self.bot.notifications.notify_channel_default_to_no_ping(
-                self.xp_channel,
-                event.user_id,
-                Notification.PING_ON_COMMUNITY_RANK_UPDATE,
-                (
+            # Prestige channel ping notification
+            await self.bot.notifications.notify_with_channel_ping(
+                channel=self.xp_channel,
+                user_id=event.user_id,
+                event_type=NotificationEventType.PRESTIGE,
+                title="Prestige!",
+                body=f"You prestiged from level {xp_data.old_prestige_level} to {xp_data.new_prestige_level}!",
+                metadata={
+                    "old_prestige": xp_data.old_prestige_level,
+                    "new_prestige": xp_data.new_prestige_level,
+                },
+                ping_message=(
+                    f"<:_:976468395505614858><:_:976468395505614858><:_:976468395505614858> "
+                    f"{user.display_name} has prestiged! "
+                    f"**Prestige {xp_data.old_prestige_level}** -> **Prestige {xp_data.new_prestige_level}**"
+                ),
+                fallback_message=(
                     f"<:_:976468395505614858><:_:976468395505614858><:_:976468395505614858> "
                     f"{user.display_name} has prestiged! "
                     f"**Prestige {xp_data.old_prestige_level}** -> **Prestige {xp_data.new_prestige_level}**"
