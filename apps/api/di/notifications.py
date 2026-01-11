@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import msgspec
 from asyncpg import Connection
 from genjishimada_sdk.notifications import (
     EVENT_TYPE_DEFAULT_CHANNELS,
     NOTIFICATION_CHANNEL,
+    NOTIFICATION_EVENT_TYPE,
     NotificationChannel,
     NotificationCreateRequest,
     NotificationDeliveryEvent,
@@ -116,7 +117,7 @@ class NotificationService(BaseService):
         )
         return self._row_to_event_response(row)
 
-    async def _get_enabled_channels(self, user_id: int, event_type: str) -> list[str]:
+    async def _get_enabled_channels(self, user_id: int, event_type: NOTIFICATION_EVENT_TYPE) -> list[str]:
         """Get list of enabled channels for a user and event type."""
         # Get explicit preferences
         query = """
@@ -149,8 +150,8 @@ class NotificationService(BaseService):
     async def record_delivery_result(
         self,
         event_id: int,
-        channel: str,
-        status: str,
+        channel: NOTIFICATION_CHANNEL,
+        status: Literal["delivered", "failed", "skipped"],
         error_message: str | None = None,
     ) -> None:
         """Record the result of a delivery attempt."""
@@ -256,7 +257,9 @@ class NotificationService(BaseService):
 
         return result
 
-    async def update_preference(self, user_id: int, event_type: str, channel: str, enabled: bool) -> None:
+    async def update_preference(
+        self, user_id: int, event_type: NOTIFICATION_EVENT_TYPE, channel: NOTIFICATION_CHANNEL, enabled: bool
+    ) -> None:
         """Update a single preference."""
         query = """
             INSERT INTO notifications.preferences (user_id, event_type, channel, enabled)
@@ -272,7 +275,9 @@ class NotificationService(BaseService):
             for pref in preferences:
                 await self.update_preference(user_id, pref.event_type, pref.channel, pref.enabled)
 
-    async def should_deliver(self, user_id: int, event_type: str, channel: str) -> bool:
+    async def should_deliver(
+        self, user_id: int, event_type: NOTIFICATION_EVENT_TYPE, channel: NOTIFICATION_CHANNEL
+    ) -> bool:
         """Check if a notification should be delivered to a channel."""
         enabled_channels = await self._get_enabled_channels(user_id, event_type)
         return channel in enabled_channels

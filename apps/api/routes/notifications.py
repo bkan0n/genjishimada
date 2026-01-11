@@ -4,6 +4,8 @@ import logging
 
 import litestar
 from genjishimada_sdk.notifications import (
+    NOTIFICATION_CHANNEL,
+    NOTIFICATION_EVENT_TYPE,
     NotificationCreateRequest,
     NotificationDeliveryResultRequest,
     NotificationEventResponse,
@@ -12,7 +14,6 @@ from genjishimada_sdk.notifications import (
     NotificationUnreadCountResponse,
     ShouldDeliverResponse,
 )
-from litestar.datastructures import Headers
 from litestar.di import Provide
 from litestar.status_codes import HTTP_201_CREATED, HTTP_204_NO_CONTENT
 
@@ -38,7 +39,7 @@ class NotificationsController(litestar.Controller):
         self,
         svc: NotificationService,
         data: NotificationCreateRequest,
-        headers: Headers,
+        request: litestar.Request,
     ) -> NotificationEventResponse:
         """Create a notification event.
 
@@ -48,12 +49,12 @@ class NotificationsController(litestar.Controller):
         Args:
             svc: Notification service.
             data: Notification creation request.
-            headers: Request headers for RabbitMQ.
+            request: Request to get the headers
 
         Returns:
             The created notification event.
         """
-        return await svc.create_and_dispatch(data, headers)
+        return await svc.create_and_dispatch(data, request.headers)
 
     @litestar.get(
         path="/users/{user_id:int}/events",
@@ -221,8 +222,8 @@ class NotificationsController(litestar.Controller):
         self,
         svc: NotificationService,
         user_id: int,
-        event_type: str,
-        channel: str,
+        event_type: NOTIFICATION_EVENT_TYPE,
+        channel: NOTIFICATION_CHANNEL,
         enabled: bool,
     ) -> None:
         """Update a single preference.
@@ -266,8 +267,8 @@ class NotificationsController(litestar.Controller):
         self,
         svc: NotificationService,
         user_id: int,
-        event_type: str,
-        channel: str,
+        event_type: NOTIFICATION_EVENT_TYPE,
+        channel: NOTIFICATION_CHANNEL,
     ) -> ShouldDeliverResponse:
         """Check if notification should be delivered.
 

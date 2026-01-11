@@ -115,7 +115,7 @@ class NotificationEventResponse(Struct):
 
     id: int
     user_id: int
-    event_type: str
+    event_type: NOTIFICATION_EVENT_TYPE
     title: str
     body: str
     metadata: dict | None
@@ -127,15 +127,15 @@ class NotificationEventResponse(Struct):
 class NotificationPreference(Struct):
     """User preference for a notification type and channel."""
 
-    event_type: str
-    channel: str
+    event_type: NOTIFICATION_EVENT_TYPE
+    channel: NOTIFICATION_CHANNEL
     enabled: bool
 
 
 class NotificationPreferencesResponse(Struct):
     """All preferences for a user for a single event type."""
 
-    event_type: str
+    event_type: NOTIFICATION_EVENT_TYPE
     channels: dict[str, bool]  # channel -> enabled
 
 
