@@ -116,9 +116,9 @@ CN_TRANSLATIONS_TEMP = {
 }
 CN_TRANSLATIONS_FIELDS_TEMP = {
     "Code": "代码",
-    "Official Code": "国际服代码",
-    "Official": "官方的",
-    "Unofficial (CN) Code": "国服代码",
+    "Global Code": "国际服代码",
+    "Global": "官方的",
+    "Chinese Code": "国服代码",
     "Title": "标题",
     "Creator": "作者",
     "Map": "地图名",
@@ -315,7 +315,7 @@ class MapSearchCog(BaseCog):
         restriction: app_commands.Transform[Restrictions, transformers.RestrictionsTransformer] | None,
         minimum_quality: app_commands.Choice[int] | None,
         category: MapCategory | None,
-        official_filter: OfficialFilter = "Official Only",
+        official_filter: OfficialFilter = "Global Only",
         completion_filter: CompletionFilter = "All",
         medal_filter: MedalFilter = "All",
         playtest_filter: PlaytestFilter = "All",
@@ -328,7 +328,7 @@ class MapSearchCog(BaseCog):
 
         Args:
             itx: The command interaction context.
-            map_name: Optional map name filter..
+            map_name: Optional map name filter.
             difficulty: Optional exact difficulty choice.
             code: Optional map code filter.
             creator: Optional creator user ID.
@@ -346,7 +346,7 @@ class MapSearchCog(BaseCog):
         mechanics: list[Mechanics] | None = [mechanic] if mechanic else None
         if official_filter == "All":
             official_val = None
-        elif official_filter == "Official Only":
+        elif official_filter == "Global Only":
             official_val = True
         else:
             official_val = False
@@ -454,7 +454,7 @@ class MapSearchCog(BaseCog):
         mechanics: list[Mechanics] | None = [mechanic] if mechanic else None
         if official_filter == CN_FILTER_2_TRANSLATIONS_TEMP["All"]:
             official_val = None
-        elif official_filter == CN_FILTER_2_TRANSLATIONS_TEMP["Official Only"]:
+        elif official_filter == CN_FILTER_2_TRANSLATIONS_TEMP["Global Only"]:
             official_val = True
         else:
             official_val = False

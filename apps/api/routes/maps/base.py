@@ -917,7 +917,7 @@ class BaseMapsController(litestar.Controller):
     @litestar.post(
         path="/link-codes",
         summary="Link Maps.",
-        description="Link an official and unofficial map and create a playtest and newsfeed if needed.",
+        description="Link an Global and Chinese map and create a playtest and newsfeed if needed.",
     )
     async def link_map_codes(
         self,
@@ -983,7 +983,7 @@ class BaseMapsController(litestar.Controller):
     @litestar.delete(
         path="/link-codes",
         summary="Unlink Maps.",
-        description="Unlink an official and unofficial map.",
+        description="Unlink an Global and Chinese map.",
     )
     async def unlink_map_codes(
         self,

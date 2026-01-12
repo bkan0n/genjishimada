@@ -491,9 +491,7 @@ class ModeratorCog(BaseCog):
         data = LinkMapsCreateRequest(official_code=official_code, unofficial_code=unofficial_code)
 
         message = (
-            "Are you sure you want to link these two maps?\n"
-            f"`Official` {official_code}\n"
-            f"`Unofficial (CN)` {unofficial_code}\n"
+            f"Are you sure you want to link these two maps?\n`Global` {official_code}\n`Chinese` {unofficial_code}\n"
         )
 
         async def callback() -> None:
@@ -528,9 +526,7 @@ class ModeratorCog(BaseCog):
         data = UnlinkMapsCreateRequest(official_code=official_code, unofficial_code=unofficial_code, reason=reason)
 
         message = (
-            "Are you sure you want to unlink these two maps?\n"
-            f"`Official` {official_code}\n"
-            f"`Unofficial (CN)` {unofficial_code}\n"
+            f"Are you sure you want to unlink these two maps?\n`Global` {official_code}\n`Chinese` {unofficial_code}\n"
         )
 
         async def callback() -> None:

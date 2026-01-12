@@ -300,7 +300,7 @@ class UsersController(litestar.Controller):
         summary="Get User Rank Details",
         description=(
             "Compute per-difficulty completion counts and medal thresholds for the given user. "
-            "Uses verified, latest-per-user runs and official maps only."
+            "Uses verified, latest-per-user runs and Global maps only."
         ),
     )
     async def get_user_rank_data(self, svc: UserService, user_id: int) -> list[RankDetailResponse]:

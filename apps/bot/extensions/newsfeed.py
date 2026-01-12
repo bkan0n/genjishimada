@@ -311,8 +311,8 @@ class LinkedMapFormattable(msgspec.Struct, kw_only=True):
             dict[str, str | None]: Mapping of field names to values.
         """
         return {
-            "Official Code": self.official_code,
-            "Unofficial (CN) Code": self.unofficial_code,
+            "Global Code": self.official_code,
+            "Chinese Code": self.unofficial_code,
         }
 
 
@@ -328,8 +328,8 @@ class UnlinkedMapFormattable(msgspec.Struct, kw_only=True):
             dict[str, str | None]: Mapping of field names to values.
         """
         return {
-            "Official Code": self.official_code,
-            "Unofficial (CN) Code": self.unofficial_code,
+            "Global Code": self.official_code,
+            "Chinese Code": self.unofficial_code,
             "Reason": self.reason,
         }
 
@@ -442,7 +442,7 @@ class NewMapNewsfeedBuilder(BaseNewsfeedBuilder[NewsfeedNewMap]):
         )
         content = self._format(form)
         title = (
-            f"A new {'official' if payload.official else 'unofficial (CN)'} {payload.difficulty} "
+            f"A new {'global' if payload.official else 'Chinese'} {payload.difficulty} "
             f"map on {payload.map_name} has been submitted!"
         )
         hex_color = "#2858bf" if payload.official else "#111827"
@@ -729,7 +729,7 @@ class LinkedMapNewsfeedBuilder(BaseNewsfeedBuilder[NewsfeedLinkedMap]):
         if link_url:
             content += "\n\nThe official map is now in playtest. Use the button below to visit the playtest thread!"
         return NewsfeedComponentView(
-            title="Official and Unofficial (CN) Map Linked",
+            title="Global and Chinese Map Linked",
             content=content,
             thumbnail_url="https://bkan0n.com/assets/images/genji/icons/warning.avif",
             link_url=link_url,
@@ -757,7 +757,7 @@ class UnlinkedMapNewsfeedBuilder(BaseNewsfeedBuilder[NewsfeedUnlinkedMap]):
         )
         content = self._format(form)
         return NewsfeedComponentView(
-            title="Official and Unofficial (CN) Map Unlinked",
+            title="Global and Chinese Map Unlinked",
             content=content,
             thumbnail_url="https://bkan0n.com/assets/images/genji/icons/warning.avif",
             color=discord.Color.magenta(),
