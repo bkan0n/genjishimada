@@ -125,7 +125,7 @@ class MapEditService(BaseService):
             SELECT id, code, message_id
             FROM maps.edit_requests
             WHERE accepted IS NULL
-            ORDER BY created_at ASC
+            ORDER BY created_at
             """
         )
         return [
@@ -181,10 +181,15 @@ class MapEditService(BaseService):
             """
             SELECT
                 code, map_name, category, checkpoints, difficulty,
-                description, title, mechanics, restrictions,
+                description, title, array_agg(mech.name), array_agg(res.name),
                 custom_banner, hidden, archived, official
-            FROM core.maps
+            FROM core.maps m
+            LEFT JOIN maps.mechanic_links ml ON ml.map_id = m.id
+            LEFT JOIN maps.mechanics mech ON mech.id = ml.mechanic_id
+            LEFT JOIN maps.restriction_links rl ON rl.map_id = m.id
+            LEFT JOIN maps.restrictions res ON res.id = rl.restriction_id
             WHERE code = $1
+            GROUP BY m.id
             """,
             edit_row["code"],
         )
@@ -231,11 +236,11 @@ class MapEditService(BaseService):
         current_medals: dict[str, Any] | None,
         proposed: dict[str, Any],
     ) -> list[MapEditFieldChange]:
-        """Build human-readable field change list.
+        """Build a human-readable field change list.
 
         Args:
-            current_map: Current map data from database.
-            current_medals: Current medal data (may be None).
+            current_map: Current map data from a database.
+            current_medals: Current medal data (might be None).
             proposed: Proposed changes dict.
 
         Returns:
@@ -276,7 +281,7 @@ class MapEditService(BaseService):
 
     @staticmethod
     def _format_value_for_display(field: str, value: str | float | bool | list | dict | None) -> str:
-        """Format a field value for human-readable display.
+        """Format a field value for a human-readable display.
 
         Args:
             field: Field name.
@@ -402,7 +407,8 @@ class MapEditService(BaseService):
         rows = await self._conn.fetch(query, user_id)
         return [self._row_to_response(row) for row in rows]
 
-    def _row_to_response(self, row: Record) -> MapEditResponse:
+    @staticmethod
+    def _row_to_response(row: Record) -> MapEditResponse:
         """Convert a database row to MapEditResponse.
 
         Args:

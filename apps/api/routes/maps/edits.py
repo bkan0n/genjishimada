@@ -101,7 +101,7 @@ class MapEditsController(litestar.Controller):
         svc: MapEditService,
         edit_id: int,
     ) -> MapEditSubmissionResponse:
-        """Get edit request with human-readable changes."""
+        """Get an edit request with human-readable changes."""
         return await svc.get_edit_submission(edit_id)
 
     @litestar.patch(

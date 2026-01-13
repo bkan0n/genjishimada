@@ -248,7 +248,7 @@ class MapSearchSQLBuilder:
             return
         minimum_quality_query = f"""
             SELECT map_id FROM
-                (SELECT map_id, avg(quality) as avg_quality FROM maps.ratings GROUP BY map_id)
+                (SELECT map_id, avg(quality) as avg_quality FROM maps.ratings GROUP BY map_id) as miaq
             WHERE avg_quality >= ${next(self._counter)}
         """
         self._add_cte_definition(
