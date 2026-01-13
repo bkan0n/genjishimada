@@ -1826,6 +1826,40 @@ class APIService:
         r = Route("PUT", "/maps/map-edits/{edit_id}/resolve", edit_id=edit_id)
         return self._request(r, data=data)
 
+    def archive_map(self, code: OverwatchCode) -> Response[None]:
+        """Archive a map using the dedicated archive endpoint.
+
+        This ensures proper newsfeed generation for archive events.
+
+        Args:
+            code: The map code to archive.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        from genjishimada_sdk.maps import ArchivalStatusPatchRequest
+
+        r = Route("PATCH", "/maps/archive")
+        data = ArchivalStatusPatchRequest(status="Archive", codes=[code])
+        return self._request(r, data=data)
+
+    def unarchive_map(self, code: OverwatchCode) -> Response[None]:
+        """Unarchive a map using the dedicated archive endpoint.
+
+        This ensures proper newsfeed generation for unarchive events.
+
+        Args:
+            code: The map code to unarchive.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        from genjishimada_sdk.maps import ArchivalStatusPatchRequest
+
+        r = Route("PATCH", "/maps/archive")
+        data = ArchivalStatusPatchRequest(status="Unarchive", codes=[code])
+        return self._request(r, data=data)
+
 
 async def setup(bot: core.Genji) -> None:
     """Set up the HTTP client extension."""

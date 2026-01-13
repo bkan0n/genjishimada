@@ -24,6 +24,7 @@ from genjishimada_sdk.maps import (
     Mechanics,
     MedalsResponse,
     OverwatchCode,
+    OverwatchMap,
     Restrictions,
 )
 
@@ -115,8 +116,14 @@ class EditableField(str, Enum):
 # Preview length for field values in selects
 _PREVIEW_MAX_LENGTH = 50
 
-# Static lists for mechanics and restrictions (fetched from SDK Literal types)
-# These are the options available in the database
+# Fields that are mod-only and should not be shown to regular users
+_MOD_ONLY_FIELDS = {EditableField.HIDDEN, EditableField.OFFICIAL, EditableField.ARCHIVED}
+
+# Fields that are excluded entirely from the wizard
+_EXCLUDED_FIELDS = {EditableField.CREATORS}
+
+# Number of options per page for paginated selects
+_PAGINATED_SELECT_PAGE_SIZE = 25
 
 
 # ============================================================================
@@ -187,11 +194,12 @@ class FieldSelectionSelect(ui.Select["MapEditWizardView"]):
 
     view: MapEditWizardView
 
-    def __init__(self, map_data: MapModel) -> None:
+    def __init__(self, map_data: MapModel, *, is_mod: bool) -> None:
         """Initialize the field selection select.
 
         Args:
             map_data: The map data to build options from.
+            is_mod: Whether the user is a moderator.
         """
         options = [
             SelectOption(
@@ -200,7 +208,8 @@ class FieldSelectionSelect(ui.Select["MapEditWizardView"]):
                 description=self._get_current_preview(map_data, field),
             )
             for field in EditableField
-            if field not in {EditableField.CREATORS}  # Creators handled separately
+            if field not in _EXCLUDED_FIELDS
+            and (is_mod or field not in _MOD_ONLY_FIELDS)
         ]
         super().__init__(
             placeholder="Select fields to edit...",
@@ -335,7 +344,6 @@ class MedalsModal(ui.Modal):
         # If all empty, clear medals
         if not any([gold_str, silver_str, bronze_str]):
             self.submitted_medals = None
-            await itx.response.defer()
             self.stop()
             return
 
@@ -401,6 +409,70 @@ class CategorySelect(ui.Select["MapEditWizardView"]):
         self.view.state.set_change(EditableField.CATEGORY, self.values[0])
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+        view = self.view
+        self.view.rebuild()
+        await itx.response.edit_message(view=view)
+
+
+class MapNameSelect(ui.Select["MapEditWizardView"]):
+    """Paginated select for map name field."""
+
+    view: MapEditWizardView
+
+    def __init__(self, current: OverwatchMap | None, page: int = 0) -> None:
+        """Initialize the map name select.
+
+        Args:
+            current: The current map name value.
+            page: The current page (0-indexed).
+        """
+        all_maps = list(get_args(OverwatchMap))
+        all_maps.sort()  # Sort alphabetically for easier navigation
+
+        start_idx = page * _PAGINATED_SELECT_PAGE_SIZE
+        end_idx = start_idx + _PAGINATED_SELECT_PAGE_SIZE
+        page_maps = all_maps[start_idx:end_idx]
+
+        options = [SelectOption(label=m, value=m, default=(m == current)) for m in page_maps]
+        placeholder = f"Select map name (page {page + 1})..."
+        super().__init__(placeholder=placeholder, options=options)
+        self.page = page
+        self.total_pages = (len(all_maps) + _PAGINATED_SELECT_PAGE_SIZE - 1) // _PAGINATED_SELECT_PAGE_SIZE
+
+    async def callback(self, itx: GenjiItx) -> None:
+        """Handle map name selection."""
+        self.view.state.set_change(EditableField.MAP_NAME, self.values[0])
+        if not self.view.state.advance_field():
+            self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+        # Reset page state when selection is made
+        self.view.map_name_page = 0
+        view = self.view
+        self.view.rebuild()
+        await itx.response.edit_message(view=view)
+
+
+class MapNamePageButton(ui.Button["MapEditWizardView"]):
+    """Button to navigate map name pages."""
+
+    view: MapEditWizardView
+
+    def __init__(self, direction: Literal["prev", "next"], *, disabled: bool = False) -> None:
+        """Initialize the page navigation button.
+
+        Args:
+            direction: Whether this is a previous or next button.
+            disabled: Whether the button should be disabled.
+        """
+        self.direction = direction
+        label = "◀ Previous" if direction == "prev" else "Next ▶"
+        super().__init__(label=label, style=ButtonStyle.secondary, disabled=disabled)
+
+    async def callback(self, itx: GenjiItx) -> None:
+        """Handle page navigation."""
+        if self.direction == "prev":
+            self.view.map_name_page = max(0, self.view.map_name_page - 1)
+        else:
+            self.view.map_name_page += 1
         view = self.view
         self.view.rebuild()
         await itx.response.edit_message(view=view)
@@ -659,9 +731,29 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
         state = self.view.state
 
         if self.is_mod:
-            # Direct apply
-            patch = self._build_patch_request(state)
-            await itx.client.api.edit_map(state.map_data.code, patch)
+            # Handle archive separately - use dedicated endpoint for newsfeed
+            if "archived" in state.pending_changes:
+                archived_value = state.pending_changes["archived"]
+                if archived_value:
+                    await itx.client.api.archive_map(state.map_data.code)
+                else:
+                    await itx.client.api.unarchive_map(state.map_data.code)
+
+                # Remove archived from pending changes so it's not sent to patch
+                remaining_changes = {
+                    k: v for k, v in state.pending_changes.items() if k != "archived"
+                }
+
+                # Apply remaining changes if any
+                if remaining_changes:
+                    state.pending_changes = remaining_changes
+                    patch = self._build_patch_request(state)
+                    await itx.client.api.edit_map(state.map_data.code, patch)
+            else:
+                # No archive change, apply normally
+                patch = self._build_patch_request(state)
+                await itx.client.api.edit_map(state.map_data.code, patch)
+
             await itx.edit_original_response(
                 content=f"✅ Changes applied to **{state.map_data.code}**!",
                 view=None,
@@ -724,6 +816,7 @@ class MapEditWizardView(BaseView):
         self.state = MapEditWizardState(map_data, is_mod)
         self.submitted = False
         self.cancelled = False
+        self.map_name_page = 0  # Track current page for map name pagination
         self.rebuild()
 
     def rebuild(self) -> None:  # noqa: PLR0912
@@ -745,7 +838,7 @@ class MapEditWizardView(BaseView):
                 )
             )
             container.add_item(ui.Separator())
-            container.add_item(ui.ActionRow(FieldSelectionSelect(state.map_data)))
+            container.add_item(ui.ActionRow(FieldSelectionSelect(state.map_data, is_mod=state.is_mod)))
             container.add_item(ui.ActionRow(CancelButton()))
 
         elif step == "edit_field":
@@ -772,6 +865,22 @@ class MapEditWizardView(BaseView):
                 container.add_item(ui.ActionRow(DifficultySelect(cast(DifficultyAll | None, current_value))))
             elif field == EditableField.CATEGORY:
                 container.add_item(ui.ActionRow(CategorySelect(cast(MapCategory | None, current_value))))
+            elif field == EditableField.MAP_NAME:
+                # Paginated map name select
+                map_select = MapNameSelect(
+                    cast(OverwatchMap | None, current_value),
+                    page=self.map_name_page,
+                )
+                container.add_item(ui.ActionRow(map_select))
+                # Add pagination buttons
+                prev_disabled = self.map_name_page <= 0
+                next_disabled = self.map_name_page >= map_select.total_pages - 1
+                container.add_item(
+                    ui.ActionRow(
+                        MapNamePageButton("prev", disabled=prev_disabled),
+                        MapNamePageButton("next", disabled=next_disabled),
+                    )
+                )
             elif field == EditableField.MECHANICS:
                 mechanics_value = cast(list[Mechanics] | None, current_value)
                 container.add_item(ui.ActionRow(MechanicsSelect(mechanics_value or [])))
