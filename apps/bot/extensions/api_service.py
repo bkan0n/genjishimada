@@ -1764,7 +1764,7 @@ class APIService:
         Returns:
             Response[MapEditResponse]: The created edit request.
         """
-        r = Route("POST", "/map-edits")
+        r = Route("POST", "/maps/map-edits")
         return self._request(r, response_model=MapEditResponse, data=data)
 
     def get_map_edit_request(self, edit_id: int) -> Response[MapEditResponse]:
@@ -1776,7 +1776,7 @@ class APIService:
         Returns:
             Response[MapEditResponse]: The edit request.
         """
-        r = Route("GET", "/map-edits/{edit_id}", edit_id=edit_id)
+        r = Route("GET", "/maps/map-edits/{edit_id}", edit_id=edit_id)
         return self._request(r, response_model=MapEditResponse)
 
     def get_map_edit_submission(self, edit_id: int) -> Response[MapEditSubmissionResponse]:
@@ -1788,7 +1788,7 @@ class APIService:
         Returns:
             Response[MapEditSubmissionResponse]: Enriched submission data.
         """
-        r = Route("GET", "/map-edits/{edit_id}/submission", edit_id=edit_id)
+        r = Route("GET", "/maps/map-edits/{edit_id}/submission", edit_id=edit_id)
         return self._request(r, response_model=MapEditSubmissionResponse)
 
     def get_pending_map_edit_requests(self) -> Response[list[PendingMapEditResponse]]:
@@ -1797,7 +1797,7 @@ class APIService:
         Returns:
             Response[list[PendingMapEditResponse]]: List of pending edit requests.
         """
-        r = Route("GET", "/map-edits/pending")
+        r = Route("GET", "/maps/map-edits/pending")
         return self._request(r, response_model=list[PendingMapEditResponse])
 
     def set_map_edit_message_id(self, edit_id: int, data: MapEditSetMessageIdRequest) -> Response[None]:
@@ -1810,7 +1810,7 @@ class APIService:
         Returns:
             Response[None]: Empty response on success.
         """
-        r = Route("PATCH", "/map-edits/{edit_id}/message", edit_id=edit_id)
+        r = Route("PATCH", "/maps/map-edits/{edit_id}/message", edit_id=edit_id)
         return self._request(r, data=data)
 
     def resolve_map_edit_request(self, edit_id: int, data: MapEditResolveRequest) -> Response[None]:
@@ -1823,7 +1823,7 @@ class APIService:
         Returns:
             Response[None]: Empty response on success.
         """
-        r = Route("PUT", "/map-edits/{edit_id}/resolve", edit_id=edit_id)
+        r = Route("PUT", "/maps/map-edits/{edit_id}/resolve", edit_id=edit_id)
         return self._request(r, data=data)
 
 
