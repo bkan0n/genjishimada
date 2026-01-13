@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Literal, cast, get_args
 
 import discord
 from discord import ButtonStyle, SelectOption, TextStyle, app_commands, ui
+from discord.ui.view import LayoutView
 from genjishimada_sdk.difficulties import DIFFICULTY_RANGES_ALL, DifficultyAll
 from genjishimada_sdk.maps import (
     MapCategory,
@@ -117,7 +118,7 @@ class EditableField(str, Enum):
 _PREVIEW_MAX_LENGTH = 50
 
 # Fields that are mod-only and should not be shown to regular users
-_MOD_ONLY_FIELDS = {EditableField.HIDDEN, EditableField.OFFICIAL, EditableField.ARCHIVED}
+_MOD_ONLY_FIELDS = {EditableField.HIDDEN, EditableField.OFFICIAL}
 
 # Fields that are excluded entirely from the wizard
 _EXCLUDED_FIELDS = {EditableField.CREATORS}
@@ -671,10 +672,9 @@ class CancelButton(ui.Button["MapEditWizardView"]):
         """Handle cancel button click."""
         self.view.cancelled = True
         self.view.stop()
-        await itx.response.edit_message(
-            content="Edit cancelled.",
-            view=None,
-        )
+        view = LayoutView()
+        view.add_item(ui.Container(ui.TextDisplay("Edit cancelled.")))
+        await itx.response.edit_message(view=view)
 
 
 class BackButton(ui.Button["MapEditWizardView"]):
@@ -920,7 +920,8 @@ class MapEditWizardView(BaseView):
                     CancelButton(),
                 )
             )
-
+        container.add_item(ui.Separator())
+        container.add_item(discord.ui.TextDisplay(f"# {self._end_time_string}"))
         self.add_item(container)
 
     def _format_value(self, value: FieldValue) -> str:
