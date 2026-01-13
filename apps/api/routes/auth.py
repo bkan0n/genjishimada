@@ -15,6 +15,7 @@ from genjishimada_sdk.auth import (
     EmailVerifyRequest,
     PasswordResetConfirmRequest,
     PasswordResetRequest,
+    SessionReadResponse,
     SessionWriteRequest,
 )
 from litestar.di import Provide
@@ -231,6 +232,7 @@ class AuthController(litestar.Controller):
                     "username": user.username,
                     "email_verified": user.email_verified,
                     "coins": user.coins,
+                    "is_mod": user.is_mod,
                 },
             },
             status_code=HTTP_200_OK,
@@ -265,6 +267,7 @@ class AuthController(litestar.Controller):
                     "email": user.email,
                     "username": user.username,
                     "email_verified": user.email_verified,
+                    "is_mod": user.is_mod,
                 },
             },
             status_code=HTTP_200_OK,
@@ -375,6 +378,7 @@ class AuthController(litestar.Controller):
                     "email": user.email,
                     "username": user.username,
                     "email_verified": user.email_verified,
+                    "is_mod": user.is_mod,
                 },
             },
             status_code=HTTP_200_OK,
@@ -400,23 +404,26 @@ class AuthController(litestar.Controller):
     @litestar.get(
         path="/sessions/{session_id:str}",
         summary="Read Session",
-        description="Read session data by ID. Used by Laravel session driver.",
+        description="Read session data by ID. Includes is_mod flag. Used by Laravel session driver.",
     )
-    async def session_read(self, svc: AuthService, session_id: str) -> Response:
-        """Read session data.
+    async def session_read(self, svc: AuthService, session_id: str) -> SessionReadResponse:
+        """Read session data and include is_mod flag.
 
         Args:
             svc: Auth service.
             session_id: The session ID.
 
         Returns:
-            Response with session payload or empty if not found.
+            SessionReadResponse with payload and is_mod flag.
         """
         payload = await svc.session_read(session_id)
-        return Response(
-            {"payload": payload},
-            status_code=HTTP_200_OK,
-        )
+
+        # Get is_mod from user's record
+        is_mod = False
+        if payload:
+            is_mod = await svc.check_if_mod(session_id)
+
+        return SessionReadResponse(payload=payload, is_mod=is_mod)
 
     @litestar.put(
         path="/sessions/{session_id:str}",

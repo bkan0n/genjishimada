@@ -325,6 +325,7 @@ class AuthService(BaseService):
                 username=data.username,
                 email_verified=False,
                 coins=0,
+                is_mod=False,
             ),
             token,
         )
@@ -344,7 +345,7 @@ class AuthService(BaseService):
         token_hash = self.hash_token(data.token)
 
         query = """
-            SELECT t.user_id, t.expires_at, t.used_at, e.email, u.nickname, u.coins
+            SELECT t.user_id, t.expires_at, t.used_at, e.email, u.nickname, u.coins, u.is_mod
             FROM users.email_tokens t
             JOIN users.email_auth e ON t.user_id = e.user_id
             JOIN core.users u ON t.user_id = u.id
@@ -389,6 +390,7 @@ class AuthService(BaseService):
             username=row["nickname"],
             email_verified=True,
             coins=row["coins"],
+            is_mod=row["is_mod"],
         )
 
     async def resend_verification(self, email: str, client_ip: str | None = None) -> tuple[str, str]:
@@ -477,7 +479,7 @@ class AuthService(BaseService):
 
         query = """
             SELECT e.user_id, e.email, e.password_hash, e.email_verified_at,
-                   u.nickname, u.coins
+                   u.nickname, u.coins, u.is_mod
             FROM users.email_auth e
             JOIN core.users u ON e.user_id = u.id
             WHERE LOWER(e.email) = LOWER($1)
@@ -506,6 +508,7 @@ class AuthService(BaseService):
             username=row["nickname"],
             email_verified=row["email_verified_at"] is not None,
             coins=row["coins"],
+            is_mod=row["is_mod"],
         )
 
     async def request_password_reset(
@@ -582,7 +585,7 @@ class AuthService(BaseService):
         token_hash = self.hash_token(data.token)
 
         query = """
-            SELECT t.user_id, t.expires_at, t.used_at, e.email, u.nickname, u.coins, e.email_verified_at
+            SELECT t.user_id, t.expires_at, t.used_at, e.email, u.nickname, u.coins, e.email_verified_at, u.is_mod
             FROM users.email_tokens t
             JOIN users.email_auth e ON t.user_id = e.user_id
             JOIN core.users u ON t.user_id = u.id
@@ -630,6 +633,7 @@ class AuthService(BaseService):
             username=row["nickname"],
             email_verified=row["email_verified_at"] is not None,
             coins=row["coins"],
+            is_mod=row["is_mod"],
         )
 
     async def get_auth_status(self, user_id: int) -> EmailAuthStatus | None:
@@ -859,6 +863,17 @@ class AuthService(BaseService):
             return int(result.split()[1])
         except (IndexError, ValueError):
             return 0
+
+    async def check_if_mod(self, session_id: str) -> bool:
+        """Check if a session is a moderator."""
+        user_query = """
+            SELECT u.is_mod
+            FROM users.sessions s
+            JOIN core.users u ON s.user_id = u.id
+            WHERE s.id = $1 AND s.user_id IS NOT NULL
+        """
+        is_mod_value = await self._conn.fetchval(user_query, session_id)
+        return bool(is_mod_value)
 
 
 async def provide_auth_service(conn: Connection, state: State) -> AuthService:
