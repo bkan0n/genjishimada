@@ -227,8 +227,9 @@ class FieldSelectionSelect(ui.Select["MapEditWizardView"]):
         self.view.state.selected_fields = [EditableField(v) for v in self.values]
         self.view.state.current_step = "edit_field"
         self.view.state.current_field_index = 0
+        view = self.view
         self.view.rebuild()
-        await itx.response.edit_message(view=self.view)
+        await itx.response.edit_message(view=view)
 
 
 # ============================================================================
@@ -269,6 +270,7 @@ class TextInputModal(ui.Modal):
 
     async def on_submit(self, itx: GenjiItx) -> None:
         """Process the submitted value."""
+        await itx.response.defer()
         raw_value = self.value_input.value.strip()
 
         # Type conversion based on field
@@ -284,7 +286,6 @@ class TextInputModal(ui.Modal):
         else:
             self.submitted_value = raw_value if raw_value else None
 
-        await itx.response.defer()
         self.stop()
 
 
@@ -326,6 +327,7 @@ class MedalsModal(ui.Modal):
 
     async def on_submit(self, itx: GenjiItx) -> None:
         """Validate and store medal values."""
+        await itx.response.defer()
         gold_str = self.gold_input.value.strip()
         silver_str = self.silver_input.value.strip()
         bronze_str = self.bronze_input.value.strip()
@@ -352,7 +354,7 @@ class MedalsModal(ui.Modal):
             raise UserFacingError("Gold must be faster than silver, and silver faster than bronze.")
 
         self.submitted_medals = MedalsResponse(gold=gold, silver=silver, bronze=bronze)
-        await itx.response.defer()
+
         self.stop()
 
 
@@ -375,8 +377,9 @@ class DifficultySelect(ui.Select["MapEditWizardView"]):
         self.view.state.set_change(EditableField.DIFFICULTY, self.values[0])
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+        view = self.view
         self.view.rebuild()
-        await itx.response.edit_message(view=self.view)
+        await itx.response.edit_message(view=view)
 
 
 class CategorySelect(ui.Select["MapEditWizardView"]):
@@ -398,8 +401,9 @@ class CategorySelect(ui.Select["MapEditWizardView"]):
         self.view.state.set_change(EditableField.CATEGORY, self.values[0])
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+        view = self.view
         self.view.rebuild()
-        await itx.response.edit_message(view=self.view)
+        await itx.response.edit_message(view=view)
 
 
 class MechanicsSelect(ui.Select["MapEditWizardView"]):
@@ -426,8 +430,9 @@ class MechanicsSelect(ui.Select["MapEditWizardView"]):
         self.view.state.set_change(EditableField.MECHANICS, list(self.values))
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+        view = self.view
         self.view.rebuild()
-        await itx.response.edit_message(view=self.view)
+        await itx.response.edit_message(view=view)
 
 
 class RestrictionsSelect(ui.Select["MapEditWizardView"]):
@@ -454,8 +459,10 @@ class RestrictionsSelect(ui.Select["MapEditWizardView"]):
         self.view.state.set_change(EditableField.RESTRICTIONS, list(self.values))
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+
+        view = self.view
         self.view.rebuild()
-        await itx.response.edit_message(view=self.view)
+        await itx.response.edit_message(view=view)
 
 
 class BooleanToggleButton(ui.Button["MapEditWizardView"]):
@@ -482,8 +489,9 @@ class BooleanToggleButton(ui.Button["MapEditWizardView"]):
         self.view.state.set_change(self.field, new_value)
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+        view = self.view
         self.view.rebuild()
-        await itx.response.edit_message(view=self.view)
+        await itx.response.edit_message(view=view)
 
 
 class OpenModalButton(ui.Button["MapEditWizardView"]):
@@ -519,8 +527,9 @@ class OpenModalButton(ui.Button["MapEditWizardView"]):
 
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+        view = self.view
         self.view.rebuild()
-        await itx.edit_original_response(view=self.view)
+        await itx.edit_original_response(view=view)
 
 
 # ============================================================================
@@ -568,8 +577,9 @@ class EnterReasonButton(ui.Button["MapEditWizardView"]):
         if modal.submitted_reason:
             self.view.state.reason = modal.submitted_reason
             self.view.state.current_step = "review"
+            view = self.view
             self.view.rebuild()
-            await itx.edit_original_response(view=self.view)
+            await itx.edit_original_response(view=view)
 
 
 # ============================================================================
@@ -621,9 +631,9 @@ class BackButton(ui.Button["MapEditWizardView"]):
                 state.current_field_index = len(state.selected_fields) - 1
             else:
                 state.current_step = "reason"
-
+        view = self.view
         self.view.rebuild()
-        await itx.response.edit_message(view=self.view)
+        await itx.response.edit_message(view=view)
 
 
 class SubmitButton(ui.Button["MapEditWizardView"]):
