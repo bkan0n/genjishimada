@@ -43,6 +43,7 @@ from genjishimada_sdk.internal import ClaimCreateRequest, ClaimResponse, JobStat
 from genjishimada_sdk.logs import LogCreateRequest
 from genjishimada_sdk.lootbox import LootboxKeyType
 from genjishimada_sdk.maps import (
+    ArchivalStatusPatchRequest,
     GuideResponse,
     GuideURL,
     LinkMapsCreateRequest,
@@ -1837,8 +1838,6 @@ class APIService:
         Returns:
             Response[None]: Empty response on success.
         """
-        from genjishimada_sdk.maps import ArchivalStatusPatchRequest
-
         r = Route("PATCH", "/maps/archive")
         data = ArchivalStatusPatchRequest(status="Archive", codes=[code])
         return self._request(r, data=data)
@@ -1854,10 +1853,8 @@ class APIService:
         Returns:
             Response[None]: Empty response on success.
         """
-        from genjishimada_sdk.maps import ArchivalStatusPatchRequest
-
         r = Route("PATCH", "/maps/archive")
-        data = ArchivalStatusPatchRequest(status="Unarchive", codes=[code])
+        data = ArchivalStatusPatchRequest(status="Unarchived", codes=[code])
         return self._request(r, data=data)
 
 
