@@ -147,8 +147,8 @@ CN_FILTER_TRANSLATIONS_TEMP: dict[_CNTriFilter, CompletionFilter] = {
 
 CN_FILTER_2_TRANSLATIONS_TEMP: dict[OfficialFilter, CNOfficialFilter] = {
     "All": "全部",
-    "Official Only": "仅限官方",
-    "Unofficial (CN) Only": "非官方（CN）",  # noqa: RUF001
+    "Global Only": "仅限官方",
+    "Chinese Only": "非官方（CN）",  # noqa: RUF001
 }
 
 CN_FILTER_3_TRANSLATION_TEMP: dict[CNPlaytestFilter, PlaytestFilter] = {

@@ -1,11 +1,13 @@
 # apps/bot/extensions/map_editor.py
 
+"""Map editor extension for wizard-style map editing and verification queue."""
+
 from __future__ import annotations
 
 import asyncio
 from enum import Enum
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Literal, get_args
+from typing import TYPE_CHECKING, Literal, cast, get_args
 
 import discord
 from discord import ButtonStyle, SelectOption, TextStyle, app_commands, ui
@@ -24,7 +26,6 @@ from genjishimada_sdk.maps import (
     OverwatchCode,
     Restrictions,
 )
-from msgspec import UNSET
 
 from extensions._queue_registry import queue_consumer
 from utilities import transformers
@@ -111,7 +112,11 @@ class EditableField(str, Enum):
         }
 
 
-CATEGORY_OPTIONS = ["Classic", "Increasing Difficulty", "Other"]
+# Preview length for field values in selects
+_PREVIEW_MAX_LENGTH = 50
+
+# Static lists for mechanics and restrictions (fetched from SDK Literal types)
+# These are the options available in the database
 
 
 # ============================================================================
@@ -119,13 +124,23 @@ CATEGORY_OPTIONS = ["Classic", "Increasing Difficulty", "Other"]
 # ============================================================================
 
 
+# Type alias for field values that can be edited
+FieldValue = str | int | float | bool | list[str] | MedalsResponse | None
+
+
 class MapEditWizardState:
     """Tracks the state of a map edit wizard session."""
 
     def __init__(self, map_data: MapModel, is_mod: bool) -> None:
+        """Initialize the wizard state.
+
+        Args:
+            map_data: The map being edited.
+            is_mod: Whether the user is a moderator.
+        """
         self.map_data = map_data
         self.is_mod = is_mod
-        self.pending_changes: dict[str, Any] = {}
+        self.pending_changes: dict[str, FieldValue] = {}
         self.reason: str | None = None
         self.current_step: Literal["select_fields", "edit_field", "review", "reason"] = "select_fields"
         self.selected_fields: list[EditableField] = []
@@ -138,17 +153,17 @@ class MapEditWizardState:
             return self.selected_fields[self.current_field_index]
         return None
 
-    def get_current_value(self, field: EditableField) -> Any:
+    def get_current_value(self, field: EditableField) -> FieldValue:
         """Get the current value of a field from the map."""
         return getattr(self.map_data, field.value, None)
 
-    def get_pending_value(self, field: EditableField) -> Any:
+    def get_pending_value(self, field: EditableField) -> FieldValue:
         """Get the pending change value, or current if not changed."""
         if field.value in self.pending_changes:
             return self.pending_changes[field.value]
         return self.get_current_value(field)
 
-    def set_change(self, field: EditableField, value: Any) -> None:
+    def set_change(self, field: EditableField, value: FieldValue) -> None:
         """Record a pending change."""
         self.pending_changes[field.value] = value
 
@@ -173,6 +188,11 @@ class FieldSelectionSelect(ui.Select["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, map_data: MapModel) -> None:
+        """Initialize the field selection select.
+
+        Args:
+            map_data: The map data to build options from.
+        """
         options = [
             SelectOption(
                 label=field.display_name,
@@ -200,10 +220,10 @@ class FieldSelectionSelect(ui.Select["MapEditWizardView"]):
         if isinstance(value, bool):
             return "Yes" if value else "No"
         preview = str(value)
-        return preview[:50] + "..." if len(preview) > 50 else preview
+        return preview[:_PREVIEW_MAX_LENGTH] + "..." if len(preview) > _PREVIEW_MAX_LENGTH else preview
 
     async def callback(self, itx: GenjiItx) -> None:
-        """Store selected fields and advance to editing."""
+        """Handle field selection and advance to editing step."""
         self.view.state.selected_fields = [EditableField(v) for v in self.values]
         self.view.state.current_step = "edit_field"
         self.view.state.current_field_index = 0
@@ -221,10 +241,16 @@ class TextInputModal(ui.Modal):
 
     value_input: ui.TextInput
 
-    def __init__(self, field: EditableField, current_value: Any) -> None:
+    def __init__(self, field: EditableField, current_value: FieldValue) -> None:
+        """Initialize the text input modal.
+
+        Args:
+            field: The field being edited.
+            current_value: The current value of the field.
+        """
         super().__init__(title=f"Edit {field.display_name}")
         self.field = field
-        self.submitted_value: Any = None
+        self.submitted_value: str | int | None = None
 
         # Configure based on field type
         style = TextStyle.paragraph if field == EditableField.DESCRIPTION else TextStyle.short
@@ -266,6 +292,11 @@ class MedalsModal(ui.Modal):
     """Modal for editing medal thresholds."""
 
     def __init__(self, current_medals: MedalsResponse | None) -> None:
+        """Initialize the medals modal.
+
+        Args:
+            current_medals: The current medal thresholds, if any.
+        """
         super().__init__(title="Edit Medal Thresholds")
         self.submitted_medals: MedalsResponse | None = None
 
@@ -331,10 +362,16 @@ class DifficultySelect(ui.Select["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, current: DifficultyAll | None) -> None:
+        """Initialize the difficulty select.
+
+        Args:
+            current: The current difficulty value.
+        """
         options = [SelectOption(label=d, value=d, default=(d == current)) for d in DIFFICULTY_RANGES_ALL]
         super().__init__(placeholder="Select difficulty...", options=options)
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle difficulty selection."""
         self.view.state.set_change(EditableField.DIFFICULTY, self.values[0])
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
@@ -348,10 +385,16 @@ class CategorySelect(ui.Select["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, current: MapCategory | None) -> None:
-        options = [SelectOption(label=c, value=c, default=(c == current)) for c in CATEGORY_OPTIONS]
+        """Initialize the category select.
+
+        Args:
+            current: The current category value.
+        """
+        options = [SelectOption(label=c, value=c, default=(c == current)) for c in get_args(MapCategory)]
         super().__init__(placeholder="Select category...", options=options)
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle category selection."""
         self.view.state.set_change(EditableField.CATEGORY, self.values[0])
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
@@ -365,6 +408,11 @@ class MechanicsSelect(ui.Select["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, current: list[Mechanics]) -> None:
+        """Initialize the mechanics select.
+
+        Args:
+            current: The current list of mechanics.
+        """
         options = [SelectOption(label=m, value=m, default=(m in current)) for m in get_args(Mechanics)[:25]]
         super().__init__(
             placeholder="Select mechanics...",
@@ -374,6 +422,7 @@ class MechanicsSelect(ui.Select["MapEditWizardView"]):
         )
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle mechanics selection."""
         self.view.state.set_change(EditableField.MECHANICS, list(self.values))
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
@@ -387,7 +436,12 @@ class RestrictionsSelect(ui.Select["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, current: list[Restrictions]) -> None:
-        options = [SelectOption(label=r, value=r, default=(r in current)) for r in get_args(Restrictions)[:25]]
+        """Initialize the restrictions select.
+
+        Args:
+            current: The current list of restrictions.
+        """
+        options = [SelectOption(label=r, value=r, default=(r in current)) for r in get_args(Restrictions)]
         super().__init__(
             placeholder="Select restrictions...",
             min_values=0,
@@ -396,6 +450,7 @@ class RestrictionsSelect(ui.Select["MapEditWizardView"]):
         )
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle restrictions selection."""
         self.view.state.set_change(EditableField.RESTRICTIONS, list(self.values))
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
@@ -409,6 +464,12 @@ class BooleanToggleButton(ui.Button["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, field: EditableField, current: bool) -> None:
+        """Initialize the boolean toggle button.
+
+        Args:
+            field: The field being toggled.
+            current: The current boolean value.
+        """
         self.field = field
         self.current_value = current
         label = f"{field.display_name}: {'Yes' if current else 'No'}"
@@ -416,6 +477,7 @@ class BooleanToggleButton(ui.Button["MapEditWizardView"]):
         super().__init__(label=label, style=style)
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle boolean toggle."""
         new_value = not self.current_value
         self.view.state.set_change(self.field, new_value)
         if not self.view.state.advance_field():
@@ -430,24 +492,30 @@ class OpenModalButton(ui.Button["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, field: EditableField) -> None:
+        """Initialize the modal open button.
+
+        Args:
+            field: The field to edit via modal.
+        """
         self.field = field
         super().__init__(label=f"Edit {field.display_name}", style=ButtonStyle.blurple)
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle button click to open modal."""
         current = self.view.state.get_pending_value(self.field)
 
         if self.field == EditableField.MEDALS:
-            modal = MedalsModal(current)
-            await itx.response.send_modal(modal)
-            await modal.wait()
-            if modal.submitted_medals is not None or current is not None:
-                self.view.state.set_change(self.field, modal.submitted_medals)
+            medals_modal = MedalsModal(cast(MedalsResponse | None, current))
+            await itx.response.send_modal(medals_modal)
+            await medals_modal.wait()
+            if medals_modal.submitted_medals is not None or current is not None:
+                self.view.state.set_change(self.field, medals_modal.submitted_medals)
         else:
-            modal = TextInputModal(self.field, current)
-            await itx.response.send_modal(modal)
-            await modal.wait()
-            if modal.submitted_value is not None or current is not None:
-                self.view.state.set_change(self.field, modal.submitted_value)
+            text_modal = TextInputModal(self.field, current)
+            await itx.response.send_modal(text_modal)
+            await text_modal.wait()
+            if text_modal.submitted_value is not None or current is not None:
+                self.view.state.set_change(self.field, text_modal.submitted_value)
 
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
@@ -472,10 +540,12 @@ class ReasonModal(ui.Modal):
     )
 
     def __init__(self) -> None:
+        """Initialize the reason modal."""
         super().__init__(title="Reason for Edit Request")
         self.submitted_reason: str | None = None
 
     async def on_submit(self, itx: GenjiItx) -> None:
+        """Handle reason submission."""
         self.submitted_reason = self.reason_input.value
         await itx.response.defer()
         self.stop()
@@ -484,12 +554,14 @@ class ReasonModal(ui.Modal):
 class EnterReasonButton(ui.Button["MapEditWizardView"]):
     """Button to open reason modal."""
 
-    def __init__(self) -> None:
-        super().__init__(label="Enter Reason", style=ButtonStyle.blurple)
-
     view: MapEditWizardView
 
+    def __init__(self) -> None:
+        """Initialize the enter reason button."""
+        super().__init__(label="Enter Reason", style=ButtonStyle.blurple)
+
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle button click to open reason modal."""
         modal = ReasonModal()
         await itx.response.send_modal(modal)
         await modal.wait()
@@ -508,12 +580,14 @@ class EnterReasonButton(ui.Button["MapEditWizardView"]):
 class CancelButton(ui.Button["MapEditWizardView"]):
     """Cancel the wizard."""
 
-    def __init__(self) -> None:
-        super().__init__(label="Cancel", style=ButtonStyle.red, row=4)
-
     view: MapEditWizardView
 
+    def __init__(self) -> None:
+        """Initialize the cancel button."""
+        super().__init__(label="Cancel", style=ButtonStyle.red, row=4)
+
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle cancel button click."""
         self.view.cancelled = True
         self.view.stop()
         await itx.response.edit_message(
@@ -528,9 +602,11 @@ class BackButton(ui.Button["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self) -> None:
+        """Initialize the back button."""
         super().__init__(label="Back", style=ButtonStyle.grey, row=4)
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle back button click to navigate to previous step."""
         state = self.view.state
         if state.current_step == "edit_field" and state.current_field_index > 0:
             state.current_field_index -= 1
@@ -555,12 +631,19 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
 
     view: MapEditWizardView
 
-    def __init__(self, is_mod: bool, disabled: bool = False) -> None:
+    def __init__(self, is_mod: bool, *, disabled: bool = False) -> None:
+        """Initialize the submit button.
+
+        Args:
+            is_mod: Whether the user is a moderator.
+            disabled: Whether the button should be disabled.
+        """
         label = "Apply Changes" if is_mod else "Submit for Approval"
         super().__init__(label=label, style=ButtonStyle.green, row=4, disabled=disabled)
         self.is_mod = is_mod
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle submit button click to apply or queue changes."""
         await itx.response.defer(ephemeral=True, thinking=True)
 
         state = self.view.state
@@ -621,13 +704,19 @@ class MapEditWizardView(BaseView):
     """Main wizard view for editing maps."""
 
     def __init__(self, map_data: MapModel, is_mod: bool) -> None:
+        """Initialize the wizard view.
+
+        Args:
+            map_data: The map being edited.
+            is_mod: Whether the user is a moderator.
+        """
         super().__init__()
         self.state = MapEditWizardState(map_data, is_mod)
         self.submitted = False
         self.cancelled = False
         self.rebuild()
 
-    def rebuild(self) -> None:
+    def rebuild(self) -> None:  # noqa: PLR0912
         """Rebuild the view based on current state."""
         self.clear_items()
 
@@ -670,15 +759,18 @@ class MapEditWizardView(BaseView):
 
             # Add appropriate editor based on field type
             if field == EditableField.DIFFICULTY:
-                container.add_item(ui.ActionRow(DifficultySelect(current_value)))
+                container.add_item(ui.ActionRow(DifficultySelect(cast(DifficultyAll | None, current_value))))
             elif field == EditableField.CATEGORY:
-                container.add_item(ui.ActionRow(CategorySelect(current_value)))
+                container.add_item(ui.ActionRow(CategorySelect(cast(MapCategory | None, current_value))))
             elif field == EditableField.MECHANICS:
-                container.add_item(ui.ActionRow(MechanicsSelect(current_value or [])))
+                mechanics_value = cast(list[Mechanics] | None, current_value)
+                container.add_item(ui.ActionRow(MechanicsSelect(mechanics_value or [])))
             elif field == EditableField.RESTRICTIONS:
-                container.add_item(ui.ActionRow(RestrictionsSelect(current_value or [])))
+                restrictions_value = cast(list[Restrictions] | None, current_value)
+                container.add_item(ui.ActionRow(RestrictionsSelect(restrictions_value or [])))
             elif field.requires_toggle:
-                container.add_item(ui.ActionRow(BooleanToggleButton(field, current_value or False)))
+                bool_value = cast(bool | None, current_value)
+                container.add_item(ui.ActionRow(BooleanToggleButton(field, bool_value or False)))
             elif field.requires_modal or field == EditableField.MEDALS:
                 container.add_item(ui.ActionRow(OpenModalButton(field)))
 
@@ -715,7 +807,7 @@ class MapEditWizardView(BaseView):
 
         self.add_item(container)
 
-    def _format_value(self, value: Any) -> str:
+    def _format_value(self, value: FieldValue) -> str:
         """Format a value for display."""
         if value is None:
             return "*Not set*"
@@ -760,9 +852,11 @@ class MapEditAcceptButton(ui.Button["MapEditVerificationView"]):
     view: MapEditVerificationView
 
     def __init__(self) -> None:
+        """Initialize the accept button."""
         super().__init__(label="Accept", style=ButtonStyle.green, custom_id="map_edit:accept")
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle accept button click to approve the edit request."""
         await itx.response.defer(ephemeral=True, thinking=True)
 
         data = MapEditResolveRequest(
@@ -788,9 +882,11 @@ class MapEditRejectButton(ui.Button["MapEditVerificationView"]):
     view: MapEditVerificationView
 
     def __init__(self) -> None:
+        """Initialize the reject button."""
         super().__init__(label="Reject", style=ButtonStyle.red, custom_id="map_edit:reject")
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle reject button click to deny the edit request."""
         # Open modal for rejection reason
         modal = ReasonModal()
         modal.reason_input.label = "Rejection Reason"
@@ -823,6 +919,11 @@ class MapEditVerificationView(ui.LayoutView):
     """View shown in the verification queue for map edit requests."""
 
     def __init__(self, data: MapEditSubmissionResponse) -> None:
+        """Initialize the verification view.
+
+        Args:
+            data: The edit request submission data.
+        """
         super().__init__(timeout=None)
         self.data = data
         self.edit_id = data.id
@@ -907,18 +1008,14 @@ class MapEditorService(BaseService):
                 f"**Reason:** {event.rejection_reason}"
             )
 
-        await self.bot.notifications.notify_dm_only(
-            user_id=edit_data.created_by,
-            event_type="MAP_EDIT_RESOLVED",  # Add to NotificationEventType
-            title="Map Edit Request Update",
-            body=message,
-            discord_message=message,
-            metadata={
-                "code": edit_data.code,
-                "accepted": event.accepted,
-                "rejection_reason": event.rejection_reason,
-            },
-        )
+        # Send DM notification directly since we don't have a dedicated notification type
+        try:
+            user = self.bot.get_user(edit_data.created_by)
+            if user is None:
+                user = await self.bot.fetch_user(edit_data.created_by)
+            await user.send(message)
+        except discord.HTTPException:
+            log.warning(f"Failed to send DM to user {edit_data.created_by} for map edit resolution")
 
         # Delete verification queue message
         if edit_data.message_id:
@@ -975,13 +1072,6 @@ class MapEditorCog(BaseCog):
         map_data = await itx.client.api.get_map(code=code)
         if not map_data:
             raise UserFacingError(f"Map `{code}` not found.")
-
-        # Check if user is a mod (for direct apply vs queue)
-        assert isinstance(itx.user, discord.Member) and itx.guild
-        is_mod = (
-            itx.user.get_role(itx.client.config.roles.admin.mod) is not None
-            or itx.user.get_role(itx.client.config.roles.admin.sensei) is not None
-        )
 
         # Start wizard - for this command, always queue (user path)
         view = MapEditWizardView(map_data, is_mod=False)

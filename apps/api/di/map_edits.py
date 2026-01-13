@@ -1,13 +1,13 @@
-# apps/api/di/map_edits.py
+"""Map edit request service for managing edit suggestions and approvals."""
 
 from __future__ import annotations
 
 import datetime as dt
 from logging import getLogger
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import msgspec
-from asyncpg import Connection
+from asyncpg import Connection, Record
 from genjishimada_sdk.maps import (
     MapEditFieldChange,
     MapEditResponse,
@@ -20,7 +20,13 @@ from litestar.datastructures import State
 
 from di.base import BaseService
 
+if TYPE_CHECKING:
+    pass
+
 log = getLogger(__name__)
+
+# Preview length for field values
+_PREVIEW_MAX_LENGTH = 50
 
 
 class MapEditService(BaseService):
@@ -63,9 +69,9 @@ class MapEditService(BaseService):
                 map_id, code, proposed_changes, reason, created_by
             )
             VALUES ($1, $2, $3::jsonb, $4, $5)
-            RETURNING 
+            RETURNING
                 id, map_id, code, proposed_changes, reason, created_by,
-                created_at, message_id, resolved_at, accepted, 
+                created_at, message_id, resolved_at, accepted,
                 resolved_by, rejection_reason
             """,
             map_id,
@@ -74,6 +80,9 @@ class MapEditService(BaseService):
             reason,
             created_by,
         )
+
+        if row is None:
+            raise ValueError(f"Failed to create edit request for {code}")
 
         return self._row_to_response(row)
 
@@ -91,7 +100,7 @@ class MapEditService(BaseService):
         """
         row = await self._conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 id, map_id, code, proposed_changes, reason, created_by,
                 created_at, message_id, resolved_at, accepted,
                 resolved_by, rejection_reason
@@ -100,7 +109,7 @@ class MapEditService(BaseService):
             """,
             edit_id,
         )
-        if not row:
+        if row is None:
             raise ValueError(f"Edit request {edit_id} not found")
 
         return self._row_to_response(row)
@@ -143,8 +152,8 @@ class MapEditService(BaseService):
         # Get the edit request with map info
         edit_row = await self._conn.fetchrow(
             """
-            SELECT 
-                e.id, e.code, e.proposed_changes, e.reason, 
+            SELECT
+                e.id, e.code, e.proposed_changes, e.reason,
                 e.created_by, e.created_at, e.message_id,
                 m.map_name, m.difficulty
             FROM maps.edit_requests e
@@ -153,7 +162,7 @@ class MapEditService(BaseService):
             """,
             edit_id,
         )
-        if not edit_row:
+        if edit_row is None:
             raise ValueError(f"Edit request {edit_id} not found")
 
         # Get submitter name
@@ -170,7 +179,7 @@ class MapEditService(BaseService):
         # Get current map data for comparison
         map_row = await self._conn.fetchrow(
             """
-            SELECT 
+            SELECT
                 code, map_name, category, checkpoints, difficulty,
                 description, title, mechanics, restrictions,
                 custom_banner, hidden, archived, official
@@ -179,6 +188,8 @@ class MapEditService(BaseService):
             """,
             edit_row["code"],
         )
+        if map_row is None:
+            raise ValueError(f"Map {edit_row['code']} not found")
 
         # Get medals separately (different table structure based on your schema)
         medals_row = await self._conn.fetchrow(
@@ -197,7 +208,9 @@ class MapEditService(BaseService):
             proposed_changes = msgspec.json.decode(proposed_changes)
 
         # Build human-readable changes
-        changes = self._build_field_changes(dict(map_row), medals_row, proposed_changes)
+        map_data = dict(map_row)
+        medals_data = dict(medals_row) if medals_row else None
+        changes = self._build_field_changes(map_data, medals_data, proposed_changes)
 
         return MapEditSubmissionResponse(
             id=edit_row["id"],
@@ -262,7 +275,7 @@ class MapEditService(BaseService):
         return changes
 
     @staticmethod
-    def _format_value_for_display(field: str, value: Any) -> str:
+    def _format_value_for_display(field: str, value: str | float | bool | list | dict | None) -> str:
         """Format a field value for human-readable display.
 
         Args:
@@ -275,19 +288,15 @@ class MapEditService(BaseService):
         if value is None:
             return "Not set"
 
-        if field in ("mechanics", "restrictions"):
-            if isinstance(value, list):
-                return ", ".join(value) if value else "None"
-            return str(value)
-
-        if field == "medals":
-            if isinstance(value, dict):
-                return f"🥇 {value.get('gold')} | 🥈 {value.get('silver')} | 🥉 {value.get('bronze')}"
-            return str(value)
-
+        # Boolean fields
         if field in ("hidden", "archived", "official"):
             return "Yes" if value else "No"
 
+        # Medal fields
+        if field == "medals" and isinstance(value, dict):
+            return f"🥇 {value.get('gold')} | 🥈 {value.get('silver')} | 🥉 {value.get('bronze')}"
+
+        # List fields (mechanics, restrictions, etc.)
         if isinstance(value, list):
             return ", ".join(str(v) for v in value) if value else "None"
 
@@ -328,7 +337,7 @@ class MapEditService(BaseService):
         await self._conn.execute(
             """
             UPDATE maps.edit_requests
-            SET 
+            SET
                 resolved_at = $2,
                 accepted = $3,
                 resolved_by = $4,
@@ -352,14 +361,14 @@ class MapEditService(BaseService):
         Returns:
             MapPatchRequest with the changes applied.
         """
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
 
-        for field, value in proposed_changes.items():
+        for field, field_value in proposed_changes.items():
             # Handle special conversions
-            if field == "medals" and value is not None:
-                value = MedalsResponse(**value)
-
-            kwargs[field] = value
+            if field == "medals" and field_value is not None:
+                kwargs[field] = MedalsResponse(**field_value)
+            else:
+                kwargs[field] = field_value
 
         return MapPatchRequest(**kwargs)
 
@@ -378,7 +387,7 @@ class MapEditService(BaseService):
             List of edit requests.
         """
         query = """
-            SELECT 
+            SELECT
                 id, map_id, code, proposed_changes, reason, created_by,
                 created_at, message_id, resolved_at, accepted,
                 resolved_by, rejection_reason
@@ -393,7 +402,7 @@ class MapEditService(BaseService):
         rows = await self._conn.fetch(query, user_id)
         return [self._row_to_response(row) for row in rows]
 
-    def _row_to_response(self, row: dict[str, Any]) -> MapEditResponse:
+    def _row_to_response(self, row: Record) -> MapEditResponse:
         """Convert a database row to MapEditResponse.
 
         Args:

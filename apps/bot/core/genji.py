@@ -9,6 +9,7 @@ import extensions
 import utilities.config
 from extensions.api_service import APIService
 from extensions.completions import CompletionsService
+from extensions.map_editor import MapEditorService
 from extensions.newsfeed import NewsfeedService
 from extensions.notifications import NotificationService
 from extensions.playtest import PlaytestService
@@ -42,6 +43,7 @@ class Genji(commands.Bot):
     _completions_manager: CompletionsService
     _xp_manager: XPService
     _thumbnail_service: VideoThumbnailService
+    _map_editor_service: MapEditorService
 
     def __init__(self, *, prefix: str, session: aiohttp.ClientSession) -> None:
         """Initialize Bot instance.
@@ -152,3 +154,12 @@ class Genji(commands.Bot):
     @thumbnail_service.setter
     def thumbnail_service(self, service: VideoThumbnailService) -> None:
         self._thumbnail_service = service
+
+    @property
+    def map_editor(self) -> MapEditorService:
+        """Return the MapEditorService."""
+        return self._map_editor_service
+
+    @map_editor.setter
+    def map_editor(self, service: MapEditorService) -> None:
+        self._map_editor_service = service

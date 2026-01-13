@@ -48,6 +48,11 @@ from genjishimada_sdk.maps import (
     LinkMapsCreateRequest,
     MapCategory,
     MapCreationJobResponse,
+    MapEditCreateRequest,
+    MapEditResolveRequest,
+    MapEditResponse,
+    MapEditSetMessageIdRequest,
+    MapEditSubmissionResponse,
     MapMasteryCreateRequest,
     MapMasteryCreateResponse,
     MapMasteryResponse,
@@ -56,6 +61,7 @@ from genjishimada_sdk.maps import (
     Mechanics,
     OverwatchCode,
     OverwatchMap,
+    PendingMapEditResponse,
     PlaytestApproveRequest,
     PlaytestForceAcceptRequest,
     PlaytestForceDenyRequest,
@@ -1744,6 +1750,81 @@ class APIService:
             channel=channel,
         )
         return self._request(r, params={"enabled": enabled})
+
+    # =========================================================================
+    # Map Edit Request Methods
+    # =========================================================================
+
+    def create_map_edit_request(self, data: MapEditCreateRequest) -> Response[MapEditResponse]:
+        """Create a new map edit request.
+
+        Args:
+            data: The edit request creation payload.
+
+        Returns:
+            Response[MapEditResponse]: The created edit request.
+        """
+        r = Route("POST", "/map-edits")
+        return self._request(r, response_model=MapEditResponse, data=data)
+
+    def get_map_edit_request(self, edit_id: int) -> Response[MapEditResponse]:
+        """Get a specific map edit request by ID.
+
+        Args:
+            edit_id: The edit request ID.
+
+        Returns:
+            Response[MapEditResponse]: The edit request.
+        """
+        r = Route("GET", "/map-edits/{edit_id}", edit_id=edit_id)
+        return self._request(r, response_model=MapEditResponse)
+
+    def get_map_edit_submission(self, edit_id: int) -> Response[MapEditSubmissionResponse]:
+        """Get enriched edit request data for verification queue display.
+
+        Args:
+            edit_id: The edit request ID.
+
+        Returns:
+            Response[MapEditSubmissionResponse]: Enriched submission data.
+        """
+        r = Route("GET", "/map-edits/{edit_id}/submission", edit_id=edit_id)
+        return self._request(r, response_model=MapEditSubmissionResponse)
+
+    def get_pending_map_edit_requests(self) -> Response[list[PendingMapEditResponse]]:
+        """Get all pending map edit requests.
+
+        Returns:
+            Response[list[PendingMapEditResponse]]: List of pending edit requests.
+        """
+        r = Route("GET", "/map-edits/pending")
+        return self._request(r, response_model=list[PendingMapEditResponse])
+
+    def set_map_edit_message_id(self, edit_id: int, data: MapEditSetMessageIdRequest) -> Response[None]:
+        """Associate a Discord message ID with an edit request.
+
+        Args:
+            edit_id: The edit request ID.
+            data: The message ID request payload.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("PATCH", "/map-edits/{edit_id}/message", edit_id=edit_id)
+        return self._request(r, data=data)
+
+    def resolve_map_edit_request(self, edit_id: int, data: MapEditResolveRequest) -> Response[None]:
+        """Accept or reject a map edit request.
+
+        Args:
+            edit_id: The edit request ID.
+            data: The resolution request payload.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("PUT", "/map-edits/{edit_id}/resolve", edit_id=edit_id)
+        return self._request(r, data=data)
 
 
 async def setup(bot: core.Genji) -> None:
