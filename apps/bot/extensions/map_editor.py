@@ -208,8 +208,7 @@ class FieldSelectionSelect(ui.Select["MapEditWizardView"]):
                 description=self._get_current_preview(map_data, field),
             )
             for field in EditableField
-            if field not in _EXCLUDED_FIELDS
-            and (is_mod or field not in _MOD_ONLY_FIELDS)
+            if field not in _EXCLUDED_FIELDS and (is_mod or field not in _MOD_ONLY_FIELDS)
         ]
         super().__init__(
             placeholder="Select fields to edit...",
@@ -740,9 +739,7 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
                     await itx.client.api.unarchive_map(state.map_data.code)
 
                 # Remove archived from pending changes so it's not sent to patch
-                remaining_changes = {
-                    k: v for k, v in state.pending_changes.items() if k != "archived"
-                }
+                remaining_changes = {k: v for k, v in state.pending_changes.items() if k != "archived"}
 
                 # Apply remaining changes if any
                 if remaining_changes:
@@ -819,7 +816,7 @@ class MapEditWizardView(BaseView):
         self.map_name_page = 0  # Track current page for map name pagination
         self.rebuild()
 
-    def rebuild(self) -> None:  # noqa: PLR0912
+    def rebuild(self) -> None:  # noqa: PLR0912, PLR0915
         """Rebuild the view based on current state."""
         self.clear_items()
 

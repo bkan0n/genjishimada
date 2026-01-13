@@ -136,7 +136,7 @@ class MapEditsController(litestar.Controller):
         summary="Resolve Edit Request",
         description="Accept or reject a map edit request.",
     )
-    async def resolve_edit_request(  # noqa: PLR0912
+    async def resolve_edit_request(  # noqa: PLR0913
         self,
         request: litestar.Request,
         svc: MapEditService,
@@ -200,9 +200,7 @@ class MapEditsController(litestar.Controller):
                 await newsfeed.create_and_publish(event, headers=request.headers)
 
                 # Prepare remaining changes (without archived)
-                remaining_changes = {
-                    k: v for k, v in edit_request.proposed_changes.items() if k != "archived"
-                }
+                remaining_changes = {k: v for k, v in edit_request.proposed_changes.items() if k != "archived"}
 
                 # Apply remaining changes if any
                 if remaining_changes:
@@ -215,6 +213,7 @@ class MapEditsController(litestar.Controller):
 
             # Generate newsfeed entry for non-archive changes
             if remaining_changes:
+
                 async def _get_user_coalesced_name(user_id: int) -> str:
                     d = await users.get_user(user_id)
                     if d:
