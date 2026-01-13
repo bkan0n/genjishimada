@@ -51,6 +51,10 @@ class NotificationEventType(str, Enum):
     # Engagement events
     PLAYTEST_UPDATE = "playtest_update"
 
+    # Map edit events
+    MAP_EDIT_APPROVED = "map_edit_approved"
+    MAP_EDIT_REJECTED = "map_edit_rejected"
+
 
 NOTIFICATION_EVENT_TYPE = Literal[
     "verification_approved",
@@ -63,6 +67,8 @@ NOTIFICATION_EVENT_TYPE = Literal[
     "mastery_earned",
     "lootbox_earned",
     "playtest_update",
+    "map_edit_approved",
+    "map_edit_rejected",
 ]
 
 NOTIFICATION_CHANNEL = Literal["discord_dm", "discord_ping", "web"]
@@ -80,6 +86,8 @@ EVENT_TYPE_DEFAULT_CHANNELS: dict[NotificationEventType, list[NotificationChanne
     NotificationEventType.MASTERY_EARNED: [NotificationChannel.DISCORD_PING, NotificationChannel.WEB],
     NotificationEventType.LOOTBOX_EARNED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.PLAYTEST_UPDATE: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
+    NotificationEventType.MAP_EDIT_APPROVED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
+    NotificationEventType.MAP_EDIT_REJECTED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
 }
 
 

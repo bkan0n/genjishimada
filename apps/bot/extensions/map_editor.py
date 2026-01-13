@@ -1107,32 +1107,15 @@ class MapEditorService(BaseService):
 
     @queue_consumer("api.map_edit.resolved", struct_type=MapEditResolvedEvent)
     async def _process_edit_resolved(self, event: MapEditResolvedEvent, _: AbstractIncomingMessage) -> None:
-        """Handle resolved map edit - notify submitter and cleanup."""
+        """Handle resolved map edit - clean up verification queue message.
+
+        Note: User notification is handled by the API via the notification service.
+        This consumer only handles Discord-side cleanup (deleting the queue message).
+        """
         log.debug(f"[RabbitMQ] Processing map edit resolved: {event.edit_request_id}")
 
-        # Get the edit request details
+        # Get the edit request details for the message_id
         edit_data = await self.bot.api.get_map_edit_request(event.edit_request_id)
-
-        # Notify the submitter
-        if event.accepted:
-            message = (
-                f"✅ Your edit request for **{edit_data.code}** has been **approved**!\n"
-                "Your changes have been applied to the map."
-            )
-        else:
-            message = (
-                f"❌ Your edit request for **{edit_data.code}** has been **rejected**.\n"
-                f"**Reason:** {event.rejection_reason}"
-            )
-
-        # Send DM notification directly since we don't have a dedicated notification type
-        try:
-            user = self.bot.get_user(edit_data.created_by)
-            if user is None:
-                user = await self.bot.fetch_user(edit_data.created_by)
-            await user.send(message)
-        except discord.HTTPException:
-            log.warning(f"Failed to send DM to user {edit_data.created_by} for map edit resolution")
 
         # Delete verification queue message
         if edit_data.message_id:

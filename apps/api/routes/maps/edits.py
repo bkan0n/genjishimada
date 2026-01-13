@@ -21,16 +21,20 @@ from genjishimada_sdk.newsfeed import (
     NewsfeedEvent,
     NewsfeedUnarchive,
 )
+from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
+from litestar.datastructures import Headers
 from litestar.di import Provide
 
 from di import (
     MapEditService,
     MapService,
     NewsfeedService,
+    NotificationService,
     UserService,
     provide_map_edit_service,
     provide_map_service,
     provide_newsfeed_service,
+    provide_notification_service,
     provide_user_service,
 )
 from di.maps import MapSearchFilters
@@ -48,6 +52,7 @@ class MapEditsController(litestar.Controller):
         "maps": Provide(provide_map_service),
         "newsfeed": Provide(provide_newsfeed_service),
         "users": Provide(provide_user_service),
+        "notifications": Provide(provide_notification_service),
     }
 
     @litestar.post(
@@ -142,6 +147,7 @@ class MapEditsController(litestar.Controller):
         svc: MapEditService,
         maps: MapService,
         newsfeed: NewsfeedService,
+        notifications: NotificationService,
         users: UserService,
         edit_id: int,
         data: MapEditResolveRequest,
@@ -239,7 +245,16 @@ class MapEditsController(litestar.Controller):
             rejection_reason=data.rejection_reason,
         )
 
-        # Publish event for bot notification
+        # Send notification to the submitter
+        await self._send_resolution_notification(
+            notifications=notifications,
+            edit_request=edit_request,
+            accepted=data.accepted,
+            rejection_reason=data.rejection_reason,
+            headers=request.headers,
+        )
+
+        # Publish event for bot to clean up verification queue message
         await svc.publish_message(
             routing_key="api.map_edit.resolved",
             data=MapEditResolvedEvent(
@@ -251,6 +266,56 @@ class MapEditsController(litestar.Controller):
             headers=request.headers,
             idempotency_key=f"map_edit:resolved:{edit_id}",
         )
+
+    async def _send_resolution_notification(
+        self,
+        notifications: NotificationService,
+        edit_request: MapEditResponse,
+        accepted: bool,
+        rejection_reason: str | None,
+        headers: Headers,
+    ) -> None:
+        """Send notification to the edit request submitter about resolution.
+
+        Args:
+            notifications: Notification service for creating and dispatching notifications.
+            edit_request: The edit request that was resolved.
+            accepted: Whether the edit was accepted.
+            rejection_reason: Reason for rejection if rejected.
+            headers: Request headers for RabbitMQ publishing.
+        """
+        if accepted:
+            event_type = NotificationEventType.MAP_EDIT_APPROVED.value
+            title = "Map Edit Approved"
+            body = f"Your edit request for {edit_request.code} has been approved and your changes have been applied."
+            discord_message = (
+                f"✅ Your edit request for **{edit_request.code}** has been **approved**!\n"
+                "Your changes have been applied to the map."
+            )
+        else:
+            event_type = NotificationEventType.MAP_EDIT_REJECTED.value
+            title = "Map Edit Rejected"
+            body = f"Your edit request for {edit_request.code} was rejected."
+            if rejection_reason:
+                body += f" Reason: {rejection_reason}"
+            discord_message = f"❌ Your edit request for **{edit_request.code}** has been **rejected**."
+            if rejection_reason:
+                discord_message += f"\n**Reason:** {rejection_reason}"
+
+        notification_data = NotificationCreateRequest(
+            user_id=edit_request.created_by,
+            event_type=event_type,
+            title=title,
+            body=body,
+            discord_message=discord_message,
+            metadata={
+                "map_code": edit_request.code,
+                "edit_id": edit_request.id,
+                "rejection_reason": rejection_reason,
+            },
+        )
+
+        await notifications.create_and_dispatch(notification_data, headers)
 
     @litestar.get(
         path="/user/{user_id:int}",
