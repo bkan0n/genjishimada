@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import datetime as dt
 import re
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
+import msgspec
 from msgspec import UNSET, Meta, Struct, UnsetType, ValidationError
 
 from .difficulties import DifficultyAll, DifficultyTop
@@ -26,6 +27,14 @@ __all__ = (
     "MapCountsResponse",
     "MapCreateRequest",
     "MapCreationJobResponse",
+    "MapEditCreateRequest",
+    "MapEditCreatedEvent",
+    "MapEditFieldChange",
+    "MapEditResolveRequest",
+    "MapEditResolvedEvent",
+    "MapEditResponse",
+    "MapEditSetMessageIdRequest",
+    "MapEditSubmissionResponse",
     "MapMasteryCreateRequest",
     "MapMasteryCreateResponse",
     "MapMasteryResponse",
@@ -39,6 +48,7 @@ __all__ = (
     "MedalsResponse",
     "OverwatchCode",
     "OverwatchMap",
+    "PendingMapEditResponse",
     "PlaytestApproveRequest",
     "PlaytestApprovedEvent",
     "PlaytestCreatePartialRequest",
@@ -321,74 +331,6 @@ class MapPatchRequest(Struct, kw_only=True):
     medals: MedalsResponse | UnsetType | None = UNSET
     title: str | UnsetType | None = UNSET
     custom_banner: str | UnsetType | None = UNSET
-
-
-class MapEditCreateRequest(Struct, kw_only=True):
-    """Partial update payload for map edit request entries."""
-
-    reason: str
-    created_by: int
-    code: OverwatchCode | UnsetType = UNSET
-    map_name: OverwatchMap | UnsetType = UNSET
-    category: MapCategory | UnsetType = UNSET
-    creators: list[Creator] | UnsetType = UNSET
-    checkpoints: Annotated[int, Meta(gt=0)] | UnsetType = UNSET
-    difficulty: DifficultyAll | UnsetType = UNSET
-    hidden: bool | UnsetType = UNSET
-    archived: bool | UnsetType = UNSET
-    mechanics: list[Mechanics] | UnsetType | None = UNSET
-    restrictions: list[Restrictions] | UnsetType | None = UNSET
-    description: str | UnsetType | None = UNSET
-    medals: MedalsResponse | UnsetType | None = UNSET
-    title: str | UnsetType | None = UNSET
-    custom_banner: str | UnsetType | None = UNSET
-
-
-class MapEditCreateResponse(Struct, kw_only=True):
-    edit_request_id: int
-    current_map_data: MapResponse
-
-
-class MapEditChangesResponse(Struct, kw_only=True):
-    code: OverwatchCode | None = None
-    map_name: OverwatchMap | None = None
-    category: MapCategory | None = None
-    creators: list[Creator] | None = None
-    checkpoints: Annotated[int, Meta(gt=0)] | None = None
-    difficulty: DifficultyAll | None = None
-    hidden: bool | None = None
-    archived: bool | None = None
-    mechanics: list[Mechanics] | None = None
-    restrictions: list[Restrictions] | None = None
-    description: str | None = None
-    medals: MedalsResponse | None = None
-    title: str | None = None
-    custom_banner: str | None = None
-
-
-class MapEditResponse(Struct, kw_only=True):
-    id: int
-    map_id: int
-    code: OverwatchCode
-    fields: MapEditChangesResponse
-    reason: str
-    created_at: dt.datetime
-    completed_at: dt.datetime
-    accepted_by: int
-    accepted: bool | None
-    message_id: int
-    created_by: int
-    rejection_reason: str | None
-
-
-class MapEditSetMessageIdRequest(Struct, kw_only=True):
-    message_id: int
-
-
-class MapEditResolveRequest(Struct, kw_only=True):
-    accepted: bool
-    accepted_by: int
-    rejection_reason: str | None = None
 
 
 class ArchivalStatusPatchRequest(Struct):
@@ -1043,3 +985,136 @@ def get_map_banner(map_name: str) -> str:
     _map = re.sub(r"[^a-zA-Z0-9]", "", map_name)
     sanitized_name = _map.lower().strip().replace(" ", "")
     return f"https://cdn.genji.pk/assets/map_banners/{sanitized_name}.png"
+
+
+class MapEditCreateRequest(Struct, kw_only=True):
+    """Request payload for creating a map edit request."""
+
+    code: OverwatchCode
+    reason: str
+    created_by: int
+
+    # All optional - only include fields being changed
+    new_code: OverwatchCode | UnsetType = UNSET
+    map_name: OverwatchMap | UnsetType = UNSET
+    category: MapCategory | UnsetType = UNSET
+    creators: list[Creator] | UnsetType = UNSET
+    checkpoints: Annotated[int, Meta(gt=0)] | UnsetType = UNSET
+    difficulty: DifficultyAll | UnsetType = UNSET
+    hidden: bool | UnsetType = UNSET
+    archived: bool | UnsetType = UNSET
+    official: bool | UnsetType = UNSET
+    mechanics: list[Mechanics] | UnsetType | None = UNSET
+    restrictions: list[Restrictions] | UnsetType | None = UNSET
+    description: str | UnsetType | None = UNSET
+    medals: MedalsResponse | UnsetType | None = UNSET
+    title: str | UnsetType | None = UNSET
+    custom_banner: str | UnsetType | None = UNSET
+
+    def to_changes_dict(self) -> dict[str, Any]:
+        """Convert to a dict of only the changed fields."""
+        changes = {}
+        for field_name in [
+            "new_code",
+            "map_name",
+            "category",
+            "creators",
+            "checkpoints",
+            "difficulty",
+            "hidden",
+            "archived",
+            "official",
+            "mechanics",
+            "restrictions",
+            "description",
+            "medals",
+            "title",
+            "custom_banner",
+        ]:
+            value = getattr(self, field_name)
+            if value is not UNSET:
+                # Rename new_code to code for storage
+                key = "code" if field_name == "new_code" else field_name
+                changes[key] = msgspec.to_builtins(value)
+        return changes
+
+
+class MapEditFieldChange(Struct):
+    """Represents a single field change for display."""
+
+    field: str
+    old_value: str  # Human-readable
+    new_value: str  # Human-readable
+
+
+class MapEditResponse(Struct, kw_only=True):
+    """Full map edit request response."""
+
+    id: int
+    map_id: int
+    code: OverwatchCode
+    proposed_changes: dict[str, Any]  # Raw JSONB
+    reason: str
+    created_by: int
+    created_at: dt.datetime
+    message_id: int | None
+    resolved_at: dt.datetime | None
+    accepted: bool | None
+    resolved_by: int | None
+    rejection_reason: str | None
+
+
+class MapEditSubmissionResponse(Struct):
+    """Response when viewing an edit request for the queue."""
+
+    id: int
+    code: OverwatchCode
+    map_name: OverwatchMap
+    difficulty: DifficultyAll
+
+    # Current vs proposed shown as readable changes
+    changes: list[MapEditFieldChange]
+
+    reason: str
+    submitter_name: str
+    submitter_id: int
+    created_at: dt.datetime
+    message_id: int | None
+
+
+class MapEditResolveRequest(Struct, kw_only=True):
+    """Request to resolve (accept/reject) an edit request."""
+
+    accepted: bool
+    resolved_by: int
+    rejection_reason: str | None = None
+
+
+class MapEditSetMessageIdRequest(Struct):
+    """Request to set the verification queue message ID."""
+
+    message_id: int
+
+
+class PendingMapEditResponse(Struct):
+    """Lightweight response for pending edits list."""
+
+    id: int
+    code: OverwatchCode
+    message_id: int | None
+
+
+# Events for RabbitMQ
+class MapEditCreatedEvent(Struct):
+    """Event emitted when a map edit request is created."""
+
+    edit_request_id: int
+
+
+class MapEditResolvedEvent(Struct):
+    """Event emitted when a map edit request is resolved."""
+
+    edit_request_id: int
+    accepted: bool
+    resolved_by: int
+    rejection_reason: str | None
