@@ -44,12 +44,14 @@ from genjishimada_sdk.newsfeed import (
     NewsfeedUnarchive,
     NewsfeedUnlinkedMap,
 )
+from genjishimada_sdk.xp import XP_AMOUNTS, XpGrantRequest
 from litestar.datastructures import Headers
 from litestar.di import Provide
 from litestar.response import Response, Stream
 from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST
 
 from di.jobs import InternalJobsService, provide_internal_jobs_service
+from di.lootbox import LootboxService, provide_lootbox_service
 from di.maps import CompletionFilter, MapSearchFilters, MapService, MedalFilter, PlaytestFilter, provide_map_service
 from di.newsfeed import NewsfeedService, provide_newsfeed_service
 from di.users import UserService, provide_user_service
@@ -69,6 +71,7 @@ class BaseMapsController(litestar.Controller):
         "newsfeed": Provide(provide_newsfeed_service),
         "users": Provide(provide_user_service),
         "jobs": Provide(provide_internal_jobs_service),
+        "lootbox": Provide(provide_lootbox_service),
     }
     linked_code_job_statuses = set()
 
@@ -399,6 +402,7 @@ class BaseMapsController(litestar.Controller):
         newsfeed: NewsfeedService,
         users: UserService,
         request: litestar.Request,
+        lootbox: LootboxService,
     ) -> GuideResponse:
         """Create a guide for a map.
 
@@ -417,6 +421,8 @@ class BaseMapsController(litestar.Controller):
         guide = await svc.create_guide(code, data)
         user_data = await users.get_user(user_id=data.user_id)
         name = user_data.coalesced_name if user_data else None
+        xp_amount = XP_AMOUNTS["Guide"]
+        await lootbox.grant_user_xp(request.headers, data.user_id, XpGrantRequest(xp_amount, "Guide"))
         event_payload = NewsfeedGuide(code=code, guide_url=data.url, name=name or "Unknown User")
         event = NewsfeedEvent(
             id=None, timestamp=dt.datetime.now(dt.timezone.utc), payload=event_payload, event_type="guide"
@@ -427,7 +433,7 @@ class BaseMapsController(litestar.Controller):
     @litestar.get(
         path="/{code:str}/affected",
         summary="Get Affected Users",
-        description=("Return user IDs that are impacted by changes to the specified map."),
+        description="Return user IDs that are impacted by changes to the specified map.",
     )
     async def get_affected_users(self, svc: MapService, code: OverwatchCode) -> list[int]:
         """Get IDs of users affected by a map change.
