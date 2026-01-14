@@ -282,6 +282,28 @@
         "x-dead-letter-routing-key": "api.notifications.delivery.dlq",
         "x-queue-type": "classic"
       }
+    },
+    {
+      "name": "api.map_edit.created",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "api.map_edit.created.dlq",
+        "x-queue-type": "classic"
+      }
+    },
+    {
+      "name": "api.map_edit.resolved",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "api.map_edit.resolved.dlq",
+        "x-queue-type": "classic"
+      }
     }
   ]
 }
