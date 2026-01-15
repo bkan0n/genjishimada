@@ -1177,7 +1177,10 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
         else:
             # Submit for approval
             request = self._build_edit_request(state, itx.user.id)
-            await itx.client.api.create_map_edit_request(request)
+            try:
+                await itx.client.api.create_map_edit_request(request)
+            except APIHTTPError as e:
+                raise UserFacingError(e.error or "Failed to submit the edit request.")
             await itx.edit_original_response(
                 content=(
                     f"✅ Edit request submitted for **{state.map_data.code}**!\nA moderator will review your changes."

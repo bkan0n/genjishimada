@@ -1,5 +1,3 @@
-"""Map edit request service for managing edit suggestions and approvals."""
-
 from __future__ import annotations
 
 import datetime as dt
@@ -19,8 +17,10 @@ from genjishimada_sdk.maps import (
 )
 from genjishimada_sdk.users import Creator
 from litestar.datastructures import State
+from litestar.status_codes import HTTP_409_CONFLICT
 
 from di.base import BaseService
+from utilities.errors import CustomHTTPException
 
 if TYPE_CHECKING:
     pass
@@ -64,6 +64,21 @@ class MapEditService(BaseService):
             raise ValueError(f"Map with code {code} not found")
 
         map_id = map_row["id"]
+
+        pending_row = await self._conn.fetchrow(
+            """
+            SELECT id
+            FROM maps.edit_requests
+            WHERE map_id = $1 AND accepted IS NULL
+            """,
+            map_id,
+        )
+        if pending_row:
+            raise CustomHTTPException(
+                detail="There is already a pending edit request for this map.",
+                status_code=HTTP_409_CONFLICT,
+                extra={"edit_request_id": pending_row["id"]},
+            )
 
         row = await self._conn.fetchrow(
             """
