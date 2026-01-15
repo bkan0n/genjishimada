@@ -216,13 +216,13 @@ class XPService(BaseService):
             )
 
 
+@app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
 class XPCog(commands.GroupCog, group_name="xp"):
     def __init__(self, bot: core.Genji) -> None:
         """Initialize XPCog."""
         self.bot = bot
 
     @app_commands.command(name="grant")
-    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def _command_grant_xp(
         self,
         itx: GenjiItx,

@@ -422,8 +422,10 @@ class BaseMapsController(litestar.Controller):
         guide = await svc.create_guide(code, data)
         user_data = await users.get_user(user_id=data.user_id)
         name = user_data.coalesced_name if user_data else None
-        xp_amount = XP_AMOUNTS["Guide"]
-        await lootbox.grant_user_xp(request.headers, data.user_id, XpGrantRequest(xp_amount, "Guide"))
+        map_data = await svc.fetch_maps(filters=MapSearchFilters(code=code), single=True)
+        if map_data.official:
+            xp_amount = XP_AMOUNTS["Guide"]
+            await lootbox.grant_user_xp(request.headers, data.user_id, XpGrantRequest(xp_amount, "Guide"))
         event_payload = NewsfeedGuide(code=code, guide_url=data.url, name=name or "Unknown User")
         event = NewsfeedEvent(
             id=None, timestamp=dt.datetime.now(dt.timezone.utc), payload=event_payload, event_type="guide"
