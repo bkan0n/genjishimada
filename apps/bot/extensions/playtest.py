@@ -287,6 +287,10 @@ class PlaytestService(BaseService):
         await message.edit(attachments=[image])
 
     async def _grant_xp_upon_successful_playtest(self, thread_id: int) -> None:
+        pt = await self.bot.api.get_playtest(thread_id)
+        map_data = await self.bot.api.get_map(code=pt.code)
+        for creator in map_data.creators:
+            await self.bot.xp.grant_user_xp_of_type(creator.id, "Map Submission")
         votes = await self.bot.api.get_all_votes(thread_id)
         for vote in votes.votes:
             await self.bot.xp.grant_user_xp_of_type(vote.user_id, "Playtest")
