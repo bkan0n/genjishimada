@@ -9,7 +9,7 @@ import extensions
 import utilities.config
 from extensions.api_service import APIService
 from extensions.completions import CompletionsService
-from extensions.map_editor import MapEditorService
+from extensions.moderator import MapEditorService
 from extensions.newsfeed import NewsfeedService
 from extensions.notifications import NotificationService
 from extensions.playtest import PlaytestService
