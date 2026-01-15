@@ -1073,6 +1073,7 @@ class CompletionsCog(BaseCog):
                 name="Mark Suspicious",
                 callback=self.mark_submission_as_suspicious_context_command,
                 type=AppCommandType.message,
+                guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))],
             )
         )
         self.bot.add_dynamic_items(CompletionLikeButton)
