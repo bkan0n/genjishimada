@@ -144,9 +144,7 @@ class ModStatusView(BaseView):
             else ()
         )
         container = ui.Container(
-            ui.TextDisplay(
-                f"# Mod View - Status ({self._data.code})\n-# ⚠️ You probably don't need to use this command."
-            ),
+            ui.TextDisplay(f"# Mod View - Status ({self._data.code})\n-# ⚠️ **Please, don't use this command**."),
             ui.Separator(),
             ui.Section(ui.TextDisplay("Edit the **Hidden** status."), accessory=self.hidden_button),
             ui.Section(ui.TextDisplay("Edit the **Official** status."), accessory=self.official_button),
