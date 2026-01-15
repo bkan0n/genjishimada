@@ -413,6 +413,7 @@ class BaseMapsController(litestar.Controller):
             code (OverwatchCode): Map code.
             data (Guide): Guide payload.
             request (Request): Request obj.
+            lootbox (LootboxService): Service handling lootbox data.
 
         Returns:
             Guide: Created guide.
@@ -451,7 +452,7 @@ class BaseMapsController(litestar.Controller):
     @litestar.get(
         "/mastery",
         summary="Get Map Mastery",
-        description=("Retrieve mastery data for a user, optionally scoped to a specific map."),
+        description="Retrieve mastery data for a user, optionally scoped to a specific map.",
         tags=["Mastery"],
     )
     async def get_map_mastery_data(
@@ -473,7 +474,7 @@ class BaseMapsController(litestar.Controller):
     @litestar.post(
         "/mastery",
         summary="Update Map Mastery",
-        description=("Create or update a user's map mastery data and return the result."),
+        description="Create or update a user's map mastery data and return the result.",
         tags=["Mastery"],
         include_in_schema=False,
     )

@@ -4,7 +4,7 @@ import asyncio
 from enum import Enum
 from http import HTTPStatus
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Callable, Literal, cast, get_args
+from typing import TYPE_CHECKING, Literal, cast, get_args
 
 import discord
 from aio_pika.abc import AbstractIncomingMessage
@@ -39,7 +39,6 @@ from utilities.base import BaseCog, BaseService, BaseView, ConfirmationView
 from utilities.emojis import generate_all_star_rating_strings, stars_rating_string
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.views.mod_creator_view import MapCreatorModView
-from utilities.views.mod_edit_map_views import MechanicsEditView, RestrictionsEditView
 from utilities.views.mod_guides_view import ModGuidePaginatorView
 from utilities.views.mod_status_view import ModStatusView
 
@@ -858,10 +857,20 @@ class PlaytestDifficultySelect(ui.Select["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, current: DifficultyAll | None) -> None:
+        """Initialize the playtest difficulty select.
+
+        Args:
+            current: The currently selected playtest difficulty, if any.
+        """
         options = [SelectOption(label=d, value=d, default=(d == current)) for d in DIFFICULTY_RANGES_ALL]
         super().__init__(placeholder="Select playtest difficulty...", options=options)
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle difficulty selection and stage send-to-playtest action.
+
+        Args:
+            itx: The interaction context.
+        """
         self.view.state.set_mod_action(EditableField.SEND_TO_PLAYTEST, self.values[0])
         if not self.view.state.advance_field():
             self.view.state.current_step = "review"
@@ -876,6 +885,11 @@ class RatingOverrideSelect(ui.Select["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, current: int | None) -> None:
+        """Initialize the rating override select.
+
+        Args:
+            current: The currently selected override rating, if any.
+        """
         strings = generate_all_star_rating_strings()
         options: list[SelectOption] = []
         for i, s in enumerate(strings, start=1):
@@ -889,6 +903,11 @@ class RatingOverrideSelect(ui.Select["MapEditWizardView"]):
         super().__init__(placeholder="Select rating override...", options=options)
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle rating selection and stage rating override action.
+
+        Args:
+            itx: The interaction context.
+        """
         self.view.state.set_mod_action(EditableField.OVERRIDE_RATING, int(self.values[0]))
         if not self.view.state.advance_field():
             self.view.state.current_step = "review"
@@ -903,6 +922,12 @@ class ModBooleanToggleButton(ui.Button["MapEditWizardView"]):
     view: MapEditWizardView
 
     def __init__(self, field: EditableField, current: bool) -> None:
+        """Initialize the mod-only boolean toggle button.
+
+        Args:
+            field: The mod-only action field being toggled.
+            current: The current boolean value.
+        """
         self.field = field
         self.current_value = current
         label = f"{field.display_name}: {'Yes' if current else 'No'}"
@@ -910,6 +935,11 @@ class ModBooleanToggleButton(ui.Button["MapEditWizardView"]):
         super().__init__(label=label, style=style)
 
     async def callback(self, itx: GenjiItx) -> None:
+        """Handle toggle interaction and stage mod-only action.
+
+        Args:
+            itx: The interaction context.
+        """
         new_value = not self.current_value
         # One-way semantics are enforced at submit-time: only act when True.
         self.view.state.set_mod_action(self.field, new_value)
