@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import datetime as dt
+import inspect
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 import msgspec
 from asyncpg import Connection, Record
@@ -16,6 +17,7 @@ from genjishimada_sdk.maps import (
     MedalsResponse,
     PendingMapEditResponse,
 )
+from genjishimada_sdk.users import Creator
 from litestar.datastructures import State
 
 from di.base import BaseService
@@ -137,7 +139,11 @@ class MapEditService(BaseService):
             for row in rows
         ]
 
-    async def get_edit_submission(self, edit_id: int) -> MapEditSubmissionResponse:
+    async def get_edit_submission(
+        self,
+        edit_id: int,
+        get_creator_name: Callable[[int], str | Awaitable[str]] | None = None,
+    ) -> MapEditSubmissionResponse:
         """Get enriched edit request data for verification queue display.
 
         Fetches the edit request, current map data, and submitter info,
@@ -145,6 +151,7 @@ class MapEditService(BaseService):
 
         Args:
             edit_id: The edit request ID.
+            get_creator_name: Function to get creator names.
 
         Returns:
             Enriched submission data with readable changes.
@@ -155,7 +162,7 @@ class MapEditService(BaseService):
             SELECT
                 e.id, e.code, e.proposed_changes, e.reason,
                 e.created_by, e.created_at, e.message_id,
-                m.map_name, m.difficulty
+                m.id AS map_id, m.map_name, m.difficulty
             FROM maps.edit_requests e
             JOIN core.maps m ON m.id = e.map_id
             WHERE e.id = $1
@@ -196,6 +203,16 @@ class MapEditService(BaseService):
         if map_row is None:
             raise ValueError(f"Map {edit_row['code']} not found")
 
+        creator_rows = await self._conn.fetch(
+            """
+            SELECT user_id, is_primary
+            FROM maps.creators
+            WHERE map_id = $1
+            ORDER BY is_primary DESC, user_id
+            """,
+            edit_row["map_id"],
+        )
+
         # Get medals separately (different table structure based on your schema)
         medals_row = await self._conn.fetchrow(
             """
@@ -214,8 +231,14 @@ class MapEditService(BaseService):
 
         # Build human-readable changes
         map_data = dict(map_row)
+        map_data["creators"] = [{"id": row["user_id"], "is_primary": row["is_primary"]} for row in creator_rows]
         medals_data = dict(medals_row) if medals_row else None
-        changes = self._build_field_changes(map_data, medals_data, proposed_changes)
+        changes = await self._build_field_changes(
+            map_data,
+            medals_data,
+            proposed_changes,
+            get_creator_name=get_creator_name,
+        )
 
         return MapEditSubmissionResponse(
             id=edit_row["id"],
@@ -230,11 +253,12 @@ class MapEditService(BaseService):
             message_id=edit_row["message_id"],
         )
 
-    def _build_field_changes(
+    async def _build_field_changes(
         self,
         current_map: dict[str, Any],
         current_medals: dict[str, Any] | None,
         proposed: dict[str, Any],
+        get_creator_name: Callable[[int], str | Awaitable[str]] | None = None,
     ) -> list[MapEditFieldChange]:
         """Build a human-readable field change list.
 
@@ -242,6 +266,7 @@ class MapEditService(BaseService):
             current_map: Current map data from a database.
             current_medals: Current medal data (might be None).
             proposed: Proposed changes dict.
+            get_creator_name: Function to get creator names.
 
         Returns:
             List of field changes with old/new values formatted.
@@ -263,8 +288,12 @@ class MapEditService(BaseService):
                 old_value = current_map.get(field_name)
 
             # Format values for display
-            old_display = self._format_value_for_display(field_name, old_value)
-            new_display = self._format_value_for_display(field_name, new_value)
+            if field_name == "creators":
+                old_display = await self._format_creators_for_display(old_value, get_creator_name)
+                new_display = await self._format_creators_for_display(new_value, get_creator_name)
+            else:
+                old_display = self._format_value_for_display(field_name, old_value)
+                new_display = self._format_value_for_display(field_name, new_value)
 
             # Convert field name to display name
             display_name = field_name.replace("_", " ").title()
@@ -278,6 +307,49 @@ class MapEditService(BaseService):
             )
 
         return changes
+
+    @staticmethod
+    async def _format_creators_for_display(
+        value: Any,  # noqa: ANN401
+        get_creator_name: Callable[[int], str | Awaitable[str]] | None = None,
+    ) -> str:
+        """Format creator values for human-readable display."""
+        if value is None:
+            return "Not set"
+
+        if not value:
+            return "None"
+
+        if isinstance(value, dict):
+            value = [value]
+
+        if not isinstance(value, list):
+            return str(value)
+
+        rendered = []
+        for creator in value:
+            if isinstance(creator, dict):
+                creator_id = creator.get("id")
+                is_primary = creator.get("is_primary")
+                name = creator.get("name")
+            else:
+                creator_id = getattr(creator, "id", None)
+                is_primary = getattr(creator, "is_primary", None)
+                name = getattr(creator, "name", None)
+
+            if not name and creator_id and get_creator_name:
+                resolved = get_creator_name(int(creator_id))
+                name = await resolved if inspect.isawaitable(resolved) else resolved
+            if not name:
+                name = "Unknown User"
+
+            primary_suffix = "primary, " if is_primary else ""
+            if creator_id:
+                rendered.append(f"{name} ({primary_suffix}{creator_id})")
+            else:
+                rendered.append(name)
+
+        return ", ".join(rendered)
 
     @staticmethod
     def _format_value_for_display(field: str, value: str | float | bool | list | dict | None) -> str:
@@ -372,6 +444,9 @@ class MapEditService(BaseService):
             # Handle special conversions
             if field == "medals" and field_value is not None:
                 kwargs[field] = MedalsResponse(**field_value)
+            elif field == "creators" and field_value is not None:
+                creators = [creator if isinstance(creator, Creator) else Creator(**creator) for creator in field_value]
+                kwargs[field] = creators
             else:
                 kwargs[field] = field_value
 

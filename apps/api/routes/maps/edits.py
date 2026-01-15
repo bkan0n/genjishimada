@@ -117,10 +117,18 @@ class MapEditsController(litestar.Controller):
     async def get_edit_submission(
         self,
         svc: MapEditService,
+        users: UserService,
         edit_id: int,
     ) -> MapEditSubmissionResponse:
         """Get an edit request with human-readable changes."""
-        return await svc.get_edit_submission(edit_id)
+
+        async def _get_user_coalesced_name(user_id: int) -> str:
+            d = await users.get_user(user_id)
+            if d:
+                return d.coalesced_name or "Unknown User"
+            return "Unknown User"
+
+        return await svc.get_edit_submission(edit_id, get_creator_name=_get_user_coalesced_name)
 
     @litestar.patch(
         path="/{edit_id:int}/message",
