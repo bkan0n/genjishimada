@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from logging import getLogger
 from typing import TYPE_CHECKING, Literal, Sequence, cast, get_args
 
@@ -298,6 +299,7 @@ class MapGuideView(PaginatorView[FormattableGuide]):
 
 class MapSearchCog(BaseCog):
     @app_commands.command(name="map-search")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.choices(
         difficulty=[app_commands.Choice(name=d, value=d) for d in get_args(DifficultyTop)],
         minimum_quality=[
@@ -380,6 +382,7 @@ class MapSearchCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="地图搜索")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.choices(
         difficulty=[app_commands.Choice(name=d, value=d) for d in get_args(DifficultyTop)],
         minimum_quality=[
@@ -488,6 +491,7 @@ class MapSearchCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="view-guides")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def view_guides(
         self,
         itx: GenjiItx,

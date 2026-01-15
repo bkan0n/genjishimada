@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from logging import getLogger
 from math import floor
 from typing import TYPE_CHECKING
@@ -221,6 +222,7 @@ class XPCog(commands.GroupCog, group_name="xp"):
         self.bot = bot
 
     @app_commands.command(name="grant")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def _command_grant_xp(
         self,
         itx: GenjiItx,

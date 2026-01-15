@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import typing
 from logging import getLogger
 
@@ -310,6 +311,7 @@ class OverwatchUsernameModal(ui.Modal):
 
 class SettingsCog(BaseCog):
     @app_commands.command()
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def settings(self, itx: GenjiItx) -> None:
         """Change various settings like notifications and your display name."""
         await itx.response.defer(ephemeral=True)
@@ -320,6 +322,7 @@ class SettingsCog(BaseCog):
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.command(name="rank-card")
     async def rank_card(self, itx: GenjiItx) -> None:
         """View the rank card of a user."""

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio
+import os
 from enum import Enum
 from http import HTTPStatus
 from logging import getLogger
@@ -52,23 +52,22 @@ log = getLogger(__name__)
 
 class ModeratorCog(BaseCog):
     mod = app_commands.Group(
-        name="mod",
-        description="Mod only commands",
+        name="mod", description="Mod only commands", guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))]
     )
     map = app_commands.Group(
-        name="map",
-        description="Mod only commands",
-        parent=mod,
+        name="map", description="Mod only commands", parent=mod, guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))]
     )
     record = app_commands.Group(
         name="edit-record",
         description="Mod only commands",
         parent=mod,
+        guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))],
     )
     user = app_commands.Group(
         name="edit-user",
         description="Mod only commands",
         parent=mod,
+        guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))],
     )
 
     @map.command(name="edit")
@@ -348,9 +347,8 @@ async def setup(bot: Genji) -> None:
     Args:
         bot (Genji): The bot instance.
     """
-    await bot.add_cog(ModeratorCog(bot))
     bot.map_editor = MapEditorService(bot)
-    await bot.add_cog(MapEditorCog(bot))
+    await bot.add_cog(ModeratorCog(bot))
 
 
 async def teardown(bot: Genji) -> None:
@@ -360,7 +358,6 @@ async def teardown(bot: Genji) -> None:
         bot (Genji): The bot instance.
     """
     await bot.remove_cog("ModeratorCog")
-    await bot.remove_cog("MapEditorCog")
 
 
 class EditableField(str, Enum):
@@ -1563,49 +1560,3 @@ class MapEditorService(BaseService):
                 pass
 
             self.verification_views.pop(edit_data.message_id, None)
-
-
-class MapEditorCog(BaseCog):
-    """Commands for editing maps."""
-
-    _startup_task: asyncio.Task
-
-    async def cog_load(self) -> None:
-        """Load pending verification views on startup."""
-        self._startup_task = asyncio.create_task(self._restore_views())
-
-    async def _restore_views(self) -> None:
-        """Restore persistent views for pending edit requests."""
-        await self.bot.rabbit.wait_until_drained()
-
-        pending = await self.bot.api.get_pending_map_edit_requests()
-        for edit in pending:
-            if edit.message_id:
-                data = await self.bot.api.get_map_edit_submission(edit.id)
-                view = MapEditVerificationView(data)
-                self.bot.add_view(view, message_id=edit.message_id)
-                self.bot.map_editor.verification_views[edit.message_id] = view
-
-    @app_commands.command(name="edit-request")
-    async def edit_request_non_moderator(
-        self,
-        itx: GenjiItx,
-        code: app_commands.Transform[OverwatchCode, transformers.CodeAllTransformer],
-    ) -> None:
-        """Suggest changes to a map for moderator approval.
-
-        Args:
-            itx: The interaction context.
-            code: The map code to edit.
-        """
-        await itx.response.defer(ephemeral=True)
-
-        # Fetch map data
-        map_data = await itx.client.api.get_map(code=code)
-        if not map_data:
-            raise UserFacingError(f"Map `{code}` not found.")
-
-        # Start wizard - for this command, always queue (user path)
-        view = MapEditWizardView(map_data, is_mod=False)
-        await itx.edit_original_response(view=view)
-        view.original_interaction = itx

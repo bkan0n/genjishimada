@@ -51,6 +51,7 @@ jobs:
 
           # Bot env
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_FEEDBACK_URL: ${{ secrets.SENTRY_FEEDBACK_URL }}
           API_KEY: ${{ secrets.API_KEY }}

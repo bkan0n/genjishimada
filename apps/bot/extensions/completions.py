@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import re
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Sequence, cast, get_args
@@ -1119,6 +1120,7 @@ class CompletionsCog(BaseCog):
         await itx.response.send_modal(modal)
 
     @app_commands.command(name="view-flagged-submissions")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def view_suspicious_flags(
         self,
         itx: GenjiItx,
@@ -1150,6 +1152,7 @@ class CompletionsCog(BaseCog):
         await _view_user_suspicious_flags(itx, name, user)
 
     @app_commands.command(name="user-completions")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def get_completions_for_user(
         self,
         itx: GenjiItx,
@@ -1184,6 +1187,7 @@ class CompletionsCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="world-records")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def get_world_records_for_user(
         self,
         itx: GenjiItx,
@@ -1215,6 +1219,7 @@ class CompletionsCog(BaseCog):
         await itx.edit_original_response(view=view)
 
     @app_commands.command(name="completions")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def get_completion_leaderboard(
         self,
         itx: GenjiItx,
@@ -1240,6 +1245,7 @@ class CompletionsCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="submit-completion")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.choices(
         quality=[
             app_commands.Choice(
