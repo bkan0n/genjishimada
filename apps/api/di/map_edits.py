@@ -181,7 +181,7 @@ class MapEditService(BaseService):
             """
             SELECT
                 code, map_name, category, checkpoints, difficulty,
-                description, title, array_agg(mech.name), array_agg(res.name),
+                description, title, array_agg(mech.name) AS mechanics, array_agg(res.name) AS restrictions,
                 custom_banner, hidden, archived, official
             FROM core.maps m
             LEFT JOIN maps.mechanic_links ml ON ml.map_id = m.id
