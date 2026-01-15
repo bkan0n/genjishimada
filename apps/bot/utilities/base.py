@@ -69,8 +69,9 @@ class BaseView(ui.LayoutView):
         self.disable_children()
         if self.original_interaction:
             with contextlib.suppress(NotFound):
-                resp = await self.original_interaction.original_response()
-                await resp.edit(view=self)
+                with contextlib.suppress(discord.NotFound):
+                    resp = await self.original_interaction.original_response()
+                    await resp.edit(view=self)
                 return
         cls = type(self)
         raise RuntimeWarning(f"No original_interaction was associated with {cls.__module__}.{cls.__qualname__}.")
