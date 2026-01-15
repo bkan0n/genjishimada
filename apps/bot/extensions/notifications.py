@@ -10,6 +10,7 @@ This service:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Literal
 
@@ -129,8 +130,11 @@ class NotificationService(BaseService):
             user = self.bot.get_user(user_id)
             if not user:
                 user = await self.bot.fetch_user(user_id)
-            await user.send(message)
-            logger.debug("Sent DM to user %s", user_id)
+            if not user:
+                return False
+            with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
+                await user.send(message)
+                logger.debug("Sent DM to user %s", user_id)
             return True
         except Exception as e:
             logger.error("Failed to send DM to user %s: %s", user_id, e)
@@ -255,8 +259,11 @@ class NotificationService(BaseService):
                 user = self.bot.get_user(user_id)
                 if not user:
                     user = await self.bot.fetch_user(user_id)
-                await user.send(message)
-                logger.debug("Sent DM to user %s for %s", user_id, notification.name)
+                if not user:
+                    return False
+                with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    await user.send(message)
+                    logger.debug("Sent DM to user %s for %s", user_id, notification.name)
                 return True
             except Exception as e:
                 logger.error("Failed to send DM to user %s: %s", user_id, e)
