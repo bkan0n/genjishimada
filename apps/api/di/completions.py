@@ -1378,6 +1378,7 @@ class CompletionsService(BaseService):
             JOIN core.maps m ON m.id = r.map_id
             LEFT JOIN maps.medals md ON md.map_id = r.map_id
             JOIN name_split ns ON ns.user_id = r.user_id
+            WHERE r.message_id IS NOT NULL
             ORDER BY r.inserted_at DESC
             LIMIT ${param_idx} OFFSET ${param_idx + 1};
             """
@@ -1443,6 +1444,7 @@ class CompletionsService(BaseService):
             JOIN core.maps m ON m.id = r.map_id
             LEFT JOIN maps.medals md ON md.map_id = r.map_id
             JOIN name_split ns ON ns.user_id = r.user_id
+            WHERE r.message_id IS NOT NULL
             ORDER BY r.inserted_at DESC
             LIMIT ${param_idx} OFFSET ${param_idx + 1};
             """
