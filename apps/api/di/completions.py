@@ -1339,7 +1339,7 @@ class CompletionsService(BaseService):
                         ) AS rn
                     FROM core.users u
                 ) un
-                GROUP BY un.user_id
+                GROUP BY un.user_id, un.name
             ),
             ranked AS (
                 SELECT
@@ -1402,7 +1402,7 @@ class CompletionsService(BaseService):
                         ) AS rn
                     FROM core.users u
                 ) un
-                GROUP BY un.user_id
+                GROUP BY un.user_id, un.name
             ),
             ranked AS (
                 SELECT
