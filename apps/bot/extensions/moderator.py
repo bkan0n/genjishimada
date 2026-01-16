@@ -1190,7 +1190,8 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
         self.view.submitted = True
         self.view.stop()
 
-    def _build_patch_request(self, state: MapEditWizardState) -> MapPatchRequest:
+    @staticmethod
+    def _build_patch_request(state: MapEditWizardState) -> MapPatchRequest:
         """Build a MapPatchRequest from pending changes."""
         kwargs = {}
         for field_name, value in state.pending_changes.items():
@@ -1200,7 +1201,8 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
                 kwargs[field_name] = value
         return MapPatchRequest(**kwargs)
 
-    def _build_edit_request(self, state: MapEditWizardState, user_id: int) -> MapEditCreateRequest:
+    @staticmethod
+    def _build_edit_request(state: MapEditWizardState, user_id: int) -> MapEditCreateRequest:
         """Build a MapEditCreateRequest from pending changes."""
         kwargs = {
             "code": state.map_data.code,
@@ -1352,7 +1354,8 @@ class MapEditWizardView(BaseView):
         container.add_item(discord.ui.TextDisplay(f"# {self._end_time_string}"))
         self.add_item(container)
 
-    def _format_value(self, value: FieldValue) -> str:
+    @staticmethod
+    def _format_value(value: FieldValue) -> str:
         """Format a value for display."""
         if value is None:
             return "*Not set*"
@@ -1404,10 +1407,17 @@ class MapEditWizardView(BaseView):
         return "\n".join(lines)
 
 
-class MapEditAcceptButton(ui.Button["MapEditVerificationView"]):
-    """Accept the edit request."""
-
+class _MapEditVerificationButton(ui.Button["MapEditVerificationView"]):
     view: MapEditVerificationView
+
+    def disable_buttons(self) -> None:
+        for item in self.view.walk_children():
+            if isinstance(item, ui.Button):
+                item.disabled = True
+
+
+class MapEditAcceptButton(_MapEditVerificationButton):
+    """Accept the edit request."""
 
     def __init__(self) -> None:
         """Initialize the accept button."""
@@ -1421,20 +1431,17 @@ class MapEditAcceptButton(ui.Button["MapEditVerificationView"]):
             accepted=True,
             resolved_by=itx.user.id,
         )
-        await itx.client.api.resolve_map_edit_request(self.view.edit_id, data)
 
-        # Disable buttons
-        for item in self.view.walk_children():
-            if isinstance(item, ui.Button):
-                item.disabled = True
-
+        self.disable_buttons()
         if itx.message:
             await itx.message.edit(view=self.view)
+
+        await itx.client.api.resolve_map_edit_request(self.view.edit_id, data)
 
         await itx.edit_original_response(content="✅ Edit request accepted and changes applied!")
 
 
-class MapEditAcceptAndPlaytestButton(ui.Button["MapEditVerificationView"]):
+class MapEditAcceptAndPlaytestButton(_MapEditVerificationButton):
     """Accept the edit request and send to playtest."""
 
     view: MapEditVerificationView
@@ -1456,20 +1463,17 @@ class MapEditAcceptAndPlaytestButton(ui.Button["MapEditVerificationView"]):
             resolved_by=itx.user.id,
             send_to_playtest=True,
         )
-        await itx.client.api.resolve_map_edit_request(self.view.edit_id, data)
 
-        # Disable buttons
-        for item in self.view.walk_children():
-            if isinstance(item, ui.Button):
-                item.disabled = True
-
+        self.disable_buttons()
         if itx.message:
             await itx.message.edit(view=self.view)
+
+        await itx.client.api.resolve_map_edit_request(self.view.edit_id, data)
 
         await itx.edit_original_response(content="✅ Edit request accepted, changes applied, and map sent to playtest!")
 
 
-class MapEditRejectButton(ui.Button["MapEditVerificationView"]):
+class MapEditRejectButton(_MapEditVerificationButton):
     """Reject the edit request."""
 
     view: MapEditVerificationView
@@ -1495,15 +1499,13 @@ class MapEditRejectButton(ui.Button["MapEditVerificationView"]):
             resolved_by=itx.user.id,
             rejection_reason=modal.submitted_reason,
         )
-        await itx.client.api.resolve_map_edit_request(self.view.edit_id, data)
 
-        # Disable buttons
-        for item in self.view.walk_children():
-            if isinstance(item, ui.Button):
-                item.disabled = True
+        self.disable_buttons()
 
         if itx.message:
             await itx.message.edit(view=self.view)
+
+        await itx.client.api.resolve_map_edit_request(self.view.edit_id, data)
 
         await itx.followup.send("❌ Edit request rejected.", ephemeral=True)
 
