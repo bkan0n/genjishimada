@@ -468,7 +468,7 @@ class CompletionsController(Controller):
         user_id: int | None = None,
         verification_status: Literal["Verified", "Unverified", "All"] = "All",
         latest_only: bool = True,
-        page_size: Literal[10, 20, 25, 50] = 10,
+        page_size: Literal[10, 20, 25, 50, 0] = 10,
         page_number: int = 1,
     ) -> list[CompletionResponse]:
         """Get filtered records for moderation.
@@ -479,7 +479,7 @@ class CompletionsController(Controller):
             user_id: Optional user ID to filter by.
             verification_status: Filter by verification status.
             latest_only: Whether to only show latest record per user per map.
-            page_size: Number of records per page.
+            page_size: Number of records per page. Use 0 to fetch all records without pagination.
             page_number: Page number (1-indexed).
 
         Returns:

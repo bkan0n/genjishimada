@@ -1272,7 +1272,7 @@ class CompletionsService(BaseService):
             user_id: Optional user ID to filter by.
             verification_status: "Verified", "Unverified", or "All".
             latest_only: Whether to only show the latest record per user per map.
-            page_size: Number of records per page.
+            page_size: Number of records per page. Use 0 to fetch all records without pagination.
             page_number: Page number (1-indexed).
 
         Returns:
@@ -1447,9 +1447,16 @@ class CompletionsService(BaseService):
             LIMIT ${param_idx} OFFSET ${param_idx + 1};
             """
 
-        offset = (page_number - 1) * page_size
-        params.extend([page_size, offset])
-        rows = await self._conn.fetch(query, *params)
+        # If page_size is 0, fetch all records
+        if page_size == 0:
+            # Remove LIMIT and OFFSET from query
+            query = query.replace(f"LIMIT ${param_idx} OFFSET ${param_idx + 1};", ";")
+            rows = await self._conn.fetch(query, *params)
+        else:
+            offset = (page_number - 1) * page_size
+            params.extend([page_size, offset])
+            rows = await self._conn.fetch(query, *params)
+
         return msgspec.convert(rows, list[CompletionResponse])
 
     async def moderate_completion(  # noqa: PLR0912

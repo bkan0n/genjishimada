@@ -4,7 +4,7 @@ import os
 from enum import Enum
 from http import HTTPStatus
 from logging import getLogger
-from typing import TYPE_CHECKING, Literal, cast, get_args
+from typing import TYPE_CHECKING, Any, Literal, Sequence, cast, get_args
 
 import discord
 from aio_pika.abc import AbstractIncomingMessage
@@ -40,6 +40,7 @@ from utilities import transformers
 from utilities.base import BaseCog, BaseService, BaseView, ConfirmationView
 from utilities.emojis import generate_all_star_rating_strings, stars_rating_string
 from utilities.errors import APIHTTPError, UserFacingError
+from utilities.paginator import PaginatorView
 from utilities.views.mod_creator_view import MapCreatorModView
 from utilities.views.mod_guides_view import ModGuidePaginatorView
 from utilities.views.mod_status_view import ModStatusView
@@ -343,13 +344,13 @@ class ModeratorCog(BaseCog):
         """
         await itx.response.defer(ephemeral=True)
 
-        # Fetch records with filters
+        # Fetch all records with filters
         records = await itx.client.api.get_records_filtered(
             code=code,
             user_id=user,
             verification_status=verification_status,
             latest_only=latest_only,
-            page_size=10,
+            page_size=0,  # Fetch all records
             page_number=1,
         )
 
@@ -1664,21 +1665,30 @@ class ModRecordButton(ui.Button["ModRecordManagementView"]):
 
     view: ModRecordManagementView
 
+    def __init__(self, record: CompletionLeaderboardFormattable, **kwargs: Any) -> None:  # noqa: ANN401
+        """Initialize the mod record button.
+
+        Args:
+            record: The record this button operates on.
+            **kwargs: Additional button parameters.
+        """
+        super().__init__(**kwargs)
+        self.record = record
+
 
 class ChangeTimeButton(ModRecordButton):
     """Button to change the completion time."""
 
-    def __init__(self) -> None:
+    def __init__(self, record: CompletionLeaderboardFormattable) -> None:
         """Initialize the change time button."""
-        super().__init__(label="Change Time", style=ButtonStyle.blurple)
+        super().__init__(record, label="Change Time", style=ButtonStyle.blurple)
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle time change."""
-        record = self.view.current_record
-        if record.id is None:
+        if self.record.id is None:
             raise UserFacingError("Cannot moderate this record: missing ID")
 
-        modal = TimeChangeModal(record.time)
+        modal = TimeChangeModal(self.record.time)
         await itx.response.send_modal(modal)
         await modal.wait()
 
@@ -1691,9 +1701,10 @@ class ChangeTimeButton(ModRecordButton):
             time_change_reason=modal.submitted_reason,
         )
 
-        await itx.client.api.moderate_completion(record.id, data)
+        await itx.client.api.moderate_completion(self.record.id, data)
         await itx.followup.send(
-            f"✅ Time changed from {record.time}s to {modal.submitted_time}s for {record.name}'s run on {record.code}.",
+            f"✅ Time changed from {self.record.time}s to {modal.submitted_time}s for "
+            f"{self.record.name}'s run on {self.record.code}.",
             ephemeral=True,
         )
 
@@ -1704,15 +1715,14 @@ class ChangeTimeButton(ModRecordButton):
 class VerifyButton(ModRecordButton):
     """Button to verify a completion."""
 
-    def __init__(self) -> None:
+    def __init__(self, record: CompletionLeaderboardFormattable) -> None:
         """Initialize the verify button."""
-        super().__init__(label="Verify", style=ButtonStyle.green)
+        super().__init__(record, label="Verify", style=ButtonStyle.green)
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle verification."""
         await itx.response.defer(ephemeral=True)
-        record = self.view.current_record
-        if record.id is None:
+        if self.record.id is None:
             raise UserFacingError("Cannot moderate this record: missing ID")
 
         data = CompletionModerateRequest(
@@ -1720,9 +1730,9 @@ class VerifyButton(ModRecordButton):
             verified=True,
         )
 
-        await itx.client.api.moderate_completion(record.id, data)
+        await itx.client.api.moderate_completion(self.record.id, data)
         await itx.edit_original_response(
-            content=f"✅ Verified {record.name}'s run on {record.code}.",
+            content=f"✅ Verified {self.record.name}'s run on {self.record.code}.",
         )
 
         # Refresh the view
@@ -1732,15 +1742,14 @@ class VerifyButton(ModRecordButton):
 class UnverifyButton(ModRecordButton):
     """Button to unverify a completion."""
 
-    def __init__(self) -> None:
+    def __init__(self, record: CompletionLeaderboardFormattable) -> None:
         """Initialize the unverify button."""
-        super().__init__(label="Unverify", style=ButtonStyle.red)
+        super().__init__(record, label="Unverify", style=ButtonStyle.red)
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle unverification."""
         await itx.response.defer(ephemeral=True)
-        record = self.view.current_record
-        if record.id is None:
+        if self.record.id is None:
             raise UserFacingError("Cannot moderate this record: missing ID")
 
         data = CompletionModerateRequest(
@@ -1748,9 +1757,9 @@ class UnverifyButton(ModRecordButton):
             verified=False,
         )
 
-        await itx.client.api.moderate_completion(record.id, data)
+        await itx.client.api.moderate_completion(self.record.id, data)
         await itx.edit_original_response(
-            content=f"❌ Unverified {record.name}'s run on {record.code}.",
+            content=f"❌ Unverified {self.record.name}'s run on {self.record.code}.",
         )
 
         # Refresh the view
@@ -1760,14 +1769,13 @@ class UnverifyButton(ModRecordButton):
 class MarkSuspiciousButton(ModRecordButton):
     """Button to mark a completion as suspicious."""
 
-    def __init__(self) -> None:
+    def __init__(self, record: CompletionLeaderboardFormattable) -> None:
         """Initialize the mark suspicious button."""
-        super().__init__(label="Mark Suspicious", style=ButtonStyle.red)
+        super().__init__(record, label="Mark Suspicious", style=ButtonStyle.red)
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle marking as suspicious."""
-        record = self.view.current_record
-        if record.id is None:
+        if self.record.id is None:
             raise UserFacingError("Cannot moderate this record: missing ID")
 
         modal = MarkSuspiciousModal()
@@ -1784,9 +1792,9 @@ class MarkSuspiciousButton(ModRecordButton):
             suspicious_flag_type=modal.submitted_flag_type,
         )
 
-        await itx.client.api.moderate_completion(record.id, data)
+        await itx.client.api.moderate_completion(self.record.id, data)
         await itx.followup.send(
-            f"⚠️ Marked {record.name}'s run on {record.code} as suspicious ({modal.submitted_flag_type}).",
+            f"⚠️ Marked {self.record.name}'s run on {self.record.code} as suspicious ({modal.submitted_flag_type}).",
             ephemeral=True,
         )
 
@@ -1797,15 +1805,14 @@ class MarkSuspiciousButton(ModRecordButton):
 class UnmarkSuspiciousButton(ModRecordButton):
     """Button to unmark a completion as suspicious."""
 
-    def __init__(self) -> None:
+    def __init__(self, record: CompletionLeaderboardFormattable) -> None:
         """Initialize the unmark suspicious button."""
-        super().__init__(label="Unmark Suspicious", style=ButtonStyle.green)
+        super().__init__(record, label="Unmark Suspicious", style=ButtonStyle.green)
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle unmarking as suspicious."""
         await itx.response.defer(ephemeral=True)
-        record = self.view.current_record
-        if record.id is None:
+        if self.record.id is None:
             raise UserFacingError("Cannot moderate this record: missing ID")
 
         data = CompletionModerateRequest(
@@ -1813,91 +1820,16 @@ class UnmarkSuspiciousButton(ModRecordButton):
             unmark_suspicious=True,
         )
 
-        await itx.client.api.moderate_completion(record.id, data)
+        await itx.client.api.moderate_completion(self.record.id, data)
         await itx.edit_original_response(
-            content=f"✅ Unmarked {record.name}'s run on {record.code} as suspicious.",
+            content=f"✅ Unmarked {self.record.name}'s run on {self.record.code} as suspicious.",
         )
 
         # Refresh the view
         await self.view.refresh_records(itx)
 
 
-class RecordNavigationButton(ui.Button["ModRecordManagementView"]):
-    """Button for navigating between records."""
-
-    view: ModRecordManagementView
-
-    def __init__(self, direction: Literal["prev", "next"], *, disabled: bool = False) -> None:
-        """Initialize the navigation button.
-
-        Args:
-            direction: Navigation direction.
-            disabled: Whether the button is disabled.
-        """
-        self.direction = direction
-        label = "◀ Previous" if direction == "prev" else "Next ▶"
-        super().__init__(label=label, style=ButtonStyle.secondary, disabled=disabled)
-
-    async def callback(self, itx: GenjiItx) -> None:
-        """Handle navigation."""
-        await itx.response.defer()
-        if self.direction == "prev":
-            self.view.current_page = max(1, self.view.current_page - 1)
-        else:
-            self.view.current_page += 1
-
-        # Fetch new page of records
-
-        records = await itx.client.api.get_records_filtered(
-            code=self.view.code_filter,
-            user_id=self.view.user_filter,
-            verification_status=self.view.verification_filter,
-            latest_only=self.view.latest_only,
-            page_size=10,
-            page_number=self.view.current_page,
-        )
-
-        if not records:
-            # No more records, go back
-            self.view.current_page -= 1 if self.direction == "next" else -1
-            await itx.followup.send("No more records found.", ephemeral=True)
-            return
-
-        self.view.records = records
-        self.view.current_record_index = 0
-        self.view.rebuild()
-        await itx.edit_original_response(view=self.view)
-
-
-class RecordIndexButton(ui.Button["ModRecordManagementView"]):
-    """Button to navigate between records on the same page."""
-
-    view: ModRecordManagementView
-
-    def __init__(self, direction: Literal["prev", "next"], *, disabled: bool = False) -> None:
-        """Initialize the record index button.
-
-        Args:
-            direction: Navigation direction.
-            disabled: Whether the button is disabled.
-        """
-        self.direction = direction
-        label = "◀ Prev Record" if direction == "prev" else "Next Record ▶"
-        super().__init__(label=label, style=ButtonStyle.secondary, disabled=disabled, row=1)
-
-    async def callback(self, itx: GenjiItx) -> None:
-        """Handle navigation between records."""
-        await itx.response.defer()
-        if self.direction == "prev":
-            self.view.current_record_index = max(0, self.view.current_record_index - 1)
-        else:
-            self.view.current_record_index = min(len(self.view.records) - 1, self.view.current_record_index + 1)
-
-        self.view.rebuild()
-        await itx.edit_original_response(view=self.view)
-
-
-class ModRecordManagementView(BaseView):
+class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
     """View for managing completion records with moderation actions."""
 
     def __init__(
@@ -1917,106 +1849,80 @@ class ModRecordManagementView(BaseView):
             verification_filter: Verification status filter.
             latest_only: Whether showing only latest records.
         """
-        super().__init__()
-        self.records = records
         self.code_filter = code_filter
         self.user_filter = user_filter
         self.verification_filter: Literal["Verified", "Unverified", "All"] = verification_filter
         self.latest_only = latest_only
-        self.current_page = 1
-        self.current_record_index = 0
-        self.rebuild()
-
-    @property
-    def current_record(self) -> CompletionLeaderboardFormattable:
-        """Get the current record being displayed."""
-        return self.records[self.current_record_index]
+        super().__init__("Record Management", records, page_size=5)
 
     async def refresh_records(self, itx: GenjiItx) -> None:
-        """Refresh the records from the API."""
+        """Refresh the records from the API and rebuild the view."""
         records = await itx.client.api.get_records_filtered(
             code=self.code_filter,
             user_id=self.user_filter,
             verification_status=self.verification_filter,
             latest_only=self.latest_only,
-            page_size=10,
-            page_number=self.current_page,
+            page_size=0,  # Fetch all records
+            page_number=1,
         )
 
         if not records:
             await itx.followup.send("No records found after refresh.", ephemeral=True)
             return
 
-        self.records = records
-        self.current_record_index = min(self.current_record_index, len(records) - 1)
-        self.rebuild()
+        self.rebuild_data(records)
+        self.rebuild_components()
         await itx.edit_original_response(view=self)
 
-    def rebuild(self) -> None:
-        """Rebuild the view based on current state."""
-        self.clear_items()
+    def build_page_body(self) -> Sequence[ui.Item]:
+        """Build the UI components for the current page of records.
 
-        record = self.current_record
-        container = ui.Container()
+        Returns:
+            Sequence[ui.Item]: The list of UI components to display.
+        """
+        if not self._pages:
+            return []
 
-        # Build record info text
-        status_emoji = "✅" if record.verified else "❌"
-        suspicious_emoji = "⚠️" if record.suspicious else ""
-        info_text = (
-            f"# Record Management\n"
-            f"**Map:** {record.code} - {record.map_name} ({record.difficulty})\n"
-            f"**Runner:** {record.name}\n"
-            f"**Time:** {record.time}s\n"
-            f"**Rank:** #{record.rank}\n"
-            f"**Medal:** {record.medal or 'None'}\n"
-            f"**Verified:** {status_emoji} {record.verified}\n"
-            f"**Suspicious:** {suspicious_emoji} {record.suspicious}\n"
-            f"**Legacy:** {record.legacy}\n\n"
-            f"**Record {self.current_record_index + 1}/{len(self.records)} (Page {self.current_page})**"
-        )
+        records = self.current_page
+        res = []
 
-        container.add_item(ui.TextDisplay(info_text))
-        container.add_item(ui.Separator())
-
-        # Add action buttons
-        action_buttons: list[ui.Button] = [ChangeTimeButton()]
-
-        if record.verified:
-            action_buttons.append(UnverifyButton())
-        else:
-            action_buttons.append(VerifyButton())
-
-        if record.suspicious:
-            action_buttons.append(UnmarkSuspiciousButton())
-        else:
-            action_buttons.append(MarkSuspiciousButton())
-
-        container.add_item(ui.ActionRow(*action_buttons))
-
-        # Add record navigation buttons
-        prev_record_disabled = self.current_record_index == 0
-        next_record_disabled = self.current_record_index >= len(self.records) - 1
-
-        container.add_item(
-            ui.ActionRow(
-                RecordIndexButton("prev", disabled=prev_record_disabled),
-                RecordIndexButton("next", disabled=next_record_disabled),
+        for record in records:
+            # Build record info text
+            status_emoji = "✅" if record.verified else "❌"
+            suspicious_emoji = "⚠️" if record.suspicious else ""
+            info_text = (
+                f"**Map:** {record.code} - {record.map_name} ({record.difficulty})\n"
+                f"**Runner:** {record.name}\n"
+                f"**Time:** {record.time}s\n"
+                f"**Rank:** #{record.rank}\n"
+                f"**Medal:** {record.medal or 'None'}\n"
+                f"**Verified:** {status_emoji}\n"
+                f"**Suspicious:** {suspicious_emoji}\n"
+                f"**Legacy:** {record.legacy}"
             )
-        )
 
-        # Add page navigation buttons
-        prev_page_disabled = self.current_page == 1
-        container.add_item(
-            ui.ActionRow(
-                RecordNavigationButton("prev", disabled=prev_page_disabled),
-                RecordNavigationButton("next"),
+            # Build action buttons for this record
+            action_buttons: list[ui.Button] = [ChangeTimeButton(record)]
+
+            if record.verified:
+                action_buttons.append(UnverifyButton(record))
+            else:
+                action_buttons.append(VerifyButton(record))
+
+            if record.suspicious:
+                action_buttons.append(UnmarkSuspiciousButton(record))
+            else:
+                action_buttons.append(MarkSuspiciousButton(record))
+
+            # Add text display and action row for this record
+            section = (
+                ui.TextDisplay(info_text),
+                ui.ActionRow(*action_buttons),
+                ui.Separator(),
             )
-        )
+            res.extend(section)
 
-        container.add_item(ui.Separator())
-        container.add_item(discord.ui.TextDisplay(f"# {self._end_time_string}"))
-
-        self.add_item(container)
+        return res
 
 
 class MapEditorService(BaseService):
