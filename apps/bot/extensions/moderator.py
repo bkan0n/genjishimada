@@ -1721,7 +1721,7 @@ class VerifyButton(ModRecordButton):
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle verification."""
-        await itx.response.defer(ephemeral=True)
+        await itx.response.defer(ephemeral=True, thinking=True)
         if self.record.id is None:
             raise UserFacingError("Cannot moderate this record: missing ID")
 
@@ -1748,7 +1748,7 @@ class UnverifyButton(ModRecordButton):
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle unverification."""
-        await itx.response.defer(ephemeral=True)
+        await itx.response.defer(ephemeral=True, thinking=True)
         if self.record.id is None:
             raise UserFacingError("Cannot moderate this record: missing ID")
 
@@ -1811,7 +1811,7 @@ class UnmarkSuspiciousButton(ModRecordButton):
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle unmarking as suspicious."""
-        await itx.response.defer(ephemeral=True)
+        await itx.response.defer(ephemeral=True, thinking=True)
         if self.record.id is None:
             raise UserFacingError("Cannot moderate this record: missing ID")
 

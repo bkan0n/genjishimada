@@ -156,7 +156,7 @@ class RankCardService(BaseService):
                     row_d[url_col] = cur.icon_url
             elif row_d[type_col] == "spray":
                 _sanitized = sanitize_string(row_d[name_col])
-                row_d[url_col] = f"assets/rank_card/spray/{_sanitized}.webp"
+                row_d[url_col] = f"https://cdn.genji.pk/assets/rank_card/spray/{_sanitized}.webp"
         return RankCardBadgeSettings(**row_d)
 
     async def set_badges_settings(self, data: RankCardBadgeSettings, user_id: int) -> None:
