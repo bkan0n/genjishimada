@@ -872,7 +872,7 @@ class CompletionsService(BaseService):
 
         Args:
             code: Overwatch map code to fetch legacy completions for.
-            page_number (int): Page nubmer for pagination.
+            page_number (int): Page number for pagination.
             page_size (int): Page size for pagination.
 
         Returns:
@@ -1096,13 +1096,13 @@ class CompletionsService(BaseService):
             )
         job_status = None
         if count != 0 and count % upvote_channel_amount_breakpoint == 0:
-            messsage_data = UpvoteUpdateEvent(
+            message_data = UpvoteUpdateEvent(
                 data.user_id,
                 data.message_id,
             )
             job_status = await self.publish_message(
                 routing_key="api.completion.upvote",
-                data=messsage_data,
+                data=message_data,
                 headers=request.headers,
             )
         return UpvoteSubmissionJobResponse(job_status, count)

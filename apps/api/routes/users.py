@@ -74,7 +74,7 @@ class UsersController(litestar.Controller):
     @litestar.get(
         path="/",
         summary="List Users",
-        description=("Fetch all users with their basic fields and aggregated Overwatch usernames."),
+        description="Fetch all users with their basic fields and aggregated Overwatch usernames.",
     )
     async def get_users(self, svc: UserService) -> list[UserResponse] | None:
         """Get user(s).

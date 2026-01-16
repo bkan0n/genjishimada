@@ -830,7 +830,7 @@ class Tags(commands.Cog):
                 include_aliases=False,
                 limit=1,
             )
-            if not res.items or not (res.items[0].content):
+            if not res.items or not res.items[0].content:
                 await ctx.send(
                     "Could not find a tag with that name, are you sure it exists or you own it?",
                     ephemeral=True,

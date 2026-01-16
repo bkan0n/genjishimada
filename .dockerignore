@@ -16,7 +16,6 @@ venv/
 .uv_cache/
 .uv_cache*/
 .uv_tool/
-.uv/
 uv.lock.bak
 
 # Build artifacts

@@ -471,8 +471,8 @@ class APIService:
             "page_number": page_number,
             "return_all": return_all,
         }
-        log.debug(f"Playtest filtyer is now {playtest_filter}")
-        log.debug(f"Playtest filtyer is now (in the dict) {params['playtest_filter']}")
+        log.debug(f"Playtest filter is now {playtest_filter}")
+        log.debug(f"Playtest filter is now (in the dict) {params['playtest_filter']}")
 
         return self._request(r, response_model=list[MapModel], params=params)
 
@@ -1534,7 +1534,7 @@ class APIService:
         Args:
             command_name (str): The fully qualified command name used in the interaction.
             user_id (int): The user id of the interaction.
-            created_at (datetime): When the interaction occured.
+            created_at (datetime): When the interaction occurred.
             namespace (dict): A dict of the interaction command namespace (arguments used).
         """
         r = Route("POST", "/utilities/log")

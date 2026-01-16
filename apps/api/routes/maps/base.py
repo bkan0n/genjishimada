@@ -203,7 +203,7 @@ class BaseMapsController(litestar.Controller):
     @litestar.post(
         path="/",
         summary="Submit Map",
-        description=("Create a new map of any category. Accepts a structured payload and returns the created map."),
+        description="Create a new map of any category. Accepts a structured payload and returns the created map.",
     )
     async def submit_map(
         self,
@@ -310,7 +310,7 @@ class BaseMapsController(litestar.Controller):
     @litestar.get(
         "/{code:str}/plot",
         summary="Get Playtest Plot",
-        description=("Return a generated plot image stream for the specified map's playtest."),
+        description="Return a generated plot image stream for the specified map's playtest.",
         include_in_schema=False,
     )
     async def get_map_plot(

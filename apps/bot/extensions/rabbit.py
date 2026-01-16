@@ -306,7 +306,7 @@ class RabbitService:
 
             headers = dict(msg.headers or {})
             # If we've already marked it, just ack and move on.
-            if headers.get(DLQ_HEADER_KEY) is True:
+            if headers.get(DLQ_HEADER_KEY):
                 await msg.nack(requeue=True)
                 processed += 1
                 continue

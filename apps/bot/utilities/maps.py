@@ -161,7 +161,7 @@ class MapModel(MapResponse):
         Raises:
             AttributeError: If no playtest data is attached.
         """
-        if self.override_finalize is True:
+        if self.override_finalize:
             log.debug("Finalizable: Override is true=True")
             return True
 

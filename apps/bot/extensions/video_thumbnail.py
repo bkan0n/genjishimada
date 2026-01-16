@@ -61,7 +61,7 @@ def _extract_bilibili_video_id(url: str) -> Optional[Tuple[str, str]]:
         return ("aid", num) if num.isdigit() else None
 
     if candidate.startswith("BV"):
-        return ("bvid", candidate)
+        return "bvid", candidate
 
     return None
 
