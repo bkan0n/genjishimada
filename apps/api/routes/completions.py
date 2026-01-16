@@ -12,6 +12,7 @@ from genjishimada_sdk.completions import (
     CompletionCreatedEvent,
     CompletionCreateRequest,
     CompletionCreateRequest2,
+    CompletionModerateRequest,
     CompletionPatchRequest,
     CompletionResponse,
     CompletionSubmissionJobResponse,
@@ -37,10 +38,12 @@ from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 from di import (
     AutocompleteService,
     CompletionsService,
+    NotificationService,
     UserService,
     provide_autocomplete_service,
     provide_completions_service,
     provide_map_service,
+    provide_notification_service,
     provide_user_service,
 )
 from utilities.errors import CustomHTTPException
@@ -60,6 +63,7 @@ class CompletionsController(Controller):
         "users": Provide(provide_user_service),
         "maps": Provide(provide_map_service),
         "autocomplete": Provide(provide_autocomplete_service),
+        "notifications": Provide(provide_notification_service),
     }
 
     @get(
@@ -451,6 +455,68 @@ class CompletionsController(Controller):
             user_id: The user id.
         """
         return await svc.check_for_previous_world_record(code, user_id)
+
+    @get(
+        path="/moderation/records",
+        summary="Get Records with Filters",
+        description="Fetch completion records with optional filters for moderation purposes.",
+    )
+    async def get_records_filtered(  # noqa: PLR0913
+        self,
+        svc: CompletionsService,
+        code: str | None = None,
+        user_id: int | None = None,
+        verification_status: Literal["Verified", "Unverified", "All"] = "All",
+        latest_only: bool = True,
+        page_size: Literal[10, 20, 25, 50] = 10,
+        page_number: int = 1,
+    ) -> list[CompletionResponse]:
+        """Get filtered records for moderation.
+
+        Args:
+            svc: Completions service.
+            code: Optional map code to filter by.
+            user_id: Optional user ID to filter by.
+            verification_status: Filter by verification status.
+            latest_only: Whether to only show latest record per user per map.
+            page_size: Number of records per page.
+            page_number: Page number (1-indexed).
+
+        Returns:
+            list[CompletionResponse]: Filtered records.
+        """
+        return await svc.get_records_filtered(
+            code=code,
+            user_id=user_id,
+            verification_status=verification_status,
+            latest_only=latest_only,
+            page_size=page_size,
+            page_number=page_number,
+        )
+
+    @put(
+        path="/{record_id:int}/moderate",
+        summary="Moderate Completion",
+        description="Moderate a completion record (change time, verification status, suspicious flag).",
+    )
+    async def moderate_completion(
+        self,
+        svc: CompletionsService,
+        notifications: NotificationService,
+        request: Request,
+        record_id: int,
+        data: CompletionModerateRequest,
+    ) -> None:
+        """Moderate a completion record.
+
+        Args:
+            svc: Completions service.
+            notifications: Notification service.
+            request: Request object.
+            record_id: ID of the completion to moderate.
+            data: Moderation request data.
+        """
+        return await svc.moderate_completion(record_id, data, notifications, request.headers)
 
     @get(
         path="/{code:str}/legacy",

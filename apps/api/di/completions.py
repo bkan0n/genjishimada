@@ -1,11 +1,12 @@
 from logging import getLogger
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import asyncpg
 import msgspec
 from asyncpg import Connection
 from genjishimada_sdk.completions import (
     CompletionCreateRequest,
+    CompletionModerateRequest,
     CompletionPatchRequest,
     CompletionResponse,
     CompletionSubmissionResponse,
@@ -21,14 +22,18 @@ from genjishimada_sdk.completions import (
 from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
+from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
 from litestar import Request
-from litestar.datastructures import State
+from litestar.datastructures import Headers, State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from di.base import BaseService
 from utilities.errors import CustomHTTPException
 
 log = getLogger(__name__)
+
+if TYPE_CHECKING:
+    from di import NotificationService
 
 
 class CompletionsService(BaseService):
@@ -79,7 +84,7 @@ class CompletionsService(BaseService):
                         WHEN l.completion = FALSE THEN
                                     rank() OVER (
                                 PARTITION BY l.map_id
-                                ORDER BY l.time ASC, l.inserted_at ASC
+                                ORDER BY l.time, l.inserted_at
                                 )
                         ELSE NULL::int
                     END AS rank
@@ -367,7 +372,7 @@ class CompletionsService(BaseService):
             SELECT
                 user_id,
                 time,
-                RANK() OVER (ORDER BY time ASC) AS rank
+                RANK() OVER (ORDER BY time) AS rank
             FROM eligible_ranked
         ),
         final AS (
@@ -1248,6 +1253,323 @@ class CompletionsService(BaseService):
           SET quality = EXCLUDED.quality;
         """
         await self._conn.execute(query, code, user_id, quality)
+
+    async def get_records_filtered(  # noqa: PLR0913
+        self,
+        code: OverwatchCode | None = None,
+        user_id: int | None = None,
+        verification_status: str = "All",
+        latest_only: bool = True,
+        page_size: int = 10,
+        page_number: int = 1,
+    ) -> list[CompletionResponse]:
+        """Fetch records with filters for moderation.
+
+        Args:
+            code: Optional map code to filter by.
+            user_id: Optional user ID to filter by.
+            verification_status: "Verified", "Unverified", or "All".
+            latest_only: Whether to only show the latest record per user per map.
+            page_size: Number of records per page.
+            page_number: Page number (1-indexed).
+
+        Returns:
+            list[CompletionResponse]: Filtered records.
+        """
+        params: list[Any] = []
+        param_idx = 1
+        where_clauses: list[str] = []
+
+        if code:
+            where_clauses.append(f"m.code = ${param_idx}")
+            params.append(code)
+            param_idx += 1
+
+        if user_id:
+            where_clauses.append(f"c.user_id = ${param_idx}")
+            params.append(user_id)
+            param_idx += 1
+
+        if verification_status == "Verified":
+            where_clauses.append("c.verified = TRUE")
+        elif verification_status == "Unverified":
+            where_clauses.append("c.verified = FALSE")
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+        if latest_only:
+            query = f"""
+            WITH latest_per_user_per_map AS (
+                SELECT DISTINCT ON (c.user_id, c.map_id)
+                    c.id,
+                    c.user_id,
+                    c.map_id,
+                    c.time,
+                    c.screenshot,
+                    c.video,
+                    c.completion,
+                    c.verified,
+                    c.message_id,
+                    c.legacy,
+                    c.legacy_medal,
+                    c.inserted_at
+                FROM core.completions c
+                JOIN core.maps m ON m.id = c.map_id
+                {where_sql}
+                ORDER BY c.user_id, c.map_id, c.inserted_at DESC
+            ),
+            name_split AS (
+                SELECT
+                    un.user_id,
+                    un.name,
+                    COALESCE(STRING_AGG(
+                        CASE WHEN un.rn > 1 THEN un.name END,
+                        ', '
+                    ), '') AS also_known_as
+                FROM (
+                    SELECT
+                        u.id AS user_id,
+                        COALESCE(u.nickname, u.global_name) AS name,
+                        ROW_NUMBER() OVER (PARTITION BY u.id ORDER BY
+                            CASE WHEN u.nickname IS NOT NULL THEN 1
+                                 WHEN u.global_name IS NOT NULL THEN 2
+                            END
+                        ) AS rn
+                    FROM core.users u
+                ) un
+                GROUP BY un.user_id
+            ),
+            ranked AS (
+                SELECT
+                    l.*,
+                    RANK() OVER (PARTITION BY l.map_id ORDER BY l.time, l.inserted_at) AS rank
+                FROM latest_per_user_per_map l
+            )
+            SELECT
+                m.code,
+                r.user_id,
+                ns.name,
+                ns.also_known_as,
+                r.time,
+                r.screenshot,
+                r.video,
+                r.completion,
+                r.verified,
+                r.rank,
+                CASE
+                    WHEN r.legacy THEN r.legacy_medal
+                    WHEN r.time <= md.gold THEN 'Gold'
+                    WHEN r.time <= md.silver THEN 'Silver'
+                    WHEN r.time <= md.bronze THEN 'Bronze'
+                END AS medal,
+                m.map_name,
+                m.difficulty,
+                r.message_id,
+                r.legacy,
+                r.legacy_medal,
+                COALESCE(
+                    (SELECT COUNT(*) > 0 FROM users.suspicious_flags WHERE completion_id = r.id), FALSE
+                ) AS suspicious,
+                (SELECT COUNT(*) FROM completions.upvotes WHERE message_id = r.message_id) AS upvotes,
+                r.id
+            FROM ranked r
+            JOIN core.maps m ON m.id = r.map_id
+            LEFT JOIN maps.medals md ON md.map_id = r.map_id
+            JOIN name_split ns ON ns.user_id = r.user_id
+            ORDER BY r.inserted_at DESC
+            LIMIT ${param_idx} OFFSET ${param_idx + 1};
+            """
+        else:
+            query = f"""
+            WITH name_split AS (
+                SELECT
+                    un.user_id,
+                    un.name,
+                    COALESCE(STRING_AGG(
+                        CASE WHEN un.rn > 1 THEN un.name END,
+                        ', '
+                    ), '') AS also_known_as
+                FROM (
+                    SELECT
+                        u.id AS user_id,
+                        COALESCE(u.nickname, u.global_name) AS name,
+                        ROW_NUMBER() OVER (PARTITION BY u.id ORDER BY
+                            CASE WHEN u.nickname IS NOT NULL THEN 1
+                                 WHEN u.global_name IS NOT NULL THEN 2
+                            END
+                        ) AS rn
+                    FROM core.users u
+                ) un
+                GROUP BY un.user_id
+            ),
+            ranked AS (
+                SELECT
+                    c.*,
+                    RANK() OVER (PARTITION BY c.map_id ORDER BY c.time, c.inserted_at) AS rank
+                FROM core.completions c
+                JOIN core.maps m ON m.id = c.map_id
+                {where_sql}
+            )
+            SELECT
+                m.code,
+                r.user_id,
+                ns.name,
+                ns.also_known_as,
+                r.time,
+                r.screenshot,
+                r.video,
+                r.completion,
+                r.verified,
+                r.rank,
+                CASE
+                    WHEN r.legacy THEN r.legacy_medal
+                    WHEN r.time <= md.gold THEN 'Gold'
+                    WHEN r.time <= md.silver THEN 'Silver'
+                    WHEN r.time <= md.bronze THEN 'Bronze'
+                END AS medal,
+                m.map_name,
+                m.difficulty,
+                r.message_id,
+                r.legacy,
+                r.legacy_medal,
+                COALESCE(
+                    (SELECT COUNT(*) > 0 FROM users.suspicious_flags WHERE completion_id = r.id), FALSE
+                ) AS suspicious,
+                (SELECT COUNT(*) FROM completions.upvotes WHERE message_id = r.message_id) AS upvotes,
+                r.id
+            FROM ranked r
+            JOIN core.maps m ON m.id = r.map_id
+            LEFT JOIN maps.medals md ON md.map_id = r.map_id
+            JOIN name_split ns ON ns.user_id = r.user_id
+            ORDER BY r.inserted_at DESC
+            LIMIT ${param_idx} OFFSET ${param_idx + 1};
+            """
+
+        offset = (page_number - 1) * page_size
+        params.extend([page_size, offset])
+        rows = await self._conn.fetch(query, *params)
+        return msgspec.convert(rows, list[CompletionResponse])
+
+    async def moderate_completion(  # noqa: PLR0912
+        self,
+        completion_id: int,
+        data: CompletionModerateRequest,
+        notification_service: NotificationService | None = None,
+        headers: Headers | None = None,
+    ) -> None:
+        """Moderate a completion record.
+
+        Args:
+            completion_id: ID of the completion to moderate.
+            data: Moderation request data.
+            notification_service: Optional notification service for sending notifications.
+            headers: Optional request headers for publishing events.
+        """
+        # Get completion details for notifications
+        completion_query = """
+            SELECT c.user_id, m.code, c.time as old_time, c.verified as old_verified
+            FROM core.completions c
+            LEFT JOIN core.maps m ON m.id = c.map_id
+            WHERE c.id = $1
+        """
+        completion_info = await self._conn.fetchrow(completion_query, completion_id)
+        if not completion_info:
+            raise CustomHTTPException(
+                detail="Completion not found",
+                status_code=HTTP_400_BAD_REQUEST,
+            )
+
+        user_id = completion_info["user_id"]
+        map_code = completion_info["code"]
+        old_time = completion_info["old_time"]
+        old_verified = completion_info["old_verified"]
+
+        notification_messages: list[str] = []
+
+        # Handle time change
+        if data.time is not msgspec.UNSET:
+            if data.time_change_reason is msgspec.UNSET:
+                raise CustomHTTPException(
+                    detail="time_change_reason is required when changing time",
+                    status_code=HTTP_400_BAD_REQUEST,
+                )
+            query = "UPDATE core.completions SET time = $1 WHERE id = $2"
+            await self._conn.execute(query, data.time, completion_id)
+            notification_messages.append(
+                f"Your completion time on **{map_code}** was changed from **{old_time}s** to **{data.time}s**.\n"
+                f"Reason: {data.time_change_reason}"
+            )
+
+        # Handle verification change
+        if data.verified is not msgspec.UNSET:
+            query = """
+            UPDATE core.completions
+            SET verified = $1
+            WHERE id = $2
+            """
+            await self._conn.execute(query, data.verified, completion_id)
+
+            if data.verified != old_verified:
+                if data.verified:
+                    notification_messages.append(f"Your completion on **{map_code}** has been verified by a moderator.")
+                else:
+                    reason_msg = f"\nReason: {data.verification_reason}" if data.verification_reason else ""
+                    notification_messages.append(
+                        f"Your completion on **{map_code}** has been unverified by a moderator.{reason_msg}"
+                    )
+
+        # Handle suspicious flag
+        if data.mark_suspicious:
+            if data.suspicious_context is msgspec.UNSET or data.suspicious_flag_type is msgspec.UNSET:
+                raise CustomHTTPException(
+                    detail="suspicious_context and suspicious_flag_type are required when marking as suspicious",
+                    status_code=HTTP_400_BAD_REQUEST,
+                )
+            # Check if already flagged
+            check_query = "SELECT id FROM users.suspicious_flags WHERE completion_id = $1"
+            existing = await self._conn.fetchval(check_query, completion_id)
+            if not existing:
+                insert_query = """
+                INSERT INTO users.suspicious_flags (completion_id, context, flag_type, flagged_by)
+                VALUES ($1, $2, $3, $4)
+                """
+                await self._conn.execute(
+                    insert_query,
+                    completion_id,
+                    data.suspicious_context,
+                    data.suspicious_flag_type,
+                    data.moderated_by,
+                )
+                notification_messages.append(
+                    f"Your completion on **{map_code}** has been flagged as suspicious ({data.suspicious_flag_type}).\n"
+                    f"Context: {data.suspicious_context}"
+                )
+
+        if data.unmark_suspicious:
+            delete_query = "DELETE FROM users.suspicious_flags WHERE completion_id = $1"
+            deleted_count = await self._conn.fetchval(
+                "SELECT COUNT(*) FROM users.suspicious_flags WHERE completion_id = $1", completion_id
+            )
+            await self._conn.execute(delete_query, completion_id)
+            if deleted_count > 0:
+                notification_messages.append(
+                    f"The suspicious flag on your completion for **{map_code}** has been removed."
+                )
+
+        # Send notification if any changes were made
+        if notification_messages and notification_service is not None and headers is not None:
+            notification_body = "\n\n".join(notification_messages)
+
+            notification_data = NotificationCreateRequest(
+                user_id=user_id,
+                event_type=NotificationEventType.RECORD_EDITED,  # type: ignore
+                title=f"Completion Updated - {map_code}",
+                body=notification_body,
+                discord_message=notification_body,
+                metadata={"map_code": map_code, "completion_id": completion_id},
+            )
+
+            await notification_service.create_and_dispatch(notification_data, headers)
 
 
 async def provide_completions_service(conn: Connection, state: State) -> CompletionsService:

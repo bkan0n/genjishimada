@@ -29,6 +29,7 @@ import msgspec
 from genjishimada_sdk.change_requests import ChangeRequestResponse, StaleChangeRequestResponse
 from genjishimada_sdk.completions import (
     CompletionCreateRequest,
+    CompletionModerateRequest,
     CompletionPatchRequest,
     CompletionSubmissionJobResponse,
     CompletionVerificationUpdateRequest,
@@ -1108,6 +1109,55 @@ class APIService:
         """
         r = Route("PUT", "/completions/{record_id}/verification", record_id=record_id)
         return self._request(r, data=data, response_model=JobStatusResponse)
+
+    def get_records_filtered(  # noqa: PLR0913
+        self,
+        code: OverwatchCode | None = None,
+        user_id: int | None = None,
+        verification_status: Literal["Verified", "Unverified", "All"] = "All",
+        latest_only: bool = True,
+        page_size: int = 10,
+        page_number: int = 1,
+    ) -> Response[list[CompletionLeaderboardFormattable]]:
+        """Fetch records with filters for moderation.
+
+        Args:
+            code: Optional map code to filter by.
+            user_id: Optional user ID to filter by.
+            verification_status: Filter by verification status.
+            latest_only: Whether to only show latest record per user per map.
+            page_size: Number of records per page.
+            page_number: Page number (1-indexed).
+
+        Returns:
+            Response[list[CompletionLeaderboardFormattable]]: Filtered records.
+        """
+        r = Route("GET", "/completions/moderation/records")
+        return self._request(
+            r,
+            response_model=list[CompletionLeaderboardFormattable],
+            params={
+                "code": code,
+                "user_id": user_id,
+                "verification_status": verification_status,
+                "latest_only": latest_only,
+                "page_size": page_size,
+                "page_number": page_number,
+            },
+        )
+
+    def moderate_completion(self, record_id: int, data: CompletionModerateRequest) -> Response[None]:
+        """Moderate a completion record.
+
+        Args:
+            record_id: ID of the completion to moderate.
+            data: Moderation request data.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("PUT", "/completions/{record_id}/moderate", record_id=record_id)
+        return self._request(r, data=data, response_model=None)
 
     def get_completions(self, code: OverwatchCode) -> Response[list[CompletionLeaderboardFormattable]]:
         """Fetch the completions leaderboard for a specific map code.

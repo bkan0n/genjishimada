@@ -37,6 +37,7 @@ class NotificationEventType(str, Enum):
     VERIFICATION_APPROVED = "verification_approved"
     VERIFICATION_REJECTED = "verification_rejected"
     RECORD_REMOVED = "record_removed"
+    RECORD_EDITED = "record_edited"
 
     # Progression events
     SKILL_ROLE_UPDATE = "skill_role_update"
@@ -60,6 +61,7 @@ NOTIFICATION_EVENT_TYPE = Literal[
     "verification_approved",
     "verification_rejected",
     "record_removed",
+    "record_edited",
     "skill_role_update",
     "xp_gain",
     "rank_up",
