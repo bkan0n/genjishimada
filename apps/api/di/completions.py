@@ -1379,7 +1379,7 @@ class CompletionsService(BaseService):
             LEFT JOIN maps.medals md ON md.map_id = r.map_id
             JOIN name_split ns ON ns.user_id = r.user_id
             WHERE r.message_id IS NOT NULL
-            ORDER BY r.inserted_at DESC
+            ORDER BY r.time ASC, r.inserted_at ASC
             LIMIT ${param_idx} OFFSET ${param_idx + 1};
             """
         else:
@@ -1445,7 +1445,7 @@ class CompletionsService(BaseService):
             LEFT JOIN maps.medals md ON md.map_id = r.map_id
             JOIN name_split ns ON ns.user_id = r.user_id
             WHERE r.message_id IS NOT NULL
-            ORDER BY r.inserted_at DESC
+            ORDER BY r.time ASC, r.inserted_at ASC
             LIMIT ${param_idx} OFFSET ${param_idx + 1};
             """
 

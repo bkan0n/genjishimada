@@ -1895,7 +1895,6 @@ class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
                 f"**Map:** {record.code} - {record.map_name} ({record.difficulty})\n"
                 f"**Runner:** {record.name}\n"
                 f"**Time:** {record.time}s\n"
-                f"**Rank:** #{record.rank}\n"
                 f"**Medal:** {record.medal or 'None'}\n"
                 f"**Verified:** {status_emoji}\n"
                 f"**Suspicious:** {suspicious_emoji}\n"
