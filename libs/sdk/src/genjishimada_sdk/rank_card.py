@@ -49,7 +49,7 @@ class AvatarResponse(Struct):
             self.skin = "Overwatch 1"
         if not self.pose:
             self.pose = "Heroic"
-        self.url = f"assets/rank_card/avatar/{sanitize_string(self.skin)}/{sanitize_string(self.pose)}.webp"
+        self.url = f"https://cdn.genji.pk/assets/rank_card/avatar/{sanitize_string(self.skin)}/{sanitize_string(self.pose)}.webp"
 
 
 class RankCardBadgeSettings(Struct):

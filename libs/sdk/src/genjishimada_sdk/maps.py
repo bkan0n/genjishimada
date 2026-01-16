@@ -676,7 +676,7 @@ class MapMasteryResponse(Struct):
         _sanitized_map_name = sanitize_string(self.map_name)
         assert self.level
         _lowered_level = self.level.lower()
-        return f"assets/mastery/{_sanitized_map_name}_{_lowered_level}.webp"
+        return f"https://cdn.genji.pk/assets/mastery/{_sanitized_map_name}_{_lowered_level}.webp"
 
 
 class PlaytestApproveRequest(Struct):
