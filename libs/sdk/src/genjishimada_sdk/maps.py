@@ -1088,6 +1088,7 @@ class MapEditResolveRequest(Struct, kw_only=True):
     accepted: bool
     resolved_by: int
     rejection_reason: str | None = None
+    send_to_playtest: bool = False
 
 
 class MapEditSetMessageIdRequest(Struct):

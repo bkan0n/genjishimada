@@ -15,6 +15,7 @@ from genjishimada_sdk.maps import (
     MapEditSetMessageIdRequest,
     MapEditSubmissionResponse,
     PendingMapEditResponse,
+    SendToPlaytestRequest,
 )
 from genjishimada_sdk.newsfeed import (
     NewsfeedArchive,
@@ -252,6 +253,27 @@ class MapEditsController(litestar.Controller):
             resolved_by=data.resolved_by,
             rejection_reason=data.rejection_reason,
         )
+
+        # Send to playtest if requested and accepted
+        if data.accepted and data.send_to_playtest:
+            try:
+                # Get the difficulty from the proposed changes, or use the original map's difficulty
+                playtest_difficulty = edit_request.proposed_changes.get("difficulty")
+                if not playtest_difficulty:
+                    # If difficulty wasn't changed, use the original map's difficulty
+                    playtest_difficulty = original_map.difficulty
+
+                await maps.send_map_to_playtest(
+                    code=edit_request.code,
+                    data=SendToPlaytestRequest(initial_difficulty=playtest_difficulty),
+                    request=request,
+                )
+            except Exception as e:
+                # Log the error but don't fail the entire resolution
+                log.error(
+                    f"Failed to send map {edit_request.code} to playtest after accepting edit request: {e}",
+                    exc_info=True,
+                )
 
         # Send notification to the submitter
         await self._send_resolution_notification(

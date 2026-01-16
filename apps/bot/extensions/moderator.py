@@ -435,7 +435,6 @@ class EditableField(str, Enum):
 _PREVIEW_MAX_LENGTH = 50
 _MOD_ONLY_FIELDS = {
     EditableField.HIDDEN,
-    EditableField.OFFICIAL,
     EditableField.SEND_TO_PLAYTEST,
     EditableField.MAKE_LEGACY,
     EditableField.OVERRIDE_RATING,
@@ -1435,6 +1434,41 @@ class MapEditAcceptButton(ui.Button["MapEditVerificationView"]):
         await itx.edit_original_response(content="✅ Edit request accepted and changes applied!")
 
 
+class MapEditAcceptAndPlaytestButton(ui.Button["MapEditVerificationView"]):
+    """Accept the edit request and send to playtest."""
+
+    view: MapEditVerificationView
+
+    def __init__(self) -> None:
+        """Initialize the accept and playtest button."""
+        super().__init__(
+            label="Accept & Send to Playtest",
+            style=ButtonStyle.blurple,
+            custom_id="map_edit:accept_playtest",
+        )
+
+    async def callback(self, itx: GenjiItx) -> None:
+        """Handle accept and playtest button click to approve and send to playtest."""
+        await itx.response.defer(ephemeral=True, thinking=True)
+
+        data = MapEditResolveRequest(
+            accepted=True,
+            resolved_by=itx.user.id,
+            send_to_playtest=True,
+        )
+        await itx.client.api.resolve_map_edit_request(self.view.edit_id, data)
+
+        # Disable buttons
+        for item in self.view.walk_children():
+            if isinstance(item, ui.Button):
+                item.disabled = True
+
+        if itx.message:
+            await itx.message.edit(view=self.view)
+
+        await itx.edit_original_response(content="✅ Edit request accepted, changes applied, and map sent to playtest!")
+
+
 class MapEditRejectButton(ui.Button["MapEditVerificationView"]):
     """Reject the edit request."""
 
@@ -1488,12 +1522,22 @@ class MapEditVerificationView(ui.LayoutView):
         self.edit_id = data.id
         self.rebuild_components()
 
+    def _has_difficulty_change(self) -> bool:
+        """Check if the edit request includes a difficulty change."""
+        return any(change.field == "Difficulty" for change in self.data.changes)
+
     def rebuild_components(self) -> None:
         """Build the verification view."""
         self.clear_items()
 
         # Build changes display
         changes_text = "\n".join(f"**{c.field}:** ~~{c.old_value}~~ → {c.new_value}" for c in self.data.changes)
+
+        # Build action row with conditional playtest button
+        action_buttons: list[ui.Item] = [MapEditAcceptButton()]
+        if self._has_difficulty_change():
+            action_buttons.append(MapEditAcceptAndPlaytestButton())
+        action_buttons.append(MapEditRejectButton())
 
         container = ui.Container(
             ui.TextDisplay(
@@ -1505,7 +1549,7 @@ class MapEditVerificationView(ui.LayoutView):
             ui.Separator(),
             ui.TextDisplay(f"## Proposed Changes\n{changes_text}"),
             ui.Separator(),
-            ui.ActionRow(MapEditAcceptButton(), MapEditRejectButton()),
+            ui.ActionRow(*action_buttons),
             accent_color=0x5865F2,  # Discord blurple
         )
         self.add_item(container)
