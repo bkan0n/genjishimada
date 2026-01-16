@@ -18,8 +18,8 @@ BEGIN
     WHERE c.user_id = new.user_id
       AND c.map_id = new.map_id
       AND c.legacy = FALSE
-      AND verified IS FALSE
-      AND verified_by
+      AND c.verified IS FALSE
+      AND c.verified_by IS NULL
       AND (tg_op <> 'UPDATE' OR c.id <> new.id)
     ORDER BY c.time
     LIMIT 1;
