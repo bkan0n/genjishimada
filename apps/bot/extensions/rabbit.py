@@ -287,6 +287,7 @@ class RabbitService:
         initial_count = dlq.declaration_result.message_count or 0
         cap = min(initial_count, DLQ_MAX_PER_QUEUE_TICK)
         if cap == 0:
+            log.info("[DLQ] %s is empty.", dlq_name)
             return 0
 
         processed = 0
@@ -294,14 +295,10 @@ class RabbitService:
         queue = await channel.declare_queue(dlq_name, passive=True)
 
         while processed < cap:
-            # Try non-blocking get with a tiny timeout to avoid hanging.
-            try:
-                msg = await queue.get(timeout=0.1, no_ack=False)
-            except asyncio.TimeoutError:
-                break
-            except QueueEmpty:
-                break
+            # Non-blocking get; returns None if empty.
+            msg = await queue.get(no_ack=False, fail=False)
             if msg is None:
+                log.info("[DLQ] %s has no messages available.", dlq_name)
                 break
 
             headers = dict(msg.headers or {})
