@@ -14,6 +14,7 @@ import contextlib
 import logging
 from typing import TYPE_CHECKING, Literal
 
+import discord
 from aio_pika.abc import AbstractIncomingMessage
 from genjishimada_sdk.notifications import (
     NOTIFICATION_CHANNEL,
@@ -27,8 +28,6 @@ from extensions._queue_registry import queue_consumer
 from utilities.base import BaseService
 
 if TYPE_CHECKING:
-    import discord
-
     import core
 
 logger = logging.getLogger(__name__)
