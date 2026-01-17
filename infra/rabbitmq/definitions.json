@@ -273,13 +273,13 @@
       }
     },
     {
-      "name": "api.notifications.delivery",
+      "name": "api.notification.delivery",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
       "arguments": {
         "x-dead-letter-exchange": "",
-        "x-dead-letter-routing-key": "api.notifications.delivery.dlq",
+        "x-dead-letter-routing-key": "api.notification.delivery.dlq",
         "x-queue-type": "classic"
       }
     },
