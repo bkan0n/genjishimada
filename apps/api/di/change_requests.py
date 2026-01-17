@@ -32,6 +32,8 @@ class ChangeRequestsService(BaseService):
             WHERE thread_id = $1 AND code = $2;
         """
         val = await self._conn.fetchval(query, thread_id, code)
+        if not val:
+            return False
         return str(user_id) in val
 
     async def create_change_request(self, data: ChangeRequestCreateRequest) -> None:

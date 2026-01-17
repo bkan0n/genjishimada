@@ -1,7 +1,7 @@
 CREATE TABLE users.remember_tokens
 (
     id           uuid PRIMARY KEY     DEFAULT gen_random_uuid(),
-    user_id      bigint      NOT NULL REFERENCES core.users (id) ON DELETE CASCADE,
+    user_id      bigint      NOT NULL REFERENCES core.users (id) ON UPDATE CASCADE ON DELETE CASCADE,
     token_hash   varchar(64) NOT NULL,
     expires_at   timestamptz NOT NULL,
     created_at   timestamptz NOT NULL DEFAULT now(),

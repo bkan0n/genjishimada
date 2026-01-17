@@ -15,7 +15,7 @@ class TestRankCardEndpoints:
         data = response.json()
         assert data["pose"] == "Heroic"
         assert data["skin"] == "Overwatch 1"
-        assert data["url"] == "assets/rank_card/avatar/overwatch_1/heroic.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/avatar/overwatch_1/heroic.webp"
 
     @pytest.mark.asyncio
     async def test_set_avatar_pose(self, test_client):
@@ -24,7 +24,7 @@ class TestRankCardEndpoints:
         data = response.json()
         assert data["pose"] == "Heroic"
         assert data["skin"] == "Overwatch 1"
-        assert data["url"] == "assets/rank_card/avatar/overwatch_1/heroic.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/avatar/overwatch_1/heroic.webp"
 
         response = await test_client.put("/api/v3/users/51/rank-card/avatar/pose", json={"pose": "Medal"})
         assert response.status_code == HTTP_200_OK
@@ -35,7 +35,7 @@ class TestRankCardEndpoints:
         data = response.json()
         assert data["pose"] == "Medal"
         assert data["skin"] == "Overwatch 1"
-        assert data["url"] == "assets/rank_card/avatar/overwatch_1/medal.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/avatar/overwatch_1/medal.webp"
 
     @pytest.mark.asyncio
     async def test_get_avatar_skin_good(self, test_client):
@@ -44,7 +44,7 @@ class TestRankCardEndpoints:
         data = response.json()
         assert data["pose"] == "Heroic"
         assert data["skin"] == "Overwatch 1"
-        assert data["url"] == "assets/rank_card/avatar/overwatch_1/heroic.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/avatar/overwatch_1/heroic.webp"
 
     @pytest.mark.asyncio
     async def test_set_avatar_skin(self, test_client):
@@ -53,7 +53,7 @@ class TestRankCardEndpoints:
         data = response.json()
         assert data["pose"] == "Heroic"
         assert data["skin"] == "Overwatch 1"
-        assert data["url"] == "assets/rank_card/avatar/overwatch_1/heroic.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/avatar/overwatch_1/heroic.webp"
 
         response = await test_client.put("/api/v3/users/52/rank-card/avatar/skin", json={"skin": "Nihon"})
         assert response.status_code == HTTP_200_OK
@@ -64,7 +64,7 @@ class TestRankCardEndpoints:
         data = response.json()
         assert data["pose"] == "Heroic"
         assert data["skin"] == "Nihon"
-        assert data["url"] == "assets/rank_card/avatar/nihon/heroic.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/avatar/nihon/heroic.webp"
 
     @pytest.mark.asyncio
     async def test_get_background_good(self, test_client):
@@ -72,7 +72,7 @@ class TestRankCardEndpoints:
         assert response.status_code == HTTP_200_OK
         data = response.json()
         assert data["name"] == "placeholder"
-        assert data["url"] == "assets/rank_card/background/placeholder.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/background/placeholder.webp"
 
     @pytest.mark.asyncio
     async def test_set_background(self, test_client):
@@ -80,7 +80,7 @@ class TestRankCardEndpoints:
         assert response.status_code == HTTP_200_OK
         data = response.json()
         assert data["name"] == "placeholder"
-        assert data["url"] == "assets/rank_card/background/placeholder.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/background/placeholder.webp"
 
         response = await test_client.put("/api/v3/users/52/rank-card/background", json={"name": "Ayutthaya"})
         assert response.status_code == HTTP_200_OK
@@ -90,7 +90,7 @@ class TestRankCardEndpoints:
         assert response.status_code == HTTP_200_OK
         data = response.json()
         assert data["name"] == "Ayutthaya"
-        assert data["url"] == "assets/rank_card/background/ayutthaya.webp"
+        assert data["url"] == "https://cdn.genji.pk/assets/rank_card/background/ayutthaya.webp"
 
 
     @pytest.mark.asyncio

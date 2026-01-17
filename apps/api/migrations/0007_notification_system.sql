@@ -8,7 +8,7 @@ CREATE SCHEMA IF NOT EXISTS notifications;
 CREATE TABLE notifications.events
 (
     id           bigserial PRIMARY KEY,
-    user_id      bigint      NOT NULL REFERENCES core.users (id) ON DELETE CASCADE,
+    user_id      bigint      NOT NULL REFERENCES core.users (id) ON UPDATE CASCADE ON DELETE CASCADE,
     event_type   text        NOT NULL,
     title        text        NOT NULL,
     body         text        NOT NULL,
@@ -30,7 +30,7 @@ COMMENT ON COLUMN notifications.events.dismissed_at IS 'When the notification wa
 
 CREATE TABLE notifications.preferences
 (
-    user_id    bigint  NOT NULL REFERENCES core.users (id) ON DELETE CASCADE,
+    user_id    bigint  NOT NULL REFERENCES core.users (id) ON UPDATE CASCADE ON DELETE CASCADE,
     event_type text    NOT NULL,
     channel    text    NOT NULL, -- 'discord_dm', 'discord_ping', 'web', 'email' (future)
     enabled    boolean NOT NULL DEFAULT TRUE,
@@ -45,7 +45,7 @@ COMMENT ON COLUMN notifications.preferences.channel IS 'Delivery channel: discor
 CREATE TABLE notifications.delivery_log
 (
     id            bigserial PRIMARY KEY,
-    event_id      bigint NOT NULL REFERENCES notifications.events (id) ON DELETE CASCADE,
+    event_id      bigint NOT NULL REFERENCES notifications.events (id) ON UPDATE CASCADE ON DELETE CASCADE,
     channel       text   NOT NULL,
     status        text   NOT NULL, -- 'pending', 'delivered', 'failed', 'skipped'
     attempted_at  timestamptz,

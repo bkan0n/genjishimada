@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import re
 import secrets
@@ -806,6 +807,11 @@ class AuthService(BaseService):
         """
         token, token_hash = self.generate_token()
         expires_at = datetime.now(timezone.utc) + timedelta(days=REMEMBER_TOKEN_LIFETIME_DAYS)
+        if ip_address:
+            try:
+                ipaddress.ip_address(ip_address)
+            except ValueError:
+                ip_address = None
 
         await self._conn.execute(
             """
