@@ -18,7 +18,16 @@ permissions:
   statuses: read
 
 jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
+
+  tests:
+    uses: ./.github/workflows/tests.yml
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
+
   dev-deploy:
+    needs: [lint, tests]
     # Run if manually dispatched OR if this is a comment on a PR
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
     runs-on: ubuntu-latest

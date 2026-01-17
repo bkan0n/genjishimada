@@ -6,7 +6,14 @@ on:
     branches: [ main ]
 
 jobs:
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  tests:
+    uses: ./.github/workflows/tests.yml
+
   prod-deploy:
+    needs: [lint, tests]
     runs-on: ubuntu-latest
     environment: production
 
