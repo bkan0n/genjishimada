@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Awaitable, Callable, TypeVar
 
 from aio_pika import Channel, DeliveryMode, Message, connect_robust
 from aio_pika.abc import AbstractIncomingMessage
-from aio_pika.exceptions import QueueEmpty
 from aio_pika.pool import Pool
 from discord import TextChannel
 
