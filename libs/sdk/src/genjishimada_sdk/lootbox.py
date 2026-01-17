@@ -82,7 +82,7 @@ class UserRewardResponse(Struct):
         if self.type == "mastery":
             name = sanitize_string(self.name)
             medal = sanitize_string(self.medal)
-            self.url = f"assets/mastery/{name}_{medal}.webp"
+            self.url = f"https://cdn.genji.pk/assets/mastery/{name}_{medal}.webp"
         else:
             self.url = _reward_url(self.type, self.name)
 
@@ -90,15 +90,15 @@ class UserRewardResponse(Struct):
 def _reward_url(type_: str, name: str) -> str:
     sanitized_name = sanitize_string(name)
     if type_ == "spray":
-        url = f"assets/rank_card/spray/{sanitized_name}.webp"
+        url = f"https://cdn.genji.pk/assets/rank_card/spray/{sanitized_name}.webp"
     elif type_ == "skin":
-        url = f"assets/rank_card/avatar/{sanitized_name}/heroic.webp"
+        url = f"https://cdn.genji.pk/assets/rank_card/avatar/{sanitized_name}/heroic.webp"
     elif type_ == "pose":
-        url = f"assets/rank_card/avatar/overwatch_1/{sanitized_name}.webp"
+        url = f"https://cdn.genji.pk/assets/rank_card/avatar/overwatch_1/{sanitized_name}.webp"
     elif type_ == "background":
-        url = f"assets/rank_card/background/{sanitized_name}.webp"
+        url = f"https://cdn.genji.pk/assets/rank_card/background/{sanitized_name}.webp"
     elif type_ == "coins":
-        url = f"assets/rank_card/coins/{sanitized_name}.webp"
+        url = f"https://cdn.genji.pk/assets/rank_card/coins/{sanitized_name}.webp"
     else:
         url = ""
     return url
