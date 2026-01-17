@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import re
 import typing
 
 import discord
 from discord import ButtonStyle, ForumChannel, Guild, SelectOption, TextStyle, ui
-from discord.app_commands import Transform, command
+from discord.app_commands import Transform, command, guilds
 from discord.ext import tasks
 from genjishimada_sdk.change_requests import ChangeRequestResponse, ChangeRequestType
 from genjishimada_sdk.maps import OverwatchCode
@@ -682,6 +683,7 @@ class ChangeRequestsCog(BaseCog):
         self.alert_stale_change_requests.stop()
 
     @command(name="change-request")
+    @guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def change_request(
         self,
         itx: GenjiItx,

@@ -27,6 +27,7 @@ for item in os.listdir(MODULE_PATH):
     # --- Case 2: submodule with __init__.py
     elif item_path.is_dir() and (item_path / "__init__.py").exists():
         submodule_name = f"{MODULE_NAME}.{item}"
+        # noinspection SpellCheckingInspection
         submod = importlib.import_module(submodule_name)
 
         for _, obj in inspect.getmembers(submod):

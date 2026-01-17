@@ -36,7 +36,7 @@ from genjishimada_sdk.maps import (
     PlaytestVoteRemovedEvent,
 )
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedNewMap
-from genjishimada_sdk.users import Notification
+from genjishimada_sdk.notifications import NotificationChannel, NotificationEventType
 
 from extensions._queue_registry import queue_consumer
 from utilities import BaseCog, BaseService
@@ -167,17 +167,44 @@ class PlaytestService(BaseService):
         """
         await self.bot.api.edit_map(code, MapPatchRequest(difficulty=difficulty))
 
-    async def _alert_creator(self, *, creator_user_id: int, message: str) -> bool:
+    async def _alert_creator(
+        self,
+        *,
+        creator_user_id: int,
+        message: str,
+        title: str = "Playtest Update",
+        metadata: dict | None = None,
+    ) -> bool:
         """DM the primary creator about an action.
+
+        Creates a notification via the new system which:
+        1. Stores in DB for web notification tray
+        2. Triggers DM delivery via RabbitMQ (if preference enabled)
 
         Args:
             creator_user_id: Discord user ID of the creator.
-            message: Message content.
+            message: Message content for Discord DM.
+            title: Notification title for web tray.
+            metadata: Additional context data.
 
         Returns:
-            True if DM delivered; False if DMs are closed/disabled.
+            True if user has DM notifications enabled, False otherwise.
+            Note: Actual delivery is async via RabbitMQ.
         """
-        return await self.bot.notifications.notify_dm(creator_user_id, Notification.DM_ON_PLAYTEST_ALERTS, message)
+        await self.bot.notifications.notify_dm_only(
+            user_id=creator_user_id,
+            event_type=NotificationEventType.PLAYTEST_UPDATE,
+            title=title,
+            body=message,
+            discord_message=message,
+            metadata=metadata,
+        )
+        # Check if user has DMs enabled to determine fallback behavior
+        return await self.bot.notifications.should_deliver_new(
+            creator_user_id,
+            NotificationEventType.PLAYTEST_UPDATE,
+            NotificationChannel.DISCORD_DM,
+        )
 
     async def _post_newsfeed_new_map(self, *, code: str) -> None:
         """Create a 'new/approved map' newsfeed entry via API.
@@ -260,6 +287,10 @@ class PlaytestService(BaseService):
         await message.edit(attachments=[image])
 
     async def _grant_xp_upon_successful_playtest(self, thread_id: int) -> None:
+        pt = await self.bot.api.get_playtest(thread_id)
+        map_data = await self.bot.api.get_map(code=pt.code)
+        for creator in map_data.creators:
+            await self.bot.xp.grant_user_xp_of_type(creator.id, "Map Submission")
         votes = await self.bot.api.get_all_votes(thread_id)
         for vote in votes.votes:
             await self.bot.xp.grant_user_xp_of_type(vote.user_id, "Playtest")
@@ -288,10 +319,16 @@ class PlaytestService(BaseService):
         """
         if primary_creator_id is not None:
             msg = f"Your map ({code}) has been **accepted** by <@{verifier_id}> with a difficulty of {difficulty}."
-            delivered = await self._alert_creator(creator_user_id=primary_creator_id, message=msg)
+            delivered = await self._alert_creator(
+                creator_user_id=primary_creator_id,
+                message=msg,
+                title="Map Approved!",
+                metadata={"code": code, "difficulty": difficulty, "verifier_id": verifier_id},
+            )
             if not delivered:
                 thread = await self._fetch_thread(thread_id)
                 await thread.send(msg)
+
         await self.bot.api.edit_map(code, MapPatchRequest(difficulty=difficulty))
         await self._grant_xp_upon_successful_playtest(thread_id)
         await self._post_newsfeed_new_map(code=code)
@@ -320,7 +357,12 @@ class PlaytestService(BaseService):
             msg = (
                 f"Your map ({code}) has been **force accepted** by <@{verifier_id}> with a difficulty of {difficulty}."
             )
-            delivered = await self._alert_creator(creator_user_id=notify_primary_creator_id, message=msg)
+            delivered = await self._alert_creator(
+                creator_user_id=notify_primary_creator_id,
+                message=msg,
+                title="Map Force Accepted",
+                metadata={"code": code, "difficulty": difficulty, "verifier_id": verifier_id},
+            )
             if not delivered:
                 thread = await self._fetch_thread(thread_id)
                 await thread.send(msg)
@@ -350,7 +392,12 @@ class PlaytestService(BaseService):
         """
         if notify_primary_creator_id is not None:
             msg = f"Your map ({code}) has been **denied** by <@{verifier_id}>.\n\nReason: {reason}"
-            delivered = await self._alert_creator(creator_user_id=notify_primary_creator_id, message=msg)
+            delivered = await self._alert_creator(
+                creator_user_id=notify_primary_creator_id,
+                message=msg,
+                title="Map Denied",
+                metadata={"code": code, "reason": reason, "verifier_id": verifier_id},
+            )
             if not delivered:
                 thread = await self._fetch_thread(thread_id)
                 await thread.send(msg)
@@ -393,7 +440,18 @@ class PlaytestService(BaseService):
 
         thread = await self._fetch_thread(thread_id)
         if notify_primary_creator_id is not None:
-            delivered = await self._alert_creator(creator_user_id=notify_primary_creator_id, message=full_msg)
+            delivered = await self._alert_creator(
+                creator_user_id=notify_primary_creator_id,
+                message=full_msg,
+                title="Playtest Reset",
+                metadata={
+                    "code": code,
+                    "reason": reason,
+                    "remove_votes": remove_votes,
+                    "remove_completions": remove_completions,
+                    "verifier_id": verifier_id,
+                },
+            )
             if not delivered:
                 await thread.send(full_msg)
                 await thread.send("@here")
@@ -951,8 +1009,20 @@ class ModOnlySelectMenu(discord.ui.Select["PlaytestComponentsV2View"]):
                     f"The Finalize button has been manually {state} for map "
                     f"({code}) by {itx.user.mention}.\n\n{_disabled_notifications_alert}"
                 )
-                delivered = await itx.client.notifications.notify_dm(
-                    primary_creator_id, Notification.DM_ON_PLAYTEST_ALERTS, _message
+
+                await itx.client.notifications.notify_dm_only(
+                    user_id=primary_creator_id,
+                    event_type=NotificationEventType.PLAYTEST_UPDATE,
+                    title="Finalize Button Toggled",
+                    body=f"The finalize button has been {state} for your map ({code}).",
+                    discord_message=_message,
+                    metadata={"code": code, "state": state, "toggled_by": itx.user.id},
+                )
+
+                delivered = await itx.client.notifications.should_deliver_new(
+                    primary_creator_id,
+                    NotificationEventType.PLAYTEST_UPDATE,
+                    NotificationChannel.DISCORD_DM,
                 )
                 if not delivered:
                     await itx.channel.send(_message)

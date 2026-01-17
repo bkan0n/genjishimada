@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
 from typing import TYPE_CHECKING, Annotated, Any, Iterable, Literal, Optional, Sequence, TypedDict
 
 import discord
@@ -595,6 +596,7 @@ class Tags(commands.Cog):
     @app_commands.guild_only()
     @app_commands.describe(name="The tag to retrieve")
     @app_commands.autocomplete(name=aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def tag(self, ctx: GenjiCtx, *, name: Annotated[str, TagName(lower=True)]) -> None:
         """Fetch a tag by name via the `tag` command or its fallback.
 
@@ -629,6 +631,7 @@ class Tags(commands.Cog):
     @app_commands.guild_only()
     @app_commands.describe(name="The tag to retrieve")
     @app_commands.autocomplete(name=aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def view(self, ctx: GenjiCtx, *, name: Annotated[str, TagName(lower=True)]) -> None:
         """Display a tag by name through the 'tag view' subcommand.
 
@@ -643,6 +646,7 @@ class Tags(commands.Cog):
     @tag.command(aliases=["add"])
     @commands.guild_only()
     @app_commands.describe(name="The tag name", content="The tag content")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def create(
         self,
         ctx: GenjiCtx,
@@ -671,6 +675,7 @@ class Tags(commands.Cog):
     @app_commands.rename(new_name="aliased-name", old_name="original-tag")
     @app_commands.describe(new_name="The name of the alias", old_name="The original tag to alias")
     @app_commands.autocomplete(old_name=non_aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def alias(
         self,
         ctx: GenjiCtx,
@@ -699,6 +704,7 @@ class Tags(commands.Cog):
 
     @tag.command(ignore_extra=False)
     @commands.guild_only()
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def make(self, ctx: GenjiCtx) -> Message | None:  # noqa: PLR0911, PLR0912
         """Interactively create a new tag via text or modal input.
 
@@ -795,6 +801,7 @@ class Tags(commands.Cog):
         content="The new content of the tag, if not given then a modal is opened",
     )
     @app_commands.autocomplete(name=owned_non_aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def edit(
         self,
         ctx: GenjiCtx,
@@ -823,7 +830,7 @@ class Tags(commands.Cog):
                 include_aliases=False,
                 limit=1,
             )
-            if not res.items or not (res.items[0].content):
+            if not res.items or not res.items[0].content:
                 await ctx.send(
                     "Could not find a tag with that name, are you sure it exists or you own it?",
                     ephemeral=True,
@@ -850,6 +857,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @app_commands.describe(name="The tag to remove")
     @app_commands.autocomplete(name=owned_aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def remove(self, ctx: GenjiCtx, *, name: Annotated[str, TagName(lower=True)]) -> None:
         """Remove a tag (and its aliases) by name.
 
@@ -872,6 +880,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @app_commands.describe(tag_id="The internal tag ID to delete")
     @app_commands.rename(tag_id="id")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def remove_id(self, ctx: GenjiCtx, tag_id: int) -> None:
         """Remove a tag (and its aliases) by internal tag ID.
 
@@ -925,6 +934,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @app_commands.describe(name="The tag to retrieve information for")
     @app_commands.autocomplete(name=aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def info(self, ctx: GenjiCtx, *, name: Annotated[str, TagName(lower=True)]) -> Message | None:
         """Retrieve detailed information about a tag.
 
@@ -947,6 +957,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @app_commands.describe(name="The tag to retrieve raw content for")
     @app_commands.autocomplete(name=non_aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def raw(self, ctx: GenjiCtx, *, name: Annotated[str, TagName(lower=True)]) -> Message | None:
         """Display the raw, markdown-escaped content of a tag.
 
@@ -975,6 +986,7 @@ class Tags(commands.Cog):
     @tag.command(name="list")
     @commands.guild_only()
     @app_commands.describe(member="The member to list tags of, if not given then it shows yours")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def _list(self, ctx: GenjiCtx, *, member: discord.User = commands.Author) -> None:
         """List all tags owned by a user.
 
@@ -998,6 +1010,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @app_commands.guild_only()
     @app_commands.describe(member="The member to list tags of, if not given then it shows yours")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def tags(self, ctx: GenjiCtx, *, member: discord.User = commands.Author) -> None:
         """Alias for the 'tag list' command.
 
@@ -1029,6 +1042,7 @@ class Tags(commands.Cog):
 
     @tag.command(name="all", usage="[text: yes|no]")
     @commands.guild_only()
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def _all(self, ctx: GenjiCtx, *, flags: TagAllFlags) -> Message | None:
         """List all server-specific tags for the current guild.
 
@@ -1053,6 +1067,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @has_guild_permissions(manage_messages=True)
     @app_commands.describe(member="The member to remove all tags of")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def purge(self, ctx: GenjiCtx, member: discord.User) -> Message | None:
         """Remove all tags belonging to a given member in the server.
 
@@ -1083,6 +1098,7 @@ class Tags(commands.Cog):
     @tag.command()
     @commands.guild_only()
     @app_commands.describe(query="The tag name to search for")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def search(self, ctx: GenjiCtx, *, query: Annotated[str, commands.clean_content]) -> Message | None:
         """Search for tags in the current server using fuzzy matching.
 
@@ -1107,6 +1123,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @app_commands.describe(tag="The tag to claim")
     @app_commands.autocomplete(tag=aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def claim(self, ctx: GenjiCtx, *, tag: Annotated[str, TagName]) -> Message | None:
         """Claim ownership of an unclaimed tag.
 
@@ -1130,6 +1147,7 @@ class Tags(commands.Cog):
     @commands.guild_only()
     @app_commands.describe(member="The member to transfer the tag to")
     @app_commands.autocomplete(tag=aliased_tag_autocomplete)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def transfer(self, ctx: GenjiCtx, member: discord.Member, *, tag: Annotated[str, TagName]) -> Message | None:
         """Transfer a tag to another member.
 
@@ -1156,6 +1174,7 @@ class Tags(commands.Cog):
             await ctx.send(f"Successfully transferred tag ownership to {member}.")
 
     @tag.command(hidden=True, with_app_command=False)
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def config(self, ctx: GenjiCtx) -> None:
         """Reserved command placeholder for future configuration support.
 
@@ -1166,6 +1185,7 @@ class Tags(commands.Cog):
         """
 
     @tag.command()
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def random(self, ctx: GenjiCtx) -> Message | None:
         """Display a random tag from the current server.
 

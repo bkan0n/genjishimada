@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from discord import Attachment, app_commands
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 
 class MapSubmissionCog(BaseCog):
     @app_commands.command(name="submit-map")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def submit_map(  # noqa: PLR0913
         self,
         itx: GenjiItx,
@@ -85,6 +87,7 @@ class MapSubmissionCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="submit-guide")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def submit_guide(
         self,
         itx: GenjiItx,

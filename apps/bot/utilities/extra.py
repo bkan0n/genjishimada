@@ -14,14 +14,14 @@ if TYPE_CHECKING:
 def time_convert(string: str) -> float:
     """Convert HH:MM:SS.ss string into seconds (float)."""
     negative = -1 if string[0] == "-" else 1
-    time = string.split(":")
-    match len(time):
+    time_ = string.split(":")
+    match len(time_):
         case 1:
-            res = float(time[0])
+            res = float(time_[0])
         case 2:
-            res = float((int(time[0]) * 60) + (negative * float(time[1])))
+            res = float((int(time_[0]) * 60) + (negative * float(time_[1])))
         case 3:
-            res = float((int(time[0]) * 3600) + (negative * (int(time[1]) * 60)) + (negative * float(time[2])))
+            res = float((int(time_[0]) * 3600) + (negative * (int(time_[1]) * 60)) + (negative * float(time_[2])))
         case _:
             raise ValueError("Failed to match any cases.")
     return round(res, 2)

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import os
 import typing
 from logging import getLogger
 
 from discord import ButtonStyle, TextStyle, app_commands, ui
+from genjishimada_sdk.notifications import (
+    NotificationChannel,
+    NotificationEventType,
+    NotificationPreferencesResponse,
+)
 from genjishimada_sdk.users import (
-    NOTIFICATION_TYPES,
-    Notification,
     OverwatchUsernameItem,
     OverwatchUsernamesResponse,
     OverwatchUsernamesUpdateRequest,
@@ -23,41 +27,101 @@ log = getLogger(__name__)
 
 def bool_string(value: bool) -> str:
     """Return ON or OFF depending on the boolean value given."""
-    if value:
-        return "ON"
-    else:
-        return "OFF"
+    return "ON" if value else "OFF"
 
 
 ENABLED_EMOJI = "🔔"
 DISABLED_EMOJI = "🔕"
 
 
+# Mapping from UI labels to (event_type, channel) pairs
+# This defines what each toggle in the settings UI controls
+NOTIFICATION_SETTINGS = {
+    # DM notifications
+    "dm_on_verification": (NotificationEventType.VERIFICATION_APPROVED, NotificationChannel.DISCORD_DM),
+    "dm_on_skill_role_update": (NotificationEventType.SKILL_ROLE_UPDATE, NotificationChannel.DISCORD_DM),
+    "dm_on_lootbox_gain": (NotificationEventType.LOOTBOX_EARNED, NotificationChannel.DISCORD_DM),
+    "dm_on_records_removal": (NotificationEventType.RECORD_REMOVED, NotificationChannel.DISCORD_DM),
+    "dm_on_playtest_alerts": (NotificationEventType.PLAYTEST_UPDATE, NotificationChannel.DISCORD_DM),
+    # Channel ping notifications
+    "ping_on_xp_gain": (NotificationEventType.XP_GAIN, NotificationChannel.DISCORD_PING),
+    "ping_on_mastery": (NotificationEventType.MASTERY_EARNED, NotificationChannel.DISCORD_PING),
+    "ping_on_community_rank_update": (NotificationEventType.RANK_UP, NotificationChannel.DISCORD_PING),
+}
+
+
 class SettingsView(BaseView):
-    def __init__(self, flags: Notification, current_usernames: OverwatchUsernamesResponse) -> None:
+    def __init__(
+        self,
+        preferences: list[NotificationPreferencesResponse],
+        current_usernames: OverwatchUsernamesResponse,
+    ) -> None:
         """Initialize SettingsView.
 
         Args:
-            flags (Notification): The flags currently assigned to the user.
-            current_usernames (OverwatchUsernamesResponse): The user names a user currently has assigned.
+            preferences: List of notification preferences for the user.
+            current_usernames: The usernames a user currently has assigned.
         """
-        self.flags = flags
+        self.preferences = preferences
         self.current_usernames = current_usernames
+        # Build a lookup dict for quick access: (event_type, channel) -> enabled
+        self._pref_lookup: dict[tuple[str, str], bool] = {}
+        for pref in preferences:
+            for channel, enabled in pref.channels.items():
+                self._pref_lookup[(pref.event_type, channel)] = enabled
         super().__init__(timeout=360)
         self.rebuild_components()
+
+    def _is_enabled(self, setting_key: str) -> bool:
+        """Check if a setting is enabled based on preferences."""
+        if setting_key not in NOTIFICATION_SETTINGS:
+            return False
+        event_type, channel = NOTIFICATION_SETTINGS[setting_key]
+        # Default to True if preference not found (matches DEFAULT_CHANNELS behavior)
+        return self._pref_lookup.get((event_type.value, channel.value), True)
+
+    def update_pref_lookup(self, setting_key: str, enabled: bool) -> None:
+        """Update the local preference lookup after a toggle."""
+        if setting_key in NOTIFICATION_SETTINGS:
+            event_type, channel = NOTIFICATION_SETTINGS[setting_key]
+            self._pref_lookup[(event_type.value, channel.value)] = enabled
 
     def rebuild_components(self) -> None:
         """Rebuild the necessary components for the view."""
         self.clear_items()
 
-        self._dm_on_verfication_button = NotificationButton("DM_ON_VERIFICATION", self.flags)
-        self._dm_on_skill_role_update_button = NotificationButton("DM_ON_SKILL_ROLE_UPDATE", self.flags)
-        self._dm_on_lootbox_gain_button = NotificationButton("DM_ON_LOOTBOX_GAIN", self.flags)
-        self._dm_on_records_removal_button = NotificationButton("DM_ON_RECORDS_REMOVAL", self.flags)
-        self._dm_on_playtest_alerts_button = NotificationButton("DM_ON_PLAYTEST_ALERTS", self.flags)
-        self._ping_on_xp_gain_button = NotificationButton("PING_ON_XP_GAIN", self.flags)
-        self._ping_on_mastery_button = NotificationButton("PING_ON_MASTERY", self.flags)
-        self._ping_on_community_rank_update_button = NotificationButton("PING_ON_COMMUNITY_RANK_UPDATE", self.flags)
+        self._dm_on_verification_button = NotificationButton(
+            "dm_on_verification",
+            self._is_enabled("dm_on_verification"),
+        )
+        self._dm_on_skill_role_update_button = NotificationButton(
+            "dm_on_skill_role_update",
+            self._is_enabled("dm_on_skill_role_update"),
+        )
+        self._dm_on_lootbox_gain_button = NotificationButton(
+            "dm_on_lootbox_gain",
+            self._is_enabled("dm_on_lootbox_gain"),
+        )
+        self._dm_on_records_removal_button = NotificationButton(
+            "dm_on_records_removal",
+            self._is_enabled("dm_on_records_removal"),
+        )
+        self._dm_on_playtest_alerts_button = NotificationButton(
+            "dm_on_playtest_alerts",
+            self._is_enabled("dm_on_playtest_alerts"),
+        )
+        self._ping_on_xp_gain_button = NotificationButton(
+            "ping_on_xp_gain",
+            self._is_enabled("ping_on_xp_gain"),
+        )
+        self._ping_on_mastery_button = NotificationButton(
+            "ping_on_mastery",
+            self._is_enabled("ping_on_mastery"),
+        )
+        self._ping_on_community_rank_update_button = NotificationButton(
+            "ping_on_community_rank_update",
+            self._is_enabled("ping_on_community_rank_update"),
+        )
 
         container = ui.Container(
             ui.TextDisplay("# Settings"),
@@ -65,7 +129,7 @@ class SettingsView(BaseView):
             ui.TextDisplay("### Direct Messages"),
             ui.Section(
                 ui.TextDisplay("Direct message on completion/records verification."),
-                accessory=self._dm_on_verfication_button,
+                accessory=self._dm_on_verification_button,
             ),
             ui.Section(
                 ui.TextDisplay("Direct message on skill role updates."),
@@ -114,29 +178,43 @@ class SettingsView(BaseView):
 class NotificationButton(ui.Button["SettingsView"]):
     view: SettingsView
 
-    def __init__(self, notification_type: NOTIFICATION_TYPES, flags: Notification) -> None:
+    def __init__(self, setting_key: str, enabled: bool) -> None:
         """Initialize NotificationButton.
 
         Args:
-            notification_type (NOTIFICATION_TYPES): The type of notification.
-            flags (Notification): The flags currently assigned to the user.
+            setting_key: Key identifying which setting this button controls.
+            enabled: Whether the notification is currently enabled.
         """
         super().__init__()
-        self.notification_type: NOTIFICATION_TYPES = notification_type
-        self.value = getattr(Notification, notification_type, Notification.NONE)
-        enabled = self.value in flags
+        self.setting_key = setting_key
+        self.enabled = enabled
         self._edit_button(enabled)
 
     async def callback(self, itx: GenjiItx) -> None:
         """Notification button callback."""
-        self.view.flags ^= self.value
-        enabled = self.value in self.view.flags
-        self._edit_button(enabled)
+        # Toggle the state
+        self.enabled = not self.enabled
+        self._edit_button(self.enabled)
+
+        # Update local lookup so rebuild works correctly
+        self.view.update_pref_lookup(self.setting_key, self.enabled)
+
+        # Update the view
         await itx.response.edit_message(view=self.view)
-        await itx.client.api.update_notification(itx.user.id, self.notification_type, enabled)
+
+        # Get the event_type and channel for this setting
+        if self.setting_key in NOTIFICATION_SETTINGS:
+            event_type, channel = NOTIFICATION_SETTINGS[self.setting_key]
+            # Call the new preferences API
+            await itx.client.api.update_notification_preference(
+                itx.user.id,
+                event_type.value,
+                channel.value,
+                self.enabled,
+            )
 
     def _edit_button(self, enabled: bool) -> None:
-        """Edit button."""
+        """Edit button appearance based on enabled state."""
         self.label = bool_string(enabled)
         self.emoji = ENABLED_EMOJI if enabled else DISABLED_EMOJI
         self.style = ButtonStyle.green if enabled else ButtonStyle.red
@@ -149,7 +227,7 @@ class OpenOverwatchUsernamesModalButton(ui.Button["SettingsView"]):
         """Initialize OpenOverwatchUsernamesModalButton.
 
         Args:
-            current_usernames (OverwatchUsernamesResponse): The user names a user currently has assigned.
+            current_usernames: The usernames a user currently has assigned.
         """
         self.current_usernames = current_usernames
         super().__init__(style=ButtonStyle.green, label="Edit")
@@ -180,7 +258,7 @@ class OverwatchUsernameModal(ui.Modal):
         """Initialize OverwatchUsernameModal.
 
         Args:
-            current_usernames (OverwatchUsernamesResponse): The user names a user currently has assigned.
+            current_usernames: The usernames a user currently has assigned.
         """
         self.completed = False
         self.current_usernames = current_usernames
@@ -193,7 +271,7 @@ class OverwatchUsernameModal(ui.Modal):
             text="Primary Overwatch Username",
             component=ui.TextInput(
                 style=TextStyle.short,
-                placeholder=("Enter your primary Overwatch username. The number after your username is not required."),
+                placeholder="Enter your primary Overwatch username. The number after your username is not required.",
                 default=self.current_usernames.primary,
                 max_length=25,
                 required=True,
@@ -204,7 +282,7 @@ class OverwatchUsernameModal(ui.Modal):
             text="Alt Overwatch Username 1",
             component=ui.TextInput(
                 style=TextStyle.short,
-                placeholder=("Enter an alternate Overwatch username. The number after your username is not required."),
+                placeholder="Enter an alternate Overwatch username. The number after your username is not required.",
                 default=self.current_usernames.secondary,
                 max_length=25,
                 required=False,
@@ -215,7 +293,7 @@ class OverwatchUsernameModal(ui.Modal):
             text="Alt Overwatch Username 2",
             component=ui.TextInput(
                 style=TextStyle.short,
-                placeholder=("Enter an alternate Overwatch username. The number after your username is not required."),
+                placeholder="Enter an alternate Overwatch username. The number after your username is not required.",
                 default=self.current_usernames.tertiary,
                 max_length=25,
                 required=False,
@@ -233,15 +311,18 @@ class OverwatchUsernameModal(ui.Modal):
 
 class SettingsCog(BaseCog):
     @app_commands.command()
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def settings(self, itx: GenjiItx) -> None:
         """Change various settings like notifications and your display name."""
         await itx.response.defer(ephemeral=True)
-        flags = await self.bot.api.get_notification_flags(itx.user.id)
+        # Fetch preferences from the new API
+        preferences = await self.bot.api.get_notification_preferences(itx.user.id)
         current_usernames = await self.bot.api.get_overwatch_usernames(itx.user.id)
-        view = SettingsView(flags, current_usernames)
+        view = SettingsView(preferences, current_usernames)
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.command(name="rank-card")
     async def rank_card(self, itx: GenjiItx) -> None:
         """View the rank card of a user."""

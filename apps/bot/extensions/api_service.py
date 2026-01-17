@@ -29,6 +29,7 @@ import msgspec
 from genjishimada_sdk.change_requests import ChangeRequestResponse, StaleChangeRequestResponse
 from genjishimada_sdk.completions import (
     CompletionCreateRequest,
+    CompletionModerateRequest,
     CompletionPatchRequest,
     CompletionSubmissionJobResponse,
     CompletionVerificationUpdateRequest,
@@ -43,11 +44,17 @@ from genjishimada_sdk.internal import ClaimCreateRequest, ClaimResponse, JobStat
 from genjishimada_sdk.logs import LogCreateRequest
 from genjishimada_sdk.lootbox import LootboxKeyType
 from genjishimada_sdk.maps import (
+    ArchivalStatusPatchRequest,
     GuideResponse,
     GuideURL,
     LinkMapsCreateRequest,
     MapCategory,
     MapCreationJobResponse,
+    MapEditCreateRequest,
+    MapEditResolveRequest,
+    MapEditResponse,
+    MapEditSetMessageIdRequest,
+    MapEditSubmissionResponse,
     MapMasteryCreateRequest,
     MapMasteryCreateResponse,
     MapMasteryResponse,
@@ -56,6 +63,7 @@ from genjishimada_sdk.maps import (
     Mechanics,
     OverwatchCode,
     OverwatchMap,
+    PendingMapEditResponse,
     PlaytestApproveRequest,
     PlaytestForceAcceptRequest,
     PlaytestForceDenyRequest,
@@ -72,6 +80,15 @@ from genjishimada_sdk.maps import (
     UnlinkMapsCreateRequest,
 )
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedEventType, PublishNewsfeedJobResponse
+from genjishimada_sdk.notifications import (
+    NOTIFICATION_CHANNEL,
+    NOTIFICATION_EVENT_TYPE,
+    NotificationCreateRequest,
+    NotificationDeliveryResultRequest,
+    NotificationEventResponse,
+    NotificationPreferencesResponse,
+    ShouldDeliverResponse,
+)
 from genjishimada_sdk.tags import (
     TagsAutocompleteRequest,
     TagsAutocompleteResponse,
@@ -119,7 +136,7 @@ _TriFilter = Literal["All", "With", "Without"]
 CompletionFilter = _TriFilter
 MedalFilter = _TriFilter
 PlaytestFilter = Literal["All", "Only", "None"]
-OfficialFilter = Literal["All", "Official Only", "Unofficial (CN) Only"]
+OfficialFilter = Literal["All", "Global Only", "Chinese Only"]
 
 
 @lru_cache(maxsize=None)
@@ -455,8 +472,8 @@ class APIService:
             "page_number": page_number,
             "return_all": return_all,
         }
-        log.debug(f"Playtest filtyer is now {playtest_filter}")
-        log.debug(f"Playtest filtyer is now (in the dict) {params['playtest_filter']}")
+        log.debug(f"Playtest filter is now {playtest_filter}")
+        log.debug(f"Playtest filter is now (in the dict) {params['playtest_filter']}")
 
         return self._request(r, response_model=list[MapModel], params=params)
 
@@ -1093,6 +1110,55 @@ class APIService:
         r = Route("PUT", "/completions/{record_id}/verification", record_id=record_id)
         return self._request(r, data=data, response_model=JobStatusResponse)
 
+    def get_records_filtered(  # noqa: PLR0913
+        self,
+        code: OverwatchCode | None = None,
+        user_id: int | None = None,
+        verification_status: Literal["Verified", "Unverified", "All"] = "All",
+        latest_only: bool = True,
+        page_size: int = 10,
+        page_number: int = 1,
+    ) -> Response[list[CompletionLeaderboardFormattable]]:
+        """Fetch records with filters for moderation.
+
+        Args:
+            code: Optional map code to filter by.
+            user_id: Optional user ID to filter by.
+            verification_status: Filter by verification status.
+            latest_only: Whether to only show latest record per user per map.
+            page_size: Number of records per page.
+            page_number: Page number (1-indexed).
+
+        Returns:
+            Response[list[CompletionLeaderboardFormattable]]: Filtered records.
+        """
+        r = Route("GET", "/completions/moderation/records")
+        return self._request(
+            r,
+            response_model=list[CompletionLeaderboardFormattable],
+            params={
+                "code": code,
+                "user_id": user_id,
+                "verification_status": verification_status,
+                "latest_only": latest_only,
+                "page_size": page_size,
+                "page_number": page_number,
+            },
+        )
+
+    def moderate_completion(self, record_id: int, data: CompletionModerateRequest) -> Response[None]:
+        """Moderate a completion record.
+
+        Args:
+            record_id: ID of the completion to moderate.
+            data: Moderation request data.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("PUT", "/completions/{record_id}/moderate", record_id=record_id)
+        return self._request(r, data=data, response_model=None)
+
     def get_completions(self, code: OverwatchCode) -> Response[list[CompletionLeaderboardFormattable]]:
         """Fetch the completions leaderboard for a specific map code.
 
@@ -1518,7 +1584,7 @@ class APIService:
         Args:
             command_name (str): The fully qualified command name used in the interaction.
             user_id (int): The user id of the interaction.
-            created_at (datetime): When the interaction occured.
+            created_at (datetime): When the interaction occurred.
             namespace (dict): A dict of the interaction command namespace (arguments used).
         """
         r = Route("POST", "/utilities/log")
@@ -1605,6 +1671,240 @@ class APIService:
     def unlink_map_codes(self, data: UnlinkMapsCreateRequest) -> Response[None]:
         """Unlink two map codes."""
         r = Route("DELETE", "/maps/link-codes")
+        return self._request(r, data=data)
+
+    def create_notification(  # noqa: PLR0913
+        self,
+        user_id: int,
+        event_type: NOTIFICATION_EVENT_TYPE,
+        title: str,
+        body: str,
+        discord_message: str | None = None,
+        metadata: dict | None = None,
+    ) -> Response[NotificationEventResponse]:
+        """Create a notification event via API.
+
+        The API will store the notification and dispatch it to RabbitMQ
+        for Discord delivery if applicable.
+
+        Args:
+            user_id: Target user ID.
+            event_type: Type of notification event.
+            title: Notification title.
+            body: Notification body.
+            discord_message: Optional Discord-specific message override.
+            metadata: Optional metadata dict.
+
+        Returns:
+            Response[NotificationEventResponse]: The created notification.
+        """
+        r = Route("POST", "/notifications/events")
+        data = NotificationCreateRequest(
+            user_id=user_id,
+            event_type=event_type,
+            title=title,
+            body=body,
+            discord_message=discord_message,
+            metadata=metadata,
+        )
+        return self._request(r, response_model=NotificationEventResponse, data=data)
+
+    def should_deliver_notification(
+        self,
+        user_id: int,
+        event_type: str,
+        channel: str,
+    ) -> Response[bool]:
+        """Check if a notification should be delivered to a channel.
+
+        Args:
+            user_id: Target user ID.
+            event_type: Type of notification event.
+            channel: Delivery channel to check.
+
+        Returns:
+            Response[bool]: Whether the notification should be delivered.
+        """
+        r = Route("GET", "/notifications/users/{user_id}/should-deliver", user_id=user_id)
+        params = {"event_type": event_type, "channel": channel}
+
+        async def _inner() -> bool:
+            resp = await self._request(r, response_model=ShouldDeliverResponse, params=params)
+            return resp.should_deliver
+
+        return _inner()
+
+    def record_notification_delivery_result(
+        self,
+        event_id: int,
+        channel: NOTIFICATION_CHANNEL,
+        status: Literal["delivered", "failed", "skipped"],
+        error_message: str | None = None,
+    ) -> Response[None]:
+        """Record the result of a notification delivery attempt.
+
+        Called by the bot after attempting to deliver a notification
+        via Discord DM or channel ping.
+
+        Args:
+            event_id: ID of the notification event.
+            channel: Delivery channel that was attempted.
+            status: Result status ('delivered', 'failed', 'skipped').
+            error_message: Optional error message if failed.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("POST", "/notifications/events/{event_id}/delivery-result", event_id=event_id)
+        data = NotificationDeliveryResultRequest(
+            channel=channel,
+            status=status,
+            error_message=error_message,
+        )
+        return self._request(r, data=data)
+
+    def get_notification_preferences(self, user_id: int) -> Response[list]:
+        """Get all notification preferences for a user.
+
+        Args:
+            user_id: Target user ID.
+
+        Returns:
+            Response[list]: List of NotificationPreferencesResponse.
+        """
+        r = Route("GET", "/notifications/users/{user_id}/preferences", user_id=user_id)
+        return self._request(r, response_model=list[NotificationPreferencesResponse])
+
+    def update_notification_preference(
+        self,
+        user_id: int,
+        event_type: str,
+        channel: str,
+        enabled: bool,
+    ) -> Response[None]:
+        """Update a single notification preference.
+
+        Args:
+            user_id: Target user ID.
+            event_type: Event type to update.
+            channel: Channel to update.
+            enabled: Whether the preference should be enabled.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route(
+            "PUT",
+            "/notifications/users/{user_id}/preferences/{event_type}/{channel}",
+            user_id=user_id,
+            event_type=event_type,
+            channel=channel,
+        )
+        return self._request(r, params={"enabled": enabled})
+
+    # =========================================================================
+    # Map Edit Request Methods
+    # =========================================================================
+
+    def create_map_edit_request(self, data: MapEditCreateRequest) -> Response[MapEditResponse]:
+        """Create a new map edit request.
+
+        Args:
+            data: The edit request creation payload.
+
+        Returns:
+            Response[MapEditResponse]: The created edit request.
+        """
+        r = Route("POST", "/maps/map-edits")
+        return self._request(r, response_model=MapEditResponse, data=data)
+
+    def get_map_edit_request(self, edit_id: int) -> Response[MapEditResponse]:
+        """Get a specific map edit request by ID.
+
+        Args:
+            edit_id: The edit request ID.
+
+        Returns:
+            Response[MapEditResponse]: The edit request.
+        """
+        r = Route("GET", "/maps/map-edits/{edit_id}", edit_id=edit_id)
+        return self._request(r, response_model=MapEditResponse)
+
+    def get_map_edit_submission(self, edit_id: int) -> Response[MapEditSubmissionResponse]:
+        """Get enriched edit request data for verification queue display.
+
+        Args:
+            edit_id: The edit request ID.
+
+        Returns:
+            Response[MapEditSubmissionResponse]: Enriched submission data.
+        """
+        r = Route("GET", "/maps/map-edits/{edit_id}/submission", edit_id=edit_id)
+        return self._request(r, response_model=MapEditSubmissionResponse)
+
+    def get_pending_map_edit_requests(self) -> Response[list[PendingMapEditResponse]]:
+        """Get all pending map edit requests.
+
+        Returns:
+            Response[list[PendingMapEditResponse]]: List of pending edit requests.
+        """
+        r = Route("GET", "/maps/map-edits/pending")
+        return self._request(r, response_model=list[PendingMapEditResponse])
+
+    def set_map_edit_message_id(self, edit_id: int, data: MapEditSetMessageIdRequest) -> Response[None]:
+        """Associate a Discord message ID with an edit request.
+
+        Args:
+            edit_id: The edit request ID.
+            data: The message ID request payload.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("PATCH", "/maps/map-edits/{edit_id}/message", edit_id=edit_id)
+        return self._request(r, data=data)
+
+    def resolve_map_edit_request(self, edit_id: int, data: MapEditResolveRequest) -> Response[None]:
+        """Accept or reject a map edit request.
+
+        Args:
+            edit_id: The edit request ID.
+            data: The resolution request payload.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("PUT", "/maps/map-edits/{edit_id}/resolve", edit_id=edit_id)
+        return self._request(r, data=data)
+
+    def archive_map(self, code: OverwatchCode) -> Response[None]:
+        """Archive a map using the dedicated archive endpoint.
+
+        This ensures proper newsfeed generation for archive events.
+
+        Args:
+            code: The map code to archive.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("PATCH", "/maps/archive")
+        data = ArchivalStatusPatchRequest(status="Archive", codes=[code])
+        return self._request(r, data=data)
+
+    def unarchive_map(self, code: OverwatchCode) -> Response[None]:
+        """Unarchive a map using the dedicated archive endpoint.
+
+        This ensures proper newsfeed generation for unarchive events.
+
+        Args:
+            code: The map code to unarchive.
+
+        Returns:
+            Response[None]: Empty response on success.
+        """
+        r = Route("PATCH", "/maps/archive")
+        data = ArchivalStatusPatchRequest(status="Unarchived", codes=[code])
         return self._request(r, data=data)
 
 

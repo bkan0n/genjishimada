@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from logging import getLogger
 from typing import TYPE_CHECKING, Literal
 
@@ -24,6 +25,7 @@ class HousekeepingCog(BaseCog):
         self.repair_context_menu = app_commands.ContextMenu(
             name="Repair View",
             callback=self.repair,
+            guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))],
         )
         self.bot.tree.add_command(self.repair_context_menu)
 

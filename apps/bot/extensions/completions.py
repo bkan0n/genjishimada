@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import re
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Sequence, cast, get_args
@@ -41,7 +42,8 @@ from genjishimada_sdk.completions import (
 from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, DifficultyTop
 from genjishimada_sdk.maps import MapMasteryCreateRequest, OverwatchCode
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedRecord, NewsfeedRole
-from genjishimada_sdk.users import Notification, RankDetailResponse
+from genjishimada_sdk.notifications import NotificationEventType
+from genjishimada_sdk.users import RankDetailResponse
 
 from extensions._queue_registry import queue_consumer
 from utilities import transformers
@@ -582,9 +584,7 @@ class CompletionsService(BaseService):
         member = guild.get_member(completion_data.user_id)
         verifier = await self.bot.api.get_user(event.verified_by)
         verifier_name = verifier.coalesced_name if verifier and verifier.coalesced_name else "Unknown User"
-        should_notify = await self.bot.notifications.should_notify(
-            completion_data.user_id, Notification.DM_ON_VERIFICATION
-        )
+
         map_data = await self.bot.api.get_map(code=_data.code)
         log.info(map_data)
         log.info(map_data.official)
@@ -593,16 +593,30 @@ class CompletionsService(BaseService):
         if event.verified:
             message = await self.submission_channel.send(view=view)
             await self.bot.api.edit_completion(event.completion_id, data=CompletionPatchRequest(message_id=message.id))
-            if should_notify and member:
-                completion_data = await self.bot.api.get_completion_submission(event.completion_id)
-                _view = CompletionView(completion_data, is_dm=True, verifier_name=verifier_name)
-                with contextlib.suppress(discord.Forbidden):
-                    await member.send(view=_view)
 
-            # Completion
+            completion_data = await self.bot.api.get_completion_submission(event.completion_id)
+            await self.bot.notifications.notify_dm_only(
+                user_id=completion_data.user_id,
+                event_type=NotificationEventType.VERIFICATION_APPROVED,
+                title="Completion Verified!",
+                body=f"Your completion on {completion_data.code} ({completion_data.map_name}) was verified!",
+                discord_message=(
+                    f"Your completion on **{completion_data.code}** has been verified by {verifier_name}!\n"
+                    f"Time: {completion_data.time}"
+                ),
+                metadata={
+                    "code": completion_data.code,
+                    "map_name": completion_data.map_name,
+                    "time": str(completion_data.time),
+                    "verifier": verifier_name,
+                    "completion_id": event.completion_id,
+                },
+            )
+
+            # Completion XP
             if completion_data.completion and map_data.official:
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Completion")
-            # World Record
+            # World Record XP
             if not completion_data.completion and completion_data.hypothetical_rank == 1 and map_data.official:
                 previously_granted = await self.bot.api.check_for_previous_world_record_xp(
                     completion_data.code, completion_data.user_id
@@ -613,7 +627,7 @@ class CompletionsService(BaseService):
                         event.completion_id, data=CompletionPatchRequest(wr_xp_check=True)
                     )
                 await self._emit_newsfeed_for_record(completion_data)
-            # Record
+            # Record XP
             if (
                 not completion_data.completion
                 and completion_data.hypothetical_rank
@@ -626,11 +640,26 @@ class CompletionsService(BaseService):
             if map_data.official:
                 await self._process_map_mastery(completion_data.user_id)
 
-        elif should_notify and member:
+        else:
             completion_data = await self.bot.api.get_completion_submission(event.completion_id)
-            _view = CompletionView(completion_data, is_dm=True, reason=event.reason, verifier_name=verifier_name)
-            with contextlib.suppress(discord.Forbidden):
-                await member.send(view=_view)
+            await self.bot.notifications.notify_dm_only(
+                user_id=completion_data.user_id,
+                event_type=NotificationEventType.VERIFICATION_REJECTED,
+                title="Completion Rejected",
+                body=f"Your completion on {completion_data.code} was rejected. Reason: {event.reason}",
+                discord_message=(
+                    f"Your completion on **{completion_data.code}** was rejected by {verifier_name}.\n"
+                    f"**Reason:** {event.reason}"
+                ),
+                metadata={
+                    "code": completion_data.code,
+                    "map_name": completion_data.map_name,
+                    "reason": event.reason,
+                    "verifier": verifier_name,
+                    "completion_id": event.completion_id,
+                },
+            )
+
         if completion_data.verification_id:
             with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
                 await (self.verification_channel.get_partial_message(completion_data.verification_id)).delete()
@@ -684,18 +713,26 @@ class CompletionsService(BaseService):
             nickname = user_data.coalesced_name or "Unknown User"
             map_name = updated_mastery.map_name
             medal = updated_mastery.medal
-            m.icon_url
             embed = Embed(
                 description=f"{nickname} received the **{map_name} {medal}** Map Mastery badge!",
             )
             embed.set_thumbnail(url=f"https://genji.pk/{m.icon_url}")
             xp_channel = self.guild.get_channel(self.bot.config.channels.updates.xp)
             assert isinstance(xp_channel, TextChannel)
-            await self.bot.notifications.notify_channel_default_to_no_ping(
-                xp_channel,
-                user_id,
-                Notification.PING_ON_MASTERY,
-                "",
+
+            await self.bot.notifications.notify_with_channel_ping(
+                channel=xp_channel,
+                user_id=user_id,
+                event_type=NotificationEventType.MASTERY_EARNED,
+                title="Map Mastery Earned!",
+                body=f"You earned the {map_name} {medal} Map Mastery badge!",
+                metadata={
+                    "map_name": map_name,
+                    "medal": medal,
+                    "icon_url": m.icon_url,
+                },
+                ping_message="",
+                fallback_message="",
                 embed=embed,
             )
 
@@ -783,10 +820,16 @@ class CompletionsService(BaseService):
             response += ", ".join([f"**{x.name}**" for x in _actual_removed_roles]) + " has been removed.\n"
 
         if _actual_added_roles or _actual_removed_roles:
-            await self.bot.notifications.notify_dm(
-                member.id,
-                Notification.DM_ON_SKILL_ROLE_UPDATE,
-                response,
+            await self.bot.notifications.notify_dm_only(
+                user_id=member.id,
+                event_type=NotificationEventType.SKILL_ROLE_UPDATE,
+                title="Skill Roles Updated",
+                body="Your skill roles have been updated based on your completions.",
+                discord_message=response,
+                metadata={
+                    "added": [r.name for r in _actual_added_roles],
+                    "removed": [r.name for r in _actual_removed_roles],
+                },
             )
 
     async def auto_skill_role(self, member: Member) -> None:
@@ -1030,6 +1073,7 @@ class CompletionsCog(BaseCog):
                 name="Mark Suspicious",
                 callback=self.mark_submission_as_suspicious_context_command,
                 type=AppCommandType.message,
+                guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))],
             )
         )
         self.bot.add_dynamic_items(CompletionLikeButton)
@@ -1077,6 +1121,7 @@ class CompletionsCog(BaseCog):
         await itx.response.send_modal(modal)
 
     @app_commands.command(name="view-flagged-submissions")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def view_suspicious_flags(
         self,
         itx: GenjiItx,
@@ -1108,6 +1153,7 @@ class CompletionsCog(BaseCog):
         await _view_user_suspicious_flags(itx, name, user)
 
     @app_commands.command(name="user-completions")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def get_completions_for_user(
         self,
         itx: GenjiItx,
@@ -1142,6 +1188,7 @@ class CompletionsCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="world-records")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def get_world_records_for_user(
         self,
         itx: GenjiItx,
@@ -1173,6 +1220,7 @@ class CompletionsCog(BaseCog):
         await itx.edit_original_response(view=view)
 
     @app_commands.command(name="completions")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def get_completion_leaderboard(
         self,
         itx: GenjiItx,
@@ -1198,6 +1246,7 @@ class CompletionsCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="submit-completion")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.choices(
         quality=[
             app_commands.Choice(

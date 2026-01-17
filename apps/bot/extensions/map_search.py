@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from logging import getLogger
 from typing import TYPE_CHECKING, Literal, Sequence, cast, get_args
 
@@ -116,9 +117,9 @@ CN_TRANSLATIONS_TEMP = {
 }
 CN_TRANSLATIONS_FIELDS_TEMP = {
     "Code": "代码",
-    "Official Code": "国际服代码",
-    "Official": "官方的",
-    "Unofficial (CN) Code": "国服代码",
+    "Global Code": "国际服代码",
+    "Global": "官方的",
+    "Chinese Code": "国服代码",
     "Title": "标题",
     "Creator": "作者",
     "Map": "地图名",
@@ -147,8 +148,8 @@ CN_FILTER_TRANSLATIONS_TEMP: dict[_CNTriFilter, CompletionFilter] = {
 
 CN_FILTER_2_TRANSLATIONS_TEMP: dict[OfficialFilter, CNOfficialFilter] = {
     "All": "全部",
-    "Official Only": "仅限官方",
-    "Unofficial (CN) Only": "非官方（CN）",  # noqa: RUF001
+    "Global Only": "仅限官方",
+    "Chinese Only": "非官方（CN）",  # noqa: RUF001
 }
 
 CN_FILTER_3_TRANSLATION_TEMP: dict[CNPlaytestFilter, PlaytestFilter] = {
@@ -298,6 +299,7 @@ class MapGuideView(PaginatorView[FormattableGuide]):
 
 class MapSearchCog(BaseCog):
     @app_commands.command(name="map-search")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.choices(
         difficulty=[app_commands.Choice(name=d, value=d) for d in get_args(DifficultyTop)],
         minimum_quality=[
@@ -315,7 +317,7 @@ class MapSearchCog(BaseCog):
         restriction: app_commands.Transform[Restrictions, transformers.RestrictionsTransformer] | None,
         minimum_quality: app_commands.Choice[int] | None,
         category: MapCategory | None,
-        official_filter: OfficialFilter = "Official Only",
+        official_filter: OfficialFilter = "Global Only",
         completion_filter: CompletionFilter = "All",
         medal_filter: MedalFilter = "All",
         playtest_filter: PlaytestFilter = "All",
@@ -328,7 +330,7 @@ class MapSearchCog(BaseCog):
 
         Args:
             itx: The command interaction context.
-            map_name: Optional map name filter..
+            map_name: Optional map name filter.
             difficulty: Optional exact difficulty choice.
             code: Optional map code filter.
             creator: Optional creator user ID.
@@ -346,7 +348,7 @@ class MapSearchCog(BaseCog):
         mechanics: list[Mechanics] | None = [mechanic] if mechanic else None
         if official_filter == "All":
             official_val = None
-        elif official_filter == "Official Only":
+        elif official_filter == "Global Only":
             official_val = True
         else:
             official_val = False
@@ -380,6 +382,7 @@ class MapSearchCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="地图搜索")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.choices(
         difficulty=[app_commands.Choice(name=d, value=d) for d in get_args(DifficultyTop)],
         minimum_quality=[
@@ -454,7 +457,7 @@ class MapSearchCog(BaseCog):
         mechanics: list[Mechanics] | None = [mechanic] if mechanic else None
         if official_filter == CN_FILTER_2_TRANSLATIONS_TEMP["All"]:
             official_val = None
-        elif official_filter == CN_FILTER_2_TRANSLATIONS_TEMP["Official Only"]:
+        elif official_filter == CN_FILTER_2_TRANSLATIONS_TEMP["Global Only"]:
             official_val = True
         else:
             official_val = False
@@ -488,6 +491,7 @@ class MapSearchCog(BaseCog):
         view.original_interaction = itx
 
     @app_commands.command(name="view-guides")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     async def view_guides(
         self,
         itx: GenjiItx,

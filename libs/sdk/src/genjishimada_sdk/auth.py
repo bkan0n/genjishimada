@@ -11,6 +11,7 @@ __all__ = (
     "PasswordResetConfirmRequest",
     "PasswordResetRequest",
     "SessionInfo",
+    "SessionReadResponse",
     "SessionWriteRequest",
 )
 
@@ -89,11 +90,12 @@ class AuthUserResponse(Struct):
     """Response after successful authentication.
 
     Attributes:
-        id: User ID (9-15 digits for email users).
+        id: User ID (9-15 digits for email users, 17-19 for Discord).
         email: User's email address.
         username: Display name.
         email_verified: Whether email is verified.
         coins: Current coin balance.
+        is_mod: Whether user has moderator/admin permissions.
     """
 
     id: int
@@ -101,6 +103,7 @@ class AuthUserResponse(Struct):
     username: str
     email_verified: bool
     coins: int = 0
+    is_mod: bool = False
 
 
 class SessionWriteRequest(Struct):
@@ -129,3 +132,15 @@ class SessionInfo(Struct):
     last_activity: str | None
     ip_address: str | None
     user_agent: str | None
+
+
+class SessionReadResponse(Struct):
+    """Response from reading a session.
+
+    Attributes:
+        payload: Base64-encoded session data (null if not found).
+        is_mod: Whether the authenticated user has moderator permissions.
+    """
+
+    payload: str | None
+    is_mod: bool = False

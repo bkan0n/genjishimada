@@ -248,7 +248,7 @@ class MapSearchSQLBuilder:
             return
         minimum_quality_query = f"""
             SELECT map_id FROM
-                (SELECT map_id, avg(quality) as avg_quality FROM maps.ratings GROUP BY map_id)
+                (SELECT map_id, avg(quality) as avg_quality FROM maps.ratings GROUP BY map_id) as miaq
             WHERE avg_quality >= ${next(self._counter)}
         """
         self._add_cte_definition(
@@ -1819,8 +1819,8 @@ class MapService(BaseService):
             raise CustomHTTPException(
                 detail=(
                     "One or both maps already have a linked map code.\n"
-                    f"Official ({official_code}): {official_map.linked_code}\n"
-                    f"Unofficial CN ({unofficial_code}): {unofficial_map.linked_code}"
+                    f"Global ({official_code}): {official_map.linked_code}\n"
+                    f"Chinese ({unofficial_code}): {unofficial_map.linked_code}"
                 ),
                 status_code=HTTP_400_BAD_REQUEST,
             )
@@ -1872,8 +1872,8 @@ class MapService(BaseService):
             raise CustomHTTPException(
                 detail=(
                     "One or both codes found no matching maps.\n"
-                    f"Official ({official_code}): {'FOUND' if official_map else 'NOT FOUND'}\n"
-                    f"Unofficial CN ({unofficial_code}): {'FOUND' if unofficial_map else 'NOT FOUND'}"
+                    f"Global ({official_code}): {'FOUND' if official_map else 'NOT FOUND'}\n"
+                    f"Chinese ({unofficial_code}): {'FOUND' if unofficial_map else 'NOT FOUND'}"
                 ),
                 status_code=HTTP_400_BAD_REQUEST,
             )
@@ -1888,8 +1888,8 @@ class MapService(BaseService):
             raise CustomHTTPException(
                 detail=(
                     "One or both codes have no linked map.\n"
-                    f"Official ({official_code}): Linked to {official_map.linked_code}\n"
-                    f"Unofficial CN ({unofficial_code}): Linked to {unofficial_map.linked_code}"
+                    f"Global ({official_code}): Linked to {official_map.linked_code}\n"
+                    f"Chinese ({unofficial_code}): Linked to {unofficial_map.linked_code}"
                 ),
                 status_code=HTTP_400_BAD_REQUEST,
             )
@@ -1898,8 +1898,8 @@ class MapService(BaseService):
             raise CustomHTTPException(
                 detail=(
                     "The two maps given do not link to each other. "
-                    f"Official ({official_code}): Linked to {official_map.linked_code} | "
-                    f"Unofficial CN ({unofficial_code}): Linked to {unofficial_map.linked_code}"
+                    f"Global ({official_code}): Linked to {official_map.linked_code} | "
+                    f"CN ({unofficial_code}): Linked to {unofficial_map.linked_code}"
                 ),
                 status_code=HTTP_400_BAD_REQUEST,
             )

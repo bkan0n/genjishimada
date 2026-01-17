@@ -27,7 +27,7 @@ class BackgroundResponse(Struct):
         """
         if not self.name:
             self.name = "placeholder"
-        self.url = f"assets/rank_card/background/{sanitize_string(self.name)}.webp"
+        self.url = f"https://cdn.genji.pk/assets/rank_card/background/{sanitize_string(self.name)}.webp"
 
 
 class AvatarResponse(Struct):
@@ -49,7 +49,7 @@ class AvatarResponse(Struct):
             self.skin = "Overwatch 1"
         if not self.pose:
             self.pose = "Heroic"
-        self.url = f"assets/rank_card/avatar/{sanitize_string(self.skin)}/{sanitize_string(self.pose)}.webp"
+        self.url = f"https://cdn.genji.pk/assets/rank_card/avatar/{sanitize_string(self.skin)}/{sanitize_string(self.pose)}.webp"
 
 
 class RankCardBadgeSettings(Struct):
@@ -113,8 +113,11 @@ class RankCardResponse(Struct):
         - ``avatar_skin`` and ``avatar_pose`` → ``avatar_url`` as
           ``assets/rank_card/avatar/{skin}/{pose}.webp``
         """
-        self.background_url = f"assets/rank_card/background/{sanitize_string(self.background)}.webp"
-        self.rank_url = f"assets/ranks/{sanitize_string(self.rank_name)}.webp"
+        self.background_url = (
+            f"https://cdn.genji.pk/assets/rank_card/background/{sanitize_string(self.background)}.webp"
+        )
+        self.rank_url = f"https://cdn.genji.pk/assets/ranks/{sanitize_string(self.rank_name)}.webp"
         self.avatar_url = (
-            f"assets/rank_card/avatar/{sanitize_string(self.avatar_skin)}/{sanitize_string(self.avatar_pose)}.webp"
+            "https://cdn.genji.pk/assets/rank_card/avatar/"
+            f"{sanitize_string(self.avatar_skin)}/{sanitize_string(self.avatar_pose)}.webp"
         )

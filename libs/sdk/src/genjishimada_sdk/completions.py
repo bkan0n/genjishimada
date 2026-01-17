@@ -10,6 +10,7 @@ from .maps import GuideURL, MedalType, OverwatchCode, OverwatchMap
 __all__ = (
     "CompletionCreateRequest",
     "CompletionCreatedEvent",
+    "CompletionModerateRequest",
     "CompletionPatchRequest",
     "CompletionResponse",
     "CompletionSubmissionJobResponse",
@@ -118,6 +119,7 @@ class CompletionResponse(Struct):
         suspicious: Whether the run has raised suspicion flags.
         total_results: Total number of records in the query, when paginated.
         upvotes: Current upvote total for the submission.
+        id: Completion record identifier (optional, used for moderation).
     """
 
     code: OverwatchCode
@@ -139,6 +141,7 @@ class CompletionResponse(Struct):
     suspicious: bool
     total_results: int | None = None
     upvotes: int = 0
+    id: int | None = None
 
 
 class CompletionSubmissionResponse(Struct):
@@ -233,6 +236,35 @@ class CompletionVerificationUpdateRequest(Struct):
     reason: str | None
 
 
+SuspiciousFlag = Literal["Cheating", "Scripting"]
+
+
+class CompletionModerateRequest(Struct, kw_only=True):
+    """Request for moderating a completion record.
+
+    Attributes:
+        moderated_by: Identifier of the moderator making the change.
+        time: New completion time in seconds.
+        time_change_reason: Required reason for changing the time.
+        verified: Whether the completion should be verified.
+        verification_reason: Optional reason for verification change.
+        mark_suspicious: Whether to mark the completion as suspicious.
+        unmark_suspicious: Whether to unmark the completion as suspicious.
+        suspicious_context: Context for marking as suspicious (required if mark_suspicious is True).
+        suspicious_flag_type: Flag type for suspicious marking.
+    """
+
+    moderated_by: int
+    time: float | UnsetType = UNSET
+    time_change_reason: str | UnsetType = UNSET
+    verified: bool | UnsetType = UNSET
+    verification_reason: str | None | UnsetType = UNSET
+    mark_suspicious: bool = False
+    unmark_suspicious: bool = False
+    suspicious_context: str | UnsetType = UNSET
+    suspicious_flag_type: SuspiciousFlag | UnsetType = UNSET
+
+
 class PendingVerificationResponse(Struct):
     """Represents a completion waiting for verification.
 
@@ -269,9 +301,6 @@ class VerificationChangedEvent(Struct):
     verified: bool
     verified_by: int
     reason: str | None
-
-
-SuspiciousFlag = Literal["Cheating", "Scripting"]
 
 
 class SuspiciousCompletionCreateRequest(Struct):

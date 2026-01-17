@@ -1,13 +1,19 @@
+-- noinspection SpellCheckingInspectionForFile
+
+-- noinspection SpellCheckingInspectionForFile
+
+-- noinspection SpellCheckingInspectionForFile
+
+-- noinspection SpellCheckingInspectionForFile
+
 BEGIN;
 SET LOCAL migration.skip_verified_check = true;
 
-CREATE OR REPLACE FUNCTION set_updated_at()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS
+$$
 BEGIN
-  IF NEW IS DISTINCT FROM OLD THEN
-    NEW.updated_at := now();
-  END IF;
-  RETURN NEW;
+    IF new IS DISTINCT FROM old THEN new.updated_at := now(); END IF;
+    RETURN new;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -41,8 +47,9 @@ CREATE INDEX IF NOT EXISTS idx_users_nickname_trgm ON core.users USING gin (nick
 CREATE INDEX IF NOT EXISTS idx_users_global_name_trgm ON core.users USING gin (global_name gin_trgm_ops);
 
 CREATE TRIGGER update_core_users_updated_at
-BEFORE UPDATE ON core.users
-FOR EACH ROW
+    BEFORE UPDATE
+    ON core.users
+    FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 CREATE TYPE playtest_status AS enum ('Approved', 'In Progress', 'Rejected');
@@ -66,12 +73,8 @@ CREATE TABLE IF NOT EXISTS core.maps
     updated_at     timestamptz     DEFAULT now(),
     custom_banner  text,
     title          text CHECK (char_length(title) <= 50),
-    linked_code    text
-        REFERENCES core.maps(code)
-        ON UPDATE CASCADE
-        ON DELETE SET NULL,
-        CONSTRAINT maps_linked_code_not_self
-        CHECK (linked_code IS NULL OR linked_code <> code)
+    linked_code    text                                          REFERENCES core.maps (code) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT maps_linked_code_not_self CHECK (linked_code IS NULL OR linked_code <> code)
 );
 COMMENT ON COLUMN core.maps.code IS 'Overwatch custom games share code';
 COMMENT ON COLUMN core.maps.map_name IS 'Overwatch map name';
@@ -95,52 +98,66 @@ CREATE INDEX IF NOT EXISTS idx_maps_difficulty ON core.maps (difficulty);
 CREATE INDEX IF NOT EXISTS idx_maps_raw_difficulty ON core.maps (raw_difficulty);
 
 CREATE TRIGGER update_core_maps_updated_at
-BEFORE UPDATE ON core.maps
-FOR EACH ROW
+    BEFORE UPDATE
+    ON core.maps
+    FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
-CREATE OR REPLACE FUNCTION core.set_maps_difficulty_from_raw()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE FUNCTION core.set_maps_difficulty_from_raw() RETURNS trigger
+    LANGUAGE plpgsql AS
+$$
 BEGIN
-  IF NEW.raw_difficulty IS NULL THEN
-    NEW.difficulty := NULL;
-    RETURN NEW;
-  END IF;
+    IF new.raw_difficulty IS NULL THEN
+        new.difficulty := NULL;
+        RETURN new;
+    END IF;
 
-  CASE
-    WHEN NEW.raw_difficulty >= 0.00 AND NEW.raw_difficulty < 1.18 THEN NEW.difficulty := 'Easy -';
-    WHEN NEW.raw_difficulty >= 1.18 AND NEW.raw_difficulty < 1.76 THEN NEW.difficulty := 'Easy';
-    WHEN NEW.raw_difficulty >= 1.76 AND NEW.raw_difficulty < 2.35 THEN NEW.difficulty := 'Easy +';
-    WHEN NEW.raw_difficulty >= 2.35 AND NEW.raw_difficulty < 2.94 THEN NEW.difficulty := 'Medium -';
-    WHEN NEW.raw_difficulty >= 2.94 AND NEW.raw_difficulty < 3.53 THEN NEW.difficulty := 'Medium';
-    WHEN NEW.raw_difficulty >= 3.53 AND NEW.raw_difficulty < 4.12 THEN NEW.difficulty := 'Medium +';
-    WHEN NEW.raw_difficulty >= 4.12 AND NEW.raw_difficulty < 4.71 THEN NEW.difficulty := 'Hard -';
-    WHEN NEW.raw_difficulty >= 4.71 AND NEW.raw_difficulty < 5.29 THEN NEW.difficulty := 'Hard';
-    WHEN NEW.raw_difficulty >= 5.29 AND NEW.raw_difficulty < 5.88 THEN NEW.difficulty := 'Hard +';
-    WHEN NEW.raw_difficulty >= 5.88 AND NEW.raw_difficulty < 6.47 THEN NEW.difficulty := 'Very Hard -';
-    WHEN NEW.raw_difficulty >= 6.47 AND NEW.raw_difficulty < 7.06 THEN NEW.difficulty := 'Very Hard';
-    WHEN NEW.raw_difficulty >= 7.06 AND NEW.raw_difficulty < 7.65 THEN NEW.difficulty := 'Very Hard +';
-    WHEN NEW.raw_difficulty >= 7.65 AND NEW.raw_difficulty < 8.24 THEN NEW.difficulty := 'Extreme -';
-    WHEN NEW.raw_difficulty >= 8.24 AND NEW.raw_difficulty < 8.82 THEN NEW.difficulty := 'Extreme';
-    WHEN NEW.raw_difficulty >= 8.82 AND NEW.raw_difficulty < 9.41 THEN NEW.difficulty := 'Extreme +';
-    WHEN NEW.raw_difficulty >= 9.41 AND NEW.raw_difficulty <= 10.00 THEN NEW.difficulty := 'Hell';
-    ELSE
-      RAISE EXCEPTION 'raw_difficulty % is out of expected range [0.00, 10.00]', NEW.raw_difficulty
-        USING ERRCODE = '22003';
-  END CASE;
+    CASE
+        WHEN new.raw_difficulty >= 0.00 AND new.raw_difficulty < 1.18
+            THEN new.difficulty := 'Easy -';
+        WHEN new.raw_difficulty >= 1.18 AND new.raw_difficulty < 1.76
+            THEN new.difficulty := 'Easy';
+        WHEN new.raw_difficulty >= 1.76 AND new.raw_difficulty < 2.35
+            THEN new.difficulty := 'Easy +';
+        WHEN new.raw_difficulty >= 2.35 AND new.raw_difficulty < 2.94
+            THEN new.difficulty := 'Medium -';
+        WHEN new.raw_difficulty >= 2.94 AND new.raw_difficulty < 3.53
+            THEN new.difficulty := 'Medium';
+        WHEN new.raw_difficulty >= 3.53 AND new.raw_difficulty < 4.12
+            THEN new.difficulty := 'Medium +';
+        WHEN new.raw_difficulty >= 4.12 AND new.raw_difficulty < 4.71
+            THEN new.difficulty := 'Hard -';
+        WHEN new.raw_difficulty >= 4.71 AND new.raw_difficulty < 5.29
+            THEN new.difficulty := 'Hard';
+        WHEN new.raw_difficulty >= 5.29 AND new.raw_difficulty < 5.88
+            THEN new.difficulty := 'Hard +';
+        WHEN new.raw_difficulty >= 5.88 AND new.raw_difficulty < 6.47
+            THEN new.difficulty := 'Very Hard -';
+        WHEN new.raw_difficulty >= 6.47 AND new.raw_difficulty < 7.06
+            THEN new.difficulty := 'Very Hard';
+        WHEN new.raw_difficulty >= 7.06 AND new.raw_difficulty < 7.65
+            THEN new.difficulty := 'Very Hard +';
+        WHEN new.raw_difficulty >= 7.65 AND new.raw_difficulty < 8.24
+            THEN new.difficulty := 'Extreme -';
+        WHEN new.raw_difficulty >= 8.24 AND new.raw_difficulty < 8.82
+            THEN new.difficulty := 'Extreme';
+        WHEN new.raw_difficulty >= 8.82 AND new.raw_difficulty < 9.41
+            THEN new.difficulty := 'Extreme +';
+        WHEN new.raw_difficulty >= 9.41 AND new.raw_difficulty <= 10.00
+            THEN new.difficulty := 'Hell';
+        ELSE RAISE EXCEPTION 'raw_difficulty % is out of expected range [0.00, 10.00]', new.raw_difficulty USING ERRCODE = '22003';
+    END CASE;
 
-  RETURN NEW;
+    RETURN new;
 END;
 $$;
 
 -- Trigger: fire only when raw_difficulty is inserted/changed
 DROP TRIGGER IF EXISTS trg_maps_set_difficulty_from_raw ON core.maps;
 CREATE TRIGGER trg_maps_set_difficulty_from_raw
-BEFORE INSERT OR UPDATE OF raw_difficulty
-ON core.maps
-FOR EACH ROW
+    BEFORE INSERT OR UPDATE OF raw_difficulty
+    ON core.maps
+    FOR EACH ROW
 EXECUTE FUNCTION core.set_maps_difficulty_from_raw();
 
 
@@ -205,17 +222,17 @@ CREATE TABLE IF NOT EXISTS maps.guides
 );
 
 ALTER TABLE maps.guides
-ADD CONSTRAINT guides_user_id_map_id_unique
-UNIQUE (user_id, map_id);
+    ADD CONSTRAINT guides_user_id_map_id_unique UNIQUE (user_id, map_id);
 
 
-CREATE TABLE IF NOT EXISTS maps.clicks (
+CREATE TABLE IF NOT EXISTS maps.clicks
+(
     id          bigserial PRIMARY KEY,
-    map_id      int NOT NULL REFERENCES core.maps (id) ON DELETE CASCADE,
+    map_id      int         NOT NULL REFERENCES core.maps (id) ON DELETE CASCADE,
     user_id     bigint REFERENCES core.users (id),
-    source      text,                    -- e.g. 'web', 'bot', 'embed'
+    source      text, -- e.g. 'web', 'bot', 'embed'
     user_agent  text,
-    ip_hash     text,                    -- optional: SHA256(ip + server_salt)
+    ip_hash     text, -- optional: SHA256(ip + server_salt)
     inserted_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -226,26 +243,25 @@ ALTER TABLE maps.clicks
     ADD COLUMN day_bucket bigint;
 
 -- 3) Create a trigger to keep it filled on INSERT/UPDATE
-CREATE OR REPLACE FUNCTION maps.set_clicks_day_bucket()
-    RETURNS trigger
-    LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE FUNCTION maps.set_clicks_day_bucket() RETURNS trigger
+    LANGUAGE plpgsql AS
+$$
 BEGIN
     -- bucket by UTC day: seconds since epoch / 86400
-    NEW.day_bucket := (extract(epoch FROM NEW.inserted_at)::bigint / 86400);
-    RETURN NEW;
+    new.day_bucket := (extract(EPOCH FROM new.inserted_at)::bigint / 86400);
+    RETURN new;
 END
 $$;
 
 DROP TRIGGER IF EXISTS trg_clicks_day_bucket_ins ON maps.clicks;
 CREATE TRIGGER trg_clicks_day_bucket_ins
-    BEFORE INSERT ON maps.clicks
+    BEFORE INSERT
+    ON maps.clicks
     FOR EACH ROW
 EXECUTE FUNCTION maps.set_clicks_day_bucket();
 
 ALTER TABLE maps.clicks
-    ADD CONSTRAINT u_click_unique_per_day
-        UNIQUE (map_id, ip_hash, day_bucket);
+    ADD CONSTRAINT u_click_unique_per_day UNIQUE (map_id, ip_hash, day_bucket);
 
 
 CREATE TABLE IF NOT EXISTS maps.ratings
@@ -266,23 +282,24 @@ CREATE INDEX IF NOT EXISTS idx_ratings_map_id_quality ON maps.ratings (map_id, q
 CREATE INDEX IF NOT EXISTS idx_ratings_map_id_quality_verified ON maps.ratings (map_id, quality, verified);
 
 CREATE TRIGGER update_maps_ratings_updated_at
-BEFORE UPDATE ON maps.ratings
-FOR EACH ROW
+    BEFORE UPDATE
+    ON maps.ratings
+    FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 
 
 CREATE TABLE IF NOT EXISTS playtests.meta
 (
-    id                                  int GENERATED ALWAYS AS IDENTITY,
-    thread_id                           bigint UNIQUE,
-    map_id                              int REFERENCES core.maps (id) ON DELETE CASCADE,
-    verification_id                     bigint,
-    initial_difficulty                  numeric(4, 2)
+    id                 int GENERATED ALWAYS AS IDENTITY,
+    thread_id          bigint UNIQUE,
+    map_id             int REFERENCES core.maps (id) ON DELETE CASCADE,
+    verification_id    bigint,
+    initial_difficulty numeric(4, 2)
         CONSTRAINT difficulty_range CHECK (initial_difficulty >= 0 AND initial_difficulty <= 10) NOT NULL,
-    created_at                          timestamptz DEFAULT now(),
-    updated_at                          timestamptz DEFAULT now(),
-    completed                           boolean     DEFAULT FALSE,
+    created_at         timestamptz DEFAULT now(),
+    updated_at         timestamptz DEFAULT now(),
+    completed          boolean     DEFAULT FALSE,
     PRIMARY KEY (id, map_id)
 );
 COMMENT ON COLUMN playtests.meta.thread_id IS 'Playtest forum post thread id snowflake in Discord';
@@ -291,8 +308,9 @@ COMMENT ON COLUMN playtests.meta.initial_difficulty IS 'The difficulty value the
 COMMENT ON COLUMN playtests.meta.completed IS 'If the playtest has concluded';
 
 CREATE TRIGGER update_playtests_meta_updated_at
-BEFORE UPDATE ON playtests.meta
-FOR EACH ROW
+    BEFORE UPDATE
+    ON playtests.meta
+    FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS playtests.votes
@@ -310,63 +328,52 @@ COMMENT ON COLUMN playtests.votes.difficulty IS 'Difficulty value the user voted
 CREATE UNIQUE INDEX IF NOT EXISTS votes_user_id_map_id_playtest_thread_id_uindex ON playtests.votes (user_id, map_id, playtest_thread_id);
 
 
-CREATE OR REPLACE FUNCTION playtests.enforce_verified_completion_immediate()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE FUNCTION playtests.enforce_verified_completion_immediate() RETURNS trigger
+    LANGUAGE plpgsql AS
+$$
 DECLARE
-  skip_mode boolean := current_setting('migration.skip_verified_check', true)::boolean;
+    skip_mode boolean := current_setting('migration.skip_verified_check', TRUE)::boolean;
 BEGIN
-  -- During migration: silently skip invalid rows
-  IF skip_mode THEN
-    IF NOT EXISTS (
-      SELECT 1
-      FROM core.completions c
-      WHERE c.user_id = NEW.user_id
-        AND c.map_id  = NEW.map_id
-        AND c.verified = TRUE
-        AND c.legacy   = FALSE
-    ) THEN
-      RETURN NULL;  -- skip this row
+    -- During migration: silently skip invalid rows
+    IF skip_mode THEN
+        IF NOT exists(
+            SELECT 1
+            FROM core.completions c
+            WHERE c.user_id = new.user_id AND c.map_id = new.map_id AND c.verified = TRUE AND c.legacy = FALSE
+        ) THEN
+            RETURN NULL; -- skip this row
+        END IF;
+
+        RETURN new;
     END IF;
 
-    RETURN NEW;
-  END IF;
+    -- Normal production behavior: raise exception
+    IF NOT exists(
+        SELECT 1
+        FROM core.completions c
+        WHERE c.user_id = new.user_id AND c.map_id = new.map_id AND c.verified = TRUE AND c.legacy = FALSE
+    ) THEN
+        RAISE EXCEPTION 'User % has no verified non-legacy completion for map %', new.user_id, new.map_id USING ERRCODE = '23514';
+    END IF;
 
-  -- Normal production behavior: raise exception
-  IF NOT EXISTS (
-    SELECT 1
-    FROM core.completions c
-    WHERE c.user_id = NEW.user_id
-      AND c.map_id  = NEW.map_id
-      AND c.verified = TRUE
-      AND c.legacy   = FALSE
-  ) THEN
-    RAISE EXCEPTION
-      'User % has no verified non-legacy completion for map %',
-      NEW.user_id, NEW.map_id
-      USING ERRCODE = '23514';
-  END IF;
-
-  RETURN NEW;
+    RETURN new;
 END
 $$;
 
 
 
 CREATE TRIGGER votes_requires_verified_completion
-BEFORE INSERT OR UPDATE OF user_id, map_id
-ON playtests.votes
-FOR EACH ROW
+    BEFORE INSERT OR UPDATE OF user_id, map_id
+    ON playtests.votes
+    FOR EACH ROW
 EXECUTE FUNCTION playtests.enforce_verified_completion_immediate();
 
 
 
-
-
 CREATE TRIGGER update_playtests_votes_updated_at
-BEFORE UPDATE ON playtests.votes
-FOR EACH ROW
+    BEFORE UPDATE
+    ON playtests.votes
+    FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE IF NOT EXISTS playtests.stale_alerts
@@ -383,14 +390,14 @@ COMMENT ON COLUMN playtests.stale_alerts.alerted IS 'Whether a stale alert has o
 COMMENT ON COLUMN playtests.stale_alerts.approved IS 'If the playtest has been approved, no more alerts needed';
 
 
-CREATE TABLE IF NOT EXISTS playtests.deprecated_count (
-  user_id bigint PRIMARY KEY,
-  count   bigint NOT NULL CHECK (count >= 0)
+CREATE TABLE IF NOT EXISTS playtests.deprecated_count
+(
+    user_id bigint PRIMARY KEY,
+    count   bigint NOT NULL CHECK (count >= 0)
 );
 
 -- Optional: index for reporting by gap size
-CREATE INDEX IF NOT EXISTS deprecated_count_count_idx
-  ON playtests.deprecated_count (count DESC);
+CREATE INDEX IF NOT EXISTS deprecated_count_count_idx ON playtests.deprecated_count (count DESC);
 
 
 CREATE TABLE IF NOT EXISTS users.notification_settings
@@ -441,12 +448,8 @@ CREATE INDEX IF NOT EXISTS idx_records_map_user_date ON core.completions (map_id
 CREATE INDEX IF NOT EXISTS idx_records_inserted_at ON core.completions (inserted_at);
 CREATE INDEX IF NOT EXISTS idx_records_user_date ON core.completions (user_id, inserted_at);
 CREATE INDEX IF NOT EXISTS idx_records_map_id ON core.completions (map_id);
-CREATE INDEX IF NOT EXISTS idx_completions_verified_nonlegacy_pair
-ON core.completions (user_id, map_id)
-WHERE verified = TRUE AND legacy = FALSE;
-CREATE INDEX IF NOT EXISTS idx_completions_nonlegacy_best
-  ON core.completions (user_id, map_id, time)
-  WHERE legacy = FALSE;
+CREATE INDEX IF NOT EXISTS idx_completions_verified_nonlegacy_pair ON core.completions (user_id, map_id) WHERE verified = TRUE AND legacy = FALSE;
+CREATE INDEX IF NOT EXISTS idx_completions_nonlegacy_best ON core.completions (user_id, map_id, time) WHERE legacy = FALSE;
 
 COMMENT ON COLUMN core.completions.time IS 'How long it took the user to complete a the map';
 COMMENT ON COLUMN core.completions.screenshot IS 'The URL to the uploaded screenshot';
@@ -460,64 +463,49 @@ COMMENT ON COLUMN core.completions.legacy IS 'Whether the submission is classifi
 COMMENT ON COLUMN core.completions.legacy_medal IS 'The medal of the submission, if submission is classified as legacy';
 COMMENT ON COLUMN core.completions.wr_xp_check IS 'A simple check to block multi World Record XP awards from being triggered';
 
-CREATE OR REPLACE FUNCTION core.enforce_speed_rules_nonlegacy_only()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE FUNCTION core.enforce_speed_rules_nonlegacy_only() RETURNS trigger
+    LANGUAGE plpgsql AS
+$$
 DECLARE
-  best_time          numeric;
-  best_is_completion boolean;
-  best_completed_at  timestamptz;
-  map_code           text;
+    best_time          numeric;
+    best_is_completion boolean;
+    best_completed_at  timestamptz;
+    map_code           text;
 BEGIN
-  -- Any write that sets the row to legacy = TRUE is always allowed.
-  IF NEW.legacy IS TRUE THEN
-    RETURN NEW;
-  END IF;
+    -- Any write that sets the row to legacy = TRUE is always allowed.
+    IF new.legacy IS TRUE THEN RETURN new; END IF;
 
-  -- Serialize per (user,map) to avoid racey double-inserts/updates.
-  -- PERFORM pg_advisory_xact_lock((NEW.user_id::bigint << 32) | NEW.map_id::bigint);
+    -- Serialize per (user,map) to avoid racey double-inserts/updates.
+    -- PERFORM pg_advisory_xact_lock((NEW.user_id::bigint << 32) | NEW.map_id::bigint);
 
-  -- Find the best non-legacy run for this user/map.
-  SELECT c.time, c.completion, c.inserted_at, m.code
+    -- Find the best non-legacy run for this user/map.
+    SELECT c.time, c.completion, c.inserted_at, m.code
     INTO best_time, best_is_completion, best_completed_at, map_code
-  FROM core.completions c
-  JOIN core.maps m ON m.id = c.map_id
-  WHERE c.user_id = NEW.user_id
-    AND c.map_id  = NEW.map_id
-    AND c.legacy  = FALSE AND verified IS FALSE AND verified_by
-  ORDER BY c.time ASC
-  LIMIT 1;
+    FROM core.completions c
+    JOIN core.maps m ON m.id = c.map_id
+    WHERE c.user_id = new.user_id AND c.map_id = new.map_id AND c.legacy = FALSE AND verified IS FALSE AND verified_by
+    ORDER BY c.time
+    LIMIT 1;
 
-  -- No non-legacy rows yet -> nothing to enforce.
-  IF best_time IS NULL THEN
-    RETURN NEW;
-  END IF;
+    -- No non-legacy rows yet -> nothing to enforce.
+    IF best_time IS NULL THEN RETURN new; END IF;
 
-  -- NEW is chronologically older -> skip checks.
-  IF NEW.inserted_at IS NOT NULL AND NEW.inserted_at < best_completed_at THEN
-    RETURN NEW;
-  END IF;
+    -- NEW is chronologically older -> skip checks.
+    IF new.inserted_at IS NOT NULL AND new.inserted_at < best_completed_at THEN RETURN new; END IF;
 
-  -- Apply speed rules
-  IF NEW.completion IS TRUE THEN
-    IF NEW.time >= best_time THEN
-      RAISE EXCEPTION
-        'completion=TRUE time % must be strictly faster than current best % (user %, map %, code %)',
-        NEW.time, best_time, NEW.user_id, NEW.map_id, map_code
-        USING ERRCODE = '23514';
+    -- Apply speed rules
+    IF new.completion IS TRUE THEN
+        IF new.time >= best_time THEN
+            RAISE EXCEPTION 'completion=TRUE time % must be strictly faster than current best % (user %, map %, code %)', new.time, best_time, new.user_id, new.map_id, map_code USING ERRCODE = '23514';
+        END IF;
+
+    ELSE
+        IF best_is_completion IS FALSE AND new.time >= best_time THEN
+            RAISE EXCEPTION 'completion=FALSE time % must be strictly faster than current best non-completion % (user %, map %, code %)', new.time, best_time, new.user_id, new.map_id, map_code USING ERRCODE = '23514';
+        END IF;
     END IF;
 
-  ELSE
-    IF best_is_completion IS FALSE AND NEW.time >= best_time THEN
-      RAISE EXCEPTION
-        'completion=FALSE time % must be strictly faster than current best non-completion % (user %, map %, code %)',
-        NEW.time, best_time, NEW.user_id, NEW.map_id, map_code
-        USING ERRCODE = '23514';
-    END IF;
-  END IF;
-
-  RETURN NEW;
+    RETURN new;
 END
 $$;
 
@@ -525,95 +513,82 @@ $$;
 DROP TRIGGER IF EXISTS trg_enforce_speed_rules_nonlegacy_only ON core.completions;
 
 CREATE TRIGGER trg_enforce_speed_rules_nonlegacy_only
-BEFORE INSERT OR UPDATE OF time, completion, user_id, map_id, legacy
-ON core.completions
-FOR EACH ROW
+    BEFORE INSERT OR UPDATE OF time, completion, user_id, map_id, legacy
+    ON core.completions
+    FOR EACH ROW
 EXECUTE FUNCTION core.enforce_speed_rules_nonlegacy_only();
 
 
-CREATE OR REPLACE FUNCTION maps.ratings_verify_on_completion()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE FUNCTION maps.ratings_verify_on_completion() RETURNS trigger
+    LANGUAGE plpgsql AS
+$$
 BEGIN
-  -- Set the matching rating to verified if it exists
-  UPDATE maps.ratings r
-     SET verified = TRUE
-   WHERE r.map_id = NEW.map_id
-     AND r.user_id = NEW.user_id
-     AND r.verified IS DISTINCT FROM TRUE;
+    -- Set the matching rating to verified if it exists
+    UPDATE maps.ratings r
+    SET verified = TRUE
+    WHERE r.map_id = new.map_id AND r.user_id = new.user_id AND r.verified IS DISTINCT FROM TRUE;
 
-  RETURN NEW; -- result ignored for AFTER triggers
+    RETURN new; -- result ignored for AFTER triggers
 END
 $$;
 
 DROP TRIGGER IF EXISTS trg_ratings_verify_on_completion ON core.completions;
 
 CREATE TRIGGER trg_ratings_verify_on_completion
-AFTER INSERT OR UPDATE OF verified
-ON core.completions
-FOR EACH ROW
-WHEN (
-  NEW.verified IS TRUE
-)
+    AFTER INSERT OR UPDATE OF verified
+    ON core.completions
+    FOR EACH ROW
+    WHEN ( new.verified IS TRUE )
 EXECUTE FUNCTION maps.ratings_verify_on_completion();
 
-CREATE OR REPLACE FUNCTION core.sync_linked_code()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE FUNCTION core.sync_linked_code() RETURNS trigger
+    LANGUAGE plpgsql AS
+$$
 DECLARE
-  target_current text;
+    target_current text;
 BEGIN
-  -- Avoid infinite ping-pong when we update the counterpart.
-  IF pg_trigger_depth() > 1 THEN
-    RETURN NEW;
-  END IF;
+    -- Avoid infinite ping-pong when we update the counterpart.
+    IF pg_trigger_depth() > 1 THEN RETURN new; END IF;
 
-  -- If unlinking (linked_code becomes NULL), clear the counterpart if it points back
-  IF NEW.linked_code IS NULL THEN
-    IF OLD.linked_code IS NOT NULL THEN
-      UPDATE core.maps
-         SET linked_code = NULL
-       WHERE code = OLD.linked_code
-         AND linked_code = OLD.code; -- only clear if it points back to us
+    -- If unlinking (linked_code becomes NULL), clear the counterpart if it points back
+    IF new.linked_code IS NULL THEN
+        IF old.linked_code IS NOT NULL THEN
+            UPDATE core.maps
+            SET linked_code = NULL
+            WHERE code = old.linked_code AND linked_code = old.code; -- only clear if it points back to us
+        END IF;
+        RETURN new;
     END IF;
-    RETURN NEW;
-  END IF;
 
-  -- At this point NEW.linked_code is NOT NULL
-  IF NEW.linked_code = NEW.code THEN
-    RAISE EXCEPTION 'linked_code cannot equal code (%).', NEW.code;
-  END IF;
+    -- At this point NEW.linked_code is NOT NULL
+    IF new.linked_code = new.code THEN RAISE EXCEPTION 'linked_code cannot equal code (%).', new.code; END IF;
 
-  -- Ensure target exists
-  PERFORM 1 FROM core.maps WHERE code = NEW.linked_code;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'linked_code % does not reference an existing code.', NEW.linked_code;
-  END IF;
+    -- Ensure target exists
+    PERFORM 1
+    FROM core.maps
+    WHERE code = new.linked_code;
+    IF NOT found THEN RAISE EXCEPTION 'linked_code % does not reference an existing code.', new.linked_code; END IF;
 
-  -- Check the target's current link
-  SELECT linked_code INTO target_current
-  FROM core.maps
-  WHERE code = NEW.linked_code
-  FOR UPDATE;  -- serialize against concurrent writers on the target
+    -- Check the target's current link
+    SELECT linked_code
+    INTO target_current
+    FROM core.maps
+    WHERE code = new.linked_code FOR UPDATE;
+    -- serialize against concurrent writers on the target
 
-  -- If target already linked to someone else (not us), forbid
-  IF target_current IS NOT NULL AND target_current <> NEW.code THEN
-    RAISE EXCEPTION
-      'Code % is already linked to %, cannot also link to %.',
-      NEW.linked_code, target_current, NEW.code;
-  END IF;
+    -- If target already linked to someone else (not us), forbid
+    IF target_current IS NOT NULL AND target_current <> new.code THEN
+        RAISE EXCEPTION 'Code % is already linked to %, cannot also link to %.', new.linked_code, target_current, new.code;
+    END IF;
 
-  -- If target not linked yet, link it back to us
-  IF target_current IS NULL THEN
-    UPDATE core.maps
-       SET linked_code = NEW.code
-     WHERE code = NEW.linked_code
-       AND linked_code IS NULL;  -- idempotent
-  END IF;
+    -- If target not linked yet, link it back to us
+    IF target_current IS NULL THEN
+        UPDATE core.maps
+        SET linked_code = new.code
+        WHERE code = new.linked_code AND linked_code IS NULL; -- idempotent
+    END IF;
 
-  RETURN NEW;
+    RETURN new;
 END
 $$;
 
@@ -621,130 +596,596 @@ $$;
 DROP TRIGGER IF EXISTS trg_sync_linked_code ON core.maps;
 
 CREATE TRIGGER trg_sync_linked_code
-BEFORE INSERT OR UPDATE OF linked_code, code
-ON core.maps
-FOR EACH ROW
+    BEFORE INSERT OR UPDATE OF linked_code, code
+    ON core.maps
+    FOR EACH ROW
 EXECUTE FUNCTION core.sync_linked_code();
 
 
 CREATE TABLE IF NOT EXISTS completions.upvotes
 (
-    id                int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id           bigint         NOT NULL REFERENCES core.users (id) ON DELETE CASCADE,
-    message_id        bigint REFERENCES core.completions (message_id) ON DELETE CASCADE,
-    inserted_at       timestamptz DEFAULT now(),
+    id          int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id     bigint NOT NULL REFERENCES core.users (id) ON DELETE CASCADE,
+    message_id  bigint REFERENCES core.completions (message_id) ON DELETE CASCADE,
+    inserted_at timestamptz DEFAULT now(),
     UNIQUE (message_id, user_id)
 );
 
-INSERT INTO maps.mechanics (name, position) VALUES ('Edge Climb', -1);
-INSERT INTO maps.mechanics (name, position) VALUES ('Bhop', 0);
-INSERT INTO maps.mechanics (name, position) VALUES ('Save Climb', 2);
-INSERT INTO maps.mechanics (name, position) VALUES ('High Edge', 3);
-INSERT INTO maps.mechanics (name, position) VALUES ('Distance Edge', 5);
-INSERT INTO maps.mechanics (name, position) VALUES ('Quick Climb', 6);
-INSERT INTO maps.mechanics (name, position) VALUES ('Slide', 7);
-INSERT INTO maps.mechanics (name, position) VALUES ('Stall', 8);
-INSERT INTO maps.mechanics (name, position) VALUES ('Dash', 9);
-INSERT INTO maps.mechanics (name, position) VALUES ('Ultimate', 10);
-INSERT INTO maps.mechanics (name, position) VALUES ('Emote Save Bhop', 11);
-INSERT INTO maps.mechanics (name, position) VALUES ('Death Bhop', 12);
-INSERT INTO maps.mechanics (name, position) VALUES ('Triple Jump', 13);
-INSERT INTO maps.mechanics (name, position) VALUES ('Multi Climb', 14);
-INSERT INTO maps.mechanics (name, position) VALUES ('Vertical Multi Climb', 15);
-INSERT INTO maps.mechanics (name, position) VALUES ('Standing Create Bhop', 17);
-INSERT INTO maps.mechanics (name, position) VALUES ('Crouch Edge', 1);
-INSERT INTO maps.mechanics (name, position) VALUES ('Bhop First', 4);
-INSERT INTO maps.mechanics (name, position) VALUES ('Create Bhop', 16);
-INSERT INTO maps.mechanics (name, position) VALUES ('Save Double', 18);
-INSERT INTO maps.restrictions (name, position) VALUES ('Bhop', -1);
-INSERT INTO maps.restrictions (name, position) VALUES ('Dash Start', 0);
-INSERT INTO maps.restrictions (name, position) VALUES ('Triple Jump', 1);
-INSERT INTO maps.restrictions (name, position) VALUES ('Emote Save Bhop', 2);
-INSERT INTO maps.restrictions (name, position) VALUES ('Death Bhop', 3);
-INSERT INTO maps.restrictions (name, position) VALUES ('Multi Climb', 4);
-INSERT INTO maps.restrictions (name, position) VALUES ('Standing Create Bhop', 6);
-INSERT INTO maps.restrictions (name, position) VALUES ('Create Bhop', 5);
-INSERT INTO maps.restrictions (name, position) VALUES ('Wall Climb', 7);
-INSERT INTO maps.restrictions (name, position) VALUES ('Double Jump', 8);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Edge Climb', -1
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Bhop', 0
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Save Climb', 2
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'High Edge', 3
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Distance Edge', 5
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Quick Climb', 6
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Slide', 7
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Stall', 8
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Dash', 9
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Ultimate', 10
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Emote Save Bhop', 11
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Death Bhop', 12
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Triple Jump', 13
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Multi Climb', 14
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Vertical Multi Climb', 15
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Standing Create Bhop', 17
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Crouch Edge', 1
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Bhop First', 4
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Create Bhop', 16
+);
+INSERT INTO maps.mechanics (
+    name, position
+)
+VALUES (
+    'Save Double', 18
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Bhop', -1
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Dash Start', 0
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Triple Jump', 1
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Emote Save Bhop', 2
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Death Bhop', 3
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Multi Climb', 4
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Standing Create Bhop', 6
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Create Bhop', 5
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Wall Climb', 7
+);
+INSERT INTO maps.restrictions (
+    name, position
+)
+VALUES (
+    'Double Jump', 8
+);
 
-CREATE TABLE IF NOT EXISTS maps.names (
+CREATE TABLE IF NOT EXISTS maps.names
+(
     name text PRIMARY KEY
 );
 
 
-INSERT INTO maps.names (name) VALUES ('Circuit Royal');
-INSERT INTO maps.names (name) VALUES ('Runasapi');
-INSERT INTO maps.names (name) VALUES ('Practice Range');
-INSERT INTO maps.names (name) VALUES ('Route 66');
-INSERT INTO maps.names (name) VALUES ('Midtown');
-INSERT INTO maps.names (name) VALUES ('Junkertown');
-INSERT INTO maps.names (name) VALUES ('Colosseo');
-INSERT INTO maps.names (name) VALUES ('Lijiang Tower (Lunar New Year)');
-INSERT INTO maps.names (name) VALUES ('Dorado');
-INSERT INTO maps.names (name) VALUES ('Throne of Anubis');
-INSERT INTO maps.names (name) VALUES ('Castillo');
-INSERT INTO maps.names (name) VALUES ('Blizzard World (Winter)');
-INSERT INTO maps.names (name) VALUES ('Hollywood (Halloween)');
-INSERT INTO maps.names (name) VALUES ('Black Forest (Winter)');
-INSERT INTO maps.names (name) VALUES ('Petra');
-INSERT INTO maps.names (name) VALUES ('Eichenwalde');
-INSERT INTO maps.names (name) VALUES ('Workshop Island');
-INSERT INTO maps.names (name) VALUES ('Chateau Guillard (Halloween)');
-INSERT INTO maps.names (name) VALUES ('New Junk City');
-INSERT INTO maps.names (name) VALUES ('Necropolis');
-INSERT INTO maps.names (name) VALUES ('Kanezaka');
-INSERT INTO maps.names (name) VALUES ('Havana');
-INSERT INTO maps.names (name) VALUES ('Oasis');
-INSERT INTO maps.names (name) VALUES ('Ayutthaya');
-INSERT INTO maps.names (name) VALUES ('Volskaya Industries');
-INSERT INTO maps.names (name) VALUES ('Hanamura');
-INSERT INTO maps.names (name) VALUES ('Workshop Expanse');
-INSERT INTO maps.names (name) VALUES ('Hanaoka');
-INSERT INTO maps.names (name) VALUES ('Lijiang Tower');
-INSERT INTO maps.names (name) VALUES ('Busan (Lunar New Year)');
-INSERT INTO maps.names (name) VALUES ('Suravasa');
-INSERT INTO maps.names (name) VALUES ('King''s Row');
-INSERT INTO maps.names (name) VALUES ('King''s Row (Winter)');
-INSERT INTO maps.names (name) VALUES ('Ecopoint: Antarctica');
-INSERT INTO maps.names (name) VALUES ('Hanamura (Winter)');
-INSERT INTO maps.names (name) VALUES ('Blizzard World');
-INSERT INTO maps.names (name) VALUES ('Chateau Guillard');
-INSERT INTO maps.names (name) VALUES ('Paraiso');
-INSERT INTO maps.names (name) VALUES ('Workshop Green Screen');
-INSERT INTO maps.names (name) VALUES ('Watchpoint: Gibraltar');
-INSERT INTO maps.names (name) VALUES ('Shambali');
-INSERT INTO maps.names (name) VALUES ('Eichenwalde (Halloween)');
-INSERT INTO maps.names (name) VALUES ('Nepal');
-INSERT INTO maps.names (name) VALUES ('Samoa');
-INSERT INTO maps.names (name) VALUES ('Horizon Lunar Colony');
-INSERT INTO maps.names (name) VALUES ('Paris');
-INSERT INTO maps.names (name) VALUES ('Esperanca');
-INSERT INTO maps.names (name) VALUES ('Black Forest');
-INSERT INTO maps.names (name) VALUES ('Antarctic Peninsula');
-INSERT INTO maps.names (name) VALUES ('Workshop Chamber');
-INSERT INTO maps.names (name) VALUES ('Hollywood');
-INSERT INTO maps.names (name) VALUES ('New Queen Street');
-INSERT INTO maps.names (name) VALUES ('Rialto');
-INSERT INTO maps.names (name) VALUES ('Busan');
-INSERT INTO maps.names (name) VALUES ('Malevento');
-INSERT INTO maps.names (name) VALUES ('Temple of Anubis');
-INSERT INTO maps.names (name) VALUES ('Ilios');
-INSERT INTO maps.names (name) VALUES ('Ecopoint: Antarctica (Winter)');
-INSERT INTO maps.names (name) VALUES ('Numbani');
-INSERT INTO maps.names (name) VALUES ('Adlersbrunn');
-INSERT INTO maps.names (name) VALUES ('Aatlis');
-INSERT INTO maps.names (name) VALUES ('Framework');
-INSERT INTO maps.names (name) VALUES ('Tools');
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Circuit Royal'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Runasapi'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Practice Range'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Route 66'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Midtown'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Junkertown'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Colosseo'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Lijiang Tower (Lunar New Year)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Dorado'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Throne of Anubis'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Castillo'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Blizzard World (Winter)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Hollywood (Halloween)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Black Forest (Winter)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Petra'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Eichenwalde'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Workshop Island'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Chateau Guillard (Halloween)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'New Junk City'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Necropolis'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Kanezaka'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Havana'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Oasis'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Ayutthaya'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Volskaya Industries'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Hanamura'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Workshop Expanse'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Hanaoka'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Lijiang Tower'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Busan (Lunar New Year)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Suravasa'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'King''s Row'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'King''s Row (Winter)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Ecopoint: Antarctica'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Hanamura (Winter)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Blizzard World'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Chateau Guillard'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Paraiso'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Workshop Green Screen'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Watchpoint: Gibraltar'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Shambali'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Eichenwalde (Halloween)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Nepal'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Samoa'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Horizon Lunar Colony'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Paris'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Esperanca'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Black Forest'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Antarctic Peninsula'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Workshop Chamber'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Hollywood'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'New Queen Street'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Rialto'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Busan'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Malevento'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Temple of Anubis'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Ilios'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Ecopoint: Antarctica (Winter)'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Numbani'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Adlersbrunn'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Aatlis'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Framework'
+);
+INSERT INTO maps.names (
+    name
+)
+VALUES (
+    'Tools'
+);
 
 
 CREATE TABLE IF NOT EXISTS public.newsfeed
 (
     id        int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     timestamp timestamp with time zone DEFAULT now() NOT NULL,
-    payload      json                                   NOT NULL
+    payload   json                                   NOT NULL
 );
 ALTER TABLE public.newsfeed
-  ADD COLUMN IF NOT EXISTS event_type TEXT GENERATED ALWAYS AS (payload->>'type') STORED;
+    ADD COLUMN IF NOT EXISTS event_type text GENERATED ALWAYS AS (payload ->> 'type') STORED;
 
 CREATE INDEX IF NOT EXISTS newsfeed_type_idx ON public.newsfeed (event_type);
 CREATE INDEX IF NOT EXISTS newsfeed_id_desc_idx ON public.newsfeed (id DESC);
@@ -768,7 +1209,15 @@ CREATE TABLE IF NOT EXISTS lootbox.key_types
     name text NOT NULL
         CONSTRAINT lootbox_box_types_pkey PRIMARY KEY
 );
-INSERT INTO lootbox.key_types (name) VALUES ('Classic'), ('Winter') ON CONFLICT DO NOTHING;
+INSERT INTO lootbox.key_types (
+    name
+)
+VALUES (
+    'Classic'
+), (
+    'Winter'
+)
+ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS lootbox.active_key
 (
@@ -776,7 +1225,10 @@ CREATE TABLE IF NOT EXISTS lootbox.active_key
         CONSTRAINT lootbox_active_key_lootbox_key_types_name_fk REFERENCES lootbox.key_types
 );
 
-INSERT INTO lootbox.active_key VALUES ('Classic');
+INSERT INTO lootbox.active_key
+VALUES (
+    'Classic'
+);
 
 CREATE TABLE IF NOT EXISTS lootbox.reward_types
 (
@@ -811,7 +1263,12 @@ CREATE TABLE IF NOT EXISTS lootbox.xp_multiplier
     value numeric(4, 2) NOT NULL DEFAULT 1
 );
 
-INSERT INTO lootbox.xp_multiplier (value) VALUES (1);
+INSERT INTO lootbox.xp_multiplier (
+    value
+)
+VALUES (
+    1
+);
 
 CREATE TABLE IF NOT EXISTS maps.mastery
 (
@@ -850,32 +1307,157 @@ CREATE TABLE IF NOT EXISTS lootbox.sub_tiers
 
 
 
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (0, 'Newcomer');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (1, 'Initiate');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (2, 'Apprentice');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (3, 'Disciple');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (4, 'Enthusiast');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (5, 'Explorer');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (6, 'Visionary');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (7, 'Aficionado');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (8, 'Virtuoso');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (9, 'Savant');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (10, 'Prodigy');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (11, 'Shadow');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (12, 'Shinobi');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (13, 'Assassin');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (14, 'Ronin');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (15, 'Shogun');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (16, 'Dragon');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (17, 'Cyber Ninja');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (18, 'Legend');
-INSERT INTO lootbox.main_tiers (threshold, name) VALUES (19, 'Mythic');
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    0, 'Newcomer'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    1, 'Initiate'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    2, 'Apprentice'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    3, 'Disciple'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    4, 'Enthusiast'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    5, 'Explorer'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    6, 'Visionary'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    7, 'Aficionado'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    8, 'Virtuoso'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    9, 'Savant'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    10, 'Prodigy'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    11, 'Shadow'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    12, 'Shinobi'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    13, 'Assassin'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    14, 'Ronin'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    15, 'Shogun'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    16, 'Dragon'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    17, 'Cyber Ninja'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    18, 'Legend'
+);
+INSERT INTO lootbox.main_tiers (
+    threshold, name
+)
+VALUES (
+    19, 'Mythic'
+);
 
-INSERT INTO lootbox.sub_tiers (threshold, name) VALUES (0, 'I');
-INSERT INTO lootbox.sub_tiers (threshold, name) VALUES (1, 'II');
-INSERT INTO lootbox.sub_tiers (threshold, name) VALUES (2, 'III');
-INSERT INTO lootbox.sub_tiers (threshold, name) VALUES (3, 'IV');
-INSERT INTO lootbox.sub_tiers (threshold, name) VALUES (4, 'V');
+INSERT INTO lootbox.sub_tiers (
+    threshold, name
+)
+VALUES (
+    0, 'I'
+);
+INSERT INTO lootbox.sub_tiers (
+    threshold, name
+)
+VALUES (
+    1, 'II'
+);
+INSERT INTO lootbox.sub_tiers (
+    threshold, name
+)
+VALUES (
+    2, 'III'
+);
+INSERT INTO lootbox.sub_tiers (
+    threshold, name
+)
+VALUES (
+    3, 'IV'
+);
+INSERT INTO lootbox.sub_tiers (
+    threshold, name
+)
+VALUES (
+    4, 'V'
+);
 
 CREATE TABLE IF NOT EXISTS public.change_requests
 (
@@ -930,20 +1512,20 @@ CREATE TABLE IF NOT EXISTS rank_card.badges
 
 CREATE TABLE users.suspicious_flags
 (
-    id              int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id         bigint REFERENCES core.users (id) ON DELETE CASCADE,
-    completion_id   bigint REFERENCES core.completions (id) ON DELETE CASCADE,
-    context         text,
-    flag_type       text,
-    flagged_by      bigint REFERENCES core.users (id) ON DELETE CASCADE
+    id            int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id       bigint REFERENCES core.users (id) ON DELETE CASCADE,
+    completion_id bigint REFERENCES core.completions (id) ON DELETE CASCADE,
+    context       text,
+    flag_type     text,
+    flagged_by    bigint REFERENCES core.users (id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS suspicious_flags_user_id_idx
-  ON users.suspicious_flags (user_id);
+CREATE INDEX IF NOT EXISTS suspicious_flags_user_id_idx ON users.suspicious_flags (user_id);
 
 COMMENT ON COLUMN users.suspicious_flags.context IS 'A description of why the flag has been given.';
 COMMENT ON COLUMN users.suspicious_flags.flag_type IS 'The type of flag given to the completion.';
 
-CREATE TABLE IF NOT EXISTS public.analytics (
+CREATE TABLE IF NOT EXISTS public.analytics
+(
     command_name text        NOT NULL,
     user_id      bigint      NOT NULL,
     created_at   timestamptz NOT NULL,
@@ -952,89 +1534,77 @@ CREATE TABLE IF NOT EXISTS public.analytics (
 );
 
 -- Indexes to support common queries
-CREATE INDEX IF NOT EXISTS analytics_date_idx  ON public.analytics (created_at);
+CREATE INDEX IF NOT EXISTS analytics_date_idx ON public.analytics (created_at);
 CREATE INDEX IF NOT EXISTS analytics_command_name_idx ON public.analytics (command_name);
 CREATE INDEX IF NOT EXISTS analytics_command_name_date_idx ON public.analytics (command_name, created_at);
 
 
 
-CREATE TYPE job_status AS ENUM ('queued','processing','succeeded','failed','timeout');
+CREATE TYPE job_status AS enum ('queued','processing','succeeded','failed','timeout');
 
-CREATE TABLE public.jobs (
-                           id          uuid PRIMARY KEY,
-                           action      text NOT NULL,
-                           status      job_status NOT NULL DEFAULT 'queued',
-                           error_code  text,
-                           error_msg   text,
-                           attempts    int NOT NULL DEFAULT 0,
-                           created_at  timestamptz NOT NULL DEFAULT now(),
-                           started_at  timestamptz,
-                           finished_at timestamptz
+CREATE TABLE public.jobs
+(
+    id          uuid PRIMARY KEY,
+    action      text        NOT NULL,
+    status      job_status  NOT NULL DEFAULT 'queued',
+    error_code  text,
+    error_msg   text,
+    attempts    int         NOT NULL DEFAULT 0,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    started_at  timestamptz,
+    finished_at timestamptz
 );
 
 CREATE INDEX ON public.jobs (status, created_at);
 
-create table public.tags
+CREATE TABLE public.tags
 (
-    id          serial
-        primary key,
+    id          serial PRIMARY KEY,
     name        text,
     content     text,
     owner_id    bigint,
-    uses        integer   default 0,
+    uses        integer   DEFAULT 0,
     location_id bigint,
-    created_at  timestamp default (now() AT TIME ZONE 'utc'::text)
+    created_at  timestamp DEFAULT (now() AT TIME ZONE 'utc'::text)
 );
 
-create table public.tag_lookup
+CREATE TABLE public.tag_lookup
 (
-    id          serial
-        primary key,
+    id          serial PRIMARY KEY,
     name        text,
     location_id bigint,
     owner_id    bigint,
-    created_at  timestamp default (now() AT TIME ZONE 'utc'::text),
-    tag_id      integer
-        references public.tags
-            on delete cascade
+    created_at  timestamp DEFAULT (now() AT TIME ZONE 'utc'::text),
+    tag_id      integer REFERENCES public.tags ON DELETE CASCADE
 );
 
 
-create index tag_lookup_location_id_idx
-    on public.tag_lookup (location_id);
+CREATE INDEX tag_lookup_location_id_idx ON public.tag_lookup (location_id);
 
-create index tag_lookup_name_idx
-    on public.tag_lookup (name);
+CREATE INDEX tag_lookup_name_idx ON public.tag_lookup (name);
 
-create index tag_lookup_name_lower_idx
-    on public.tag_lookup (lower(name));
+CREATE INDEX tag_lookup_name_lower_idx ON public.tag_lookup (lower(name));
 
-create index tag_lookup_name_trgm_idx
-    on public.tag_lookup using gin (name public.gin_trgm_ops);
+CREATE INDEX tag_lookup_name_trgm_idx ON public.tag_lookup USING gin (name public.gin_trgm_ops);
 
-create unique index tag_lookup_uniq_idx
-    on public.tag_lookup (lower(name), location_id);
+CREATE UNIQUE INDEX tag_lookup_uniq_idx ON public.tag_lookup (lower(name), location_id);
 
 
-create index tags_location_id_idx
-    on public.tags (location_id);
+CREATE INDEX tags_location_id_idx ON public.tags (location_id);
 
-create index tags_name_idx
-    on public.tags (name);
+CREATE INDEX tags_name_idx ON public.tags (name);
 
-create index tags_name_lower_idx
-    on public.tags (lower(name));
+CREATE INDEX tags_name_lower_idx ON public.tags (lower(name));
 
-create index tags_name_trgm_idx
-    on public.tags using gin (name public.gin_trgm_ops);
+CREATE INDEX tags_name_trgm_idx ON public.tags USING gin (name public.gin_trgm_ops);
 
-create unique index tags_uniq_idx
-    on public.tags (lower(name), location_id);
+CREATE UNIQUE INDEX tags_uniq_idx ON public.tags (lower(name), location_id);
 
 
-CREATE TABLE IF NOT EXISTS public.processed_messages (
+CREATE TABLE IF NOT EXISTS public.processed_messages
+(
     idempotency_key text PRIMARY KEY,
-    processed_at timestamptz NOT NULL DEFAULT now()
+    processed_at    timestamptz NOT NULL DEFAULT now()
 );
 
 

@@ -132,8 +132,8 @@ class MapModel(MapResponse):
         res.update(
             {
                 "Code": self.code,
-                "Official Code" if not self.official else "Unofficial (CN) Code": self.linked_code,
-                "Official": str(self.official),
+                "Global Code" if not self.official else "Chinese Code": self.linked_code,
+                "Global": str(self.official),
                 "Title": self.title,
                 "Creator": discord.utils.escape_markdown(", ".join(creator_names)),
                 "Map": self.map_name,
@@ -161,7 +161,7 @@ class MapModel(MapResponse):
         Raises:
             AttributeError: If no playtest data is attached.
         """
-        if self.override_finalize is True:
+        if self.override_finalize:
             log.debug("Finalizable: Override is true=True")
             return True
 

@@ -111,38 +111,38 @@ MAP_PLAYTESTING_INFO_IMAGE = "https://bkan0n.com/assets/images/map_submit_flow.p
 DIFF_TECH_CHART_IMAGE = "https://bkan0n.com/assets/images/diff_techs.png"
 
 UNOFFICIAL_MAPS_INFO_EN = """
-**Unofficial maps** are the Chinese equivalent of parkour maps. Since we have no visibilty/control over these maps, they stay separate in our system.
+**Chinese maps** are the Chinese equivalent of global maps. Since we have no visibilty/control over these maps, they stay separate in our system.
 
 **Do completions count?**
 No.
-Completions on Unofficial maps **do not** count toward:
+Completions on Chinese maps **do not** count toward:
 - XP or Mastery
 - Rank progress
 - Medals (+, ++, +++)
-Only **Official** maps allow verified completions.
+Only **Global** maps allow verified completions.
 
-**Submitting Unofficial Maps**
-To submit an Unofficial (CN) map, visit:
+**Submitting Chinese Maps**
+To submit an Chinese map, visit:
 **https://genji.pk**
 
-You must log in with your **Discord account** to submit.
+You must log in with your **Discord account** to submit. If you cannot access Discord, then use your email to sign up.
 Admins, Mods, and Senseis may also manually link codes when they confirm two maps are exact equivalents.
 
 **How Linking Works**
 Some creators publish the **same map** on both global and Chinese servers. When this happens, the two map codes can be **linked**, allowing players to easily find the matching version.
 
 Typical scenarios:
-1. **A CN map is submitted first** → An Official version is created automatically and then playtested normally.
-2. **An Official map is later ported to CN** → A linked CN code is added without requiring new playtests.
+1. **A CN map is submitted first** → A Global version is created automatically and then playtested normally.
+2. **An Global map is later ported to CN** → A linked CN code is added without requiring new playtests.
 3. **Both codes were submitted separately** → Staff can link them using a simple command.
 
-**Why Unofficial Maps Are Visible**
-Unofficial codes exist to help players:
+**Why Chinese Maps Are Visible**
+Chinese codes exist to help players:
 - Identify CN/global equivalents
 - Navigate cross-server variants
 - Avoid confusion when creators maintain multiple versions of the same map
 
-Unofficial maps are for **reference only** and are not part of the ranking, XP, or medal systems.
+Chinese maps are for **reference only** and are not part of the ranking, XP, or medal systems.
 
 """  # noqa: E501
 UNOFFICIAL_MAPS_INFO_CN = """
@@ -331,8 +331,8 @@ class MapInformationView(ui.LayoutView):
                     ),
                 ),
                 InformationButton(
-                    label="Unofficial (CN) Maps",
-                    response_view=GenericInformationView(title="Unofficial (CN) Maps", content=UNOFFICIAL_MAPS_INFO_EN),
+                    label="Chinese Maps",
+                    response_view=GenericInformationView(title="Chinese Maps", content=UNOFFICIAL_MAPS_INFO_EN),
                 ),
                 InformationButton(
                     label="非官方（CN）地图",  # noqa: RUF001

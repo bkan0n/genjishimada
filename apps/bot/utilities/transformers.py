@@ -232,6 +232,10 @@ class UserTransformer(app_commands.Transformer):
         """
         if value.isdigit():
             return int(value)
+        else:
+            autocompleted_value = await self.autocomplete(itx, value)
+            if autocompleted_value:
+                return int(autocompleted_value[0].value)
         raise ValueError("This shouldn't happen?")
 
     async def autocomplete(self, itx: GenjiItx, current: str) -> list[app_commands.Choice[str]]:
@@ -264,6 +268,10 @@ class FakeUserTransformer(app_commands.Transformer):
         """
         if value.isdigit():
             return int(value)
+        else:
+            autocompleted_value = await self.autocomplete(itx, value)
+            if autocompleted_value:
+                return int(autocompleted_value[0].value)
         raise ValueError("This shouldn't happen?")
 
     async def autocomplete(self, itx: GenjiItx, current: str) -> list[app_commands.Choice[str]]:

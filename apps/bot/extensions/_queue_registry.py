@@ -23,7 +23,7 @@ def _get_bot(self: object) -> core.Genji:
     bot = getattr(self, "bot", None)
     if bot is None:
         raise RuntimeError("Service instance has no `.bot` attribute.")
-    return cast("core.Genji", bot)
+    return bot
 
 
 def queue_consumer(
