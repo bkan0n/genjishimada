@@ -1,0 +1,204 @@
+site_name: Genji Shimada Documentation
+site_url: https://docs.genji.pk
+site_description: Official documentation for the Genji Parkour community Discord bot and REST API
+site_author: Genji Parkour Team
+repo_url: https://github.com/bkan0n/genjishimada
+repo_name: bkan0n/genjishimada
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tabs.link
+
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+  font:
+    text: Inter
+    code: Fira Code
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/bkan0n/genjishimada
+      name: GitHub Repository
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/genji
+      name: Discord Community
+
+  version:
+    provider: mike
+
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Anchor link to this section
+      toc_depth: 3
+
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+      fallback_to_build_date: true
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - libs/sdk/src
+          options:
+            show_root_heading: true
+            show_root_toc_entry: false
+            show_source: false
+
+nav:
+  - Home: index.md
+  - Domain: domain/index.md
+
+  - Getting Started:
+    - getting-started/index.md
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+
+  - Services:
+    - services/index.md
+    - Bot: services/bot.md
+    - API: services/api.md
+    - Database: services/database.md
+    - RabbitMQ: services/rabbitmq.md
+    - OCR: services/ocr.md
+
+  - Bot:
+    - bot/index.md
+    - Architecture:
+      - bot/architecture/core-bot.md
+      - bot/architecture/services.md
+      - bot/architecture/messaging.md
+    - User Experience:
+      - bot/ux/newsfeed-and-embeds.md
+    - Operations:
+      - bot/operations/configuration.md
+
+  - API:
+    - api/index.md
+    - Architecture: api/architecture.md
+    - Local Development: api/local-development.md
+    - Deployment: api/deployment.md
+    - OpenAPI Reference: api/openapi.md
+    - Authentication: api/authentication.md
+    - External API Docs ↗: https://api.genji.pk/docs
+
+  - SDK:
+    - sdk/index.md
+    - Reference:
+      - sdk/reference/index.md
+      - Maps: sdk/reference/maps.md
+      - Completions: sdk/reference/completions.md
+      - Users: sdk/reference/users.md
+      - Notifications: sdk/reference/notifications.md
+      - Newsfeed: sdk/reference/newsfeed.md
+      - XP: sdk/reference/xp.md
+      - Lootbox: sdk/reference/lootbox.md
+      - Auth: sdk/reference/auth.md
+    - Data Models: sdk/data-models.md
+    - Usage: sdk/usage.md
+
+  - Operations:
+    - operations/index.md
+    - Infrastructure: operations/infrastructure.md
+    - Docker Compose: operations/docker-compose.md
+
+  - Contributing:
+    - contributing/index.md
+    - Development Workflow: contributing/workflow.md
+    - Documentation: contributing/documentation.md
+
+watch:
+  - docs
+  - mkdocs.yml

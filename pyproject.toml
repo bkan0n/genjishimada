@@ -3,6 +3,7 @@ members = [
     "apps/api",
     "apps/bot",
     "libs/sdk",
+    "docs",
 ]
 
 [tool.uv.sources]
