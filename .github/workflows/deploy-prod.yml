@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+    paths-ignore:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "docs/pyproject.toml"
+      - ".github/workflows/docs.yml"
 
 jobs:
   lint:
