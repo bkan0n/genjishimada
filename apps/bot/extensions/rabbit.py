@@ -286,7 +286,7 @@ class RabbitService:
         initial_count = dlq.declaration_result.message_count or 0
         cap = min(initial_count, DLQ_MAX_PER_QUEUE_TICK)
         if cap == 0:
-            log.info("[DLQ] %s is empty.", dlq_name)
+            log.debug("[DLQ] %s is empty.", dlq_name)
             return 0
 
         processed = 0
@@ -297,7 +297,7 @@ class RabbitService:
             # Non-blocking get; returns None if empty.
             msg = await queue.get(no_ack=False, fail=False)
             if msg is None:
-                log.info("[DLQ] %s has no messages available.", dlq_name)
+                log.debug("[DLQ] %s has no messages available.", dlq_name)
                 break
 
             headers = dict(msg.headers or {})
