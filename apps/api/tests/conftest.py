@@ -22,8 +22,11 @@ def _apply_sql_dir(conn, directory: str) -> None:
     for path in sorted(glob.glob(os.path.join(directory, "*.sql"))):
         with open(path, "r", encoding="utf-8") as f:
             sql_text = f.read()
-        conn.execute(sql_text, prepare=False)
-    conn.commit()
+        try:
+            conn.execute(sql_text, prepare=False)
+        except Exception as exc:
+            raise RuntimeError(f"Failed applying SQL file: {path}") from exc
+        conn.commit()
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db(postgres_connection) -> Generator[None, Any, None]:

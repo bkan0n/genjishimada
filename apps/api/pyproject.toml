@@ -23,6 +23,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+dev = [
+    "psycopg[binary]>=3.3.2",
+]
 dev-api = [
     "httpx-sse>=0.4.0",
     "pytest>=8.3.5",
@@ -76,3 +79,6 @@ lint.ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.uv.sources]
+genjishimada-sdk = { workspace = true }

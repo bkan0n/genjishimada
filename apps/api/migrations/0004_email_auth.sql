@@ -5,7 +5,7 @@ BEGIN;
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS users.email_auth
 (
-    user_id           bigint PRIMARY KEY REFERENCES core.users (id) ON DELETE CASCADE,
+    user_id           bigint PRIMARY KEY REFERENCES core.users (id) ON UPDATE CASCADE ON DELETE CASCADE,
     email             text NOT NULL,
     password_hash     text NOT NULL,
     email_verified_at timestamptz,
@@ -33,7 +33,7 @@ COMMENT ON COLUMN users.email_auth.email_verified_at IS 'Timestamp when email wa
 CREATE TABLE IF NOT EXISTS users.email_tokens
 (
     id         bigserial PRIMARY KEY,
-    user_id    bigint      NOT NULL REFERENCES core.users (id) ON DELETE CASCADE,
+    user_id    bigint      NOT NULL REFERENCES core.users (id) ON UPDATE CASCADE ON DELETE CASCADE,
     token_hash text        NOT NULL,
     token_type text        NOT NULL CHECK (token_type IN ('verification', 'password_reset')),
     expires_at timestamptz NOT NULL,
@@ -89,7 +89,7 @@ COMMENT ON TABLE users.auth_rate_limits IS 'Tracks authentication attempts for r
 CREATE TABLE IF NOT EXISTS users.sessions
 (
     id            text PRIMARY KEY,
-    user_id       bigint REFERENCES core.users (id) ON DELETE CASCADE,
+    user_id       bigint REFERENCES core.users (id) ON UPDATE CASCADE ON DELETE CASCADE,
     payload       text        NOT NULL,
     last_activity timestamptz NOT NULL DEFAULT now(),
     ip_address    text,

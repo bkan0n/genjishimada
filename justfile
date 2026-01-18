@@ -32,9 +32,9 @@ lint-api:
     -uv run ruff check apps/api
     -uv run basedpyright apps/api
 
-# Test API
+# Test API (requires Docker to be running for test database)
 test-api:
-    uv run pytest -n 8 apps/api
+    uv run --project apps/api --group dev-api pytest -n 8 apps/api -x
 
 # ----------------------------
 # Bot app (genjishimada-bot)

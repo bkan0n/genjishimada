@@ -2,7 +2,7 @@
 CREATE TABLE maps.edit_requests
 (
     id               serial PRIMARY KEY,
-    map_id           int         NOT NULL REFERENCES core.maps (id) ON DELETE CASCADE,
+    map_id           int         NOT NULL REFERENCES core.maps (id) ON UPDATE CASCADE ON DELETE CASCADE,
     code             varchar(6)  NOT NULL, -- Denormalized for easy querying
 
     -- Proposed changes as JSONB

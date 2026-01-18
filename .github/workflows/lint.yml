@@ -1,0 +1,71 @@
+name: Lint
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --all-groups
+
+      - name: Ruff format (check)
+        id: ruff-format
+        continue-on-error: true
+        uses: astral-sh/ruff-action@v1
+        with:
+          args: format --check apps/api apps/bot libs/sdk
+
+      - name: Ruff check
+        id: ruff-check
+        continue-on-error: true
+        uses: astral-sh/ruff-action@v1
+        with:
+          args: check apps/api apps/bot libs/sdk
+
+      - name: Basedpyright API
+        id: pyright-api
+        continue-on-error: true
+        run: uv run basedpyright apps/api
+
+      - name: Basedpyright Bot
+        id: pyright-bot
+        continue-on-error: true
+        run: uv run basedpyright apps/bot
+
+      - name: Basedpyright SDK
+        id: pyright-sdk
+        continue-on-error: true
+        run: uv run basedpyright libs/sdk
+
+      - name: Fail if any lint step failed
+        if: ${{ always() }}
+        run: |
+          results=(
+            "${{ steps.ruff-format.outcome }}"
+            "${{ steps.ruff-check.outcome }}"
+            "${{ steps.pyright-api.outcome }}"
+            "${{ steps.pyright-bot.outcome }}"
+            "${{ steps.pyright-sdk.outcome }}"
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" ]]; then
+              echo "Lint failures detected."
+              exit 1
+            fi
+          done

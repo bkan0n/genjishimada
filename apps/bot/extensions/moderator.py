@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal, Sequence, cast, get_args
 import discord
 from aio_pika.abc import AbstractIncomingMessage
 from apps.bot.extensions.completions import CompletionLeaderboardFormattable
+from apps.bot.utilities.formatter import FilteredFormatter
 from discord import ButtonStyle, Member, SelectOption, TextStyle, app_commands, ui
 from discord.ui import LayoutView
 from genjishimada_sdk.completions import CompletionModerateRequest
@@ -1535,14 +1536,16 @@ class MapEditRejectButton(_MapEditVerificationButton):
 class MapEditVerificationView(ui.LayoutView):
     """View shown in the verification queue for map edit requests."""
 
-    def __init__(self, data: MapEditSubmissionResponse) -> None:
+    def __init__(self, data: MapEditSubmissionResponse, original_map_data: MapModel) -> None:
         """Initialize the verification view.
 
         Args:
             data: The edit request submission data.
+            original_map_data: The original map data before the edit.
         """
         super().__init__(timeout=None)
         self.data = data
+        self.original_map_data = original_map_data
         self.edit_id = data.id
         self.rebuild_components()
 
@@ -1554,27 +1557,29 @@ class MapEditVerificationView(ui.LayoutView):
         """Build the verification view."""
         self.clear_items()
 
-        # Build changes display
         changes_text = "\n".join(f"**{c.field}:** ~~{c.old_value}~~ → {c.new_value}" for c in self.data.changes)
 
-        # Build action row with conditional playtest button
         action_buttons: list[ui.Item] = [MapEditAcceptButton()]
         if self._has_difficulty_change():
             action_buttons.append(MapEditAcceptAndPlaytestButton())
         action_buttons.append(MapEditRejectButton())
 
+        map_details = FilteredFormatter(self.original_map_data).format()
+
+        creator_ids = [c.id for c in self.original_map_data.creators]
+        non_creator_alert = (
+            ":warning: **This was submitted by a non-creator.**" if self.data.submitter_id not in creator_ids else ""
+        )
+
         container = ui.Container(
-            ui.TextDisplay(
-                f"# Map Edit Request\n"
-                f"**Map:** {self.data.code} ({self.data.map_name})\n"
-                f"**Submitted by:** {self.data.submitter_name}\n"
-                f"**Reason:** {self.data.reason}\n"
-            ),
+            ui.TextDisplay(f"# Map Edit Request\n**Current Map Data:**\n{map_details}"),
             ui.Separator(),
-            ui.TextDisplay(f"## Proposed Changes\n{changes_text}"),
+            ui.TextDisplay(f"**Submitted by:** {self.data.submitter_name}\n**Reason:** {self.data.reason}\n"),
+            ui.Separator(),
+            ui.TextDisplay(f"## Proposed Changes\n{changes_text}\n{non_creator_alert}"),
             ui.Separator(),
             ui.ActionRow(*action_buttons),
-            accent_color=0x5865F2,  # Discord blurple
+            accent_color=0x5865F2,
         )
         self.add_item(container)
 
@@ -1943,9 +1948,10 @@ class MapEditorService(BaseService):
 
         # Fetch the full submission data
         data = await self.bot.api.get_map_edit_submission(event.edit_request_id)
+        original_map_data = await self.bot.api.get_map(code=data.code)
 
         # Create and send the verification view
-        view = MapEditVerificationView(data)
+        view = MapEditVerificationView(data, original_map_data)
         message = await self.verification_channel.send(view=view)
 
         # Store message ID
