@@ -34,7 +34,8 @@ class MapEditorCog(BaseCog):
         for edit in pending:
             if edit.message_id:
                 data = await self.bot.api.get_map_edit_submission(edit.id)
-                view = MapEditVerificationView(data)
+                original_map_data = await self.bot.api.get_map(code=data.code)
+                view = MapEditVerificationView(data, original_map_data)
                 self.bot.add_view(view, message_id=edit.message_id)
                 self.bot.map_editor.verification_views[edit.message_id] = view
 
