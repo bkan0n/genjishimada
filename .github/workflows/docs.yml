@@ -1,0 +1,60 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'apps/api/**'  # Rebuild if API changes affect OpenAPI spec
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write  # Required for gh-pages deployment
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for git-revision-date-localized plugin
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            docs/pyproject.toml
+            apps/api/pyproject.toml
+
+      - name: Install documentation dependencies
+        run: |
+          uv sync --project docs
+
+      - name: Install API dependencies (for OpenAPI generation)
+        run: |
+          uv sync --project apps/api
+
+      - name: Generate OpenAPI specification
+        run: |
+          uv run --project apps/api python scripts/generate_openapi.py
+
+      - name: Build documentation
+        run: |
+          uv run --project docs mkdocs build --strict
+
+      - name: Deploy to GitHub Pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          uv run --project docs mkdocs gh-deploy --force

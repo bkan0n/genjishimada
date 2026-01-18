@@ -8,7 +8,7 @@ set shell := ["bash", "-uc"]
 
 # Initial setup: install everything once
 setup:
-    uv sync --all-groups
+    uv sync --all-groups --all-packages
 
 # Update lockfile when dependencies change
 lock:
@@ -16,7 +16,7 @@ lock:
 
 # Re-sync after pulling changes or switching branches
 sync:
-    uv sync --all-groups
+    uv sync --all-groups --all-packages
 
 # ----------------------------
 # API app (genjishimada-api)
@@ -34,7 +34,7 @@ lint-api:
 
 # Test API (requires Docker to be running for test database)
 test-api:
-    uv run --project apps/api --group dev-api pytest -n 8 apps/api -x
+    uv run --project apps/api --group dev-api --group dev pytest -n 8 apps/api -x
 
 # ----------------------------
 # Bot app (genjishimada-bot)
@@ -72,3 +72,21 @@ test-all:
 ci:
     just lint-all
     just test-all
+
+# ----------------------------
+# Documentation (MkDocs)
+# ----------------------------
+
+# Serve documentation locally with live reload
+docs-serve:
+    uv run --project docs mkdocs serve
+
+# Build documentation site
+docs-build:
+    uv run --project apps/api python scripts/generate_openapi.py
+    uv run --project docs mkdocs build
+
+# Deploy documentation to GitHub Pages
+docs-deploy:
+    just docs-build
+    uv run --project docs mkdocs gh-deploy --force

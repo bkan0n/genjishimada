@@ -1,0 +1,106 @@
+/**
+ * Custom Tailwind-based color scheme for Genji Shimada documentation
+ * Primary: Emerald (bg-emerald-500/90)
+ * Background accents: Zinc (bg-zinc-900/60 or bg-zinc-900/90)
+ */
+
+:root {
+  /* Emerald primary color (from Tailwind's emerald-500) */
+  --md-primary-fg-color: #10b981;
+  --md-primary-fg-color--light: #34d399;
+  --md-primary-fg-color--dark: #059669;
+  --md-primary-bg-color: rgba(255, 255, 255, 0.9);
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+
+  /* Accent color (emerald-400 for contrast) */
+  --md-accent-fg-color: #34d399;
+  --md-accent-fg-color--transparent: rgba(52, 211, 153, 0.1);
+  --md-accent-bg-color: rgba(255, 255, 255, 0.9);
+  --md-accent-bg-color--light: rgba(255, 255, 255, 0.7);
+}
+
+/* Dark mode overrides */
+[data-md-color-scheme="slate"] {
+  /* Emerald colors remain the same for visibility */
+  --md-primary-fg-color: #10b981;
+  --md-primary-fg-color--light: #34d399;
+  --md-primary-fg-color--dark: #059669;
+
+  /* Zinc background accents (zinc-900 with varying opacity) */
+  --md-default-bg-color: #0f0f0f;
+  --md-default-bg-color--light: #18181b;
+  --md-default-bg-color--lighter: rgba(24, 24, 27, 0.6);
+  --md-default-bg-color--lightest: rgba(24, 24, 27, 0.4);
+
+  /* Code blocks with zinc background */
+  --md-code-bg-color: rgba(24, 24, 27, 0.9);
+  --md-code-fg-color: #f4f4f5;
+
+  /* Footer with zinc background */
+  --md-footer-bg-color: rgba(24, 24, 27, 0.9);
+  --md-footer-bg-color--dark: rgba(15, 15, 15, 0.95);
+}
+
+/* Light mode code blocks */
+[data-md-color-scheme="default"] {
+  --md-code-bg-color: rgba(244, 244, 245, 0.9);
+  --md-code-fg-color: #18181b;
+}
+
+/* Enhanced navigation styling */
+.md-nav__link--active {
+  color: var(--md-primary-fg-color) !important;
+  font-weight: 600;
+}
+
+.md-nav__link:hover {
+  color: var(--md-accent-fg-color) !important;
+}
+
+/* Button styling with emerald accent */
+.md-button {
+  background-color: var(--md-primary-fg-color);
+  border-color: var(--md-primary-fg-color);
+  color: white;
+}
+
+.md-button:hover {
+  background-color: var(--md-primary-fg-color--dark);
+  border-color: var(--md-primary-fg-color--dark);
+}
+
+.md-button--primary {
+  background-color: var(--md-primary-fg-color);
+  border-color: var(--md-primary-fg-color);
+  color: white;
+}
+
+/* Admonition styling */
+.md-typeset .admonition,
+.md-typeset details {
+  border-left: 0.2rem solid var(--md-primary-fg-color);
+}
+
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-left-color: var(--md-accent-fg-color);
+}
+
+/* Search highlighting */
+.md-search-result__item:hover {
+  background-color: var(--md-accent-fg-color--transparent);
+}
+
+/* Table of contents active item */
+.md-nav--secondary .md-nav__link--active {
+  border-left-color: var(--md-accent-fg-color);
+}
+
+/* Code copy button */
+.md-clipboard {
+  color: var(--md-primary-fg-color);
+}
+
+.md-clipboard:hover {
+  color: var(--md-accent-fg-color);
+}
