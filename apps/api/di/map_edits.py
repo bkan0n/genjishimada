@@ -201,17 +201,58 @@ class MapEditService(BaseService):
         # Get current map data for comparison
         map_row = await self._conn.fetchrow(
             """
-            SELECT
-                code, map_name, category, checkpoints, difficulty,
-                description, title, array_agg(mech.name) AS mechanics, array_agg(res.name) AS restrictions,
-                custom_banner, hidden, archived, official
-            FROM core.maps m
-            LEFT JOIN maps.mechanic_links ml ON ml.map_id = m.id
-            LEFT JOIN maps.mechanics mech ON mech.id = ml.mechanic_id
-            LEFT JOIN maps.restriction_links rl ON rl.map_id = m.id
-            LEFT JOIN maps.restrictions res ON res.id = rl.restriction_id
-            WHERE code = $1
-            GROUP BY m.id
+              WITH target_map AS (
+                SELECT
+                  id,
+                  code,
+                  map_name,
+                  category,
+                  checkpoints,
+                  difficulty,
+                  description,
+                  title,
+                  custom_banner,
+                  hidden,
+                  archived,
+                  official
+                FROM core.maps
+                WHERE code = $1
+              ),
+              mechanics AS (
+                SELECT
+                  ml.map_id,
+                  array_agg(mech.name ORDER BY mech.position) AS mechanics
+                FROM maps.mechanic_links ml
+                JOIN maps.mechanics mech ON mech.id = ml.mechanic_id
+                WHERE ml.map_id = (SELECT id FROM target_map)
+                GROUP BY ml.map_id
+              ),
+              restrictions AS (
+                SELECT
+                  rl.map_id,
+                  array_agg(res.name ORDER BY res.name) AS restrictions
+                FROM maps.restriction_links rl
+                JOIN maps.restrictions res ON res.id = rl.restriction_id
+                WHERE rl.map_id = (SELECT id FROM target_map)
+                GROUP BY rl.map_id
+              )
+              SELECT
+                tm.code,
+                tm.map_name,
+                tm.category,
+                tm.checkpoints,
+                tm.difficulty,
+                tm.description,
+                tm.title,
+                tm.custom_banner,
+                tm.hidden,
+                tm.archived,
+                tm.official,
+                mech.mechanics,
+                res.restrictions
+              FROM target_map tm
+              LEFT JOIN mechanics mech ON mech.map_id = tm.id
+              LEFT JOIN restrictions res ON res.map_id = tm.id;
             """,
             edit_row["code"],
         )
