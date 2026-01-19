@@ -65,10 +65,6 @@
          <lastmod>2026-01-19</lastmod>
     </url>
     <url>
-         <loc>https://docs.genji.pk/domain/</loc>
-         <lastmod>2026-01-19</lastmod>
-    </url>
-    <url>
          <loc>https://docs.genji.pk/getting-started/</loc>
          <lastmod>2026-01-19</lastmod>
     </url>
@@ -125,7 +121,23 @@
          <lastmod>2026-01-19</lastmod>
     </url>
     <url>
+         <loc>https://docs.genji.pk/sdk/reference/change-requests/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
          <loc>https://docs.genji.pk/sdk/reference/completions/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/sdk/reference/difficulties/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/sdk/reference/internal/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/sdk/reference/logs/</loc>
          <lastmod>2026-01-19</lastmod>
     </url>
     <url>
@@ -142,6 +154,14 @@
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/notifications/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/sdk/reference/rank-card/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/sdk/reference/tags/</loc>
          <lastmod>2026-01-19</lastmod>
     </url>
     <url>

@@ -12,31 +12,31 @@
         <meta name="author" content="Genji Parkour Team">
       
       
-        <link rel="canonical" href="https://docs.genji.pk/operations/infrastructure/">
+        <link rel="canonical" href="https://docs.genji.pk/sdk/reference/change-requests/">
       
       
-        <link rel="prev" href="../">
+        <link rel="prev" href="../auth/">
       
       
-        <link rel="next" href="../docker-compose/">
+        <link rel="next" href="../completions/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
-        <title>Infrastructure - Genji Shimada Documentation</title>
+        <title>Change Requests - Genji Shimada Documentation</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,13 +55,13 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../css/timeago.css">
+      <link rel="stylesheet" href="../../../css/timeago.css">
     
-      <link rel="stylesheet" href="../../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#infrastructure" class="md-skip">
+        <a href="#change-requests" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Genji Shimada Documentation" class="md-header__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
+    <a href="../../.." title="Genji Shimada Documentation" class="md-header__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -126,7 +126,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Infrastructure
+              Change Requests
             
           </span>
         </div>
@@ -238,7 +238,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../.." class="md-tabs__link">
+      <a href="../../.." class="md-tabs__link">
         
   
   
@@ -259,7 +259,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../getting-started/" class="md-tabs__link">
+        <a href="../../../getting-started/" class="md-tabs__link">
           
   
   
@@ -281,7 +281,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../services/" class="md-tabs__link">
+        <a href="../../../services/" class="md-tabs__link">
           
   
   
@@ -303,7 +303,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../web/" class="md-tabs__link">
+        <a href="../../../web/" class="md-tabs__link">
           
   
   
@@ -325,7 +325,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../bot/" class="md-tabs__link">
+        <a href="../../../bot/" class="md-tabs__link">
           
   
   
@@ -347,7 +347,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../api/" class="md-tabs__link">
+        <a href="../../../api/" class="md-tabs__link">
           
   
   
@@ -365,11 +365,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../sdk/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../" class="md-tabs__link">
           
   
   
@@ -387,13 +389,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../../operations/" class="md-tabs__link">
           
   
   
@@ -415,7 +415,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../contributing/" class="md-tabs__link">
+        <a href="../../../contributing/" class="md-tabs__link">
           
   
   
@@ -459,7 +459,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Genji Shimada Documentation" class="md-nav__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
+    <a href="../../.." title="Genji Shimada Documentation" class="md-nav__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -489,7 +489,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -545,7 +545,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../getting-started/" class="md-nav__link ">
+            <a href="../../../getting-started/" class="md-nav__link ">
               
   
   
@@ -589,7 +589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/installation/" class="md-nav__link">
+      <a href="../../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -617,7 +617,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -689,7 +689,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../services/" class="md-nav__link ">
+            <a href="../../../services/" class="md-nav__link ">
               
   
   
@@ -733,7 +733,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/bot/" class="md-nav__link">
+      <a href="../../../services/bot/" class="md-nav__link">
         
   
   
@@ -761,7 +761,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/api/" class="md-nav__link">
+      <a href="../../../services/api/" class="md-nav__link">
         
   
   
@@ -789,7 +789,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/database/" class="md-nav__link">
+      <a href="../../../services/database/" class="md-nav__link">
         
   
   
@@ -817,7 +817,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../../services/rabbitmq/" class="md-nav__link">
         
   
   
@@ -845,7 +845,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ocr/" class="md-nav__link">
+      <a href="../../../services/ocr/" class="md-nav__link">
         
   
   
@@ -873,7 +873,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/translate/" class="md-nav__link">
+      <a href="../../../services/translate/" class="md-nav__link">
         
   
   
@@ -949,7 +949,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../web/" class="md-nav__link ">
+            <a href="../../../web/" class="md-nav__link ">
               
   
   
@@ -993,7 +993,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/repository-layout/" class="md-nav__link">
+      <a href="../../../web/repository-layout/" class="md-nav__link">
         
   
   
@@ -1021,7 +1021,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/runtime-container/" class="md-nav__link">
+      <a href="../../../web/runtime-container/" class="md-nav__link">
         
   
   
@@ -1049,7 +1049,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/deployment/" class="md-nav__link">
+      <a href="../../../web/deployment/" class="md-nav__link">
         
   
   
@@ -1077,7 +1077,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/frontend/" class="md-nav__link">
+      <a href="../../../web/frontend/" class="md-nav__link">
         
   
   
@@ -1105,7 +1105,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/backend/" class="md-nav__link">
+      <a href="../../../web/backend/" class="md-nav__link">
         
   
   
@@ -1133,7 +1133,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/integrations/" class="md-nav__link">
+      <a href="../../../web/integrations/" class="md-nav__link">
         
   
   
@@ -1161,7 +1161,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/security-and-sessions/" class="md-nav__link">
+      <a href="../../../web/security-and-sessions/" class="md-nav__link">
         
   
   
@@ -1189,7 +1189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/localization/" class="md-nav__link">
+      <a href="../../../web/localization/" class="md-nav__link">
         
   
   
@@ -1255,7 +1255,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../bot/" class="md-nav__link ">
+            <a href="../../../bot/" class="md-nav__link ">
               
   
   
@@ -1361,7 +1361,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../bot/architecture/core-bot/" class="md-nav__link">
+      <a href="../../../bot/architecture/core-bot/" class="md-nav__link">
         
   
   
@@ -1389,7 +1389,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../bot/architecture/services/" class="md-nav__link">
+      <a href="../../../bot/architecture/services/" class="md-nav__link">
         
   
   
@@ -1417,7 +1417,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../bot/architecture/messaging/" class="md-nav__link">
+      <a href="../../../bot/architecture/messaging/" class="md-nav__link">
         
   
   
@@ -1453,7 +1453,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../bot/ux/newsfeed-and-embeds/" class="md-nav__link">
+      <a href="../../../bot/ux/newsfeed-and-embeds/" class="md-nav__link">
         
   
   
@@ -1539,7 +1539,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../bot/operations/configuration/" class="md-nav__link">
+      <a href="../../../bot/operations/configuration/" class="md-nav__link">
         
   
   
@@ -1619,7 +1619,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../api/" class="md-nav__link ">
+            <a href="../../../api/" class="md-nav__link ">
               
   
   
@@ -1663,7 +1663,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/architecture/" class="md-nav__link">
+      <a href="../../../api/architecture/" class="md-nav__link">
         
   
   
@@ -1691,7 +1691,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/local-development/" class="md-nav__link">
+      <a href="../../../api/local-development/" class="md-nav__link">
         
   
   
@@ -1719,7 +1719,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/deployment/" class="md-nav__link">
+      <a href="../../../api/deployment/" class="md-nav__link">
         
   
   
@@ -1747,7 +1747,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/openapi/" class="md-nav__link">
+      <a href="../../../api/openapi/" class="md-nav__link">
         
   
   
@@ -1775,7 +1775,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/authentication/" class="md-nav__link">
+      <a href="../../../api/authentication/" class="md-nav__link">
         
   
   
@@ -1835,6 +1835,8 @@
       
   
   
+    
+  
   
   
     
@@ -1852,22 +1854,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../sdk/" class="md-nav__link ">
+            <a href="../../" class="md-nav__link ">
               
   
   
@@ -1885,13 +1888,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1908,6 +1911,8 @@
                 
   
   
+    
+  
   
   
     
@@ -1951,20 +1956,21 @@
       
       
         
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
+          
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_2" >
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_2" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../sdk/reference/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1982,13 +1988,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7_2" id="__nav_7_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_7_2" id="__nav_7_2_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2008,7 +2014,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/auth/" class="md-nav__link">
+      <a href="../auth/" class="md-nav__link">
         
   
   
@@ -2033,10 +2039,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../sdk/reference/change-requests/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change Requests
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -2052,6 +2085,98 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#genjishimada_sdk.change_requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        change_requests
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="change_requests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChangeRequestCreateRequest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#genjishimada_sdk.change_requests.ChangeRequestResponse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChangeRequestResponse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#genjishimada_sdk.change_requests.ChangeRequestType" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChangeRequestType
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#genjishimada_sdk.change_requests.StaleChangeRequestResponse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        StaleChangeRequestResponse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#genjishimada_sdk.change_requests.__all__" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        __all__
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2064,7 +2189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/completions/" class="md-nav__link">
+      <a href="../completions/" class="md-nav__link">
         
   
   
@@ -2092,7 +2217,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/difficulties/" class="md-nav__link">
+      <a href="../difficulties/" class="md-nav__link">
         
   
   
@@ -2120,7 +2245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/internal/" class="md-nav__link">
+      <a href="../internal/" class="md-nav__link">
         
   
   
@@ -2148,7 +2273,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/logs/" class="md-nav__link">
+      <a href="../logs/" class="md-nav__link">
         
   
   
@@ -2176,7 +2301,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/lootbox/" class="md-nav__link">
+      <a href="../lootbox/" class="md-nav__link">
         
   
   
@@ -2204,7 +2329,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/maps/" class="md-nav__link">
+      <a href="../maps/" class="md-nav__link">
         
   
   
@@ -2232,7 +2357,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/newsfeed/" class="md-nav__link">
+      <a href="../newsfeed/" class="md-nav__link">
         
   
   
@@ -2260,7 +2385,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/notifications/" class="md-nav__link">
+      <a href="../notifications/" class="md-nav__link">
         
   
   
@@ -2288,7 +2413,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/rank-card/" class="md-nav__link">
+      <a href="../rank-card/" class="md-nav__link">
         
   
   
@@ -2316,7 +2441,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/tags/" class="md-nav__link">
+      <a href="../tags/" class="md-nav__link">
         
   
   
@@ -2344,7 +2469,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/users/" class="md-nav__link">
+      <a href="../users/" class="md-nav__link">
         
   
   
@@ -2372,7 +2497,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/xp/" class="md-nav__link">
+      <a href="../xp/" class="md-nav__link">
         
   
   
@@ -2408,7 +2533,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/usage/" class="md-nav__link">
+      <a href="../../usage/" class="md-nav__link">
         
   
   
@@ -2440,8 +2565,6 @@
       
   
   
-    
-  
   
   
     
@@ -2467,23 +2590,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../../operations/" class="md-nav__link ">
               
   
   
@@ -2501,13 +2623,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="">
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2524,37 +2646,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Infrastructure
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../operations/infrastructure/" class="md-nav__link">
         
   
   
@@ -2570,287 +2665,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#architecture-overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Architecture Overview
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#postgresql" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        PostgreSQL
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="PostgreSQL">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#schema-organization" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Schema Organization
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#backups" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Backups
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rabbitmq" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        RabbitMQ
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="RabbitMQ">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#overview_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#queue-naming-convention" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Queue Naming Convention
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#monitoring" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Monitoring
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cloudflare-r2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Cloudflare R2
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Cloudflare R2">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#overview_2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configuration
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#bucket-details" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Bucket Details
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sentry" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Sentry
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Sentry">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#overview_3" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#configuration_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configuration
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Integration
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#email-resend" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Email (Resend)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Email (Resend)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#overview_4" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#configuration_2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configuration
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -2863,7 +2677,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../docker-compose/" class="md-nav__link">
+      <a href="../../../operations/docker-compose/" class="md-nav__link">
         
   
   
@@ -2891,7 +2705,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../reverse-proxy/" class="md-nav__link">
+      <a href="../../../operations/reverse-proxy/" class="md-nav__link">
         
   
   
@@ -2919,7 +2733,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../identity-and-auth/" class="md-nav__link">
+      <a href="../../../operations/identity-and-auth/" class="md-nav__link">
         
   
   
@@ -2947,7 +2761,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cloudflare/" class="md-nav__link">
+      <a href="../../../operations/cloudflare/" class="md-nav__link">
         
   
   
@@ -2975,7 +2789,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../monitoring/" class="md-nav__link">
+      <a href="../../../operations/monitoring/" class="md-nav__link">
         
   
   
@@ -3039,7 +2853,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../contributing/" class="md-nav__link ">
+            <a href="../../../contributing/" class="md-nav__link ">
               
   
   
@@ -3083,7 +2897,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../contributing/workflow/" class="md-nav__link">
+      <a href="../../../contributing/workflow/" class="md-nav__link">
         
   
   
@@ -3111,7 +2925,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../contributing/documentation/" class="md-nav__link">
+      <a href="../../../contributing/documentation/" class="md-nav__link">
         
   
   
@@ -3164,7 +2978,7 @@
   
   
     <li class="md-path__item">
-      <a href="../.." class="md-path__link">
+      <a href="../../.." class="md-path__link">
         
   <span class="md-ellipsis">
     Home
@@ -3182,10 +2996,28 @@
     
     
       <li class="md-path__item">
+        <a href="../../" class="md-path__link">
+          
+  <span class="md-ellipsis">
+    SDK
+  </span>
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+    
+    
+      <li class="md-path__item">
         <a href="../" class="md-path__link">
           
   <span class="md-ellipsis">
-    Operations
+    Reference
   </span>
 
         </a>
@@ -3207,121 +3039,965 @@
   
 
 
-<h1 id="infrastructure">Infrastructure<a class="headerlink" href="#infrastructure" title="Anchor link to this section">&para;</a></h1>
-<p>Detailed guide to the infrastructure services that power Genji Shimada.</p>
-<h2 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Anchor link to this section">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────┐
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  Discord Users  │
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>└────────┬────────┘
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>         │
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    ┌────▼────────────────┐
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    │   Discord Bot       │
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    │  (discord.py)       │
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    └─┬────────────────┬──┘
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>      │                │
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>      │                │
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a> ┌────▼─────┐    ┌────▼──────┐
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a> │ RabbitMQ │◄───┤  REST API │
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a> │          │    │ (Litestar)│
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a> └──────────┘    └─────┬─────┘
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                       │
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>                 ┌─────▼──────┐
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>                 │ PostgreSQL │
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>                 └────────────┘
-</span></code></pre></div>
-<h2 id="postgresql">PostgreSQL<a class="headerlink" href="#postgresql" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview">Overview<a class="headerlink" href="#overview" title="Anchor link to this section">&para;</a></h3>
-<p>PostgreSQL 17 is the primary data store for all persistent data.</p>
-<h3 id="schema-organization">Schema Organization<a class="headerlink" href="#schema-organization" title="Anchor link to this section">&para;</a></h3>
-<p>The database uses multiple schemas for logical separation:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>genjishimada (database)
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── core              # Users, maps, permissions
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>├── maps              # Map metadata, ratings
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>├── completions       # User completion records
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── playtests         # Map playtesting data
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>├── users             # Profiles, XP, rank cards
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>├── lootbox           # Lootbox system
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>├── rank_card         # Rank card customization
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>└── public            # Jobs, sessions, idempotency
-</span></code></pre></div>
-<h3 id="backups">Backups<a class="headerlink" href="#backups" title="Anchor link to this section">&para;</a></h3>
-<p>Create a full backup:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pg_dump<span class="w"> </span>-U<span class="w"> </span>genjishimada<span class="w"> </span>-h<span class="w"> </span>localhost<span class="w"> </span>-p<span class="w"> </span><span class="m">65432</span><span class="w"> </span>genjishimada<span class="w"> </span>&gt;<span class="w"> </span>backup_<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d<span class="k">)</span>.sql
-</span></code></pre></div>
-<h2 id="rabbitmq">RabbitMQ<a class="headerlink" href="#rabbitmq" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview_1">Overview<a class="headerlink" href="#overview_1" title="Anchor link to this section">&para;</a></h3>
-<p>RabbitMQ is used for asynchronous message passing between the API and bot.</p>
-<p><strong>Key Features</strong>:
-- <strong>Queue-based messaging</strong> for event processing
-- <strong>Dead letter queues (DLQ)</strong> for failed messages
-- <strong>Message persistence</strong> for reliability
-- <strong>Idempotency tracking</strong> to prevent duplicate processing</p>
-<h3 id="queue-naming-convention">Queue Naming Convention<a class="headerlink" href="#queue-naming-convention" title="Anchor link to this section">&para;</a></h3>
-<p>Queues follow the pattern: <code>api.&lt;domain&gt;.&lt;action&gt;</code></p>
-<p>Examples:
-- <code>api.completion.submission</code>
-- <code>api.notification.delivery</code>
-- <code>api.map_edit.created</code></p>
-<h3 id="monitoring">Monitoring<a class="headerlink" href="#monitoring" title="Anchor link to this section">&para;</a></h3>
-<p>RabbitMQ is not exposed directly in this repo. Production access is handled via your reverse proxy (e.g., Caddy). For local debugging, use container logs:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>genjishimada-rabbitmq-dev
-</span></code></pre></div>
-<h2 id="cloudflare-r2">Cloudflare R2<a class="headerlink" href="#cloudflare-r2" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview_2">Overview<a class="headerlink" href="#overview_2" title="Anchor link to this section">&para;</a></h3>
-<p>Cloudflare R2 is used for S3-compatible object storage.</p>
-<p><strong>Use cases</strong>:
-- Completion videos and screenshots
-- User rank card images
-- Map thumbnails</p>
-<h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Anchor link to this section">&para;</a></h3>
-<p>Set environment variables:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>AWS_ACCESS_KEY_ID=your_key
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>AWS_SECRET_ACCESS_KEY=your_secret
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>R2_ACCOUNT_ID=your_account_id
-</span></code></pre></div>
-<h3 id="bucket-details">Bucket Details<a class="headerlink" href="#bucket-details" title="Anchor link to this section">&para;</a></h3>
-<p>The API uploads screenshots to the <code>genji-parkour-images</code> bucket and returns public URLs via the <code>cdn.bkan0n.com</code> domain.</p>
-<h2 id="sentry">Sentry<a class="headerlink" href="#sentry" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview_3">Overview<a class="headerlink" href="#overview_3" title="Anchor link to this section">&para;</a></h3>
-<p>Sentry provides error tracking and performance monitoring.</p>
-<h3 id="configuration_1">Configuration<a class="headerlink" href="#configuration_1" title="Anchor link to this section">&para;</a></h3>
-<p>Set the DSN in <code>.env</code>:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>SENTRY_DSN=https://your_key@sentry.io/your_project
-</span></code></pre></div>
-<h3 id="integration">Integration<a class="headerlink" href="#integration" title="Anchor link to this section">&para;</a></h3>
-<p><strong>API</strong> (<code>apps/api/app.py</code>):
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sentry_sdk</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">sentry_sdk</span><span class="o">.</span><span class="n">init</span><span class="p">(</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">dsn</span><span class="o">=</span><span class="n">SENTRY_DSN</span><span class="p">,</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">environment</span><span class="o">=</span><span class="n">APP_ENVIRONMENT</span><span class="p">,</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">traces_sample_rate</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">)</span>
-</span></code></pre></div></p>
-<p><strong>Bot</strong> (<code>apps/bot/main.py</code>):
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sentry_sdk</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sentry_sdk.integrations.asyncio</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncioIntegration</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">sentry_sdk</span><span class="o">.</span><span class="n">init</span><span class="p">(</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">dsn</span><span class="o">=</span><span class="n">SENTRY_DSN</span><span class="p">,</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">environment</span><span class="o">=</span><span class="n">APP_ENVIRONMENT</span><span class="p">,</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">integrations</span><span class="o">=</span><span class="p">[</span><span class="n">AsyncioIntegration</span><span class="p">()],</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="p">)</span>
-</span></code></pre></div></p>
-<h2 id="email-resend">Email (Resend)<a class="headerlink" href="#email-resend" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview_4">Overview<a class="headerlink" href="#overview_4" title="Anchor link to this section">&para;</a></h3>
-<p>Resend is used for transactional email delivery.</p>
-<h3 id="configuration_2">Configuration<a class="headerlink" href="#configuration_2" title="Anchor link to this section">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>RESEND_API_KEY=your_resend_api_key
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>RESEND_FROM_EMAIL=noreply@genji.pk
-</span></code></pre></div>
-<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
-<ul>
-<li><a href="../docker-compose/">Docker Compose Guide</a> - Deploy these services</li>
-<li><a href="../reverse-proxy/">Reverse Proxy</a> - Caddy routing and TLS for Genji and monitoring</li>
-<li><a href="../../bot/operations/configuration/">Bot Configuration</a> - Configure the bot</li>
-<li><a href="../../api/">API Documentation</a> - Understand the API</li>
-</ul>
+<h1 id="change-requests">Change Requests<a class="headerlink" href="#change-requests" title="Anchor link to this section">&para;</a></h1>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="genjishimada_sdk.change_requests" class="doc doc-heading">
+            <code>genjishimada_sdk.change_requests</code>
+
+
+<a href="#genjishimada_sdk.change_requests" class="headerlink" title="Anchor link to this section">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="genjishimada_sdk.change_requests.ChangeRequestCreateRequest" class="doc doc-heading">
+            <code>ChangeRequestCreateRequest</code>
+
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest" class="headerlink" title="Anchor link to this section">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="msgspec.Struct">Struct</span></code></p>
+
+
+
+        <p>Payload for creating a change request.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="thread_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestCreateRequest.thread_id)" href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.thread_id">thread_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Discord thread identifier where the request is tracked.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="user_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestCreateRequest.user_id)" href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.user_id">user_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identifier of the user submitting the request.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="code: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestCreateRequest.code)" href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.code">code</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Overwatch workshop code for the associated map.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="content: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestCreateRequest.content)" href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.content">content</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Freeform description of the requested change.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="change_request_type: ChangeRequestType
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestCreateRequest.change_request_type)" href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.change_request_type">change_request_type</a></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ChangeRequestType = Literal['Difficulty Change', 'Map Geometry', 'Map Edit Required', 'Framework/Workshop', 'Other']
+
+  
+      module-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestType)" href="#genjishimada_sdk.change_requests.ChangeRequestType">ChangeRequestType</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Category describing the request type.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="creator_mentions: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestCreateRequest.creator_mentions)" href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.creator_mentions">creator_mentions</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mention string for notifying map creators.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestCreateRequest.change_request_type" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">change_request_type</span><span class="p">:</span> <span class="n">ChangeRequestType</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.change_request_type" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestCreateRequest.code" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">code</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.code" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestCreateRequest.content" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">content</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.content" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestCreateRequest.creator_mentions" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">creator_mentions</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.creator_mentions" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestCreateRequest.thread_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">thread_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.thread_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestCreateRequest.user_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestCreateRequest.user_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="genjishimada_sdk.change_requests.ChangeRequestResponse" class="doc doc-heading">
+            <code>ChangeRequestResponse</code>
+
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse" class="headerlink" title="Anchor link to this section">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="msgspec.Struct">Struct</span></code></p>
+
+
+
+        <p>Represents a persisted change request entry.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="thread_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestResponse.thread_id)" href="#genjishimada_sdk.change_requests.ChangeRequestResponse.thread_id">thread_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Discord thread identifier where the request is tracked.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="user_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestResponse.user_id)" href="#genjishimada_sdk.change_requests.ChangeRequestResponse.user_id">user_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identifier of the user that opened the request.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="code: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestResponse.code)" href="#genjishimada_sdk.change_requests.ChangeRequestResponse.code">code</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Overwatch workshop code for the associated map.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="content: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestResponse.content)" href="#genjishimada_sdk.change_requests.ChangeRequestResponse.content">content</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Description of the requested change.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="change_request_type: ChangeRequestType
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestResponse.change_request_type)" href="#genjishimada_sdk.change_requests.ChangeRequestResponse.change_request_type">change_request_type</a></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ChangeRequestType = Literal['Difficulty Change', 'Map Geometry', 'Map Edit Required', 'Framework/Workshop', 'Other']
+
+  
+      module-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestType)" href="#genjishimada_sdk.change_requests.ChangeRequestType">ChangeRequestType</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Category describing the request type.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="creator_mentions: str | None = None
+
+  
+      class-attribute
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestResponse.creator_mentions)" href="#genjishimada_sdk.change_requests.ChangeRequestResponse.creator_mentions">creator_mentions</a></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mention string for notifying map creators, if any.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="alerted: bool = False
+
+  
+      class-attribute
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestResponse.alerted)" href="#genjishimada_sdk.change_requests.ChangeRequestResponse.alerted">alerted</a></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the request has been surfaced to moderators or staff.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="resolved: bool = False
+
+  
+      class-attribute
+      instance-attribute
+   (genjishimada_sdk.change_requests.ChangeRequestResponse.resolved)" href="#genjishimada_sdk.change_requests.ChangeRequestResponse.resolved">resolved</a></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the change request has been completed.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestResponse.alerted" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">alerted</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse.alerted" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestResponse.change_request_type" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">change_request_type</span><span class="p">:</span> <span class="n">ChangeRequestType</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse.change_request_type" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestResponse.code" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">code</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse.code" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestResponse.content" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">content</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse.content" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestResponse.creator_mentions" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">creator_mentions</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse.creator_mentions" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestResponse.resolved" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">resolved</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse.resolved" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestResponse.thread_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">thread_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse.thread_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.ChangeRequestResponse.user_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestResponse.user_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="genjishimada_sdk.change_requests.ChangeRequestType" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">ChangeRequestType</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;Difficulty Change&#39;</span><span class="p">,</span> <span class="s1">&#39;Map Geometry&#39;</span><span class="p">,</span> <span class="s1">&#39;Map Edit Required&#39;</span><span class="p">,</span> <span class="s1">&#39;Framework/Workshop&#39;</span><span class="p">,</span> <span class="s1">&#39;Other&#39;</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.ChangeRequestType" class="headerlink" title="Anchor link to this section">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="genjishimada_sdk.change_requests.StaleChangeRequestResponse" class="doc doc-heading">
+            <code>StaleChangeRequestResponse</code>
+
+
+<a href="#genjishimada_sdk.change_requests.StaleChangeRequestResponse" class="headerlink" title="Anchor link to this section">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="msgspec.Struct">Struct</span></code></p>
+
+
+
+        <p>Old change request that needs follow-up.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="thread_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.StaleChangeRequestResponse.thread_id)" href="#genjishimada_sdk.change_requests.StaleChangeRequestResponse.thread_id">thread_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Discord thread identifier for the stale request.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="user_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.StaleChangeRequestResponse.user_id)" href="#genjishimada_sdk.change_requests.StaleChangeRequestResponse.user_id">user_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identifier of the user who created the request.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="creator_mentions: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.change_requests.StaleChangeRequestResponse.creator_mentions)" href="#genjishimada_sdk.change_requests.StaleChangeRequestResponse.creator_mentions">creator_mentions</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mention string for notifying map creators.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.StaleChangeRequestResponse.creator_mentions" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">creator_mentions</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.StaleChangeRequestResponse.creator_mentions" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.StaleChangeRequestResponse.thread_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">thread_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.StaleChangeRequestResponse.thread_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.change_requests.StaleChangeRequestResponse.user_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.StaleChangeRequestResponse.user_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="genjishimada_sdk.change_requests.__all__" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;ChangeRequestCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;ChangeRequestResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;ChangeRequestType&#39;</span><span class="p">,</span> <span class="s1">&#39;StaleChangeRequestResponse&#39;</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.change_requests.__all__" class="headerlink" title="Anchor link to this section">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
 
 
 
@@ -3344,7 +4020,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 04:06:51 UTC"><span class="timeago" datetime="2026-01-19T04:06:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 04:06:51 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:23:15 UTC"><span class="timeago" datetime="2026-01-19T15:23:15+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:23:15 UTC">2026-01-19</span>
   </span>
 
     
@@ -3354,7 +4030,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:23:15 UTC"><span class="timeago" datetime="2026-01-19T15:23:15+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:23:15 UTC">2026-01-19</span>
   </span>
 
     
@@ -3391,7 +4067,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Previous: Operations">
+          <a href="../auth/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Auth">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3401,20 +4077,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                Operations
+                Auth
               </div>
             </div>
           </a>
         
         
           
-          <a href="../docker-compose/" class="md-footer__link md-footer__link--next" aria-label="Next: Docker Compose">
+          <a href="../completions/" class="md-footer__link md-footer__link--next" aria-label="Next: Completions">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Docker Compose
+                Completions
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -3474,14 +4150,14 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "toc.integrate", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "toc.integrate", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../js/timeago.min.js"></script>
+        <script src="../../../js/timeago.min.js"></script>
       
-        <script src="../../js/timeago_mkdocs_material.js"></script>
+        <script src="../../../js/timeago_mkdocs_material.js"></script>
       
     
   </body>
