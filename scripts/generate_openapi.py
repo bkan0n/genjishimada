@@ -28,7 +28,7 @@ def main() -> None:
     try:
         # Import the Litestar app
         print("Importing Litestar app...")
-        from app import app
+        from app import app  # noqa: PLC0415
 
         # Get the OpenAPI schema
         print("Extracting OpenAPI schema...")
@@ -53,7 +53,8 @@ def main() -> None:
         sys.exit(1)
     except Exception as e:
         print(f"✗ Failed to generate OpenAPI spec: {e}", file=sys.stderr)
-        import traceback
+        import traceback  # noqa: PLC0415
+
         traceback.print_exc()
         sys.exit(1)
     finally:
