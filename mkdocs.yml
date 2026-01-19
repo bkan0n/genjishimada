@@ -198,7 +198,6 @@ nav:
       - XP: sdk/reference/xp.md
       - Lootbox: sdk/reference/lootbox.md
       - Auth: sdk/reference/auth.md
-    - Data Models: sdk/data-models.md
     - Usage: sdk/usage.md
 
   - Operations:
