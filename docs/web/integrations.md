@@ -51,7 +51,3 @@ This site relies on several external services configured in `config/services.php
 ## Optional Email Providers
 
 Mailgun, Postmark, and SES are configured in `config/services.php`, but usage depends on environment setup.
-
-## Unused Reserved Env Vars
-
-`BATTLENET_CLIENT_ID` and `BATTLENET_CLIENT_SECRET` are present in compose files but are not referenced in the codebase.
