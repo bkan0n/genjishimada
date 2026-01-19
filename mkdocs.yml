@@ -155,6 +155,17 @@ nav:
     - OCR: services/ocr.md
     - Translate: services/translate.md
 
+  - Web:
+    - web/index.md
+    - Repository Layout: web/repository-layout.md
+    - Runtime Container: web/runtime-container.md
+    - Deployment: web/deployment.md
+    - Frontend Build: web/frontend.md
+    - Backend Application: web/backend.md
+    - Integrations: web/integrations.md
+    - Security And Sessions: web/security-and-sessions.md
+    - Localization And Translations: web/localization.md
+
   - Bot:
     - bot/index.md
     - Architecture:
