@@ -226,6 +226,7 @@ nav:
     - operations/index.md
     - Infrastructure: operations/infrastructure.md
     - Docker Compose: operations/docker-compose.md
+    - Backups & Dev Refresh: operations/backups.md
     - Reverse Proxy: operations/reverse-proxy.md
     - Identity & Auth: operations/identity-and-auth.md
     - Cloudflare: operations/cloudflare.md

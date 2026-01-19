@@ -8,6 +8,7 @@ This section covers:
 
 - **Infrastructure** - PostgreSQL, RabbitMQ, and cloud services
 - **Docker Compose** - Local and production deployments
+- **Backups** - Nightly prod backups and weekly dev refresh
 - **Configuration** - Environment variables and config files
 - **Reverse Proxy** - Caddy routing, domains, and TLS
 - **Identity & Auth** - Keycloak and oauth2-proxy
@@ -41,6 +42,14 @@ This section covers:
     Caddy routing and Cloudflare TLS automation
 
     [:octicons-arrow-right-24: Reverse Proxy Guide](reverse-proxy.md)
+
+-   :material-database-arrow-down:{ .lg .middle } **Backups & Dev Refresh**
+
+    ---
+
+    Nightly prod backups and weekly dev refresh workflows
+
+    [:octicons-arrow-right-24: Backups Guide](backups.md)
 
 -   :material-monitor-dashboard:{ .lg .middle } **Monitoring**
 
