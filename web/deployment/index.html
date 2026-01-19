@@ -2923,33 +2923,45 @@
 
 
 <h1 id="deployment">Deployment<a class="headerlink" href="#deployment" title="Anchor link to this section">&para;</a></h1>
-<p>Deployments are handled by GitHub Actions using Docker contexts over SSH. There is one workflow for dev and one for prod.</p>
+<p>Deployments are handled by GitHub Actions using Docker contexts over SSH. There is one workflow for dev and one for
+prod.</p>
 <h2 id="dev-deployment-workflow">Dev Deployment Workflow<a class="headerlink" href="#dev-deployment-workflow" title="Anchor link to this section">&para;</a></h2>
-<p><code>/.github/workflows/dev-deploy.yml</code>:
-- Triggers:
-  - Manual <code>workflow_dispatch</code> (with a ref override).
-  - PR comment with <code>.deploy</code> using <code>github/branch-deploy</code>.
-- Uses a Docker context over SSH to the dev host.
-- Runs <code>docker compose -f docker-compose.dev.yml up -d --build</code>.</p>
+<p><code>/.github/workflows/dev-deploy.yml</code>:</p>
+<ul>
+<li>Triggers:<ul>
+<li>Manual <code>workflow_dispatch</code> (with a ref override).</li>
+<li>PR comment with <code>.deploy</code> using <code>github/branch-deploy</code>.</li>
+</ul>
+</li>
+<li>Uses a Docker context over SSH to the dev host.</li>
+<li>Runs <code>docker compose -f docker-compose.dev.yml up -d --build</code>.</li>
+</ul>
 <h2 id="prod-deployment-workflow">Prod Deployment Workflow<a class="headerlink" href="#prod-deployment-workflow" title="Anchor link to this section">&para;</a></h2>
-<p><code>/.github/workflows/prod-deploy.yml</code>:
-- Triggers on <code>push</code> to <code>main</code> and manual dispatch.
-- Uses a Docker context over SSH to the prod host.
-- Runs <code>docker compose -f docker-compose.prod.yml up -d --build</code>.</p>
+<p><code>/.github/workflows/prod-deploy.yml</code>:</p>
+<ul>
+<li>Triggers on <code>push</code> to <code>main</code> and manual dispatch.</li>
+<li>Uses a Docker context over SSH to the prod host.</li>
+<li>Runs <code>docker compose -f docker-compose.prod.yml up -d --build</code>.</li>
+</ul>
 <h2 id="compose-files">Compose Files<a class="headerlink" href="#compose-files" title="Anchor link to this section">&para;</a></h2>
-<p>Both compose files:
-- Build the same Dockerfile.
-- Inject the full environment set from GitHub secrets.
-- Attach to the external <code>genji-network</code>.</p>
-<p>There is no database container defined here. The website uses the same database as the bot and API, and expects that database to be reachable on the shared network.</p>
+<p>Both compose files:</p>
+<ul>
+<li>Build the same Dockerfile.</li>
+<li>Inject the full environment set from GitHub secrets.</li>
+<li>Attach to the external <code>genji-network</code>.</li>
+</ul>
+<p>There is no database container defined here. The website uses the same database as the bot and API, and expects that
+database to be reachable on the shared network.</p>
 <h2 id="environment-variables">Environment Variables<a class="headerlink" href="#environment-variables" title="Anchor link to this section">&para;</a></h2>
-<p>The workflows pass env vars for:
-- Genji API access (<code>X_API_ROOT</code>, <code>X_API_KEY</code>, <code>X_API_VERIFY</code>).
-- Discord OAuth + bot (<code>DISCORD_CLIENT_ID</code>, <code>DISCORD_CLIENT_SECRET</code>, <code>DISCORD_BOT_TOKEN</code>, <code>DISCORD_GUILD_ID</code>, <code>DISCORD_MODERATOR_ROLE_IDS</code>).
-- OCR + Translation API (<code>TRANSLATION_API_ROOT</code>, <code>TRANSLATION_API_KEY</code>, <code>TRANSLATION_API_VERIFY</code>).
-- Sentry (backend + frontend).
-- Session settings (<code>SESSION_SECURE_COOKIE</code>, <code>SESSION_DOMAIN</code>).</p>
-<p>Additional vars like <code>BATTLENET_CLIENT_ID</code> and <code>BATTLENET_CLIENT_SECRET</code> are present in compose but not referenced in the codebase yet.</p>
+<p>The workflows pass env vars for:</p>
+<ul>
+<li>Genji API access (<code>X_API_ROOT</code>, <code>X_API_KEY</code>, <code>X_API_VERIFY</code>).</li>
+<li>Discord OAuth + bot (<code>DISCORD_CLIENT_ID</code>, <code>DISCORD_CLIENT_SECRET</code>, <code>DISCORD_BOT_TOKEN</code>, <code>DISCORD_GUILD_ID</code>,
+  <code>DISCORD_MODERATOR_ROLE_IDS</code>).</li>
+<li>OCR + Translation API (<code>TRANSLATION_API_ROOT</code>, <code>TRANSLATION_API_KEY</code>, <code>TRANSLATION_API_VERIFY</code>).</li>
+<li>Sentry (backend + frontend).</li>
+<li>Session settings (<code>SESSION_SECURE_COOKIE</code>, <code>SESSION_DOMAIN</code>).</li>
+</ul>
 
 
 
@@ -2972,7 +2984,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 04:49:43 UTC"><span class="timeago" datetime="2026-01-19T04:49:43+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 04:49:43 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 14:13:26 UTC"><span class="timeago" datetime="2026-01-19T14:13:26+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 14:13:26 UTC">2026-01-19</span>
   </span>
 
     
