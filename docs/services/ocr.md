@@ -1,6 +1,6 @@
 # OCR Service
 
-The OCR service extracts player name, run time, and map code from Overwatch parkour screenshots. It is implemented in the `genjishimada-ocr` repository and is consumed by the API during completion submission flows.
+The OCR service extracts player name, run time, and map code from Overwatch parkour screenshots. It is implemented in the [`genjishimada-ocr`](https://github.com/bkan0n/genjishimada-ocr) repository and is consumed by the API during completion submission flows.
 
 ## Purpose
 
@@ -24,4 +24,4 @@ Interactive documentation is available at `/docs` (Swagger UI) and `/redoc` on t
 
 ## Deployment & quickstart
 
-The OCR service runs independently and is not deployed by this repo. See the OCR repository for Docker and local Python setup details.
+The OCR service runs independently and is not deployed by this repo. See the [`genjishimada-ocr`](https://github.com/bkan0n/genjishimada-ocr) repository for Docker and local Python setup details.

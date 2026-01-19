@@ -9,7 +9,10 @@ This section covers:
 - **Infrastructure** - PostgreSQL, RabbitMQ, and cloud services
 - **Docker Compose** - Local and production deployments
 - **Configuration** - Environment variables and config files
-- **Monitoring** - Logging and error tracking
+- **Reverse Proxy** - Caddy routing, domains, and TLS
+- **Identity & Auth** - Keycloak and oauth2-proxy
+- **Cloudflare** - DNS and CDN configuration
+- **Monitoring** - Grafana Alloy stack and dashboards
 
 ## Quick Links
 
@@ -30,6 +33,38 @@ This section covers:
     Deploy with Docker for development and production
 
     [:octicons-arrow-right-24: Docker Guide](docker-compose.md)
+
+-   :material-shield-lock:{ .lg .middle } **Reverse Proxy**
+
+    ---
+
+    Caddy routing and Cloudflare TLS automation
+
+    [:octicons-arrow-right-24: Reverse Proxy Guide](reverse-proxy.md)
+
+-   :material-monitor-dashboard:{ .lg .middle } **Monitoring**
+
+    ---
+
+    Set up Grafana Alloy, dashboards, and log collection
+
+    [:octicons-arrow-right-24: Monitoring Guide](monitoring.md)
+
+-   :material-account-key:{ .lg .middle } **Identity & Auth**
+
+    ---
+
+    Keycloak and oauth2-proxy configuration
+
+    [:octicons-arrow-right-24: Identity & Auth Guide](identity-and-auth.md)
+
+-   :material-cloud:{ .lg .middle } **Cloudflare**
+
+    ---
+
+    DNS, CDN, and R2 configuration
+
+    [:octicons-arrow-right-24: Cloudflare Guide](cloudflare.md)
 
 </div>
 

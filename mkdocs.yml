@@ -153,6 +153,7 @@ nav:
     - Database: services/database.md
     - RabbitMQ: services/rabbitmq.md
     - OCR: services/ocr.md
+    - Translate: services/translate.md
 
   - Bot:
     - bot/index.md
@@ -193,6 +194,10 @@ nav:
     - operations/index.md
     - Infrastructure: operations/infrastructure.md
     - Docker Compose: operations/docker-compose.md
+    - Reverse Proxy: operations/reverse-proxy.md
+    - Identity & Auth: operations/identity-and-auth.md
+    - Cloudflare: operations/cloudflare.md
+    - Monitoring: operations/monitoring.md
 
   - Contributing:
     - contributing/index.md

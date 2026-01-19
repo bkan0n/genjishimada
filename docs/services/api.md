@@ -6,7 +6,7 @@ It exposes REST endpoints under `/api/v3` for maps, users, completions, playtest
 ## What the API does
 
 - Serves REST endpoints under `/api/v3`.
-- Validates input using typed models from `genjishimada-sdk`.
+- Validates input using typed models from [`genjishimada-sdk`](https://github.com/bkan0n/genjishimada-sdk).
 - Acts as the authoritative interface to PostgreSQL.
 - Publishes events to RabbitMQ (XP, playtests, completions, notifications).
 - Powers the Discord bot and other internal tools.

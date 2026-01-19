@@ -164,5 +164,6 @@ RESEND_FROM_EMAIL=noreply@genji.pk
 ## Next Steps
 
 - [Docker Compose Guide](docker-compose.md) - Deploy these services
+- [Reverse Proxy](reverse-proxy.md) - Caddy routing and TLS for Genji and monitoring
 - [Bot Configuration](../bot/operations/configuration.md) - Configure the bot
 - [API Documentation](../api/index.md) - Understand the API

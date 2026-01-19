@@ -1,6 +1,6 @@
 # SDK Documentation
 
-The **Genji Shimada SDK** (`genjishimada-sdk`) is a shared library containing msgspec Struct definitions used across the API and bot.
+The **Genji Shimada SDK** ([`genjishimada-sdk`](https://github.com/bkan0n/genjishimada-sdk)) is a shared library containing msgspec Struct definitions used across the API and bot.
 
 ## Overview
 

@@ -9,3 +9,4 @@ This section documents the core services that make up the Genji Shimada platform
 - [Database](database.md)
 - [RabbitMQ](rabbitmq.md)
 - [OCR](ocr.md)
+- [Translate](translate.md)
