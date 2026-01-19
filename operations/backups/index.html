@@ -12,31 +12,31 @@
         <meta name="author" content="Genji Parkour Team">
       
       
-        <link rel="canonical" href="https://docs.genji.pk/sdk/reference/logs/">
+        <link rel="canonical" href="https://docs.genji.pk/operations/backups/">
       
       
-        <link rel="prev" href="../internal/">
+        <link rel="prev" href="../docker-compose/">
       
       
-        <link rel="next" href="../lootbox/">
+        <link rel="next" href="../reverse-proxy/">
       
       
         
       
       
-      <link rel="icon" href="../../../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
-        <title>Logs - Genji Shimada Documentation</title>
+        <title>Backups & Dev Refresh - Genji Shimada Documentation</title>
       
     
     
-      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,13 +55,13 @@
       
     
     
-      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../../css/timeago.css">
+      <link rel="stylesheet" href="../../css/timeago.css">
     
-      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
     
-    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#logs" class="md-skip">
+        <a href="#backups-and-dev-refresh" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../../.." title="Genji Shimada Documentation" class="md-header__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
+    <a href="../.." title="Genji Shimada Documentation" class="md-header__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -126,7 +126,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Logs
+              Backups & Dev Refresh
             
           </span>
         </div>
@@ -238,7 +238,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../.." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -259,7 +259,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../getting-started/" class="md-tabs__link">
+        <a href="../../getting-started/" class="md-tabs__link">
           
   
   
@@ -281,7 +281,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../services/" class="md-tabs__link">
+        <a href="../../services/" class="md-tabs__link">
           
   
   
@@ -303,7 +303,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../web/" class="md-tabs__link">
+        <a href="../../web/" class="md-tabs__link">
           
   
   
@@ -325,7 +325,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../bot/" class="md-tabs__link">
+        <a href="../../bot/" class="md-tabs__link">
           
   
   
@@ -347,7 +347,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../api/" class="md-tabs__link">
+        <a href="../../api/" class="md-tabs__link">
           
   
   
@@ -365,13 +365,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../sdk/" class="md-tabs__link">
           
   
   
@@ -389,11 +387,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../../operations/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -415,7 +415,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../../contributing/" class="md-tabs__link">
+        <a href="../../contributing/" class="md-tabs__link">
           
   
   
@@ -459,7 +459,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../../.." title="Genji Shimada Documentation" class="md-nav__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
+    <a href="../.." title="Genji Shimada Documentation" class="md-nav__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -489,7 +489,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../.." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -545,7 +545,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../getting-started/" class="md-nav__link ">
+            <a href="../../getting-started/" class="md-nav__link ">
               
   
   
@@ -589,7 +589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../getting-started/installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -617,7 +617,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -689,7 +689,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../services/" class="md-nav__link ">
+            <a href="../../services/" class="md-nav__link ">
               
   
   
@@ -733,7 +733,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/bot/" class="md-nav__link">
+      <a href="../../services/bot/" class="md-nav__link">
         
   
   
@@ -761,7 +761,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/api/" class="md-nav__link">
+      <a href="../../services/api/" class="md-nav__link">
         
   
   
@@ -789,7 +789,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/database/" class="md-nav__link">
+      <a href="../../services/database/" class="md-nav__link">
         
   
   
@@ -817,7 +817,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../services/rabbitmq/" class="md-nav__link">
         
   
   
@@ -845,7 +845,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/ocr/" class="md-nav__link">
+      <a href="../../services/ocr/" class="md-nav__link">
         
   
   
@@ -873,7 +873,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/translate/" class="md-nav__link">
+      <a href="../../services/translate/" class="md-nav__link">
         
   
   
@@ -949,7 +949,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../web/" class="md-nav__link ">
+            <a href="../../web/" class="md-nav__link ">
               
   
   
@@ -993,7 +993,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../web/repository-layout/" class="md-nav__link">
+      <a href="../../web/repository-layout/" class="md-nav__link">
         
   
   
@@ -1021,7 +1021,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../web/runtime-container/" class="md-nav__link">
+      <a href="../../web/runtime-container/" class="md-nav__link">
         
   
   
@@ -1049,7 +1049,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../web/deployment/" class="md-nav__link">
+      <a href="../../web/deployment/" class="md-nav__link">
         
   
   
@@ -1077,7 +1077,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../web/frontend/" class="md-nav__link">
+      <a href="../../web/frontend/" class="md-nav__link">
         
   
   
@@ -1105,7 +1105,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../web/backend/" class="md-nav__link">
+      <a href="../../web/backend/" class="md-nav__link">
         
   
   
@@ -1133,7 +1133,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../web/integrations/" class="md-nav__link">
+      <a href="../../web/integrations/" class="md-nav__link">
         
   
   
@@ -1161,7 +1161,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../web/security-and-sessions/" class="md-nav__link">
+      <a href="../../web/security-and-sessions/" class="md-nav__link">
         
   
   
@@ -1189,7 +1189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../web/localization/" class="md-nav__link">
+      <a href="../../web/localization/" class="md-nav__link">
         
   
   
@@ -1255,7 +1255,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../bot/" class="md-nav__link ">
+            <a href="../../bot/" class="md-nav__link ">
               
   
   
@@ -1361,7 +1361,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../bot/architecture/core-bot/" class="md-nav__link">
+      <a href="../../bot/architecture/core-bot/" class="md-nav__link">
         
   
   
@@ -1389,7 +1389,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../bot/architecture/services/" class="md-nav__link">
+      <a href="../../bot/architecture/services/" class="md-nav__link">
         
   
   
@@ -1417,7 +1417,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../bot/architecture/messaging/" class="md-nav__link">
+      <a href="../../bot/architecture/messaging/" class="md-nav__link">
         
   
   
@@ -1453,7 +1453,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../bot/ux/newsfeed-and-embeds/" class="md-nav__link">
+      <a href="../../bot/ux/newsfeed-and-embeds/" class="md-nav__link">
         
   
   
@@ -1539,7 +1539,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../bot/operations/configuration/" class="md-nav__link">
+      <a href="../../bot/operations/configuration/" class="md-nav__link">
         
   
   
@@ -1619,7 +1619,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../api/" class="md-nav__link ">
+            <a href="../../api/" class="md-nav__link ">
               
   
   
@@ -1663,7 +1663,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/architecture/" class="md-nav__link">
+      <a href="../../api/architecture/" class="md-nav__link">
         
   
   
@@ -1691,7 +1691,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/local-development/" class="md-nav__link">
+      <a href="../../api/local-development/" class="md-nav__link">
         
   
   
@@ -1719,7 +1719,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/deployment/" class="md-nav__link">
+      <a href="../../api/deployment/" class="md-nav__link">
         
   
   
@@ -1747,7 +1747,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/openapi/" class="md-nav__link">
+      <a href="../../api/openapi/" class="md-nav__link">
         
   
   
@@ -1775,7 +1775,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../api/authentication/" class="md-nav__link">
+      <a href="../../api/authentication/" class="md-nav__link">
         
   
   
@@ -1835,8 +1835,6 @@
       
   
   
-    
-  
   
   
     
@@ -1854,23 +1852,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../" class="md-nav__link ">
+            <a href="../../sdk/" class="md-nav__link ">
               
   
   
@@ -1888,13 +1885,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1911,8 +1908,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1956,21 +1951,20 @@
       
       
         
-          
-          
-        
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_2" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_2" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../sdk/reference/" class="md-nav__link ">
               
   
   
@@ -1988,13 +1982,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7_2" id="__nav_7_2_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7_2" id="__nav_7_2_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2014,7 +2008,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../auth/" class="md-nav__link">
+      <a href="../../sdk/reference/auth/" class="md-nav__link">
         
   
   
@@ -2042,7 +2036,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../change-requests/" class="md-nav__link">
+      <a href="../../sdk/reference/change-requests/" class="md-nav__link">
         
   
   
@@ -2070,7 +2064,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../completions/" class="md-nav__link">
+      <a href="../../sdk/reference/completions/" class="md-nav__link">
         
   
   
@@ -2098,7 +2092,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../difficulties/" class="md-nav__link">
+      <a href="../../sdk/reference/difficulties/" class="md-nav__link">
         
   
   
@@ -2126,7 +2120,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../internal/" class="md-nav__link">
+      <a href="../../sdk/reference/internal/" class="md-nav__link">
         
   
   
@@ -2134,6 +2128,443 @@
     
   
     Internal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/lootbox/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lootbox
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/maps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Maps
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/newsfeed/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Newsfeed
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/rank-card/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rank Card
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/tags/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tags
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/users/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Users
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/reference/xp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    XP
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../sdk/usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../infrastructure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Infrastructure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker-compose/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker Compose
   
 
     
@@ -2170,7 +2601,7 @@
   <span class="md-ellipsis">
     
   
-    Logs
+    Backups & Dev Refresh
   
 
     
@@ -2188,7 +2619,7 @@
   <span class="md-ellipsis">
     
   
-    Logs
+    Backups & Dev Refresh
   
 
     
@@ -2214,52 +2645,57 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#genjishimada_sdk.logs" class="md-nav__link">
+  <a href="#overview" class="md-nav__link">
     <span class="md-ellipsis">
       
-        logs
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="logs">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#genjishimada_sdk.logs.LogCreateRequest" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LogCreateRequest
+        Overview
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#genjishimada_sdk.logs.MapClickCreateRequest" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#nightly-production-backup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        MapClickCreateRequest
+        Nightly Production Backup
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#genjishimada_sdk.logs.__all__" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#weekly-dev-refresh" class="md-nav__link">
     <span class="md-ellipsis">
       
-        __all__
+        Weekly Dev Refresh
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#zerobyte-restic-uploads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Zerobyte / Restic Uploads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#server-setup-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Server Setup Notes
+      
+    </span>
+  </a>
   
 </li>
       
@@ -2279,441 +2715,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lootbox/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Lootbox
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../maps/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Maps
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../newsfeed/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Newsfeed
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../notifications/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Notifications
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../rank-card/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Rank Card
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../tags/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Tags
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../users/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Users
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../xp/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    XP
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../usage/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Usage
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-      
-        
-          
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="../../../operations/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Operations
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_8">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Operations
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../operations/infrastructure/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Infrastructure
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../operations/docker-compose/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Docker Compose
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../operations/backups/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Backups & Dev Refresh
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../operations/reverse-proxy/" class="md-nav__link">
+      <a href="../reverse-proxy/" class="md-nav__link">
         
   
   
@@ -2741,7 +2743,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../operations/identity-and-auth/" class="md-nav__link">
+      <a href="../identity-and-auth/" class="md-nav__link">
         
   
   
@@ -2769,7 +2771,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../operations/cloudflare/" class="md-nav__link">
+      <a href="../cloudflare/" class="md-nav__link">
         
   
   
@@ -2797,7 +2799,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../operations/monitoring/" class="md-nav__link">
+      <a href="../monitoring/" class="md-nav__link">
         
   
   
@@ -2861,7 +2863,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../../contributing/" class="md-nav__link ">
+            <a href="../../contributing/" class="md-nav__link ">
               
   
   
@@ -2905,7 +2907,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../contributing/workflow/" class="md-nav__link">
+      <a href="../../contributing/workflow/" class="md-nav__link">
         
   
   
@@ -2933,7 +2935,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../contributing/documentation/" class="md-nav__link">
+      <a href="../../contributing/documentation/" class="md-nav__link">
         
   
   
@@ -2986,7 +2988,7 @@
   
   
     <li class="md-path__item">
-      <a href="../../.." class="md-path__link">
+      <a href="../.." class="md-path__link">
         
   <span class="md-ellipsis">
     Home
@@ -3004,28 +3006,10 @@
     
     
       <li class="md-path__item">
-        <a href="../../" class="md-path__link">
-          
-  <span class="md-ellipsis">
-    SDK
-  </span>
-
-        </a>
-      </li>
-    
-  
-
-      
-        
-  
-  
-    
-    
-      <li class="md-path__item">
         <a href="../" class="md-path__link">
           
   <span class="md-ellipsis">
-    Reference
+    Operations
   </span>
 
         </a>
@@ -3047,516 +3031,51 @@
   
 
 
-<h1 id="logs">Logs<a class="headerlink" href="#logs" title="Anchor link to this section">&para;</a></h1>
-
-
-<div class="doc doc-object doc-module">
-
-
-
-<h2 id="genjishimada_sdk.logs" class="doc doc-heading">
-            <code>genjishimada_sdk.logs</code>
-
-
-<a href="#genjishimada_sdk.logs" class="headerlink" title="Anchor link to this section">&para;</a></h2>
-
-    <div class="doc doc-contents first">
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-<div class="doc doc-object doc-class">
-
-
-
-<h3 id="genjishimada_sdk.logs.LogCreateRequest" class="doc doc-heading">
-            <code>LogCreateRequest</code>
-
-
-<a href="#genjishimada_sdk.logs.LogCreateRequest" class="headerlink" title="Anchor link to this section">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="msgspec.Struct">Struct</span></code></p>
-
-
-
-        <p>Payload for recording a command usage log entry.</p>
-
-
-<p><span class="doc-section-title">Attributes:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="command_name: str
-
-  
-      instance-attribute
-   (genjishimada_sdk.logs.LogCreateRequest.command_name)" href="#genjishimada_sdk.logs.LogCreateRequest.command_name">command_name</a></code></td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Name of the executed command.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="user_id: int
-
-  
-      instance-attribute
-   (genjishimada_sdk.logs.LogCreateRequest.user_id)" href="#genjishimada_sdk.logs.LogCreateRequest.user_id">user_id</a></code></td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Identifier of the user who ran the command.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="created_at: dt.datetime
-
-  
-      instance-attribute
-   (genjishimada_sdk.logs.LogCreateRequest.created_at)" href="#genjishimada_sdk.logs.LogCreateRequest.created_at">created_at</a></code></td>
-            <td>
-                  <code><span title="datetime.datetime">datetime</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Timestamp when the command was executed.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="namespace: dict
-
-  
-      instance-attribute
-   (genjishimada_sdk.logs.LogCreateRequest.namespace)" href="#genjishimada_sdk.logs.LogCreateRequest.namespace">namespace</a></code></td>
-            <td>
-                  <code><span title="dict">dict</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Arbitrary namespace metadata to store with the log.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.logs.LogCreateRequest.command_name" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">command_name</span><span class="p">:</span> <span class="nb">str</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.LogCreateRequest.command_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.logs.LogCreateRequest.created_at" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">created_at</span><span class="p">:</span> <span class="n">dt</span><span class="o">.</span><span class="n">datetime</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.LogCreateRequest.created_at" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.logs.LogCreateRequest.namespace" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">namespace</span><span class="p">:</span> <span class="nb">dict</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.LogCreateRequest.namespace" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.logs.LogCreateRequest.user_id" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.LogCreateRequest.user_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-class">
-
-
-
-<h3 id="genjishimada_sdk.logs.MapClickCreateRequest" class="doc doc-heading">
-            <code>MapClickCreateRequest</code>
-
-
-<a href="#genjishimada_sdk.logs.MapClickCreateRequest" class="headerlink" title="Anchor link to this section">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-            <p class="doc doc-class-bases">
-              Bases: <code><span title="msgspec.Struct">Struct</span></code></p>
-
-
-
-        <p>Payload for recording a click on a map banner or link.</p>
-
-
-<p><span class="doc-section-title">Attributes:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="code: OverwatchCode
-
-  
-      instance-attribute
-   (genjishimada_sdk.logs.MapClickCreateRequest.code)" href="#genjishimada_sdk.logs.MapClickCreateRequest.code">code</a></code></td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="OverwatchCode = Annotated[str, Meta(min_length=4, max_length=6, pattern='^[A-Z0-9]*$')]
-
-  
-      module-attribute
-   (genjishimada_sdk.maps.OverwatchCode)" href="../maps/#genjishimada_sdk.maps.OverwatchCode">OverwatchCode</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Workshop code for the clicked map.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="ip_address: str
-
-  
-      instance-attribute
-   (genjishimada_sdk.logs.MapClickCreateRequest.ip_address)" href="#genjishimada_sdk.logs.MapClickCreateRequest.ip_address">ip_address</a></code></td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>IP address of the user who clicked.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="user_id: int | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.logs.MapClickCreateRequest.user_id)" href="#genjishimada_sdk.logs.MapClickCreateRequest.user_id">user_id</a></code></td>
-            <td>
-                  <code><span title="int">int</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Optional identifier of the clicking user.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="source: Literal['web', 'bot'] = 'web'
-
-  
-      class-attribute
-      instance-attribute
-   (genjishimada_sdk.logs.MapClickCreateRequest.source)" href="#genjishimada_sdk.logs.MapClickCreateRequest.source">source</a></code></td>
-            <td>
-                  <code><span title="typing.Literal">Literal</span>[&#39;web&#39;, &#39;bot&#39;]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Origin of the click, such as web or bot.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.logs.MapClickCreateRequest.code" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">code</span><span class="p">:</span> <span class="n">OverwatchCode</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.MapClickCreateRequest.code" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.logs.MapClickCreateRequest.ip_address" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">ip_address</span><span class="p">:</span> <span class="nb">str</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.MapClickCreateRequest.ip_address" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.logs.MapClickCreateRequest.source" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">source</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;web&#39;</span><span class="p">,</span> <span class="s1">&#39;bot&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;web&#39;</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.MapClickCreateRequest.source" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.logs.MapClickCreateRequest.user_id" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.MapClickCreateRequest.user_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="genjishimada_sdk.logs.__all__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;LogCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;MapClickCreateRequest&#39;</span><span class="p">)</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.logs.__all__" class="headerlink" title="Anchor link to this section">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
+<h1 id="backups-and-dev-refresh">Backups and Dev Refresh<a class="headerlink" href="#backups-and-dev-refresh" title="Anchor link to this section">&para;</a></h1>
+<p>This section documents the database backup flow and the weekly refresh of the dev database.</p>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Anchor link to this section">&para;</a></h2>
+<ul>
+<li><strong>Nightly prod backup</strong> runs on a schedule and creates a fresh database dump.</li>
+<li><strong>Weekly dev refresh</strong> replaces the dev database with the latest prod backup.</li>
+<li><strong>Zerobyte (Restic)</strong> uploads the backup file from the host to the Cloudflare R2 bucket.</li>
+</ul>
+<p>The backup bucket is <code>genji-db-backups</code> (R2), and the host directory is <code>/var/backups/genji/postgres</code>.</p>
+<h2 id="nightly-production-backup">Nightly Production Backup<a class="headerlink" href="#nightly-production-backup" title="Anchor link to this section">&para;</a></h2>
+<p>Workflow: <code>.github/workflows/db-backup-nightly.yml</code></p>
+<ul>
+<li>Runs daily at 2:00 AM America/Chicago.</li>
+<li>SSHes to the server and executes <code>/opt/genji/scripts/backup_prod_db.sh</code>.</li>
+</ul>
+<p>Script: <code>ops/backup_prod_db.sh</code></p>
+<ul>
+<li>Uses <code>pg_dump -Fc</code> inside the <code>genjishimada-db</code> container.</li>
+<li>Writes to <code>/var/backups/genji/postgres/genjishimada-prod.dump</code> on the host.</li>
+<li>Overwrites the previous dump atomically.</li>
+</ul>
+<h2 id="weekly-dev-refresh">Weekly Dev Refresh<a class="headerlink" href="#weekly-dev-refresh" title="Anchor link to this section">&para;</a></h2>
+<p>Workflow: <code>.github/workflows/db-refresh-dev-weekly.yml</code></p>
+<ul>
+<li>Runs Sundays at 2:00 AM America/Chicago.</li>
+<li>SSHes to the server and executes <code>/opt/genji/scripts/refresh_dev_from_prod.sh</code>.</li>
+</ul>
+<p>Script: <code>ops/refresh_dev_from_prod.sh</code></p>
+<p>1) Runs the production backup script.
+2) Drops and recreates the dev database in <code>genjishimada-db-dev</code>.
+3) Restores the latest prod dump with <code>pg_restore --no-owner --no-privileges</code>.</p>
+<p>This keeps dev aligned with prod data while avoiding cross-env ownership issues.</p>
+<h2 id="zerobyte-restic-uploads">Zerobyte / Restic Uploads<a class="headerlink" href="#zerobyte-restic-uploads" title="Anchor link to this section">&para;</a></h2>
+<p>Zerobyte is used as a GUI wrapper for Restic. It uploads the backup dump stored in
+<code>/var/backups/genji/postgres</code> to the Cloudflare R2 bucket <code>genji-db-backups</code>.</p>
+<p>The backup workflow itself only writes the dump to disk; the upload happens via Restic.</p>
+<h2 id="server-setup-notes">Server Setup Notes<a class="headerlink" href="#server-setup-notes" title="Anchor link to this section">&para;</a></h2>
+<p>From <code>ops/README.md</code>:</p>
+<ul>
+<li>Create <code>/var/backups/genji/postgres</code> on the host.</li>
+<li>Add the SSH user to the <code>genji-backup</code> group and grant write access.</li>
+<li>Copy scripts from <code>ops/</code> to <code>/opt/genji/scripts/</code> and mark them executable.</li>
+</ul>
+<p>The Postgres containers bind-mount <code>/var/backups/genji/postgres</code> so the dump is accessible
+on the host for Restic uploads.</p>
 
 
 
@@ -3579,7 +3098,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:23:15 UTC"><span class="timeago" datetime="2026-01-19T15:23:15+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:23:15 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:28:32 UTC"><span class="timeago" datetime="2026-01-19T15:28:32+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:28:32 UTC">2026-01-19</span>
   </span>
 
     
@@ -3589,7 +3108,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:23:15 UTC"><span class="timeago" datetime="2026-01-19T15:23:15+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:23:15 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:28:32 UTC"><span class="timeago" datetime="2026-01-19T15:28:32+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:28:32 UTC">2026-01-19</span>
   </span>
 
     
@@ -3626,7 +3145,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../internal/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Internal">
+          <a href="../docker-compose/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Docker Compose">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3636,20 +3155,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                Internal
+                Docker Compose
               </div>
             </div>
           </a>
         
         
           
-          <a href="../lootbox/" class="md-footer__link md-footer__link--next" aria-label="Next: Lootbox">
+          <a href="../reverse-proxy/" class="md-footer__link md-footer__link--next" aria-label="Next: Reverse Proxy">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Lootbox
+                Reverse Proxy
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -3709,14 +3228,14 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "toc.integrate", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "toc.integrate", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../../js/timeago.min.js"></script>
+        <script src="../../js/timeago.min.js"></script>
       
-        <script src="../../../js/timeago_mkdocs_material.js"></script>
+        <script src="../../js/timeago_mkdocs_material.js"></script>
       
     
   </body>
