@@ -184,4 +184,40 @@
          <loc>https://docs.genji.pk/services/translate/</loc>
          <lastmod>2026-01-19</lastmod>
     </url>
+    <url>
+         <loc>https://docs.genji.pk/web/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/web/backend/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/web/deployment/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/web/frontend/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/web/integrations/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/web/localization/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/web/repository-layout/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/web/runtime-container/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.genji.pk/web/security-and-sessions/</loc>
+         <lastmod>2026-01-19</lastmod>
+    </url>
 </urlset>

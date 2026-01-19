@@ -12,13 +12,13 @@
         <meta name="author" content="Genji Parkour Team">
       
       
-        <link rel="canonical" href="https://docs.genji.pk/api/authentication/">
+        <link rel="canonical" href="https://docs.genji.pk/web/security-and-sessions/">
       
       
-        <link rel="prev" href="../openapi/">
+        <link rel="prev" href="../integrations/">
       
       
-        <link rel="next" href="../../sdk/">
+        <link rel="next" href="../localization/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Authentication - Genji Shimada Documentation</title>
+        <title>Security And Sessions - Genji Shimada Documentation</title>
       
     
     
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#authentication" class="md-skip">
+        <a href="#security-and-sessions" class="md-skip">
           Skip to content
         </a>
       
@@ -126,7 +126,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Authentication
+              Security And Sessions
             
           </span>
         </div>
@@ -318,11 +318,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../web/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -362,13 +364,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../api/" class="md-tabs__link">
           
   
   
@@ -951,6 +951,8 @@
       
   
   
+    
+  
   
   
     
@@ -980,22 +982,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../web/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -1013,13 +1016,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1039,7 +1042,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/repository-layout/" class="md-nav__link">
+      <a href="../repository-layout/" class="md-nav__link">
         
   
   
@@ -1067,7 +1070,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/runtime-container/" class="md-nav__link">
+      <a href="../runtime-container/" class="md-nav__link">
         
   
   
@@ -1095,7 +1098,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/deployment/" class="md-nav__link">
+      <a href="../deployment/" class="md-nav__link">
         
   
   
@@ -1123,7 +1126,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/frontend/" class="md-nav__link">
+      <a href="../frontend/" class="md-nav__link">
         
   
   
@@ -1151,7 +1154,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/backend/" class="md-nav__link">
+      <a href="../backend/" class="md-nav__link">
         
   
   
@@ -1179,7 +1182,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/integrations/" class="md-nav__link">
+      <a href="../integrations/" class="md-nav__link">
         
   
   
@@ -1204,10 +1207,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../web/security-and-sessions/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security And Sessions
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1223,6 +1253,92 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#api-backed-sessions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API-Backed Sessions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auth-and-role-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auth And Role Checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#csrf" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CSRF
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#csp-and-nonce" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CSP And Nonce
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sentry-tunnel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sentry Tunnel
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cookies-and-domains" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cookies And Domains
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1235,7 +1351,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../web/localization/" class="md-nav__link">
+      <a href="../localization/" class="md-nav__link">
         
   
   
@@ -1691,8 +1807,6 @@
       
   
   
-    
-  
   
   
     
@@ -1718,23 +1832,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../api/" class="md-nav__link ">
               
   
   
@@ -1752,13 +1865,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1778,7 +1891,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../architecture/" class="md-nav__link">
+      <a href="../../api/architecture/" class="md-nav__link">
         
   
   
@@ -1806,7 +1919,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../local-development/" class="md-nav__link">
+      <a href="../../api/local-development/" class="md-nav__link">
         
   
   
@@ -1834,7 +1947,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../deployment/" class="md-nav__link">
+      <a href="../../api/deployment/" class="md-nav__link">
         
   
   
@@ -1862,7 +1975,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../openapi/" class="md-nav__link">
+      <a href="../../api/openapi/" class="md-nav__link">
         
   
   
@@ -1887,37 +2000,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Authentication
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../api/authentication/" class="md-nav__link">
         
   
   
@@ -1933,165 +2019,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#api-keys" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        API Keys
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="API Keys">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#using-an-api-key" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Using an API Key
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#scopes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Scopes
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#middleware" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Middleware
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Middleware">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#excluding-routes-from-auth" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Excluding Routes from Auth
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#best-practices" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Best Practices
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Troubleshooting
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Troubleshooting">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#missing-api-key" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Missing API Key
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#invalid-api-key" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Invalid API Key
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#insufficient-permissions" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Insufficient Permissions
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -3025,7 +2952,7 @@
         <a href="../" class="md-path__link">
           
   <span class="md-ellipsis">
-    API
+    Web
   </span>
 
         </a>
@@ -3047,68 +2974,35 @@
   
 
 
-<h1 id="authentication">Authentication<a class="headerlink" href="#authentication" title="Anchor link to this section">&para;</a></h1>
-<p>The Genji Shimada API uses <strong>API keys</strong> for all authenticated requests. This is the only supported method for service-to-service communication.</p>
-<h2 id="api-keys">API Keys<a class="headerlink" href="#api-keys" title="Anchor link to this section">&para;</a></h2>
-<p><strong>Use case</strong>: Bot, internal services, or trusted backend clients.</p>
-<p>API keys are stored in the <code>public.api_tokens</code> table and attached to an auth user record.</p>
-<h3 id="using-an-api-key">Using an API Key<a class="headerlink" href="#using-an-api-key" title="Anchor link to this section">&para;</a></h3>
-<p>Include the key in the <code>X-API-KEY</code> header:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>curl<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;X-API-KEY: your_api_key&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>https://api.genji.pk/api/v3/maps
-</span></code></pre></div>
-<p><strong>Example (Python):</strong></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;X-API-KEY&quot;</span><span class="p">:</span> <span class="s2">&quot;your_api_key&quot;</span><span class="p">}</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">response</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;https://api.genji.pk/api/v3/maps&quot;</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="n">headers</span><span class="p">)</span>
-</span></code></pre></div>
-<h3 id="scopes">Scopes<a class="headerlink" href="#scopes" title="Anchor link to this section">&para;</a></h3>
-<p>API keys may be scoped. The middleware attaches <code>scopes</code> and <code>is_superuser</code> to the request auth token.</p>
-<p>Common scope examples:</p>
+<h1 id="security-and-sessions">Security And Sessions<a class="headerlink" href="#security-and-sessions" title="Anchor link to this section">&para;</a></h1>
+<p>This app uses a mix of Laravel defaults and platform-specific session handling.</p>
+<h2 id="api-backed-sessions">API-Backed Sessions<a class="headerlink" href="#api-backed-sessions" title="Anchor link to this section">&para;</a></h2>
 <ul>
-<li><code>read:maps</code></li>
-<li><code>write:maps</code></li>
-<li><code>read:users</code></li>
-<li><code>write:completions</code></li>
-<li><code>admin:*</code></li>
+<li><code>config/session.php</code> sets the driver to <code>api</code> and enables encryption.</li>
+<li><code>ApiSessionHandler</code> stores session data via the Genji API.</li>
+<li>Remember-token flows use <code>device_session_id</code> cookies to keep sessions consistent across devices.</li>
 </ul>
-<p>Routes can require scopes via <code>required_scopes</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@get</span><span class="p">(</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="s2">&quot;/admin/users&quot;</span><span class="p">,</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">opt</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;required_scopes&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;admin:users&quot;</span><span class="p">}},</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">)</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">list_all_users</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">User</span><span class="p">]:</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="o">...</span>
-</span></code></pre></div>
-<h2 id="middleware">Middleware<a class="headerlink" href="#middleware" title="Anchor link to this section">&para;</a></h2>
-<p>Authentication is enforced by <code>CustomAuthenticationMiddleware</code> in <code>apps/api/middleware/auth.py</code>.</p>
-<h3 id="excluding-routes-from-auth">Excluding Routes from Auth<a class="headerlink" href="#excluding-routes-from-auth" title="Anchor link to this section">&para;</a></h3>
-<p>Routes can opt out of authentication with <code>exclude_from_auth</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@get</span><span class="p">(</span><span class="s2">&quot;/healthcheck&quot;</span><span class="p">,</span> <span class="n">opt</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;exclude_from_auth&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">health_check</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;ok&quot;</span><span class="p">}</span>
-</span></code></pre></div>
-<h2 id="best-practices">Best Practices<a class="headerlink" href="#best-practices" title="Anchor link to this section">&para;</a></h2>
+<h2 id="auth-and-role-checks">Auth And Role Checks<a class="headerlink" href="#auth-and-role-checks" title="Anchor link to this section">&para;</a></h2>
 <ul>
-<li>Use <strong>least-privilege</strong> keys for each service.</li>
-<li>Rotate keys periodically.</li>
-<li>Store keys in environment variables, never in code.</li>
+<li>Discord moderator access is enforced in <code>RequireDiscordModerator</code>.</li>
+<li>Email users are still supported through the Genji API endpoints.</li>
 </ul>
-<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Anchor link to this section">&para;</a></h2>
-<h3 id="missing-api-key">Missing API Key<a class="headerlink" href="#missing-api-key" title="Anchor link to this section">&para;</a></h3>
-<p><strong>Error</strong>: <code>401 Unauthorized - Missing API key</code></p>
-<p><strong>Solution</strong>: Ensure <code>X-API-KEY</code> is present on the request.</p>
-<h3 id="invalid-api-key">Invalid API Key<a class="headerlink" href="#invalid-api-key" title="Anchor link to this section">&para;</a></h3>
-<p><strong>Error</strong>: <code>401 Unauthorized - Invalid API key</code></p>
-<p><strong>Solution</strong>: Verify the key is correct and active.</p>
-<h3 id="insufficient-permissions">Insufficient Permissions<a class="headerlink" href="#insufficient-permissions" title="Anchor link to this section">&para;</a></h3>
-<p><strong>Error</strong>: <code>403 Forbidden - Missing required scopes: ...</code></p>
-<p><strong>Solution</strong>: Update the key's scopes or use a superuser token.</p>
-<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
+<h2 id="csrf">CSRF<a class="headerlink" href="#csrf" title="Anchor link to this section">&para;</a></h2>
+<p><code>resources/js/app.js</code> patches <code>fetch()</code> to attach <code>X-CSRF-TOKEN</code> and <code>X-Requested-With</code> headers on non-GET requests.</p>
+<h2 id="csp-and-nonce">CSP And Nonce<a class="headerlink" href="#csp-and-nonce" title="Anchor link to this section">&para;</a></h2>
 <ul>
-<li><a href="../openapi/">OpenAPI Reference</a> - Review endpoint auth requirements</li>
-<li><a href="https://api.genji.pk/docs">External API Docs</a> - Interactive Swagger UI</li>
+<li><code>config/csp.php</code> defines a strict CSP and uses a nonce generator.</li>
+<li><code>AppServiceProvider</code> wires a CSP nonce into Vite via <code>Vite::useCspNonce()</code>.</li>
+</ul>
+<h2 id="sentry-tunnel">Sentry Tunnel<a class="headerlink" href="#sentry-tunnel" title="Anchor link to this section">&para;</a></h2>
+<ul>
+<li><code>/api/_/e</code> validates DSN headers and same-site origin before forwarding.</li>
+<li>Size limits are enforced to avoid oversized payloads.</li>
+</ul>
+<h2 id="cookies-and-domains">Cookies And Domains<a class="headerlink" href="#cookies-and-domains" title="Anchor link to this section">&para;</a></h2>
+<ul>
+<li>Session cookie domain and HTTPS requirements are controlled by <code>SESSION_DOMAIN</code> and <code>SESSION_SECURE_COOKIE</code>.</li>
+<li>SameSite is set to <code>lax</code> by default.</li>
 </ul>
 
 
@@ -3132,7 +3026,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 04:49:43 UTC"><span class="timeago" datetime="2026-01-19T04:49:43+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 04:49:43 UTC">2026-01-19</span>
   </span>
 
     
@@ -3142,7 +3036,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 04:49:43 UTC"><span class="timeago" datetime="2026-01-19T04:49:43+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 04:49:43 UTC">2026-01-19</span>
   </span>
 
     
@@ -3179,7 +3073,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../openapi/" class="md-footer__link md-footer__link--prev" aria-label="Previous: OpenAPI Reference">
+          <a href="../integrations/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Integrations">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3189,20 +3083,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                OpenAPI Reference
+                Integrations
               </div>
             </div>
           </a>
         
         
           
-          <a href="../../sdk/" class="md-footer__link md-footer__link--next" aria-label="Next: SDK Documentation">
+          <a href="../localization/" class="md-footer__link md-footer__link--next" aria-label="Next: Localization And Translations">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                SDK Documentation
+                Localization And Translations
               </div>
             </div>
             <div class="md-footer__button md-icon">
