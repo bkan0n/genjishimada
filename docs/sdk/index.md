@@ -62,7 +62,6 @@ json_bytes = msgspec.json.encode(payload)
 ## Next Steps
 
 - [SDK Reference](reference/index.md) - Auto-generated API docs
-- [Data Models](data-models.md) - Module overview
 - [Usage Examples](usage.md) - Common patterns and recipes
 - [API Documentation](../api/index.md) - See how the API uses the SDK
 - [Bot Architecture](../bot/architecture/messaging.md) - Learn about message queue integration
