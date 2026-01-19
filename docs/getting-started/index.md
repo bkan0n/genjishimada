@@ -1,6 +1,6 @@
 # Getting Started
 
-Welcome to Genji Shimada! This guide will help you get the project running locally for development or testing.
+This guide helps you run the project locally for development or testing.
 
 ## Prerequisites
 

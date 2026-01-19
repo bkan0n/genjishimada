@@ -11,12 +11,12 @@ The documentation is built with **MkDocs Material** and hosted on GitHub Pages a
 ```
 docs/
 ├── index.md                    # Home page
-├── domain/                     # Domain overview
 ├── services/                   # Service-level docs
 ├── getting-started/            # Installation and quickstart
 ├── bot/                        # Bot documentation
 ├── api/                        # API documentation
 ├── sdk/                        # SDK documentation
+├── web/                        # Website documentation
 ├── operations/                 # Infrastructure and deployment
 ├── contributing/               # Contribution guides
 ├── stylesheets/

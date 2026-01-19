@@ -88,12 +88,14 @@ genjishimada/
 We use **Ruff** for formatting and linting, and **BasedPyright** for type checking.
 
 **Key rules**:
+
 - Line length: 120 characters
 - Docstring style: Google
 - Type hints required for all function signatures
 - Import sorting enabled
 
 Run linters:
+
 ```bash
 just lint-all
 ```
@@ -106,6 +108,7 @@ All functions must have type annotations:
 # Good
 async def get_map(map_id: int) -> MapResponse:
     ...
+
 
 # Bad
 async def get_map(map_id):
@@ -159,6 +162,7 @@ Tests are located in `apps/api/tests/`.
 import pytest
 from httpx import AsyncClient
 
+
 @pytest.mark.asyncio
 async def test_get_map(client: AsyncClient):
     response = await client.get("/maps/1")
@@ -169,16 +173,19 @@ async def test_get_map(client: AsyncClient):
 ### Running Tests
 
 Run all tests:
+
 ```bash
 just test-all
 ```
 
 Run API tests only:
+
 ```bash
 just test-api
 ```
 
 Run specific test file:
+
 ```bash
 uv run --project apps/api pytest apps/api/tests/test_maps.py
 ```
@@ -211,8 +218,8 @@ Migrations are **manual**. There is no migration runner in this repo.
 2. Write the migration:
    ```sql
    CREATE TABLE new_feature (
-       id SERIAL PRIMARY KEY,
-       name TEXT NOT NULL
+       id serial PRIMARY KEY,
+       name text NOT NULL
    );
    ```
 
@@ -284,7 +291,7 @@ Found a bug? Submit a fix with tests.
 ## Communication
 
 - **GitHub Issues**: For bug reports and feature requests
-- **Discord**: Join the [Genji Parkour server](https://discord.gg/genji) for discussions
+- **Discord**: Join the [Genji Parkour server](https://dsc.gg/genjiparkour) for discussions
 
 ## Next Steps
 

@@ -1,6 +1,6 @@
-# Notifications
+# Tags
 
-::: genjishimada_sdk.notifications
+::: genjishimada_sdk.tags
     options:
       show_root_heading: true
       show_root_toc_entry: false

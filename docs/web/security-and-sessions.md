@@ -1,6 +1,6 @@
 # Security And Sessions
 
-This app uses a mix of Laravel defaults and platform-specific session handling.
+This app uses a mix of Laravel defaults and custom session handling.
 
 ## API-Backed Sessions
 

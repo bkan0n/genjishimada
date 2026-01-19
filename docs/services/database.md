@@ -1,10 +1,10 @@
 # Database Service
 
-The PostgreSQL service provides the central data store for the Genji Shimada platform.
+PostgreSQL stores the persistent data used by the API, bot, and website.
 
 ## Purpose
 
-This Postgres service stores persistent state used by the API, bot, and other services. Without it, there would be no single source of truth for user data, map metadata, run results, or other records.
+This database stores user data, map metadata, run results, and other records shared across services.
 
 ## Compose configuration
 

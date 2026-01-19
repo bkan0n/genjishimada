@@ -1,6 +1,6 @@
-# Notifications
+# Rank Card
 
-::: genjishimada_sdk.notifications
+::: genjishimada_sdk.rank_card
     options:
       show_root_heading: true
       show_root_toc_entry: false

@@ -1,6 +1,6 @@
 # API Documentation
 
-The Genji Shimada API is a **Litestar-based REST API** that powers the Genji Parkour platform. It provides endpoints for maps, completions, user profiles, authentication, and more.
+The Genji Shimada API is a **Litestar-based REST API** for maps, completions, user profiles, authentication, and related services.
 
 ## Overview
 

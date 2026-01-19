@@ -1,6 +1,6 @@
 # Website Overview
 
-The Genji website code lives in https://github.com/bkan0n/genji.pk and serves the public site at `genji.pk` (with `dev.genji.pk` for development). This section documents how the Laravel app is structured, built, and deployed, plus how it connects to the rest of the Genji stack.
+The Genji website code lives in [`bkan0n/genji.pk`](https://github.com/bkan0n/genji.pk) and serves the public site at `genji.pk` (with `dev.genji.pk` for development). This section documents how the Laravel app is structured, built, and deployed, plus how it connects to the rest of the Genji stack.
 
 ## Key Facts
 

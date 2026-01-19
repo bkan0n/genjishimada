@@ -1,6 +1,6 @@
-# Notifications
+# Change Requests
 
-::: genjishimada_sdk.notifications
+::: genjishimada_sdk.change_requests
     options:
       show_root_heading: true
       show_root_toc_entry: false

@@ -136,10 +136,27 @@ plugins:
             show_root_heading: true
             show_root_toc_entry: false
             show_source: false
+            members_order: alphabetical
+            group_by_category: false
+            filters:
+              - "!^_[^_]"
+              - "!^Annotated$"
+              - "!^Any$"
+              - "!^Enum$"
+              - "!^Literal$"
+              - "!^Meta$"
+              - "!^Struct$"
+              - "!^TypeVar$"
+              - "!^UNSET$"
+              - "!^UUID$"
+              - "!^UnsetType$"
+              - "!^ValidationError$"
+              - "!^dt$"
+              - "!^msgspec$"
+              - "!^re$"
 
 nav:
   - Home: index.md
-  - Domain: domain/index.md
 
   - Getting Started:
     - getting-started/index.md
@@ -172,8 +189,7 @@ nav:
       - bot/architecture/core-bot.md
       - bot/architecture/services.md
       - bot/architecture/messaging.md
-    - User Experience:
-      - bot/ux/newsfeed-and-embeds.md
+    - Developer Utilities: bot/ux/newsfeed-and-embeds.md
     - Operations:
       - bot/operations/configuration.md
 
@@ -190,14 +206,20 @@ nav:
     - sdk/index.md
     - Reference:
       - sdk/reference/index.md
-      - Maps: sdk/reference/maps.md
-      - Completions: sdk/reference/completions.md
-      - Users: sdk/reference/users.md
-      - Notifications: sdk/reference/notifications.md
-      - Newsfeed: sdk/reference/newsfeed.md
-      - XP: sdk/reference/xp.md
-      - Lootbox: sdk/reference/lootbox.md
       - Auth: sdk/reference/auth.md
+      - Change Requests: sdk/reference/change-requests.md
+      - Completions: sdk/reference/completions.md
+      - Difficulties: sdk/reference/difficulties.md
+      - Internal: sdk/reference/internal.md
+      - Logs: sdk/reference/logs.md
+      - Lootbox: sdk/reference/lootbox.md
+      - Maps: sdk/reference/maps.md
+      - Newsfeed: sdk/reference/newsfeed.md
+      - Notifications: sdk/reference/notifications.md
+      - Rank Card: sdk/reference/rank-card.md
+      - Tags: sdk/reference/tags.md
+      - Users: sdk/reference/users.md
+      - XP: sdk/reference/xp.md
     - Usage: sdk/usage.md
 
   - Operations:

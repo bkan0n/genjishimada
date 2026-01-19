@@ -35,4 +35,4 @@ Key middleware:
 - `DetectLanguage` - Sets locale based on query, cookie, or session.
 - `SentryUserContext` - Tags requests with user context.
 
-Sessions use the custom `api` driver (`config/session.php`), backed by `App\Extensions\ApiSessionHandler` and the Genji API. This keeps user sessions and moderation flags in sync with the platform services.
+Sessions use the custom `api` driver (`config/session.php`), backed by `App\Extensions\ApiSessionHandler` and the Genji API. This keeps user sessions and moderation flags in sync with other services.

@@ -1,6 +1,6 @@
 # Services Overview
 
-This section documents the core services that make up the Genji Shimada platform.
+This section lists the services documented in this repo.
 
 ## Services
 

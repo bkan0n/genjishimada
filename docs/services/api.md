@@ -1,7 +1,6 @@
 # API Service
 
-The Genji Shimada API is the primary backend service powering the Genji Parkour ecosystem.
-It exposes REST endpoints under `/api/v3` for maps, users, completions, playtests, ranking, lootboxes, and more.
+The Genji Shimada API exposes REST endpoints under `/api/v3` for maps, users, completions, playtests, ranking, and lootboxes.
 
 ## What the API does
 
