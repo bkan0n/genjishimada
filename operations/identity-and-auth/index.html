@@ -12,13 +12,13 @@
         <meta name="author" content="Genji Parkour Team">
       
       
-        <link rel="canonical" href="https://docs.genji.pk/sdk/reference/">
+        <link rel="canonical" href="https://docs.genji.pk/operations/identity-and-auth/">
       
       
-        <link rel="prev" href="../">
+        <link rel="prev" href="../reverse-proxy/">
       
       
-        <link rel="next" href="maps/">
+        <link rel="next" href="../cloudflare/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>SDK Reference - Genji Shimada Documentation</title>
+        <title>Identity & Auth - Genji Shimada Documentation</title>
       
     
     
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#sdk-reference" class="md-skip">
+        <a href="#identity-auth-keycloak-oauth2-proxy" class="md-skip">
           Skip to content
         </a>
       
@@ -126,7 +126,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              SDK Reference
+              Identity & Auth
             
           </span>
         </div>
@@ -362,13 +362,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../sdk/" class="md-tabs__link">
           
   
   
@@ -386,11 +384,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../operations/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -1609,8 +1609,6 @@
       
   
   
-    
-  
   
   
     
@@ -1630,23 +1628,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../sdk/" class="md-nav__link ">
               
   
   
@@ -1664,13 +1661,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1687,8 +1684,6 @@
                 
   
   
-    
-  
   
   
     
@@ -1720,21 +1715,20 @@
       
       
         
-          
-          
-        
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_2" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_2" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="./" class="md-nav__link md-nav__link--active">
+            <a href="../../sdk/reference/" class="md-nav__link ">
               
   
   
@@ -1752,13 +1746,13 @@
             </a>
             
               
-              <label class="md-nav__link md-nav__link--active" for="__nav_7_2" id="__nav_7_2_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7_2" id="__nav_7_2_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1778,7 +1772,7 @@
   
   
     <li class="md-nav__item">
-      <a href="maps/" class="md-nav__link">
+      <a href="../../sdk/reference/maps/" class="md-nav__link">
         
   
   
@@ -1806,7 +1800,7 @@
   
   
     <li class="md-nav__item">
-      <a href="completions/" class="md-nav__link">
+      <a href="../../sdk/reference/completions/" class="md-nav__link">
         
   
   
@@ -1834,7 +1828,7 @@
   
   
     <li class="md-nav__item">
-      <a href="users/" class="md-nav__link">
+      <a href="../../sdk/reference/users/" class="md-nav__link">
         
   
   
@@ -1862,7 +1856,7 @@
   
   
     <li class="md-nav__item">
-      <a href="notifications/" class="md-nav__link">
+      <a href="../../sdk/reference/notifications/" class="md-nav__link">
         
   
   
@@ -1890,7 +1884,7 @@
   
   
     <li class="md-nav__item">
-      <a href="newsfeed/" class="md-nav__link">
+      <a href="../../sdk/reference/newsfeed/" class="md-nav__link">
         
   
   
@@ -1918,7 +1912,7 @@
   
   
     <li class="md-nav__item">
-      <a href="xp/" class="md-nav__link">
+      <a href="../../sdk/reference/xp/" class="md-nav__link">
         
   
   
@@ -1946,7 +1940,7 @@
   
   
     <li class="md-nav__item">
-      <a href="lootbox/" class="md-nav__link">
+      <a href="../../sdk/reference/lootbox/" class="md-nav__link">
         
   
   
@@ -1974,7 +1968,7 @@
   
   
     <li class="md-nav__item">
-      <a href="auth/" class="md-nav__link">
+      <a href="../../sdk/reference/auth/" class="md-nav__link">
         
   
   
@@ -2010,7 +2004,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../data-models/" class="md-nav__link">
+      <a href="../../sdk/data-models/" class="md-nav__link">
         
   
   
@@ -2038,7 +2032,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../usage/" class="md-nav__link">
+      <a href="../../sdk/usage/" class="md-nav__link">
         
   
   
@@ -2070,6 +2064,8 @@
       
   
   
+    
+  
   
   
     
@@ -2095,22 +2091,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../operations/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -2128,13 +2125,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2154,7 +2151,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/infrastructure/" class="md-nav__link">
+      <a href="../infrastructure/" class="md-nav__link">
         
   
   
@@ -2182,7 +2179,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/docker-compose/" class="md-nav__link">
+      <a href="../docker-compose/" class="md-nav__link">
         
   
   
@@ -2210,7 +2207,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/reverse-proxy/" class="md-nav__link">
+      <a href="../reverse-proxy/" class="md-nav__link">
         
   
   
@@ -2235,10 +2232,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../operations/identity-and-auth/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Identity & Auth
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -2254,6 +2278,103 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-fits-together" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How It Fits Together
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deployment-from-genjishimada-oidc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deployment (from genjishimada-oidc)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#admin-console-configuration-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Admin Console Configuration Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#roles-and-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles and Groups
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#clients" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clients
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#client-scopes-and-mappers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Client Scopes and Mappers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related-docs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related Docs
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2266,7 +2387,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/cloudflare/" class="md-nav__link">
+      <a href="../cloudflare/" class="md-nav__link">
         
   
   
@@ -2294,7 +2415,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/monitoring/" class="md-nav__link">
+      <a href="../monitoring/" class="md-nav__link">
         
   
   
@@ -2504,25 +2625,7 @@
         <a href="../" class="md-path__link">
           
   <span class="md-ellipsis">
-    SDK
-  </span>
-
-        </a>
-      </li>
-    
-  
-
-      
-        
-  
-  
-    
-    
-      <li class="md-path__item">
-        <a href="./" class="md-path__link">
-          
-  <span class="md-ellipsis">
-    Reference
+    Operations
   </span>
 
         </a>
@@ -2544,9 +2647,121 @@
   
 
 
-<h1 id="sdk-reference">SDK Reference<a class="headerlink" href="#sdk-reference" title="Anchor link to this section">&para;</a></h1>
-<p>This section is generated automatically from the SDK source using mkdocstrings.</p>
-<p>Use the pages below to browse each SDK module and its models.</p>
+<h1 id="identity-auth-keycloak-oauth2-proxy">Identity &amp; Auth (Keycloak + OAuth2 Proxy)<a class="headerlink" href="#identity-auth-keycloak-oauth2-proxy" title="Anchor link to this section">&para;</a></h1>
+<p>Genji Shimada uses Keycloak for identity management and oauth2-proxy to protect
+internal services (Grafana, Prometheus, etc.) behind the reverse proxy. The
+Keycloak stack lives in <a href="https://github.com/bkan0n/genjishimada-oidc"><code>bkan0n/genjishimada-oidc</code></a>, and the reverse proxy routes
+Keycloak through <code>portal.bkan0n.com</code> and oauth2-proxy through <code>auth.bkan0n.com</code>.</p>
+<p>This page documents the deployed configuration and how it is wired to the
+reverse proxy and monitoring stack.</p>
+<h2 id="how-it-fits-together">How It Fits Together<a class="headerlink" href="#how-it-fits-together" title="Anchor link to this section">&para;</a></h2>
+<ul>
+<li><strong>Keycloak</strong> provides OIDC issuer at
+  <code>https://portal.bkan0n.com/realms/master</code>.</li>
+<li><strong>oauth2-proxy</strong> uses Keycloak OIDC to gate monitoring endpoints.</li>
+<li><strong>Caddy</strong> routes <code>portal.bkan0n.com</code> -&gt; <code>keycloak:8080</code> and
+  <code>auth.bkan0n.com</code> -&gt; <code>oauth2-proxy:4180</code>.</li>
+<li><strong>Grafana</strong> is configured to use Keycloak (see monitoring docs).</li>
+</ul>
+<h2 id="deployment-from-genjishimada-oidc">Deployment (from <a href="https://github.com/bkan0n/genjishimada-oidc">genjishimada-oidc</a>)<a class="headerlink" href="#deployment-from-genjishimada-oidc" title="Anchor link to this section">&para;</a></h2>
+<p>Keycloak and oauth2-proxy run in Docker with the following key settings:</p>
+<p><strong>Keycloak</strong></p>
+<ul>
+<li><code>KC_HOSTNAME=portal.bkan0n.com</code></li>
+<li><code>KC_PROXY_HEADERS=xforwarded</code></li>
+<li><code>KC_HTTP_ENABLED=true</code></li>
+</ul>
+<p><strong>oauth2-proxy</strong></p>
+<ul>
+<li><code>--provider=keycloak-oidc</code></li>
+<li><code>--client-id=oauth2-proxy</code></li>
+<li><code>--oidc-issuer-url=https://portal.bkan0n.com/realms/master</code></li>
+<li><code>--redirect-url=https://auth.bkan0n.com/oauth2/callback</code></li>
+<li><code>--allowed-group=monitoring</code></li>
+</ul>
+<p>Secrets are supplied via environment variables and should not be stored in docs:</p>
+<ul>
+<li><code>OAUTH2_PROXY_CLIENT_SECRET</code></li>
+<li><code>OAUTH2_PROXY_COOKIE_SECRET</code></li>
+</ul>
+<h2 id="admin-console-configuration-summary">Admin Console Configuration Summary<a class="headerlink" href="#admin-console-configuration-summary" title="Anchor link to this section">&para;</a></h2>
+<p>The current Keycloak realm export (redacted) shows:</p>
+<ul>
+<li><strong>Realm:</strong> <code>master</code></li>
+<li><strong>Registration:</strong> disabled</li>
+<li><strong>Email login:</strong> enabled</li>
+<li><strong>Required credentials:</strong> password</li>
+<li><strong>OTP:</strong> TOTP enabled with 30s period and 6 digits</li>
+<li><strong>Auth flows:</strong> browser, direct grant, and conditional OTP flows enabled</li>
+</ul>
+<p>Clients in the realm include built-in admin/account clients and service clients
+used by Keycloak itself. The oauth2-proxy client is defined in Keycloak and
+relies on OIDC standard scopes.</p>
+<h2 id="roles-and-groups">Roles and Groups<a class="headerlink" href="#roles-and-groups" title="Anchor link to this section">&para;</a></h2>
+<p>From the export (master realm):</p>
+<ul>
+<li><strong>Realm roles</strong>:<ul>
+<li>Built-ins: <code>offline_access</code>, <code>uma_authorization</code>, <code>default-roles-master</code>, <code>admin</code>, <code>create-realm</code>.</li>
+<li>Grafana roles: <code>grafana-admin</code>, <code>grafana-editor</code>, <code>grafana-viewer</code> (used by Grafana role mapping).</li>
+<li>RabbitMQ roles:<ul>
+<li><code>rabbitmq.tag:administrator</code>, <code>rabbitmq.tag:management</code></li>
+<li><code>rabbitmq.configure:*/*/*</code>, <code>rabbitmq.write:*/*/*</code>, <code>rabbitmq.read:*/*/*</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><strong>Client roles</strong>: standard roles for <code>master-realm</code>, <code>account</code>, and <code>broker</code>.</li>
+<li><strong>Groups</strong>:<ul>
+<li><code>monitoring</code> (for Grafana/Prometheus/Loki/cAdvisor access)</li>
+<li><code>RabbitMQ</code> (grants RabbitMQ tag roles)</li>
+</ul>
+</li>
+</ul>
+<p>If you are using oauth2-proxy group gating (for example <code>--allowed-group=monitoring</code>),
+make sure a <code>monitoring</code> group exists in the realm and that users are assigned to it.</p>
+<h2 id="clients">Clients<a class="headerlink" href="#clients" title="Anchor link to this section">&para;</a></h2>
+<p>The realm includes built-in Keycloak clients plus service clients for internal
+apps. The notable custom clients are below:</p>
+<ul>
+<li><strong>oauth2-proxy</strong><ul>
+<li>Redirect: <code>https://auth.bkan0n.com/oauth2/callback</code></li>
+<li>Standard flow enabled, confidential client</li>
+<li>Default scopes include <code>groups</code> so oauth2-proxy can enforce group gating</li>
+</ul>
+</li>
+<li><strong>grafana-oauth</strong><ul>
+<li>Root/Admin URL: <code>https://grafana.bkan0n.com</code></li>
+<li>Redirect: <code>https://grafana.bkan0n.com/login/generic_oauth</code></li>
+<li>Protocol mappers: realm roles + hardcoded <code>aud=grafana-oauth</code></li>
+</ul>
+</li>
+<li><strong>rabbitmq-prod</strong><ul>
+<li>Root/Admin URL: <code>https://rabbitmq.genji.pk</code></li>
+<li>Redirect: <code>https://rabbitmq.genji.pk/*</code></li>
+<li>Protocol mapper: hardcoded <code>aud=rabbitmq</code></li>
+</ul>
+</li>
+<li><strong>rabbitmq-dev</strong><ul>
+<li>Root/Admin URL: <code>https://dev-rabbitmq.genji.pk</code></li>
+<li>Redirect: <code>https://dev-rabbitmq.genji.pk/*</code></li>
+<li>Protocol mapper: hardcoded <code>aud=rabbitmq</code></li>
+</ul>
+</li>
+</ul>
+<p>Built-in clients also exist: <code>account</code>, <code>account-console</code>, <code>admin-cli</code>,
+<code>broker</code>, <code>master-realm</code>, <code>security-admin-console</code>.</p>
+<h2 id="client-scopes-and-mappers">Client Scopes and Mappers<a class="headerlink" href="#client-scopes-and-mappers" title="Anchor link to this section">&para;</a></h2>
+<ul>
+<li><strong>groups</strong> client scope adds a <code>groups</code> claim via
+  <code>oidc-group-membership-mapper</code> (used by oauth2-proxy).</li>
+<li><strong>grafana-oauth</strong> uses realm-role mapping and a hardcoded audience claim.</li>
+<li><strong>rabbitmq</strong> clients include a hardcoded <code>aud</code> claim of <code>rabbitmq</code>.</li>
+</ul>
+<h2 id="related-docs">Related Docs<a class="headerlink" href="#related-docs" title="Anchor link to this section">&para;</a></h2>
+<ul>
+<li><a href="../reverse-proxy/">Reverse Proxy</a> - Caddy routes and auth wiring</li>
+<li><a href="../monitoring/">Monitoring</a> - Grafana OAuth config</li>
+</ul>
 
 
 
@@ -2569,7 +2784,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 04:06:51 UTC"><span class="timeago" datetime="2026-01-19T04:06:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 04:06:51 UTC">2026-01-19</span>
   </span>
 
     
@@ -2579,7 +2794,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 04:06:51 UTC"><span class="timeago" datetime="2026-01-19T04:06:51+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 04:06:51 UTC">2026-01-19</span>
   </span>
 
     
@@ -2616,7 +2831,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../" class="md-footer__link md-footer__link--prev" aria-label="Previous: SDK Documentation">
+          <a href="../reverse-proxy/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Reverse Proxy">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2626,20 +2841,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                SDK Documentation
+                Reverse Proxy
               </div>
             </div>
           </a>
         
         
           
-          <a href="maps/" class="md-footer__link md-footer__link--next" aria-label="Next: Maps">
+          <a href="../cloudflare/" class="md-footer__link md-footer__link--next" aria-label="Next: Cloudflare">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Maps
+                Cloudflare
               </div>
             </div>
             <div class="md-footer__button md-icon">
