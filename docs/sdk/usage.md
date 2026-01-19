@@ -148,6 +148,5 @@ updated_user = msgspec.structs.replace(user, **updates)
 
 ## Next Steps
 
-- [Data Models](data-models.md) - Module overview
 - [API Documentation](../api/index.md) - See SDK models in API endpoints
 - [Bot Messaging](../bot/architecture/messaging.md) - Event-driven patterns
