@@ -192,31 +192,28 @@ Most commands can also be done via the website as well.
 This is for players and not map makers.
 When a map requires change **in-game**, players can send a change request.
 The command automatically creates a post in <#1342953312000934069> and pings the map owner.
-```/change-request ```
-## Edit map information
-This is for changing how a map appears in the system. 
+Command: `/change-request `
+## Edit Map Information
+This is for changing how a map appears in the system.
 For example the count of checkpoints or the map variation.
 Using this command will send your changes to a Sensei for approval.
 You can send a request for other people's maps if needed.
-```/edit-request ```
-## Legacy times
+Command: `/edit-request `
+## Legacy Times
 Sometimes after you make changes to your map, you want to reset the leaderboard.
-This does **NOT** remove completions, it only makes the leaderboard empty.
+This does **NOT** remove completions, it only makes the leaderboard "empty".
 It turns the old completions into legacy completion times.
 This can only be done by contacting a Sensei.
-## Delete / archive map
+## Delete / Archive Map
 If you want to take your map out of the map pool, you can request to archive it.
-```/edit-request ```
-## Remove from playtest
+Command: `/edit-request `
+## Remove From Playtest
 Removing a map from playtest can only be done by contacting a Sensei.
-
-## Re-using an old code
-You can re-use a code from a map that previously got deleted or rejected. 
-Use edit map information command and set the status to active.
+## Re-using An Old Code
+You can re-use a code from a map that previously got deleted or rejected.
+Use edit map information command and make a note in the reason that you are wishing to start a new playtest.
 This also applies to maps that got rejected in playtest before.
-```/edit-request ```
-
-
+Command: `/edit-request `
 """
 
 
@@ -373,6 +370,12 @@ class MapInformationView(ui.LayoutView):
                 InformationButton(
                     label="非官方（CN）地图",  # noqa: RUF001
                     response_view=GenericInformationView(title="非官方（CN）地图", content=UNOFFICIAL_MAPS_INFO_CN),  # noqa: RUF001
+                ),
+            ),
+            ui.ActionRow(
+                InformationButton(
+                    label="Edit Map Info",
+                    response_view=GenericInformationView(title="Edit Map Info", content=MAP_EDIT_INFO),
                 ),
             ),
         )
