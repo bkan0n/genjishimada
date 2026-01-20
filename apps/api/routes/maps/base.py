@@ -52,11 +52,12 @@ from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST
 
 from di.jobs import InternalJobsService, provide_internal_jobs_service
 from di.lootbox import LootboxService, provide_lootbox_service
-from di.maps import CompletionFilter, MapSearchFilters, MapService, MedalFilter, PlaytestFilter, provide_map_service
+from di.maps import MapService, provide_map_service
 from di.newsfeed import NewsfeedService, provide_newsfeed_service
 from di.users import UserService, provide_user_service
 from utilities.errors import CustomHTTPException
 from utilities.jobs import wait_for_job_completion
+from utilities.map_search import CompletionFilter, MapSearchFilters, MedalFilter, PlaytestFilter
 
 log = getLogger(__name__)
 

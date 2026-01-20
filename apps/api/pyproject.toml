@@ -20,6 +20,7 @@ dependencies = [
     "asyncpg-stubs>=0.31.1",
     "bcrypt>=4.0.0",
     "httpx>=0.27.0",
+    "sqlspec>=0.38.0",
 ]
 
 [dependency-groups]

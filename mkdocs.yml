@@ -190,6 +190,7 @@ nav:
       - bot/architecture/services.md
       - bot/architecture/messaging.md
     - Developer Utilities: bot/ux/newsfeed-and-embeds.md
+    - Map Search SQL Builder: bot/ux/map-search-sqlspec.md
     - Operations:
       - bot/operations/configuration.md
 

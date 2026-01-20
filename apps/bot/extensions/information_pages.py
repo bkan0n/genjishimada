@@ -183,6 +183,42 @@ UNOFFICIAL_MAPS_INFO_CN = """
 通过DeepL.com（免费版）翻译
 """  # noqa: RUF001
 
+MAP_EDIT_INFO = """
+# 🔄  Changing Existing Maps
+This section explains how to change map that are already in the system.
+Playtest maps mostly follow the same rules as accepted maps.
+Most commands can also be done via the website as well.
+## Change Request
+This is for players and not map makers.
+When a map requires change **in-game**, players can send a change request.
+The command automatically creates a post in <#1342953312000934069> and pings the map owner.
+```/change-request ```
+## Edit map information
+This is for changing how a map appears in the system. 
+For example the count of checkpoints or the map variation.
+Using this command will send your changes to a Sensei for approval.
+You can send a request for other people's maps if needed.
+```/edit-request ```
+## Legacy times
+Sometimes after you make changes to your map, you want to reset the leaderboard.
+This does **NOT** remove completions, it only makes the leaderboard empty.
+It turns the old completions into legacy completion times.
+This can only be done by contacting a Sensei.
+## Delete / archive map
+If you want to take your map out of the map pool, you can request to archive it.
+```/edit-request ```
+## Remove from playtest
+Removing a map from playtest can only be done by contacting a Sensei.
+
+## Re-using an old code
+You can re-use a code from a map that previously got deleted or rejected. 
+Use edit map information command and set the status to active.
+This also applies to maps that got rejected in playtest before.
+```/edit-request ```
+
+
+"""
+
 
 class InformationButton(ui.Button):
     def __init__(
