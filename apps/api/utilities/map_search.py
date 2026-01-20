@@ -103,14 +103,9 @@ class MapSearchSQLSpecBuilder:
             QueryWithArgs: The compiled SQL and its positional parameters.
         """
         query = self._build_query()
-        built_query = query.build(dialect="postgres")
-        expression = query.get_expression()
-        if expression is not None:
-            statement = SQL(expression, statement_config=default_statement_config, **built_query.parameters)
-        else:
-            statement = SQL(built_query.sql, statement_config=default_statement_config, **built_query.parameters)
         if not self._filters.return_all:
-            statement = statement.paginate(page=self._filters.page_number, page_size=self._filters.page_size)
+            self._apply_pagination(query)
+        statement = query.to_statement(config=default_statement_config)
         compiled_sql, compiled_params = statement.compile()
         params = self._normalize_params(cast(StatementParams, compiled_params))
         return QueryWithArgs(compiled_sql, params)
@@ -193,6 +188,17 @@ class MapSearchSQLSpecBuilder:
 
         return ctes
 
+    def _apply_pagination(self, query: Select) -> None:
+        """Apply limit/offset pagination to the query builder.
+
+        Args:
+            query: Select builder to update with LIMIT/OFFSET.
+        """
+        page_number = max(1, self._filters.page_number)
+        page_size = self._filters.page_size
+        offset_value = (page_number - 1) * page_size
+        query.limit(page_size).offset(offset_value)
+
     def _build_mechanics_cte(self) -> tuple[str, Select] | None:
         """Restrict to maps containing the provided mechanics.
 
@@ -269,10 +275,13 @@ class MapSearchSQLSpecBuilder:
         Returns:
             tuple[str, Select] | None: CTE name and query, or None if inactive.
         """
-        if not self._filters.minimum_quality:
+        if self._filters.minimum_quality is None:
             return None
         avg_subquery = (
-            sql.select("map_id", sql.avg("quality").as_("avg_quality")).from_("maps.ratings").group_by("map_id")
+            sql.select("map_id", sql.avg("quality").as_("avg_quality"))
+            .from_("maps.ratings")
+            .where_eq("verified", True)
+            .group_by("map_id")
         )
         query = (
             sql.select("miaq.map_id")
@@ -396,10 +405,10 @@ class MapSearchSQLSpecBuilder:
             query.where_eq("m.official", self._filters.official)
 
         if self._filters.map_name:
-            query.where("m.map_name = ANY(:map_name)", map_name=self._filters.map_name)
+            query.where_in("m.map_name", self._filters.map_name)
 
         if self._filters.category:
-            query.where("m.category = ANY(:category)", category=self._filters.category)
+            query.where_in("m.category", self._filters.category)
 
         if self._filters.playtest_thread_id:
             query.where_eq("pm.thread_id", self._filters.playtest_thread_id)
@@ -504,7 +513,7 @@ class MapSearchSQLSpecBuilder:
         Returns:
             str: SQL fragment for the ratings column.
         """
-        return "(SELECT avg(quality)::float FROM maps.ratings r WHERE r.map_id = m.id AND r.verified) AS ratings"
+        return "(SELECT avg(quality)::float FROM maps.ratings r WHERE r.map_id = m.id) AS ratings"
 
     @staticmethod
     def _guides_array_column() -> str:
@@ -559,18 +568,21 @@ class MapSearchSQLSpecBuilder:
         """
         return dedent(
             """
-            (
-                SELECT jsonb_agg(
-                    DISTINCT jsonb_build_object(
-                       'id', c.user_id,
-                       'is_primary', c.is_primary,
-                       'name', coalesce(ow.username, u.nickname, u.global_name, 'Unknown Username')
-                   )
-                )
-                FROM maps.creators c
-                JOIN core.users u ON c.user_id = u.id
-                LEFT JOIN users.overwatch_usernames ow ON c.user_id = ow.user_id AND ow.is_primary
-                WHERE c.map_id = m.id
+            COALESCE(
+                (
+                    SELECT jsonb_agg(
+                        DISTINCT jsonb_build_object(
+                           'id', c.user_id,
+                           'is_primary', c.is_primary,
+                           'name', coalesce(ow.username, u.nickname, u.global_name, 'Unknown Username')
+                       )
+                    )
+                    FROM maps.creators c
+                    JOIN core.users u ON c.user_id = u.id
+                    LEFT JOIN users.overwatch_usernames ow ON c.user_id = ow.user_id AND ow.is_primary
+                    WHERE c.map_id = m.id
+                ),
+                '[]'::jsonb
             ) AS creators
             """
         ).strip()
@@ -671,10 +683,6 @@ class MapSearchSQLSpecBuilder:
 
 if __name__ == "__main__":
     example_filters = MapSearchFilters(
-        # playtesting="Approved",
-        # archived=False,
-        # hidden=False,
-        # official=False,
         category=["Classic"],
         map_name=["Hanamura"],
         creator_names=["MashaFF"],
@@ -682,11 +690,6 @@ if __name__ == "__main__":
         restrictions=["Wall Climb"],
         difficulty_range_min="Medium",
         difficulty_range_max="Hard",
-        # minimum_quality=7,
-        # user_id=123,
-        # medal_filter="With",
-        # completion_filter="With",
-        # playtest_filter="Only",
         page_size=10,
         page_number=1,
     )

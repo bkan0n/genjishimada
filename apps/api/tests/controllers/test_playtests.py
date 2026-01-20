@@ -193,8 +193,29 @@ class TestPlaytestsEndpoints:
     # =========================================================================
 
     @pytest.mark.asyncio
-    async def test_approve_playtest(self, test_client: AsyncTestClient[Litestar]):
+    async def test_approve_playtest(self, test_client: AsyncTestClient[Litestar], asyncpg_conn):
         """Test approving a playtest."""
+        map_id = await asyncpg_conn.fetchval(
+            "SELECT map_id FROM playtests.meta WHERE thread_id=$1;",
+            self.PLAYTEST_WITH_VOTES,
+        )
+        vote_count = await asyncpg_conn.fetchval(
+            "SELECT count(*) FROM playtests.votes WHERE playtest_thread_id=$1;",
+            self.PLAYTEST_WITH_VOTES,
+        )
+        if vote_count == 0:
+            await asyncpg_conn.execute(
+                """
+                INSERT INTO playtests.votes (playtest_thread_id, user_id, map_id, difficulty)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (user_id, map_id, playtest_thread_id) DO UPDATE
+                SET difficulty = EXCLUDED.difficulty;
+                """,
+                self.PLAYTEST_WITH_VOTES,
+                self.VOTER_USER_200,
+                map_id,
+                3.5,
+            )
         response = await test_client.post(
             f"/api/v3/maps/playtests/{self.PLAYTEST_WITH_VOTES}/approve",
             json={
