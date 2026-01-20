@@ -6,7 +6,7 @@ from typing import Literal, TypeAlias, cast
 
 import msgspec
 from genjishimada_sdk.difficulties import DIFFICULTY_RANGES_ALL, DIFFICULTY_RANGES_TOP, DifficultyTop
-from genjishimada_sdk.maps import MapCategory, Mechanics, OverwatchCode, OverwatchMap, PlaytestStatus, Restrictions
+from genjishimada_sdk.maps import MapCategory, Mechanics, OverwatchCode, OverwatchMap, PlaytestStatus, Restrictions, Tags
 from sqlspec import SQL, Select, sql
 from sqlspec.adapters.asyncpg import default_statement_config
 
@@ -50,6 +50,7 @@ class MapSearchFilters(msgspec.Struct):
     creator_names: list[str] | None = None
     mechanics: list[Mechanics] | None = None
     restrictions: list[Restrictions] | None = None
+    tags: list[Tags] | None = None
     difficulty_exact: DifficultyTop | None = None
     difficulty_range_min: DifficultyTop | None = None
     difficulty_range_max: DifficultyTop | None = None
@@ -162,6 +163,10 @@ class MapSearchSQLSpecBuilder:
         if restrictions_cte:
             ctes.append(restrictions_cte)
 
+        tags_cte = self._build_tags_cte()
+        if tags_cte:
+            ctes.append(tags_cte)
+
         creator_ids_cte = self._build_creator_ids_cte()
         if creator_ids_cte:
             ctes.append(creator_ids_cte)
@@ -230,6 +235,22 @@ class MapSearchSQLSpecBuilder:
             .where_in("r.name", self._filters.restrictions)
         )
         return "limited_restrictions", query
+
+    def _build_tags_cte(self) -> tuple[str, Select] | None:
+        """Restrict to maps containing the provided tags.
+
+        Returns:
+            tuple[str, Select] | None: CTE name and query, or None if inactive.
+        """
+        if not self._filters.tags:
+            return None
+        query = (
+            sql.select("map_id")
+            .from_("maps.tag_links", alias="tl")
+            .join("maps.tags", "tl.tag_id = t.id", alias="t")
+            .where_in("t.name", self._filters.tags)
+        )
+        return "limited_tags", query
 
     def _build_creator_ids_cte(self) -> tuple[str, Select] | None:
         """Restrict to maps created by specific user IDs.
@@ -446,6 +467,7 @@ class MapSearchSQLSpecBuilder:
             self._medals_json_column(),
             self._mechanics_array_column(),
             self._restrictions_array_column(),
+            self._tags_array_column(),
             "m.description",
             "m.raw_difficulty",
             "m.difficulty",
@@ -644,6 +666,23 @@ class MapSearchSQLSpecBuilder:
         ).strip()
 
     @staticmethod
+    def _tags_array_column() -> str:
+        """Return the tags array column with an empty array fallback.
+
+        Returns:
+            str: SQL fragment for the tags array column.
+        """
+        return dedent(
+            """
+            COALESCE((
+                SELECT array_agg(DISTINCT tag.name)
+                FROM maps.tag_links tl
+                JOIN maps.tags tag ON tag.id = tl.tag_id
+                WHERE tl.map_id = m.id
+            ), ARRAY[]::text[]) AS tags
+            """
+        ).strip()
+    @staticmethod
     def _get_raw_difficulty_bounds(
         min_difficulty: DifficultyTop | None, max_difficulty: DifficultyTop | None
     ) -> tuple[float, float]:
@@ -688,6 +727,7 @@ if __name__ == "__main__":
         creator_names=["MashaFF"],
         mechanics=["Bhop", "Dash"],
         restrictions=["Wall Climb"],
+        tags=["Other Heroes"],
         difficulty_range_min="Medium",
         difficulty_range_max="Hard",
         page_size=10,

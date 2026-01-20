@@ -29,6 +29,7 @@ from genjishimada_sdk.maps import (
     PlaytestStatus,
     QualityValueRequest,
     Restrictions,
+    Tags,
     SendToPlaytestRequest,
     TrendingMapResponse,
     UnlinkMapsCreateRequest,
@@ -81,7 +82,7 @@ class BaseMapsController(litestar.Controller):
         summary="Search Maps",
         description=(
             "Return maps matching the provided filters, including playtest status, visibility, categories, "
-            "creators, mechanics, restrictions, difficulty, medals, and completion context. Supports pagination "
+            "creators, mechanics, restrictions, tags, difficulty, medals, and completion context. Supports pagination "
             "or returning all results."
         ),
         opt={"required_scopes": {"maps:read"}},
@@ -101,6 +102,7 @@ class BaseMapsController(litestar.Controller):
         creator_names: list[str] | None = None,
         mechanics: list[Mechanics] | None = None,
         restrictions: list[Restrictions] | None = None,
+        tags: list[Tags] | None = None,
         difficulty_exact: DifficultyTop | None = None,
         difficulty_range_min: DifficultyTop | None = None,
         difficulty_range_max: DifficultyTop | None = None,
@@ -131,6 +133,7 @@ class BaseMapsController(litestar.Controller):
             creator_names (list[str] | None): Filter by creator display names.
             mechanics (list[Mechanics] | None): Filter by mechanics.
             restrictions (list[Restrictions] | None): Filter by restrictions.
+            tags (list[Tags] | None): Filter by tags.
             difficulty_exact (DifficultyTop | None): Filter by exact normalized difficulty.
             difficulty_range_min (DifficultyTop | None): Minimum difficulty bound (inclusive).
             difficulty_range_max (DifficultyTop | None): Maximum difficulty bound (inclusive).
@@ -163,6 +166,7 @@ class BaseMapsController(litestar.Controller):
             creator_names=creator_names,
             mechanics=mechanics,
             restrictions=restrictions,
+            tags=tags,
             difficulty_exact=difficulty_exact,
             difficulty_range_min=difficulty_range_min,
             difficulty_range_max=difficulty_range_max,

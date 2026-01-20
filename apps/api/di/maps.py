@@ -32,6 +32,7 @@ from genjishimada_sdk.maps import (
     PlaytestCreatePartialRequest,
     QualityValueRequest,
     Restrictions,
+    Tags,
     SendToPlaytestRequest,
     TrendingMapResponse,
 )
@@ -164,6 +165,7 @@ class MapService(BaseService):
             await self._insert_guide(map_id, data.guide_url, data.primary_creator_id)
             await self._insert_mechanics(map_id, data.mechanics, remove_existing=False)
             await self._insert_restrictions(map_id, data.restrictions, remove_existing=False)
+            await self._insert_tags(map_id, data.tags, remove_existing=False)
             await self._insert_medals(map_id, data.medals, remove_existing=False)
             job_status = None
             if data.playtesting == "In Progress":
@@ -222,6 +224,7 @@ class MapService(BaseService):
             await self._insert_creators(map_id, data.creators, remove_existing=True)
             await self._insert_mechanics(map_id, data.mechanics, remove_existing=True)
             await self._insert_restrictions(map_id, data.restrictions, remove_existing=True)
+            await self._insert_tags(map_id, data.tags, remove_existing=True)
             await self._insert_medals(map_id, data.medals, remove_existing=True)
             final_code = data.code if data.code is not msgspec.UNSET else code
             return await self.fetch_maps(single=True, filters=MapSearchFilters(code=final_code))
@@ -500,7 +503,7 @@ class MapService(BaseService):
             data (MapPatchDTO): Partial update payload.
 
         """
-        ignore = ["creators", "mechanics", "restrictions", "medals"]
+        ignore = ["creators", "mechanics", "restrictions", "tags", "medals"]
         cleaned: dict[str, Any] = {
             k: v for k, v in msgspec.structs.asdict(data).items() if v is not msgspec.UNSET and k not in ignore
         }
@@ -628,6 +631,40 @@ class MapService(BaseService):
         """
         for m in restrictions:
             await self._conn.execute(query, map_id, m)
+
+    async def _insert_tags(
+        self,
+        map_id: int,
+        tags: Sequence[Tags] | msgspec.UnsetType | None,
+        *,
+        remove_existing: bool,
+    ) -> None:
+        """Insert or replace tags linked to a map.
+
+        Args:
+            map_id (int): Target map ID.
+            tags (Sequence[Tags] | msgspec.UnsetType | None): Tags to persist; skipped if UNSET.
+                If empty/None, nothing is inserted.
+            remove_existing (bool): If True, clears existing rows before inserting.
+
+        """
+        if tags is msgspec.UNSET:
+            return
+
+        if remove_existing:
+            remove_query = "DELETE FROM maps.tag_links WHERE map_id=$1"
+            await self._conn.execute(remove_query, map_id)
+
+        if not tags:
+            return
+
+        query = """
+            INSERT INTO maps.tag_links (map_id, tag_id)
+            SELECT $1, t.id AS tag_id
+            FROM maps.tags t WHERE t.name = $2;
+        """
+        for tag in tags:
+            await self._conn.execute(query, map_id, tag)
 
     async def _insert_medals(
         self,

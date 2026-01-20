@@ -22,6 +22,7 @@ from genjishimada_sdk.maps import (
     OverwatchCode,
     OverwatchMap,
     Restrictions,
+    Tags,
     get_map_banner,
 )
 from genjishimada_sdk.users import Creator
@@ -66,6 +67,7 @@ class MapCreateModel(MapCreateRequest):
         """
         _mechanics = _remove_nulls(self.mechanics)
         _restrictions = _remove_nulls(self.restrictions)
+        _tags = _remove_nulls(self.tags)
         _medals = (
             ""
             if not self.medals
@@ -83,6 +85,7 @@ class MapCreateModel(MapCreateRequest):
             "Difficulty": self.difficulty,
             "Mechanics": ", ".join(_mechanics),
             "Restrictions": ", ".join(_restrictions),
+            "Tags": ", ".join(_tags),
             "Guide": f"[Link]({self.guide_url})" if self.guide_url else "",
             "Medals": _medals,
             "Desc": self.description,
@@ -112,6 +115,7 @@ class MapModel(MapResponse):
         creator_names = [creator.name for creator in self.creators]
         _mechanics = _remove_nulls(self.mechanics)
         _restrictions = _remove_nulls(self.restrictions)
+        _tags = _remove_nulls(self.tags)
         _guides = [f"[Link {i}]({link})" for i, link in enumerate(self.guides or [], 1) if link]
         _medals = (
             ""
@@ -142,6 +146,7 @@ class MapModel(MapResponse):
                 "Difficulty": self.difficulty,
                 "Mechanics": ", ".join(_mechanics) if _mechanics else None,
                 "Restrictions": ", ".join(_restrictions) if _mechanics else None,
+                "Tags": ", ".join(_tags) if _tags else None,
                 "Quality": stars_rating_string(self.ratings),
                 "Guide": ", ".join(_guides),
                 "Medals": _medals,
@@ -244,6 +249,7 @@ class ContinueButton(discord.ui.Button["MapSubmissionView"]):
             guide_url=self.view.data.guide_url,
             mechanics=cast("list[Mechanics]", self.view.mechanics_select.values),
             restrictions=cast("list[Restrictions]", self.view.restrictions_select.values),
+            tags=cast("list[Tags]", self.view.tags_select.values),
             description=self.view.data.description,
             medals=MedalsResponse(self.view.data.gold, self.view.data.silver, self.view.data.bronze)
             if self.view.data.gold and self.view.data.silver and self.view.data.bronze
@@ -354,6 +360,7 @@ class MapSubmissionView(BaseView):
         self.difficulty_select = DifficultySelect()
         self.mechanics_select = MechanicsSelect()
         self.restrictions_select = RestrictionsSelect()
+        self.tags_select = TagsSelect()
 
         self.continue_button = ContinueButton()
         self.cancel_button = CancelButton()
@@ -371,6 +378,7 @@ class MapSubmissionView(BaseView):
             discord.ui.ActionRow(self.difficulty_select),
             discord.ui.ActionRow(self.mechanics_select),
             discord.ui.ActionRow(self.restrictions_select),
+            discord.ui.ActionRow(self.tags_select),
             discord.ui.Separator(),
             discord.ui.TextDisplay(f"# {self._end_time_string}"),
             discord.ui.ActionRow(self.continue_button, self.cancel_button),
@@ -478,6 +486,27 @@ class RestrictionsSelect(discord.ui.Select):
 
     async def callback(self, itx: GenjiItx) -> None:
         """Update selected restrictions in the view.
+
+        Args:
+            itx (GenjiItx): The interaction context.
+        """
+        for option in self.options:
+            option.default = option.value in self.values
+        await itx.response.edit_message(view=self.view)
+
+
+class TagsSelect(discord.ui.Select):
+    def __init__(self) -> None:
+        """Initialize the tags multi-select."""
+        _options = [discord.SelectOption(value=x, label=x) for x in get_args(Tags)]
+        super().__init__(
+            placeholder="Select Tags",
+            options=_options,
+            max_values=len(_options),
+        )
+
+    async def callback(self, itx: GenjiItx) -> None:
+        """Update selected tags in the view.
 
         Args:
             itx (GenjiItx): The interaction context.

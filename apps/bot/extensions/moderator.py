@@ -31,6 +31,7 @@ from genjishimada_sdk.maps import (
     PlaytestStatus,
     QualityValueRequest,
     Restrictions,
+    Tags,
     SendToPlaytestRequest,
     UnlinkMapsCreateRequest,
 )
@@ -395,6 +396,7 @@ class EditableField(str, Enum):
     TITLE = "title"
     MECHANICS = "mechanics"
     RESTRICTIONS = "restrictions"
+    TAGS = "tags"
     MEDALS = "medals"
     CUSTOM_BANNER = "custom_banner"
     # Mod-only fields (still editable but typically mod-controlled)
@@ -432,6 +434,7 @@ class EditableField(str, Enum):
             EditableField.DIFFICULTY,
             EditableField.MECHANICS,
             EditableField.RESTRICTIONS,
+            EditableField.TAGS,
         }
 
     @property
@@ -862,6 +865,36 @@ class RestrictionsSelect(ui.Select["MapEditWizardView"]):
     async def callback(self, itx: GenjiItx) -> None:
         """Handle restrictions selection."""
         self.view.state.set_change(EditableField.RESTRICTIONS, list(self.values))
+        if not self.view.state.advance_field():
+            self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
+
+        view = self.view
+        self.view.rebuild()
+        await itx.response.edit_message(view=view)
+
+
+class TagsSelect(ui.Select["MapEditWizardView"]):
+    """Multi-select for tags."""
+
+    view: MapEditWizardView
+
+    def __init__(self, current: list[Tags]) -> None:
+        """Initialize the tags select.
+
+        Args:
+            current: The current list of tags.
+        """
+        options = [SelectOption(label=t, value=t, default=(t in current)) for t in get_args(Tags)]
+        super().__init__(
+            placeholder="Select tags...",
+            min_values=0,
+            max_values=len(options),
+            options=options,
+        )
+
+    async def callback(self, itx: GenjiItx) -> None:
+        """Handle tags selection."""
+        self.view.state.set_change(EditableField.TAGS, list(self.values))
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
 
@@ -1325,6 +1358,9 @@ class MapEditWizardView(BaseView):
             elif field == EditableField.RESTRICTIONS:
                 restrictions_value = cast(list[Restrictions] | None, current_value)
                 container.add_item(ui.ActionRow(RestrictionsSelect(restrictions_value or [])))
+            elif field == EditableField.TAGS:
+                tags_value = cast(list[Tags] | None, current_value)
+                container.add_item(ui.ActionRow(TagsSelect(tags_value or [])))
             elif field == EditableField.SEND_TO_PLAYTEST:
                 current_playtest = cast(
                     DifficultyAll | None,

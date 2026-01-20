@@ -76,6 +76,7 @@ from genjishimada_sdk.maps import (
     PlaytestVotesResponse,
     QualityValueRequest,
     Restrictions,
+    Tags,
     SendToPlaytestRequest,
     UnlinkMapsCreateRequest,
 )
@@ -404,6 +405,7 @@ class APIService:
         creator_names: list[str] | None = None,
         mechanics: list[Mechanics] | None = None,
         restrictions: list[Restrictions] | None = None,
+        tags: list[Tags] | None = None,
         difficulty_exact: DifficultyTop | None = None,
         difficulty_range_min: DifficultyAll | None = None,
         difficulty_range_max: DifficultyAll | None = None,
@@ -431,6 +433,7 @@ class APIService:
             creator_names (list[str] | None): Filter by creator display names.
             mechanics (list[Mechanics] | None): Filter by mechanics.
             restrictions (list[Restrictions] | None): Filter by restrictions.
+            tags (list[Tags] | None): Filter by tags.
             difficulty_exact (DifficultyTop | None): Match exact difficulty.
             difficulty_range_min (DifficultyAll | None): Minimum difficulty bound.
             difficulty_range_max (DifficultyAll | None): Maximum difficulty bound.
@@ -460,6 +463,7 @@ class APIService:
             "creator_names": creator_names,
             "mechanics": mechanics,
             "restrictions": restrictions,
+            "tags": tags,
             "difficulty_exact": difficulty_exact,
             "difficulty_range_min": difficulty_range_min,
             "difficulty_range_max": difficulty_range_max,
@@ -491,6 +495,7 @@ class APIService:
         creator_names: list[str] | None = None,
         mechanics: list[Mechanics] | None = None,
         restrictions: list[Restrictions] | None = None,
+        tags: list[Tags] | None = None,
         difficulty_exact: DifficultyTop | None = None,
         difficulty_range_min: DifficultyAll | None = None,
         difficulty_range_max: DifficultyAll | None = None,
@@ -518,6 +523,7 @@ class APIService:
             creator_names (list[str] | None): Filter by creator display names.
             mechanics (list[Mechanics] | None): Filter by mechanics.
             restrictions (list[Restrictions] | None): Filter by restrictions.
+            tags (list[Tags] | None): Filter by tags.
             difficulty_exact (DifficultyTop | None): Match exact difficulty.
             difficulty_range_min (DifficultyAll | None): Minimum difficulty bound.
             difficulty_range_max (DifficultyAll | None): Maximum difficulty bound.
@@ -549,6 +555,7 @@ class APIService:
             "creator_names": creator_names,
             "mechanics": mechanics,
             "restrictions": restrictions,
+            "tags": tags,
             "difficulty_exact": difficulty_exact,
             "difficulty_range_min": difficulty_range_min,
             "difficulty_range_max": difficulty_range_max,
