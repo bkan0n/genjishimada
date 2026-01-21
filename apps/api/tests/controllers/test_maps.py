@@ -214,6 +214,70 @@ class TestMapsEndpoints:
         assert all("Wall Climb" in item["restrictions"] for item in data)
 
     @pytest.mark.asyncio
+    async def test_search_maps_tags_filter_single(self, test_client):
+        """Test filtering maps by a single tag."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "tags": ["Other Heroes"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Maps 1 and 4 have "Other Heroes" tag
+        codes = {item["code"] for item in data}
+        assert "1EASY" in codes
+        assert all("Other Heroes" in item["tags"] for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_tags_filter_multiple(self, test_client):
+        """Test filtering maps by multiple tags (AND logic - must have all tags)."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "tags": ["Other Heroes", "XP Based"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Only map 4 (5EASY) has both tags
+        codes = {item["code"] for item in data}
+        assert "5EASY" in codes
+        assert all("Other Heroes" in item["tags"] for item in data)
+        assert all("XP Based" in item["tags"] for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_tags_with_mechanics(self, test_client):
+        """Test combining tags filter with mechanics filter."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "tags": ["Other Heroes"],
+                "mechanics": ["Bhop"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        # Should return maps that have both "Other Heroes" tag AND "Bhop" mechanic
+        if data:
+            assert all("Other Heroes" in item["tags"] for item in data)
+            assert all("Bhop" in item["mechanics"] for item in data)
+
+    @pytest.mark.asyncio
     async def test_search_maps_completion_filter(self, test_client):
         response = await test_client.get(
             "/api/v3/maps/",
