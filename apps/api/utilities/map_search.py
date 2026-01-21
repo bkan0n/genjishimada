@@ -6,7 +6,16 @@ from typing import Literal, TypeAlias, cast
 
 import msgspec
 from genjishimada_sdk.difficulties import DIFFICULTY_RANGES_ALL, DIFFICULTY_RANGES_TOP, DifficultyTop
-from genjishimada_sdk.maps import MapCategory, Mechanics, OverwatchCode, OverwatchMap, PlaytestStatus, Restrictions, Tags
+from genjishimada_sdk.maps import (
+    MapCategory,
+    Mechanics,
+    OverwatchCode,
+    OverwatchMap,
+    PlaytestStatus,
+    Restrictions,
+    SortKey,
+    Tags,
+)
 from sqlspec import SQL, Select, sql
 from sqlspec.adapters.asyncpg import default_statement_config
 
@@ -46,6 +55,7 @@ class MapSearchFilters(msgspec.Struct):
     code: OverwatchCode | None = None
     category: list[MapCategory] | None = None
     map_name: list[OverwatchMap] | None = None
+    sort: list[SortKey] | None = None
     creator_ids: list[int] | None = None
     creator_names: list[str] | None = None
     mechanics: list[Mechanics] | None = None
@@ -141,8 +151,35 @@ class MapSearchSQLSpecBuilder:
 
         self._apply_where_clauses(query)
 
-        query = query.order_by("raw_difficulty")
+        self._apply_sorting(query)
         return query
+
+    def _apply_sorting(self, query: Select) -> None:
+        """Apply ORDER BY clauses based on requested sort keys.
+
+        Args:
+            query: Select builder to update with ordering.
+        """
+        if not self._filters.sort:
+            query.order_by("raw_difficulty")
+            return
+
+        sort_map: dict[str, str] = {
+            "difficulty": "m.raw_difficulty",
+            "checkpoints": "m.checkpoints",
+            "ratings": "ratings",
+            "map_name": "m.map_name",
+            "title": "m.title",
+            "code": "m.code",
+        }
+        order_clauses: list[str] = []
+        for item in self._filters.sort:
+            field, direction = item.split(":", 1)
+            column = sort_map[field]
+            order_clauses.append(f"{column} {direction.upper()} NULLS FIRST")
+
+        order_clauses.append("m.id ASC")
+        query.order_by(*order_clauses)
 
     def _build_ctes(self) -> list[tuple[str, Select]]:
         """Build the ordered list of CTEs based on active filters.
@@ -682,6 +719,7 @@ class MapSearchSQLSpecBuilder:
             ), ARRAY[]::text[]) AS tags
             """
         ).strip()
+
     @staticmethod
     def _get_raw_difficulty_bounds(
         min_difficulty: DifficultyTop | None, max_difficulty: DifficultyTop | None

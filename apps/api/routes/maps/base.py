@@ -29,8 +29,9 @@ from genjishimada_sdk.maps import (
     PlaytestStatus,
     QualityValueRequest,
     Restrictions,
-    Tags,
     SendToPlaytestRequest,
+    SortKey,
+    Tags,
     TrendingMapResponse,
     UnlinkMapsCreateRequest,
 )
@@ -98,6 +99,7 @@ class BaseMapsController(litestar.Controller):
         code: OverwatchCode | None = None,
         category: list[MapCategory] | None = None,
         map_name: list[OverwatchMap] | None = None,
+        sort: list[SortKey] | None = None,
         creator_ids: list[int] | None = None,
         creator_names: list[str] | None = None,
         mechanics: list[Mechanics] | None = None,
@@ -129,6 +131,7 @@ class BaseMapsController(litestar.Controller):
             code (OverwatchCode | None): Filter by exact map code.
             category (list[MapCategory] | None): Filter by one or more categories.
             map_name (list[OverwatchMap] | None): Filter by one or more map names.
+            sort (list[SortKey] | None): Ordered sort keys (e.g., "difficulty:asc").
             creator_ids (list[int] | None): Filter by creator user IDs.
             creator_names (list[str] | None): Filter by creator display names.
             mechanics (list[Mechanics] | None): Filter by mechanics.
@@ -162,6 +165,7 @@ class BaseMapsController(litestar.Controller):
             code=code,
             category=category,
             map_name=map_name,
+            sort=sort,
             creator_ids=creator_ids,
             creator_names=creator_names,
             mechanics=mechanics,

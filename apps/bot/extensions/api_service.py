@@ -76,8 +76,8 @@ from genjishimada_sdk.maps import (
     PlaytestVotesResponse,
     QualityValueRequest,
     Restrictions,
-    Tags,
     SendToPlaytestRequest,
+    Tags,
     UnlinkMapsCreateRequest,
 )
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedEventType, PublishNewsfeedJobResponse

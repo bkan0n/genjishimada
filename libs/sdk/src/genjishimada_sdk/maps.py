@@ -74,8 +74,9 @@ __all__ = (
     "PopularMapsStatisticsResponse",
     "QualityValueRequest",
     "Restrictions",
-    "Tags",
     "SendToPlaytestRequest",
+    "SortKey",
+    "Tags",
     "TopCreatorsResponse",
     "TrendingMapResponse",
     "UnlinkMapsCreateRequest",
@@ -209,6 +210,21 @@ Restrictions = Literal[
     "Emote Save Bhop",
     "Double Jump",
     "Bhop",
+]
+
+SortKey = Literal[
+    "difficulty:asc",
+    "difficulty:desc",
+    "checkpoints:asc",
+    "checkpoints:desc",
+    "ratings:asc",
+    "ratings:desc",
+    "map_name:asc",
+    "map_name:desc",
+    "title:asc",
+    "title:desc",
+    "code:asc",
+    "code:desc",
 ]
 
 Tags = Literal[

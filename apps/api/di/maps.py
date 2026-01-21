@@ -32,8 +32,8 @@ from genjishimada_sdk.maps import (
     PlaytestCreatePartialRequest,
     QualityValueRequest,
     Restrictions,
-    Tags,
     SendToPlaytestRequest,
+    Tags,
     TrendingMapResponse,
 )
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedNewMap
