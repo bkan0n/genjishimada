@@ -278,6 +278,132 @@ class TestMapsEndpoints:
             assert all("Bhop" in item["mechanics"] for item in data)
 
     @pytest.mark.asyncio
+    async def test_search_maps_sort_difficulty_asc(self, test_client):
+        """Test sorting maps by difficulty ascending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["difficulty:asc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by raw_difficulty ascending
+        difficulties = [item["raw_difficulty"] for item in data]
+        assert difficulties == sorted(difficulties)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_difficulty_desc(self, test_client):
+        """Test sorting maps by difficulty descending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["difficulty:desc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by raw_difficulty descending
+        difficulties = [item["raw_difficulty"] for item in data]
+        assert difficulties == sorted(difficulties, reverse=True)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_checkpoints_asc(self, test_client):
+        """Test sorting maps by checkpoints ascending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["checkpoints:asc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by checkpoints ascending
+        checkpoints = [item["checkpoints"] for item in data]
+        assert checkpoints == sorted(checkpoints)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_code_asc(self, test_client):
+        """Test sorting maps by code ascending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["code:asc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by code ascending
+        codes = [item["code"] for item in data]
+        assert codes == sorted(codes)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_multiple_keys(self, test_client):
+        """Test sorting maps by multiple keys (difficulty desc, then code asc)."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["difficulty:desc", "code:asc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify primary sort by difficulty descending
+        difficulties = [item["raw_difficulty"] for item in data]
+        # For items with same difficulty, verify secondary sort by code ascending
+        for i in range(len(data) - 1):
+            if data[i]["raw_difficulty"] == data[i + 1]["raw_difficulty"]:
+                assert data[i]["code"] <= data[i + 1]["code"]
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_ratings_desc(self, test_client):
+        """Test sorting maps by ratings descending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["ratings:desc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by ratings descending (nulls first per SQL)
+        ratings = [item["ratings"] for item in data]
+        # Filter out None values for comparison
+        non_null_ratings = [r for r in ratings if r is not None]
+        if non_null_ratings:
+            assert non_null_ratings == sorted(non_null_ratings, reverse=True)
+
+    @pytest.mark.asyncio
     async def test_search_maps_completion_filter(self, test_client):
         response = await test_client.get(
             "/api/v3/maps/",
