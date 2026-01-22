@@ -51,7 +51,7 @@ from utilities.map_search import MapSearchFilters, MapSearchSQLSpecBuilder
 from utilities.playtest_plot import build_playtest_plot
 from utilities.shared_queries import get_map_mastery_data
 
-log = getLogger("__name__")
+log = getLogger(__name__)
 
 P = ParamSpec("P")
 R = TypeVar("R")
