@@ -18,23 +18,12 @@ permissions:
   statuses: read
 
 jobs:
-  lint:
-    uses: ./.github/workflows/lint.yml
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
-
-  tests:
-    uses: ./.github/workflows/tests.yml
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
-
-  dev-deploy:
-    needs: [lint, tests]
-    # Run if manually dispatched OR if this is a comment on a PR
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
+  resolve-ref:
     runs-on: ubuntu-latest
-    environment: development
-
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
+    outputs:
+      ref: ${{ steps.set-ref.outputs.ref }}
     steps:
-      # PR comment flow using branch-deploy
       - name: branch-deploy
         id: branch-deploy
         if: ${{ github.event_name == 'issue_comment' }}
@@ -44,23 +33,53 @@ jobs:
           reaction: "eyes"
           environment: "development"
           stable_branch: "main"
-          # You can extend this with more URLs if you want (e.g. dev RabbitMQ UI)
           environment_urls: "production|disabled,development|https://dev-api.genji.pk,staging|disabled"
           environment_targets: "development"
           allow_forks: "true"
           admins: "tylovejoy"
 
+      - name: Resolve ref
+        id: set-ref
+        run: |
+          if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
+            echo "ref=${{ steps.branch-deploy.outputs.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    uses: ./.github/workflows/lint.yml
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
+    needs: [resolve-ref]
+    with:
+      ref: ${{ needs.resolve-ref.outputs.ref }}
+
+  tests:
+    uses: ./.github/workflows/tests.yml
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
+    needs: [resolve-ref]
+    with:
+      ref: ${{ needs.resolve-ref.outputs.ref }}
+
+  dev-deploy:
+    needs: [resolve-ref, lint, tests]
+    # Run if manually dispatched OR if this is a comment on a PR
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
       - name: Checkout repository (PR comment)
         if: ${{ github.event_name == 'issue_comment' }}
         uses: actions/checkout@v4
         with:
-          ref: ${{ steps.branch-deploy.outputs.sha }}
+          ref: ${{ needs.resolve-ref.outputs.ref }}
 
       - name: Checkout repository (manual dispatch)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.resolve-ref.outputs.ref }}
 
       - name: Set up SSH key
         run: |
