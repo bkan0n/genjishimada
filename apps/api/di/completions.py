@@ -20,6 +20,7 @@ from genjishimada_sdk.completions import (
     UpvoteSubmissionJobResponse,
     UpvoteUpdateEvent,
     VerificationChangedEvent,
+    VerificationMessageDeleteEvent,
 )
 from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
@@ -200,17 +201,67 @@ class CompletionsService(BaseService):
         models = msgspec.convert(rows, list[CompletionResponse])
         return models
 
-    async def submit_completion(self, data: CompletionCreateRequest) -> int:
+    async def submit_completion(self, data: CompletionCreateRequest, request: Request) -> int:
         """Submit a new completion record and publish an event.
 
         Args:
-            request (Request): Request obj.
             data (CompletionCreateDTO): DTO containing completion details.
+            request (Request): Request obj.
 
         Returns:
             int: ID of the newly inserted completion record.
 
         """
+        # Check for existing pending verification
+        pending_query = """
+            SELECT c.id, c.time, c.verification_id
+            FROM core.completions c
+            JOIN core.maps m ON m.id = c.map_id
+            WHERE c.user_id = $1
+              AND m.code = $2
+              AND c.verified IS FALSE
+              AND c.verified_by IS NULL
+              AND c.legacy = FALSE
+            ORDER BY c.time ASC
+            LIMIT 1;
+        """
+        pending = await self._conn.fetchrow(pending_query, data.user_id, data.code)
+
+        if pending:
+            pending_id = pending["id"]
+            pending_time = pending["time"]
+            pending_verification_id = pending["verification_id"]
+
+            if data.time >= pending_time:
+                # Reject: new time is same or slower
+                raise CustomHTTPException(
+                    status_code=HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"You already have a pending verification for this map with time {pending_time}s. "
+                        f"Your new submission ({data.time}s) must be faster. "
+                        f"Please wait for verification or submit a faster time."
+                    ),
+                )
+            else:
+                # Accept: new time is faster - mark old submission as rejected by bot
+                bot_id = 969632729643753482
+                reject_query = """
+                    UPDATE core.completions
+                    SET verified_by = $1
+                    WHERE id = $2
+                """
+                await self._conn.execute(reject_query, bot_id, pending_id)
+
+                # If there's a verification message, delete it from Discord
+                if pending_verification_id:
+                    delete_event = VerificationMessageDeleteEvent(pending_verification_id)
+                    await self.publish_message(
+                        routing_key="api.completion.verification.delete",
+                        data=delete_event,
+                        headers=request.headers,
+                        use_pool=False,
+                    )
+
         query = """
         WITH target_map AS (
             SELECT

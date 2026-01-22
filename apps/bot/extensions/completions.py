@@ -38,6 +38,7 @@ from genjishimada_sdk.completions import (
     UpvoteCreateRequest,
     UpvoteUpdateEvent,
     VerificationChangedEvent,
+    VerificationMessageDeleteEvent,
 )
 from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, DifficultyTop
 from genjishimada_sdk.maps import MapMasteryCreateRequest, OverwatchCode
@@ -667,6 +668,20 @@ class CompletionsService(BaseService):
             await self.auto_skill_role(member)
         assert completion_data.verification_id
         stoppable_view = self.verification_views.pop(completion_data.verification_id, None)
+        if stoppable_view:
+            stoppable_view.stop()
+
+    @queue_consumer("api.completion.verification.delete", struct_type=VerificationMessageDeleteEvent)
+    async def _process_delete_verification_message(
+        self, event: VerificationMessageDeleteEvent, _: AbstractIncomingMessage
+    ) -> None:
+        """Delete a verification queue message when a faster submission replaces it."""
+        log.debug(f"[x] [RabbitMQ] Deleting verification message: {event.verification_id}")
+        with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
+            await (self.verification_channel.get_partial_message(event.verification_id)).delete()
+
+        # Remove from verification_views if exists
+        stoppable_view = self.verification_views.pop(event.verification_id, None)
         if stoppable_view:
             stoppable_view.stop()
 

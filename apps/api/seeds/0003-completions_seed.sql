@@ -33,29 +33,36 @@ VALUES (
 INSERT INTO core.completions (
     map_id, user_id, time, verified, video, screenshot, verified_by, message_id
 )
-VALUES (
-    1, 200, 12345, TRUE, NULL, 'https://example.com/screenshot1.png', 202, 1
-), (
-    1, 201, 15000, TRUE, NULL, 'https://example.com/screenshot2.png', 202, 2
-);
+SELECT m.id, v.user_id, v.time, v.verified, v.video, v.screenshot, v.verified_by, v.message_id
+FROM (
+    VALUES
+        ('1EASY', 200, 12345, TRUE, NULL, 'https://example.com/screenshot1.png', 202, 1),
+        ('1EASY', 201, 15000, TRUE, NULL, 'https://example.com/screenshot2.png', 202, 2)
+) AS v(code, user_id, time, verified, video, screenshot, verified_by, message_id)
+JOIN core.maps m ON m.code = v.code;
 
 -- Map 2 (2EASY) completions - one user
 INSERT INTO core.completions (
     map_id, user_id, time, verified, video, screenshot, verified_by, message_id
 )
-VALUES (
-    2, 200, 20000, TRUE, NULL, 'https://example.com/screenshot3.png', 202, 3
-);
+SELECT m.id, v.user_id, v.time, v.verified, v.video, v.screenshot, v.verified_by, v.message_id
+FROM (
+    VALUES
+        ('2EASY', 200, 20000, TRUE, NULL, 'https://example.com/screenshot3.png', 202, 3)
+) AS v(code, user_id, time, verified, video, screenshot, verified_by, message_id)
+JOIN core.maps m ON m.code = v.code;
 
 -- Map 3 (4EASY) completions - multiple users with close times for medal tests
 INSERT INTO core.completions (
     map_id, user_id, time, verified, video, screenshot, verified_by, message_id
 )
-VALUES (
-    3, 200, 10000, TRUE, NULL, 'https://example.com/screenshot_gold.png', 202, 4
-), (
-    3, 201, 10500, TRUE, NULL, 'https://example.com/screenshot_silver.png', 202, 5
-);
+SELECT m.id, v.user_id, v.time, v.verified, v.video, v.screenshot, v.verified_by, v.message_id
+FROM (
+    VALUES
+        ('4EASY', 200, 10000, TRUE, NULL, 'https://example.com/screenshot_gold.png', 202, 4),
+        ('4EASY', 201, 10500, TRUE, NULL, 'https://example.com/screenshot_silver.png', 202, 5)
+) AS v(code, user_id, time, verified, video, screenshot, verified_by, message_id)
+JOIN core.maps m ON m.code = v.code;
 
 -- =============================================================================
 -- PENDING COMPLETIONS (for verification queue tests)
@@ -64,11 +71,13 @@ VALUES (
 INSERT INTO core.completions (
     map_id, user_id, time, verified, video, screenshot, message_id
 )
-VALUES (
-    4, 201, 30000, FALSE, 'https://youtube.com/watch?v=abc123', 'https://example.com/screenshot4.png', 6
-), (
-    5, 200, 25000, FALSE, NULL, 'https://example.com/screenshot5.png', 7
-);
+SELECT m.id, v.user_id, v.time, v.verified, v.video, v.screenshot, v.message_id
+FROM (
+    VALUES
+        ('5EASY', 201, 30000, FALSE, 'https://youtube.com/watch?v=abc123', 'https://example.com/screenshot4.png', 6),
+        ('6EASY', 200, 25000, FALSE, NULL, 'https://example.com/screenshot5.png', 7)
+) AS v(code, user_id, time, verified, video, screenshot, message_id)
+JOIN core.maps m ON m.code = v.code;
 
 -- =============================================================================
 -- LEGACY COMPLETIONS (for legacy completion tests)
@@ -77,11 +86,13 @@ VALUES (
 INSERT INTO core.completions (
     map_id, user_id, time, verified, video, screenshot, verified_by, legacy, message_id
 )
-VALUES (
-    6, 200, 50000, TRUE, NULL, 'https://example.com/legacy1.png', 202, TRUE, 8
-), (
-    6, 201, 55000, TRUE, NULL, 'https://example.com/legacy2.png', 202, TRUE, 9
-);
+SELECT m.id, v.user_id, v.time, v.verified, v.video, v.screenshot, v.verified_by, v.legacy, v.message_id
+FROM (
+    VALUES
+        ('7EASY', 200, 50000, TRUE, NULL, 'https://example.com/legacy1.png', 202, TRUE, 8),
+        ('7EASY', 201, 55000, TRUE, NULL, 'https://example.com/legacy2.png', 202, TRUE, 9)
+) AS v(code, user_id, time, verified, video, screenshot, verified_by, legacy, message_id)
+JOIN core.maps m ON m.code = v.code;
 
 -- =============================================================================
 -- QUALITY VOTES (for quality rating tests)
@@ -90,13 +101,14 @@ VALUES (
 INSERT INTO maps.ratings (
     map_id, user_id, quality
 )
-VALUES (
-    1, 200, 4
-), (
-    1, 201, 5
-), (
-    2, 200, 3
-);
+SELECT m.id, v.user_id, v.quality
+FROM (
+    VALUES
+        ('1EASY', 200, 4),
+        ('1EASY', 201, 5),
+        ('2EASY', 200, 3)
+) AS v(code, user_id, quality)
+JOIN core.maps m ON m.code = v.code;
 
 -- =============================================================================
 -- XP DATA (for world record XP check tests)
