@@ -13,9 +13,13 @@ on:
 jobs:
   lint:
     uses: ./.github/workflows/lint.yml
+    with:
+      ref: ${{ github.sha }}
 
   tests:
     uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ github.sha }}
 
   prod-deploy:
     needs: [lint, tests]
