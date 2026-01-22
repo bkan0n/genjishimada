@@ -7,7 +7,7 @@ import pytest
 
 from utilities.map_search import MapSearchFilters, MapSearchSQLSpecBuilder
 
-# ruff: noqa: D102, D103, ANN001, ANN201
+# ruff: noqa: ANN201
 
 
 class TestMapSearchSQLSpecBuilder:
