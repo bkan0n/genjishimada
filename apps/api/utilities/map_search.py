@@ -192,17 +192,14 @@ class MapSearchSQLSpecBuilder:
 
         ctes: list[tuple[str, Select]] = []
 
-        mechanics_cte = self._build_mechanics_cte()
-        if mechanics_cte:
-            ctes.append(mechanics_cte)
+        mechanics_ctes = self._build_mechanics_ctes()
+        ctes.extend(mechanics_ctes)
 
-        restrictions_cte = self._build_restrictions_cte()
-        if restrictions_cte:
-            ctes.append(restrictions_cte)
+        restrictions_ctes = self._build_restrictions_ctes()
+        ctes.extend(restrictions_ctes)
 
-        tags_cte = self._build_tags_cte()
-        if tags_cte:
-            ctes.append(tags_cte)
+        tags_ctes = self._build_tags_ctes()
+        ctes.extend(tags_ctes)
 
         creator_ids_cte = self._build_creator_ids_cte()
         if creator_ids_cte:
@@ -241,53 +238,71 @@ class MapSearchSQLSpecBuilder:
         offset_value = (page_number - 1) * page_size
         query.limit(page_size).offset(offset_value)
 
-    def _build_mechanics_cte(self) -> tuple[str, Select] | None:
+    def _build_mechanics_ctes(self) -> list[tuple[str, Select]]:
         """Restrict to maps containing the provided mechanics.
 
+        Each mechanic yields its own CTE, and all are intersected for AND
+        semantics.
+
         Returns:
-            tuple[str, Select] | None: CTE name and query, or None if inactive.
+            list[tuple[str, Select]]: CTE name/query pairs for each mechanic.
         """
         if not self._filters.mechanics:
-            return None
-        query = (
-            sql.select("map_id")
-            .from_("maps.mechanic_links", alias="ml")
-            .join("maps.mechanics", "ml.mechanic_id = m.id", alias="m")
-            .where_in("m.name", self._filters.mechanics)
-        )
-        return "limited_mechanics", query
+            return []
+        ctes: list[tuple[str, Select]] = []
+        for idx, mechanic in enumerate(self._filters.mechanics):
+            query = (
+                sql.select("map_id")
+                .from_("maps.mechanic_links", alias="ml")
+                .join("maps.mechanics", "ml.mechanic_id = m.id", alias="m")
+                .where_eq("m.name", mechanic)
+            )
+            ctes.append((f"mechanic_match_{idx}", query))
+        return ctes
 
-    def _build_restrictions_cte(self) -> tuple[str, Select] | None:
+    def _build_restrictions_ctes(self) -> list[tuple[str, Select]]:
         """Restrict to maps containing the provided restrictions.
 
+        Each restriction yields its own CTE, and all are intersected for AND
+        semantics.
+
         Returns:
-            tuple[str, Select] | None: CTE name and query, or None if inactive.
+            list[tuple[str, Select]]: CTE name/query pairs for each restriction.
         """
         if not self._filters.restrictions:
-            return None
-        query = (
-            sql.select("map_id")
-            .from_("maps.restriction_links", alias="rl")
-            .join("maps.restrictions", "rl.restriction_id = r.id", alias="r")
-            .where_in("r.name", self._filters.restrictions)
-        )
-        return "limited_restrictions", query
+            return []
+        ctes: list[tuple[str, Select]] = []
+        for idx, restriction in enumerate(self._filters.restrictions):
+            query = (
+                sql.select("map_id")
+                .from_("maps.restriction_links", alias="rl")
+                .join("maps.restrictions", "rl.restriction_id = r.id", alias="r")
+                .where_eq("r.name", restriction)
+            )
+            ctes.append((f"restriction_match_{idx}", query))
+        return ctes
 
-    def _build_tags_cte(self) -> tuple[str, Select] | None:
+    def _build_tags_ctes(self) -> list[tuple[str, Select]]:
         """Restrict to maps containing the provided tags.
 
+        Each tag yields its own CTE, and all are intersected for AND
+        semantics.
+
         Returns:
-            tuple[str, Select] | None: CTE name and query, or None if inactive.
+            list[tuple[str, Select]]: CTE name/query pairs for each tag.
         """
         if not self._filters.tags:
-            return None
-        query = (
-            sql.select("map_id")
-            .from_("maps.tag_links", alias="tl")
-            .join("maps.tags", "tl.tag_id = t.id", alias="t")
-            .where_in("t.name", self._filters.tags)
-        )
-        return "limited_tags", query
+            return []
+        ctes: list[tuple[str, Select]] = []
+        for idx, tag in enumerate(self._filters.tags):
+            query = (
+                sql.select("map_id")
+                .from_("maps.tag_links", alias="tl")
+                .join("maps.tags", "tl.tag_id = t.id", alias="t")
+                .where_eq("t.name", tag)
+            )
+            ctes.append((f"tag_match_{idx}", query))
+        return ctes
 
     def _build_creator_ids_cte(self) -> tuple[str, Select] | None:
         """Restrict to maps created by specific user IDs.

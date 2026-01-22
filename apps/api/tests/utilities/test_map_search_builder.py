@@ -76,10 +76,12 @@ class TestMapSearchSQLSpecBuilder:
         builder = MapSearchSQLSpecBuilder(filters)
         query_result = builder.build()
 
-        # Verify query contains tag-related SQL
-        assert "limited_tags" in query_result.query
+        # Verify query contains tag-related SQL with separate CTEs for AND semantics
+        assert "tag_match_0" in query_result.query
+        assert "tag_match_1" in query_result.query
         assert "tag_links" in query_result.query
         assert "tags" in query_result.query
+        assert "INTERSECT" in query_result.query
         # Verify parameters include tag names
         assert "Other Heroes" in query_result.args
         assert "XP Based" in query_result.args
