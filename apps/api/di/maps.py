@@ -1,9 +1,7 @@
 import datetime as dt
-import functools
 from logging import getLogger
-from typing import Any, Awaitable, Callable, Literal, ParamSpec, Sequence, TypeVar, overload
+from typing import Any, Literal, Sequence, overload
 
-import asyncpg
 import msgspec
 from asyncpg import Connection
 from genjishimada_sdk.difficulties import (
@@ -40,102 +38,48 @@ from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedNewMap
 from genjishimada_sdk.users import Creator
 from litestar import Request
 from litestar.datastructures import State
-from litestar.exceptions import HTTPException
 from litestar.response import Stream
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from di.base import BaseService
 from di.newsfeed import NewsfeedService
-from utilities.errors import CustomHTTPException, parse_pg_detail
+from utilities.errors import ConstraintHandler, CustomHTTPException, handle_db_exceptions
 from utilities.map_search import MapSearchFilters, MapSearchSQLSpecBuilder
 from utilities.playtest_plot import build_playtest_plot
 from utilities.shared_queries import get_map_mastery_data
 
 log = getLogger(__name__)
 
-P = ParamSpec("P")
-R = TypeVar("R")
+# Constraint error mappings for map operations
+MAP_UNIQUE_CONSTRAINTS = {
+    "maps_code_key": ConstraintHandler(
+        message="Provided code already exists.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "mechanic_links_pkey": ConstraintHandler(
+        message="You have a duplicate mechanic.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "restriction_links_pkey": ConstraintHandler(
+        message="You have a duplicate restriction.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "creators_pkey": ConstraintHandler(
+        message="You have a duplicate creator ID.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
 
-
-def _handle_exceptions(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
-    """Catch asyncpg constraint violations via decorator.
-
-    Catches `UniqueViolationError` and `ForeignKeyViolationError`,
-    converting them into `CustomHTTPException` with meaningful messages.
-
-    Args:
-        func (Callable): Async function to wrap.
-
-    Returns:
-        Callable: Wrapped function with exception handling applied.
-
-    Raises:
-        CustomHTTPException: For known constraint violations (duplicate codes,
-            mechanics, restrictions, creators, or invalid user IDs).
-        Exception: Any other unhandled exceptions are re-raised.
-
-    """
-
-    @functools.wraps(func)
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        try:
-            return await func(*args, **kwargs)
-        except asyncpg.exceptions.UniqueViolationError as e:
-            if e.constraint_name == "maps_code_key":
-                raise CustomHTTPException(
-                    detail="Provided code already exists.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                    extra=parse_pg_detail(e.detail),
-                )
-            elif e.constraint_name == "mechanic_links_pkey":
-                raise CustomHTTPException(
-                    detail="You have a duplicate mechanic.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                )
-            elif e.constraint_name == "restriction_links_pkey":
-                raise CustomHTTPException(
-                    detail="You have a duplicate restriction.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                )
-            elif e.constraint_name == "creators_pkey":
-                raise CustomHTTPException(
-                    detail="You have a duplicate creator ID.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                )
-            log.info(
-                (
-                    "Playtest submission failed with a Unique key error. This needs to be caught.\n"
-                    f"Constraint name: {e.constraint_name}\ndetail: {e.detail}"
-                ),
-                exc_info=e,
-            )
-            raise HTTPException
-
-        except asyncpg.exceptions.ForeignKeyViolationError as e:
-            if e.constraint_name == "creators_user_id_fkey":
-                raise CustomHTTPException(
-                    detail="There is no user associated with supplied ID.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                    extra=parse_pg_detail(e.detail),
-                )
-
-            log.info(
-                (
-                    "Playtest submission failed with a Foreign key error. This needs to be caught.\n"
-                    f"Constraint name: {e.constraint_name}\ndetail: {e.detail}"
-                ),
-                exc_info=e,
-            )
-            raise HTTPException
-        except Exception as e:
-            log.info("Playtest submission failed. This needs to be caught.", exc_info=e)
-            raise e
-
-    return wrapper
+MAP_FK_CONSTRAINTS = {
+    "creators_user_id_fkey": ConstraintHandler(
+        message="There is no user associated with supplied ID.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
 
 
 class MapService(BaseService):
-    @_handle_exceptions
+    @handle_db_exceptions(unique_constraints=MAP_UNIQUE_CONSTRAINTS, fk_constraints=MAP_FK_CONSTRAINTS)
     async def create_map(
         self,
         data: MapCreateRequest,
@@ -203,7 +147,7 @@ class MapService(BaseService):
 
         return MapCreationJobResponse(job_status, map_data)
 
-    @_handle_exceptions
+    @handle_db_exceptions(unique_constraints=MAP_UNIQUE_CONSTRAINTS, fk_constraints=MAP_FK_CONSTRAINTS)
     async def patch_map(self, code: OverwatchCode, data: MapPatchRequest) -> MapResponse:
         """Edit a map.
 
