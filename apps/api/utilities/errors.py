@@ -57,7 +57,7 @@ class ConstraintHandler(typing.TypedDict):
 def handle_db_exceptions(
     unique_constraints: dict[str, ConstraintHandler] | None = None,
     fk_constraints: dict[str, ConstraintHandler] | None = None,
-) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
+) -> Callable[..., typing.Any]:
     """Decorator to catch asyncpg constraint violations and convert to CustomHTTPException.
 
     Args:
@@ -82,9 +82,9 @@ def handle_db_exceptions(
     unique_constraints = unique_constraints or {}
     fk_constraints = fk_constraints or {}
 
-    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
+    def decorator(func: Callable[..., Awaitable[typing.Any]]) -> Callable[..., Awaitable[typing.Any]]:
         @functools.wraps(func)
-        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        async def wrapper(*args: object, **kwargs: object) -> object:
             try:
                 return await func(*args, **kwargs)
             except asyncpg.exceptions.UniqueViolationError as e:
