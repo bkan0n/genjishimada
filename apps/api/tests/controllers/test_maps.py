@@ -715,3 +715,26 @@ class TestMapsEndpoints:
         assert response.status_code == HTTP_200_OK
         data = response.json()
         assert len(data) > 10
+
+    @pytest.mark.asyncio
+    async def test_search_maps_tags_and_sorting_combined(self, test_client):
+        """Integration test combining tag filter with sorting."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "tags": ["Other Heroes"],
+                "sort": ["difficulty:asc", "code:asc"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # All maps should have "Other Heroes" tag
+        assert all("Other Heroes" in item["tags"] for item in data)
+        # Maps should be sorted by difficulty ascending, then code ascending
+        difficulties = [item["raw_difficulty"] for item in data]
+        assert difficulties == sorted(difficulties)
