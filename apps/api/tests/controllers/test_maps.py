@@ -738,3 +738,7 @@ class TestMapsEndpoints:
         # Maps should be sorted by difficulty ascending, then code ascending
         difficulties = [item["raw_difficulty"] for item in data]
         assert difficulties == sorted(difficulties)
+        # For items with same difficulty, verify secondary sort by code ascending
+        for i in range(len(data) - 1):
+            if data[i]["raw_difficulty"] == data[i + 1]["raw_difficulty"]:
+                assert data[i]["code"] <= data[i + 1]["code"]
