@@ -28,7 +28,7 @@ from litestar.status_codes import (
     HTTP_429_TOO_MANY_REQUESTS,
 )
 
-from utilities.errors import CustomHTTPException
+from utilities.errors import ConstraintHandler, CustomHTTPException, handle_db_exceptions
 
 from .base import BaseService
 
@@ -69,6 +69,33 @@ USERNAME_PATTERN = re.compile(
 )
 USERNAME_MIN_LENGTH = 1
 USERNAME_MAX_LENGTH = 20
+
+# Constraint error mappings for auth operations
+AUTH_UNIQUE_CONSTRAINTS = {
+    "sessions_pkey": ConstraintHandler(
+        message="Session already exists.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "sessions_token_key": ConstraintHandler(
+        message="Session token already exists.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "api_keys_pkey": ConstraintHandler(
+        message="API key already exists.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
+
+AUTH_FK_CONSTRAINTS = {
+    "sessions_user_id_fkey": ConstraintHandler(
+        message="User does not exist.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "api_keys_user_id_fkey": ConstraintHandler(
+        message="User does not exist.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
 
 
 class AuthService(BaseService):
@@ -245,6 +272,7 @@ class AuthService(BaseService):
         """
         await self._conn.execute(query, identifier, action, success)
 
+    @handle_db_exceptions(unique_constraints=AUTH_UNIQUE_CONSTRAINTS, fk_constraints=AUTH_FK_CONSTRAINTS)
     async def register(self, data: EmailRegisterRequest, client_ip: str | None = None) -> tuple[AuthUserResponse, str]:
         """Register a new email-based user.
 
@@ -512,6 +540,7 @@ class AuthService(BaseService):
             is_mod=row["is_mod"],
         )
 
+    @handle_db_exceptions(unique_constraints=AUTH_UNIQUE_CONSTRAINTS, fk_constraints=AUTH_FK_CONSTRAINTS)
     async def request_password_reset(
         self, data: PasswordResetRequest, client_ip: str | None = None
     ) -> tuple[str, str] | None:
@@ -569,6 +598,7 @@ class AuthService(BaseService):
 
         return token, row["nickname"]
 
+    @handle_db_exceptions(unique_constraints=AUTH_UNIQUE_CONSTRAINTS, fk_constraints=AUTH_FK_CONSTRAINTS)
     async def reset_password(self, data: PasswordResetConfirmRequest) -> AuthUserResponse:
         """Reset a user's password.
 
@@ -797,6 +827,7 @@ class AuthService(BaseService):
 
     REMEMBER_TOKEN_LIFETIME_DAYS = 30
 
+    @handle_db_exceptions(unique_constraints=AUTH_UNIQUE_CONSTRAINTS, fk_constraints=AUTH_FK_CONSTRAINTS)
     async def create_remember_token(
         self, user_id: int, ip_address: str | None = None, user_agent: str | None = None
     ) -> str:
@@ -859,6 +890,7 @@ class AuthService(BaseService):
 
         return row["user_id"]
 
+    @handle_db_exceptions(unique_constraints=AUTH_UNIQUE_CONSTRAINTS, fk_constraints=AUTH_FK_CONSTRAINTS)
     async def revoke_remember_tokens(self, user_id: int) -> int:
         """Revoke all remember tokens for a user (logout everywhere)."""
         result = await self._conn.execute(
