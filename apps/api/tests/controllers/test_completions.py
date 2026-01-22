@@ -182,7 +182,13 @@ class TestCompletionsEndpoints:
         pending_resp = await test_client.get("/api/v3/completions/pending")
         pending = pending_resp.json()
         if pending:
-            record_id = pending[0]["id"]
+            record = next(
+                (p for p in pending if p["verification_id"] not in {9000000001, 9000000002, 9000000003}),
+                None,
+            )
+            if record is None:
+                return
+            record_id = record["id"]
             response = await test_client.put(
                 f"/api/v3/completions/{record_id}/verification",
                 json={
@@ -203,7 +209,13 @@ class TestCompletionsEndpoints:
         pending_resp = await test_client.get("/api/v3/completions/pending")
         pending = pending_resp.json()
         if pending and len(pending) > 1:
-            record_id = pending[1]["id"]
+            record = next(
+                (p for p in pending if p["verification_id"] not in {9000000001, 9000000002, 9000000003}),
+                None,
+            )
+            if record is None:
+                return
+            record_id = record["id"]
             response = await test_client.put(
                 f"/api/v3/completions/{record_id}/verification",
                 json={

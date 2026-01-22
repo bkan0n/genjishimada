@@ -34,7 +34,7 @@ lint-api:
 
 # Test API (requires Docker to be running for test database)
 test-api:
-    PYTHONPATH=libs/sdk/src uv run --project apps/api --group dev-api --group dev pytest -n 6 apps/api -x
+    PYTHONPATH=libs/sdk/src uv run --project apps/api --group dev-api --group dev pytest -n 4 apps/api -x
 
 # ----------------------------
 # Bot app (genjishimada-bot)
