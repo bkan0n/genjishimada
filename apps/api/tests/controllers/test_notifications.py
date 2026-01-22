@@ -17,6 +17,7 @@ class TestNotificationsEndpoints:
     USER_WITH_NOTIFICATIONS = 300  # Has 3 notifications (1 read, 2 unread)
     USER_WITH_DISMISSED = 301  # Has 1 dismissed notification + preferences
     USER_NO_NOTIFICATIONS = 302  # Has no notifications or preferences
+    USER_FOR_CREATE_TESTS = 303  # Used for tests that create notifications
 
     # =========================================================================
     # CREATE NOTIFICATION TESTS
@@ -28,7 +29,7 @@ class TestNotificationsEndpoints:
         response = await test_client.post(
             "/api/v3/notifications/events",
             json={
-                "user_id": self.USER_NO_NOTIFICATIONS,
+                "user_id": self.USER_FOR_CREATE_TESTS,
                 "event_type": "verification_approved",
                 "title": "Completion Verified",
                 "body": "Your completion was verified!",
@@ -38,7 +39,7 @@ class TestNotificationsEndpoints:
         )
         assert response.status_code == HTTP_201_CREATED
         data = response.json()
-        assert data["user_id"] == self.USER_NO_NOTIFICATIONS
+        assert data["user_id"] == self.USER_FOR_CREATE_TESTS
         assert data["event_type"] == "verification_approved"
         assert data["id"] is not None
 
@@ -48,7 +49,7 @@ class TestNotificationsEndpoints:
         response = await test_client.post(
             "/api/v3/notifications/events",
             json={
-                "user_id": self.USER_NO_NOTIFICATIONS,
+                "user_id": self.USER_FOR_CREATE_TESTS,
                 "event_type": "xp_gain",
                 "title": "XP Gained",
                 "body": "You gained 500 XP!",
@@ -180,7 +181,7 @@ class TestNotificationsEndpoints:
             await test_client.post(
                 "/api/v3/notifications/events",
                 json={
-                    "user_id": self.USER_NO_NOTIFICATIONS,
+                    "user_id": self.USER_FOR_CREATE_TESTS,
                     "event_type": "verification_approved",
                     "title": "Test Read All",
                     "body": "Test notification",
@@ -189,7 +190,7 @@ class TestNotificationsEndpoints:
                 },
             )
 
-        response = await test_client.patch(f"/api/v3/notifications/users/{self.USER_NO_NOTIFICATIONS}/read-all")
+        response = await test_client.patch(f"/api/v3/notifications/users/{self.USER_FOR_CREATE_TESTS}/read-all")
         assert response.status_code == HTTP_200_OK
         data = response.json()
         assert "marked_read" in data
@@ -206,7 +207,7 @@ class TestNotificationsEndpoints:
         create_resp = await test_client.post(
             "/api/v3/notifications/events",
             json={
-                "user_id": self.USER_NO_NOTIFICATIONS,
+                "user_id": self.USER_FOR_CREATE_TESTS,
                 "event_type": "verification_approved",
                 "title": "Test",
                 "body": "Test notification",
