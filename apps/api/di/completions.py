@@ -31,12 +31,35 @@ from litestar.datastructures import Headers, State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from di.base import BaseService
-from utilities.errors import CustomHTTPException
+from utilities.errors import ConstraintHandler, CustomHTTPException, handle_db_exceptions
 
 log = getLogger(__name__)
 
 if TYPE_CHECKING:
     from di import NotificationService
+
+# Constraint error mappings for completion operations
+COMPLETION_UNIQUE_CONSTRAINTS = {
+    "completions_pkey": ConstraintHandler(
+        message="This completion already exists.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "unique_user_map_completion": ConstraintHandler(
+        message="You already have a completion for this map.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
+
+COMPLETION_FK_CONSTRAINTS = {
+    "completions_user_id_fkey": ConstraintHandler(
+        message="User does not exist.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "completions_map_id_fkey": ConstraintHandler(
+        message="Map does not exist.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
 
 
 class CompletionsService(BaseService):
@@ -201,6 +224,7 @@ class CompletionsService(BaseService):
         models = msgspec.convert(rows, list[CompletionResponse])
         return models
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def submit_completion(self, data: CompletionCreateRequest, request: Request) -> int:
         """Submit a new completion record and publish an event.
 
@@ -341,6 +365,7 @@ class CompletionsService(BaseService):
 
         return query.strip(), values
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def edit_completion(self, state: State, record_id: int, data: CompletionPatchRequest) -> None:
         """Apply partial updates to a completion record.
 
@@ -550,6 +575,7 @@ class CompletionsService(BaseService):
         rows = await self._conn.fetch(query)
         return msgspec.convert(rows, list[PendingVerificationResponse])
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def verify_completion(
         self,
         request: Request,
@@ -1089,6 +1115,7 @@ class CompletionsService(BaseService):
         rows = await self._conn.fetch(query, user_id)
         return msgspec.convert(rows, list[SuspiciousCompletionResponse])
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def set_suspicious_flags(self, data: SuspiciousCompletionCreateRequest) -> None:
         """Insert a suspicious flag for a completion.
 
@@ -1125,6 +1152,7 @@ class CompletionsService(BaseService):
         val = await self._conn.fetchval(query, message_id)
         return val or 0
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def upvote_submission(self, request: Request, data: UpvoteCreateRequest) -> UpvoteSubmissionJobResponse:
         """Upvote a completion submission.
 
@@ -1292,6 +1320,7 @@ class CompletionsService(BaseService):
         rows = await self._conn.fetch(query, page_size, offset)
         return msgspec.convert(rows, list[CompletionResponse])
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def set_quality_vote_for_map_code(self, code: OverwatchCode, user_id: int, quality: int) -> None:
         """Set the quality vote for a map code per user."""
         query = """
@@ -1512,6 +1541,7 @@ class CompletionsService(BaseService):
 
         return msgspec.convert(rows, list[CompletionResponse])
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def moderate_completion(  # noqa: PLR0912
         self,
         completion_id: int,
