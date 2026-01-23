@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from ._types import GenjiItx
 
-__all__ = ("BaseCog", "BaseService", "BaseView", "ConfirmationButton", "ConfirmationCancelButton", "ConfirmationView")
+__all__ = ("BaseCog", "BaseHandler", "BaseView", "ConfirmationButton", "ConfirmationCancelButton", "ConfirmationView")
 
 log = getLogger(__name__)
 
@@ -165,7 +165,7 @@ class ConfirmationView(BaseView):
         await itx.client.tree.on_error(itx, cast("AppCommandError", error))
 
 
-class BaseService:
+class BaseHandler:
     """Abstract base class for Discord services tied to a shared guild.
 
     Provides common logic for asynchronously initializing the Discord guild

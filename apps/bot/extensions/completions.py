@@ -50,7 +50,7 @@ from extensions._queue_registry import queue_consumer
 from utilities import transformers
 from utilities.base import (
     BaseCog,
-    BaseService,
+    BaseHandler,
     ConfirmationView,
 )
 from utilities.completions import (
@@ -499,7 +499,7 @@ class CompletionView(ui.LayoutView):
         await itx.client.tree.on_error(itx, cast("app_commands.AppCommandError", error))
 
 
-class CompletionsService(BaseService):
+class CompletionHandler(BaseHandler):
     submission_channel: TextChannel
     verification_channel: TextChannel
     upvote_channel: TextChannel
@@ -1347,7 +1347,7 @@ class CompletionsCog(BaseCog):
 
 async def setup(bot: Genji) -> None:
     """Load the CompletionsCog cog."""
-    bot.completions = CompletionsService(bot)
+    bot.completions = CompletionHandler(bot)
     await bot.add_cog(CompletionsCog(bot))
 
 

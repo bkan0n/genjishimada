@@ -38,7 +38,7 @@ from msgspec import UNSET
 from extensions._queue_registry import queue_consumer
 from extensions.completions import CompletionLeaderboardFormattable
 from utilities import transformers
-from utilities.base import BaseCog, BaseService, BaseView, ConfirmationView
+from utilities.base import BaseCog, BaseHandler, BaseView, ConfirmationView
 from utilities.emojis import generate_all_star_rating_strings, stars_rating_string
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.formatter import FilteredFormatter
@@ -371,7 +371,7 @@ async def setup(bot: Genji) -> None:
     Args:
         bot (Genji): The bot instance.
     """
-    bot.map_editor = MapEditorService(bot)
+    bot.map_editor = MapEditHandler(bot)
     await bot.add_cog(ModeratorCog(bot))
 
 
@@ -1966,7 +1966,7 @@ class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
         return res
 
 
-class MapEditorService(BaseService):
+class MapEditHandler(BaseHandler):
     """Service for handling map edit events."""
 
     verification_views: dict[int, MapEditVerificationView] = {}

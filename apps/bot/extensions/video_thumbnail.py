@@ -176,7 +176,7 @@ class BilibiliProvider(ThumbnailProvider):
         return _normalize_image_url(pic)
 
 
-class VideoThumbnailService:
+class VideoThumbnailHandler:
     _providers: Sequence[ThumbnailProvider]
 
     def __init__(
@@ -186,7 +186,7 @@ class VideoThumbnailService:
         providers: Optional[Sequence[ThumbnailProvider]] = [],
         fallback: Optional[str] = None,
     ) -> None:
-        """Initialize the VideoThumbnailService."""
+        """Initialize the VideoThumbnailHandler."""
         self._session = session
         self._providers = [
             YouTubeProvider(),
@@ -209,5 +209,5 @@ class VideoThumbnailService:
 
 
 async def setup(bot: Genji) -> None:
-    """Set up VideoThumbnailService."""
-    bot.thumbnail_service = VideoThumbnailService(bot.session, fallback="https://cdn.genji.pk/assets/no-thumbnail.jpg")
+    """Set up VideoThumbnailHandler."""
+    bot.thumbnail_service = VideoThumbnailHandler(bot.session, fallback="https://cdn.genji.pk/assets/no-thumbnail.jpg")

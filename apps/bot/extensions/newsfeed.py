@@ -56,12 +56,12 @@ log = getLogger(__name__)
 
 
 async def setup(bot: core.Genji) -> None:
-    """Set up the Newsfeed extension and attach the NewsfeedService to the bot.
+    """Set up the Newsfeed extension and attach the NewsfeedHandler to the bot.
 
     Args:
         bot (core.Genji): The Genji bot instance.
     """
-    bot.newsfeed = NewsfeedService(bot)
+    bot.newsfeed = NewsfeedHandler(bot)
 
 
 class VideoLinkButton(Button):
@@ -764,9 +764,9 @@ class UnlinkedMapNewsfeedBuilder(BaseNewsfeedBuilder[NewsfeedUnlinkedMap]):
         )
 
 
-class NewsfeedService:
+class NewsfeedHandler:
     def __init__(self, bot: core.Genji) -> None:
-        """Initialize the NewsfeedService.
+        """Initialize the NewsfeedHandler.
 
         Args:
             bot (core.Genji): The Discord bot instance.

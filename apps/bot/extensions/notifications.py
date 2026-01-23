@@ -25,7 +25,7 @@ from genjishimada_sdk.notifications import (
 from genjishimada_sdk.users import Notification
 
 from extensions._queue_registry import queue_consumer
-from utilities.base import BaseService
+from utilities.base import BaseHandler
 
 if TYPE_CHECKING:
     import core
@@ -47,7 +47,7 @@ LEGACY_TO_NEW_MAPPING: dict[Notification, tuple[NotificationEventType, Notificat
 }
 
 
-class NotificationService(BaseService):
+class NotificationHandler(BaseHandler):
     """Service for processing and delivering notifications.
 
     This service handles both the new RabbitMQ-based notification system
@@ -317,4 +317,4 @@ class NotificationService(BaseService):
 
 async def setup(bot: core.Genji) -> None:
     """Setup Notification extension."""
-    bot.notifications = NotificationService(bot)
+    bot.notifications = NotificationHandler(bot)

@@ -12,12 +12,12 @@ from . import (
     transformers,
     views,
 )
-from .base import BaseCog, BaseService, BaseView
+from .base import BaseCog, BaseHandler, BaseView
 from .extra import time_convert
 
 __all__ = (
     "BaseCog",
-    "BaseService",
+    "BaseHandler",
     "BaseView",
     "_types",
     "change_requests",

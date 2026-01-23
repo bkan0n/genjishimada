@@ -61,6 +61,7 @@ Use SDK models for request/response bodies:
 from litestar import post
 from genjishimada_sdk.users import UserCreateRequest, UserResponse
 
+
 @post("/users")
 async def create_user(data: UserCreateRequest) -> UserResponse:
     # Insert into database and return a UserResponse
@@ -75,7 +76,8 @@ Publish SDK event models to RabbitMQ:
 from genjishimada_sdk.completions import CompletionCreatedEvent
 from di.base import BaseService
 
-class CompletionsService(BaseService):
+
+class CompletionService(BaseService):
     async def create_completion(self, user_id: int, map_id: int) -> int:
         completion_id = await insert_completion(...)
 
@@ -101,6 +103,7 @@ Consume SDK event models from RabbitMQ:
 from extensions._queue_registry import queue_consumer
 from genjishimada_sdk.completions import CompletionCreatedEvent
 from aio_pika.abc import AbstractIncomingMessage
+
 
 @queue_consumer(
     "api.completion.submission",

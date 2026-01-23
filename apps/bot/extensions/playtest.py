@@ -39,7 +39,7 @@ from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedNewMap
 from genjishimada_sdk.notifications import NotificationChannel, NotificationEventType
 
 from extensions._queue_registry import queue_consumer
-from utilities import BaseCog, BaseService
+from utilities import BaseCog, BaseHandler
 from utilities.base import ConfirmationView
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.formatter import FilteredFormatter
@@ -57,12 +57,12 @@ log = getLogger(__name__)
 
 
 _disabled_notifications_alert = (
-    "-# Map creator, you have disabled this type of notfication. "
+    "-# Map creator, you have disabled this type of notification. "
     "Please change your settings if you wish to receive this notification through DMs."
 )
 
 
-class PlaytestService(BaseService):
+class PlaytestHandler(BaseHandler):
     playtest_channel: discord.ForumChannel
     verification_channel: discord.TextChannel
 
@@ -1323,7 +1323,7 @@ async def setup(bot: core.Genji) -> None:
         bot (core.Genji): Bot instance to extend.
     """
     log.debug("[extensions.playtest] Setup called")
-    bot.playtest = PlaytestService(bot)
+    bot.playtest = PlaytestHandler(bot)
     await bot.add_cog(PlaytestCog(bot))
 
 

@@ -8,14 +8,14 @@ from discord.ext import commands
 import extensions
 import utilities.config
 from extensions.api_service import APIService
-from extensions.completions import CompletionsService
-from extensions.moderator import MapEditorService
-from extensions.newsfeed import NewsfeedService
-from extensions.notifications import NotificationService
-from extensions.playtest import PlaytestService
-from extensions.rabbit import RabbitService
-from extensions.video_thumbnail import VideoThumbnailService
-from extensions.xp import XPService
+from extensions.completions import CompletionHandler
+from extensions.moderator import MapEditHandler
+from extensions.newsfeed import NewsfeedHandler
+from extensions.notifications import NotificationHandler
+from extensions.playtest import PlaytestHandler
+from extensions.rabbit import RabbitHandler
+from extensions.video_thumbnail import VideoThumbnailHandler
+from extensions.xp import XPHandler
 
 __all__ = ("Genji",)
 
@@ -35,15 +35,15 @@ intents = discord.Intents(
 
 
 class Genji(commands.Bot):
-    _notification_service: NotificationService
-    _rabbit_client: RabbitService
-    _playtest_manager: PlaytestService
-    _newsfeed_client: NewsfeedService
+    _notification_service: NotificationHandler
+    _rabbit_client: RabbitHandler
+    _playtest_manager: PlaytestHandler
+    _newsfeed_client: NewsfeedHandler
     _api_service: APIService
-    _completions_manager: CompletionsService
-    _xp_manager: XPService
-    _thumbnail_service: VideoThumbnailService
-    _map_editor_service: MapEditorService
+    _completions_manager: CompletionHandler
+    _xp_manager: XPHandler
+    _thumbnail_service: VideoThumbnailHandler
+    _map_editor_service: MapEditHandler
 
     def __init__(self, *, prefix: str, session: aiohttp.ClientSession) -> None:
         """Initialize Bot instance.
@@ -76,47 +76,47 @@ class Genji(commands.Bot):
         self.loop.call_soon(self.rabbit.start)
 
     @property
-    def notifications(self) -> NotificationService:
+    def notifications(self) -> NotificationHandler:
         """Return the notification service."""
         if self._notification_service is None:
             raise AttributeError("Notification service not initialized.")
         return self._notification_service
 
     @notifications.setter
-    def notifications(self, service: NotificationService) -> None:
+    def notifications(self, service: NotificationHandler) -> None:
         self._notification_service = service
 
     @property
-    def rabbit(self) -> RabbitService:
+    def rabbit(self) -> RabbitHandler:
         """Return the notification service."""
         if self._rabbit_client is None:
             raise AttributeError("Notification service not initialized.")
         return self._rabbit_client
 
     @rabbit.setter
-    def rabbit(self, service: RabbitService) -> None:
+    def rabbit(self, service: RabbitHandler) -> None:
         self._rabbit_client = service
 
     @property
-    def playtest(self) -> PlaytestService:
+    def playtest(self) -> PlaytestHandler:
         """Return the playtest service."""
         if self._playtest_manager is None:
             raise AttributeError("Playtest service not initialized.")
         return self._playtest_manager
 
     @playtest.setter
-    def playtest(self, service: PlaytestService) -> None:
+    def playtest(self, service: PlaytestHandler) -> None:
         self._playtest_manager = service
 
     @property
-    def newsfeed(self) -> NewsfeedService:
+    def newsfeed(self) -> NewsfeedHandler:
         """Return the newsfeed service."""
         if self._newsfeed_client is None:
             raise AttributeError("Newsfeed service not initialized.")
         return self._newsfeed_client
 
     @newsfeed.setter
-    def newsfeed(self, service: NewsfeedService) -> None:
+    def newsfeed(self, service: NewsfeedHandler) -> None:
         self._newsfeed_client = service
 
     @property
@@ -129,37 +129,37 @@ class Genji(commands.Bot):
         self._api_service = service
 
     @property
-    def completions(self) -> CompletionsService:
-        """Return the CompletionsService service."""
+    def completions(self) -> CompletionHandler:
+        """Return the CompletionHandler service."""
         return self._completions_manager
 
     @completions.setter
-    def completions(self, service: CompletionsService) -> None:
+    def completions(self, service: CompletionHandler) -> None:
         self._completions_manager = service
 
     @property
-    def xp(self) -> XPService:
-        """Return the CompletionsService service."""
+    def xp(self) -> XPHandler:
+        """Return the CompletionHandler service."""
         return self._xp_manager
 
     @xp.setter
-    def xp(self, service: XPService) -> None:
+    def xp(self, service: XPHandler) -> None:
         self._xp_manager = service
 
     @property
-    def thumbnail_service(self) -> VideoThumbnailService:
-        """Return the VideoThumbnailService."""
+    def thumbnail_service(self) -> VideoThumbnailHandler:
+        """Return the VideoThumbnailHandler."""
         return self._thumbnail_service
 
     @thumbnail_service.setter
-    def thumbnail_service(self, service: VideoThumbnailService) -> None:
+    def thumbnail_service(self, service: VideoThumbnailHandler) -> None:
         self._thumbnail_service = service
 
     @property
-    def map_editor(self) -> MapEditorService:
-        """Return the MapEditorService."""
+    def map_editor(self) -> MapEditHandler:
+        """Return the MapEditHandler."""
         return self._map_editor_service
 
     @map_editor.setter
-    def map_editor(self, service: MapEditorService) -> None:
+    def map_editor(self, service: MapEditHandler) -> None:
         self._map_editor_service = service
