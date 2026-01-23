@@ -33,15 +33,21 @@ just setup
 
 ### 5. Configure Environment
 
-Create a `.env` file in the repo root and set the required variables.
+Copy the local environment template:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` with your Discord bot token and other settings.
 
 ### 6. Start Infrastructure
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d \
-  genjishimada-db-dev \
-  genjishimada-rabbitmq-dev
+docker compose -f docker-compose.local.yml up -d
 ```
+
+This starts PostgreSQL, RabbitMQ, and MinIO for local development.
 
 ## Daily Workflow
 
@@ -105,10 +111,10 @@ For faster iteration, run specific tests:
 just test-api
 
 # Specific test file
-uv run --project apps/api pytest apps/api/tests/test_maps.py
+uv run pytest apps/api/tests/test_maps.py
 
 # Specific test function
-uv run --project apps/api pytest apps/api/tests/test_maps.py::test_get_map
+uv run pytest apps/api/tests/test_maps.py::test_get_map
 ```
 
 ### 6. Commit Changes
@@ -417,8 +423,7 @@ async def get_user(user_id: int):
 1. **Connect to PostgreSQL**:
 
    ```bash
-   docker compose -f docker-compose.dev.yml exec genjishimada-db-dev \
-     psql -U genjishimada
+   docker exec -it genjishimada-db-local psql -U genji -d genjishimada
    ```
 
 2. **Run queries**:
@@ -442,7 +447,7 @@ just sync
 Ensure Docker services are running:
 
 ```bash
-docker compose -f docker-compose.dev.yml ps
+docker compose -f docker-compose.local.yml ps
 ```
 
 ### Tests Failing
@@ -450,7 +455,7 @@ docker compose -f docker-compose.dev.yml ps
 Run tests with verbose output:
 
 ```bash
-uv run --project apps/api pytest -vv apps/api/tests/
+uv run pytest -vv apps/api/tests/
 ```
 
 ### Type Errors
