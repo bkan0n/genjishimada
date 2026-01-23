@@ -24,7 +24,7 @@ sync:
 
 # Run API (no sync needed if you already ran 'just setup')
 run-api:
-    cd apps/api && uv run litestar run --reload --host 0.0.0.0 --debug
+    cd apps/api && uv run --env-file ../../.env.local litestar run --reload --host 0.0.0.0 --debug
 
 # Lint API
 lint-api:
@@ -41,7 +41,7 @@ test-api:
 # ----------------------------
 
 run-bot:
-    cd apps/bot && uv run python main.py
+    cd apps/bot && uv run --env-file ../../.env.local python main.py
 
 lint-bot:
     -uv run ruff format apps/bot

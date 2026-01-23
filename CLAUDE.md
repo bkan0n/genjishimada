@@ -44,6 +44,8 @@ cp .env.local.example .env.local
 # Edit .env.local with your local settings (Discord token, etc.)
 ```
 
+The `just run-api` and `just run-bot` commands automatically use `.env.local`.
+
 ### 4. Create MinIO Bucket (First Time Only)
 
 ```bash

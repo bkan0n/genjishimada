@@ -43,6 +43,8 @@ DISCORD_GUILD_ID=your_test_guild_id_here
 
 All other settings are pre-configured for local development.
 
+**Note**: The `just run-api` and `just run-bot` commands automatically load `.env.local`.
+
 ### 3. Start Infrastructure Services
 
 Start PostgreSQL, RabbitMQ, and MinIO:

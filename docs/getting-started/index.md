@@ -41,6 +41,8 @@ Copy the local environment template and customize it:
 cp .env.local.example .env.local
 ```
 
+The `just run-api` and `just run-bot` commands automatically load `.env.local`.
+
 Edit `.env.local` with your settings:
 
 ```env
