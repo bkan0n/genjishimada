@@ -22,6 +22,6 @@ VALUES (
 ), (
     'XP Based', 2
 ), (
-    'Low Grav/Speed', 3
+    'Custom Grav/Speed', 3
 )
 ON CONFLICT (name) DO NOTHING;

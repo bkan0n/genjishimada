@@ -230,7 +230,7 @@ SortKey = Literal[
 Tags = Literal[
     "Other Heroes",
     "XP Based",
-    "Low Grav/Speed",
+    "Custom Grav/Speed",
 ]
 
 PlaytestStatus = Literal["Approved", "In Progress", "Rejected"]
