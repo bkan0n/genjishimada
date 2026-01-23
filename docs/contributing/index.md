@@ -261,10 +261,9 @@ Migrations are **manual**. There is no migration runner in this repo.
    );
    ```
 
-3. Apply the migration manually using your preferred Postgres client. Example (dev container):
+3. Apply the migration manually using your preferred Postgres client. Example (local database):
    ```bash
-   docker compose -f docker-compose.dev.yml exec genjishimada-db-dev \
-     psql -U genjishimada -d genjishimada -f /path/to/migrations/0004_add_new_feature.sql
+   docker exec -i genjishimada-db-local psql -U genji -d genjishimada < apps/api/migrations/0004_add_new_feature.sql
    ```
 
 ### Migration Guidelines
