@@ -10,6 +10,9 @@ from botocore.config import Config
 logger = logging.getLogger(__name__)
 
 R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "")
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "genji-parkour-images")
+S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL", "https://cdn.bkan0n.com")
 
 
 _content_type_ext = {
@@ -29,9 +32,13 @@ def _ext_from_content_type(ct: str) -> str:
 class ImageStorageService:
     def __init__(self) -> None:
         """Initialize the ImageStorageService."""
+        # Use custom S3 endpoint if provided (e.g., MinIO for local dev),
+        # otherwise fall back to R2
+        endpoint_url = S3_ENDPOINT_URL or f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
         self.client = boto3.client(
             service_name="s3",
-            endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+            endpoint_url=endpoint_url,
             region_name="auto",  # R2 region is 'auto' (or wnam/enam/weur/eeur/apac)
             config=Config(s3={"addressing_style": "path"}),  # path-style works well with R2 endpoint
         )
@@ -49,11 +56,11 @@ class ImageStorageService:
         ext = _ext_from_content_type(content_type)
         key = f"screenshots/{today}/{digest}.{ext}"
 
-        # 2) Upload to R2 with proper headers
+        # 2) Upload to S3-compatible storage with proper headers
         fileobj = io.BytesIO(image)
         self.client.upload_fileobj(
             fileobj,
-            "genji-parkour-images",
+            S3_BUCKET_NAME,
             key,
             ExtraArgs={
                 "ContentType": content_type,
@@ -61,9 +68,9 @@ class ImageStorageService:
             },
         )
 
-        # 3) Return the PUBLIC CDN URL (custom domain or r2.dev public URL)
-        #    Example result: https://img.example.com/screenshots/2025/09/07/abcd1234.webp
-        return f"https://cdn.bkan0n.com/{key}"
+        # 3) Return the PUBLIC URL (CDN for production, direct S3 URL for local dev)
+        #    Example result: https://cdn.bkan0n.com/screenshots/2025/09/07/abcd1234.webp
+        return f"{S3_PUBLIC_URL}/{key}"
 
 
 async def provide_image_storage_service() -> ImageStorageService:
