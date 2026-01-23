@@ -6,6 +6,9 @@ repo_url: https://github.com/bkan0n/genjishimada
 repo_name: bkan0n/genjishimada
 edit_uri: edit/main/docs/
 
+exclude_docs: |
+  plans/
+
 theme:
   name: material
   language: en
