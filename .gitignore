@@ -271,4 +271,4 @@ poetry.toml
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 
-docs/plans/
+docs/plans/.env.local
