@@ -1,0 +1,77 @@
+services:
+  postgres-local:
+    container_name: genjishimada-db-local
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: genji
+      POSTGRES_PASSWORD: local_dev_password
+      POSTGRES_DB: genjishimada
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U genji -d genjishimada"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    volumes:
+      - genjishimada_db_local_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  rabbitmq-local:
+    container_name: genjishimada-rabbitmq-local
+    hostname: genjishimada-rabbitmq-local
+    build:
+      context: ./infra/rabbitmq
+      dockerfile: Dockerfile.local
+    restart: unless-stopped
+    environment:
+      RABBITMQ_USER: genji
+      RABBITMQ_PASS: local_dev_password
+      RABBITMQ_NODENAME: rabbit@genjishimada-rabbitmq-local
+      RABBITMQ_ERLANG_COOKIE: local_dev_cookie_change_me
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: >
+        -rabbitmq_management load_definitions "/etc/rabbitmq/definitions.json"
+    command: >
+      bash -lc "exec rabbitmq-server & /usr/local/bin/rabbit-init.sh; wait -n"
+    volumes:
+      - genjishimada_rabbitmq_local_data:/var/lib/rabbitmq
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'rabbitmq-diagnostics --quiet check_running --erlang-cookie "local_dev_cookie_change_me" && rabbitmq-diagnostics --quiet check_local_alarms --erlang-cookie "local_dev_cookie_change_me"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+
+  minio-local:
+    container_name: genjishimada-minio-local
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: genji
+      MINIO_ROOT_PASSWORD: local_dev_password
+    command: server /data --console-address ":9001"
+    volumes:
+      - genjishimada_minio_local_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+
+volumes:
+  genjishimada_db_local_data:
+  genjishimada_rabbitmq_local_data:
+  genjishimada_minio_local_data:

@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING, Any, Literal, Sequence, cast, get_args
 
 import discord
 from aio_pika.abc import AbstractIncomingMessage
-from apps.bot.extensions.completions import CompletionLeaderboardFormattable
-from apps.bot.utilities.formatter import FilteredFormatter
 from discord import ButtonStyle, Member, SelectOption, TextStyle, app_commands, ui
 from discord.ui import LayoutView
 from genjishimada_sdk.completions import CompletionModerateRequest
@@ -38,10 +36,12 @@ from genjishimada_sdk.maps import (
 from msgspec import UNSET
 
 from extensions._queue_registry import queue_consumer
+from extensions.completions import CompletionLeaderboardFormattable
 from utilities import transformers
 from utilities.base import BaseCog, BaseService, BaseView, ConfirmationView
 from utilities.emojis import generate_all_star_rating_strings, stars_rating_string
 from utilities.errors import APIHTTPError, UserFacingError
+from utilities.formatter import FilteredFormatter
 from utilities.paginator import PaginatorView
 from utilities.views.mod_creator_view import MapCreatorModView
 from utilities.views.mod_guides_view import ModGuidePaginatorView

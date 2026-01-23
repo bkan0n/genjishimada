@@ -90,7 +90,11 @@ The `Genji` constructor reads the appropriate file on startup based on `APP_ENVI
    just setup
    ```
 
-2. **Configure environment**: create a `.env` file and add your variables.
+2. **Configure environment**:
+   ```bash
+   cp .env.local.example .env.local
+   # Edit .env.local with your Discord token and settings
+   ```
 
 3. **Edit development config**:
    ```bash
@@ -99,17 +103,17 @@ The `Genji` constructor reads the appropriate file on startup based on `APP_ENVI
 
 4. **Start infrastructure**:
    ```bash
-   docker compose -f docker-compose.dev.yml up -d \
-     genjishimada-db-dev \
-     genjishimada-rabbitmq-dev
+   docker compose -f docker-compose.local.yml up -d
    ```
+
+   This starts PostgreSQL, RabbitMQ, and MinIO for local development.
 
 5. **Run the bot**:
    ```bash
-   docker compose -f docker-compose.dev.yml up -d genjishimada-bot-dev
+   just run-bot
    ```
 
-   If you run the bot on the host with `just run-bot`, ensure the API hostname (`genjishimada-api-dev`) resolves locally.
+   The bot automatically loads `.env.local` and connects to the API at `localhost:8000`.
 
 6. **Lint before committing**:
    ```bash
@@ -209,13 +213,25 @@ docker compose -f docker-compose.prod.yml logs genjishimada-bot
 
 ### Queue Messages Not Processing
 
-**Verify RabbitMQ connection**:
+**For local development**:
+```bash
+# Check RabbitMQ is running
+docker compose -f docker-compose.local.yml ps rabbitmq-local
+
+# Check bot logs for connection errors (if running with just run-bot)
+# Logs will appear in your terminal
+
+# Check RabbitMQ management UI
+open http://localhost:15672
+```
+
+**For remote deployments**:
 ```bash
 # Check RabbitMQ is running
 docker compose -f docker-compose.dev.yml ps genjishimada-rabbitmq-dev
 
-# Check bot logs for connection errors
-docker compose -f docker-compose.prod.yml logs genjishimada-bot | grep -i rabbitmq
+# Check bot logs
+docker compose -f docker-compose.dev.yml logs genjishimada-bot-dev | grep -i rabbitmq
 ```
 
 **Check queue consumers**:

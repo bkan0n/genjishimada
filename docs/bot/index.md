@@ -92,15 +92,29 @@ apps/bot/
 
 ## Running the Bot
 
-### Development
+### Local Development
+
+Run the bot natively for fast iteration:
+
+```bash
+just run-bot
+```
+
+This automatically loads `.env.local` and connects to infrastructure running in `docker-compose.local.yml`.
+
+See the [Quick Start Guide](../getting-started/quickstart.md) for full local development setup.
+
+### Remote Staging
+
+For deploying to a remote staging server:
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d genjishimada-bot-dev
 ```
 
-If you run the bot on the host with `just run-bot`, ensure the API hostname (`genjishimada-api-dev`) resolves locally.
+### Remote Production
 
-### Production
+For deploying to a remote production server:
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d genjishimada-bot

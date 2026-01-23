@@ -10,19 +10,27 @@ This database stores user data, map metadata, run results, and other records sha
 
 The database is defined in:
 
-- `docker-compose.dev.yml` as `genjishimada-db-dev`
-- `docker-compose.prod.yml` as `genjishimada-db`
+- `docker-compose.local.yml` as `postgres-local` (for local development)
+- `docker-compose.dev.yml` as `genjishimada-db-dev` (for remote staging)
+- `docker-compose.prod.yml` as `genjishimada-db` (for remote production)
 
-### Development
+### Local Development
 
 - Uses the `postgres:17` image
-- Exposes port `65432` on the host
+- Exposes port `5432` on `127.0.0.1`
+- Includes health checks via `pg_isready`
+- Simple credentials (genji/local_dev_password)
+
+### Remote Staging
+
+- Uses the `postgres:17` image
+- Exposes port `65432` on `127.0.0.1`
 - Includes health checks via `pg_isready`
 
-### Production
+### Remote Production
 
 - Uses the `postgres:17` image
-- Exposes port `55432` on the host
+- Exposes port `55432` on `127.0.0.1`
 - Includes health checks via `pg_isready`
 
 ## Environment variables
@@ -35,14 +43,21 @@ The database is defined in:
 
 ## Local development
 
-1. Create a `.env` file with `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`.
-2. Start the service:
+1. Start local infrastructure:
    ```bash
-   docker compose -f docker-compose.dev.yml up -d genjishimada-db-dev
+   docker compose -f docker-compose.local.yml up -d
    ```
-3. Connect using:
+
+2. Connect to the database:
    - Host: `localhost`
-   - Port: `65432`
-   - User: value of `POSTGRES_USER`
-   - Password: value of `POSTGRES_PASSWORD`
-   - Database: value of `POSTGRES_DB`
+   - Port: `5432`
+   - User: `genji`
+   - Password: `local_dev_password`
+   - Database: `genjishimada`
+
+3. Or use the container directly:
+   ```bash
+   docker exec -it genjishimada-db-local psql -U genji -d genjishimada
+   ```
+
+See the [Quick Start Guide](../getting-started/quickstart.md) for full local development setup.

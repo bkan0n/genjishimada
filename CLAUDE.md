@@ -13,6 +13,69 @@ Genji Shimada is a Discord bot and REST API for the Genji Parkour community. The
 - `apps/bot` - Discord.py bot with command/event handling
 - `libs/sdk` - Shared msgspec data models and types
 
+## Local Development Setup
+
+For local development, run infrastructure services in Docker and API/bot natively on your Mac:
+
+### 1. Start Infrastructure Services
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+```
+
+This starts PostgreSQL (port 5432), RabbitMQ (ports 5672, 15672), and MinIO (ports 9000, 9001) on localhost.
+
+### 2. Import Database from VPS
+
+```bash
+# Import from dev environment
+./scripts/import-db-from-vps.sh dev
+
+# Or from production (be careful!)
+./scripts/import-db-from-vps.sh prod
+```
+
+Requires SSH access to VPS with config entry `genji-vps` in `~/.ssh/config`.
+
+### 3. Configure Local Environment
+
+```bash
+cp .env.local.example .env.local
+# Edit .env.local with your local settings (Discord token, etc.)
+```
+
+The `just run-api` and `just run-bot` commands automatically use `.env.local`.
+
+### 4. Create MinIO Bucket (First Time Only)
+
+```bash
+mc alias set local http://localhost:9000 genji local_dev_password
+mc mb local/genji-parkour-images
+```
+
+### 5. Run API and Bot
+
+```bash
+# Terminal 1: Run API
+just run-api
+
+# Terminal 2: Run Bot
+just run-bot
+```
+
+### 6. Access Services
+
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/schema
+- RabbitMQ Management: http://localhost:15672 (user: genji, pass: local_dev_password)
+- MinIO Console: http://localhost:9001 (user: genji, pass: local_dev_password)
+
+### 7. Stop Infrastructure
+
+```bash
+docker compose -f docker-compose.local.yml down
+```
+
 ## Development Commands
 
 This project uses `just` as a task runner. All commands should be run f@masrom the repository root.

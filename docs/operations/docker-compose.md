@@ -1,21 +1,78 @@
 # Docker Compose
 
-Deploy Genji Shimada using Docker Compose for development and production environments.
+Deploy and run Genji Shimada using Docker Compose for local development and remote environments.
 
 ## Overview
 
-The project provides two Docker Compose configurations:
+The project provides three Docker Compose configurations:
 
-- **`docker-compose.dev.yml`** - Development stack (API, bot, Postgres, RabbitMQ)
-- **`docker-compose.prod.yml`** - Production stack (API, bot, Postgres, RabbitMQ)
+- **`docker-compose.local.yml`** - Local development (infrastructure only: PostgreSQL, RabbitMQ, MinIO)
+- **`docker-compose.dev.yml`** - Remote staging server (full stack: API, bot, database, RabbitMQ)
+- **`docker-compose.prod.yml`** - Remote production server (full stack: API, bot, database, RabbitMQ)
 
-Both files expect the external Docker network `genji-network` to exist.
+## Local Development
 
-## Development Environment
+For local development on your Mac/Linux machine, use `docker-compose.local.yml`. This runs **infrastructure only** (PostgreSQL, RabbitMQ, MinIO) while you run the API and bot natively for fast iteration.
 
 ### Services
 
-The development compose file defines:
+```yaml
+services:
+  postgres-local:        # PostgreSQL 17
+  rabbitmq-local:        # RabbitMQ 4
+  minio-local:           # MinIO (S3-compatible storage)
+```
+
+### Starting Local Infrastructure
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+```
+
+### Ports
+
+| Service    | Ports          | Description                    |
+|------------|----------------|--------------------------------|
+| PostgreSQL | 5432           | Database (host: localhost)     |
+| RabbitMQ   | 5672, 15672    | Broker + Management UI         |
+| MinIO      | 9000, 9001     | S3 API + Console               |
+
+All services bind to `127.0.0.1` (localhost only).
+
+### Environment Configuration
+
+Use `.env.local` (see `.env.local.example`):
+
+```env
+APP_ENVIRONMENT=local
+POSTGRES_HOST=localhost
+RABBITMQ_HOST=localhost
+S3_ENDPOINT_URL=http://localhost:9000
+```
+
+### Running API and Bot
+
+Run the API and bot natively for hot reload:
+
+```bash
+# Terminal 1
+just run-api
+
+# Terminal 2
+just run-bot
+```
+
+See the [Quick Start Guide](../getting-started/quickstart.md) for detailed local development instructions.
+
+## Remote Staging (Dev Server)
+
+The dev compose file is for deploying to a **remote staging server**, not for local development.
+
+Both remote files (dev and prod) expect the external Docker network `genji-network` to exist.
+
+### Services
+
+The staging compose file defines:
 
 ```yaml
 services:
@@ -25,13 +82,13 @@ services:
   genjishimada-rabbitmq-dev: # RabbitMQ
 ```
 
-### Starting Development Services
+### Starting Staging Services
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d
 ```
 
-To run only infrastructure services:
+To run only infrastructure services on staging:
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d \
