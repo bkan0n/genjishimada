@@ -769,10 +769,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#7-configure-environment" class="md-nav__link">
+  <a href="#7-configure-local-environment" class="md-nav__link">
     <span class="md-ellipsis">
       
-        7. Configure Environment
+        7. Configure Local Environment
       
     </span>
   </a>
@@ -780,10 +780,32 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#8-start-infrastructure" class="md-nav__link">
+  <a href="#8-start-local-infrastructure" class="md-nav__link">
     <span class="md-ellipsis">
       
-        8. Start Infrastructure
+        8. Start Local Infrastructure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-create-minio-bucket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. Create MinIO Bucket
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-import-database-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Import Database (Optional)
       
     </span>
   </a>
@@ -3247,20 +3269,36 @@
 1. Creates virtual environments for all workspaces
 2. Installs Python dependencies
 3. Sets up development tools (Ruff, BasedPyright, pytest)</p>
-<h3 id="7-configure-environment">7. Configure Environment<a class="headerlink" href="#7-configure-environment" title="Anchor link to this section">&para;</a></h3>
-<p>Create a <code>.env</code> file in the repo root and set the required values. See <a href="../../bot/operations/configuration/">Configuration Guide</a> for details. If you plan to run the API on the host, set <code>PSQL_DSN</code> to point at <code>localhost:65432</code>.</p>
-<h3 id="8-start-infrastructure">8. Start Infrastructure<a class="headerlink" href="#8-start-infrastructure" title="Anchor link to this section">&para;</a></h3>
-<p>Start PostgreSQL and RabbitMQ using Docker Compose:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>genjishimada-db-dev<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span>genjishimada-rabbitmq-dev
+<h3 id="7-configure-local-environment">7. Configure Local Environment<a class="headerlink" href="#7-configure-local-environment" title="Anchor link to this section">&para;</a></h3>
+<p>Copy the local environment template:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>cp<span class="w"> </span>.env.local.example<span class="w"> </span>.env.local
+</span></code></pre></div>
+<p>Edit <code>.env.local</code> with your Discord bot token and other settings. The database, RabbitMQ, and MinIO settings are pre-configured for local development.</p>
+<h3 id="8-start-local-infrastructure">8. Start Local Infrastructure<a class="headerlink" href="#8-start-local-infrastructure" title="Anchor link to this section">&para;</a></h3>
+<p>Start PostgreSQL, RabbitMQ, and MinIO for local development:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>up<span class="w"> </span>-d
 </span></code></pre></div>
 <p>Check that services are healthy:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>ps
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps
 </span></code></pre></div>
+<p>All services should show status "Up (healthy)".</p>
+<h3 id="9-create-minio-bucket">9. Create MinIO Bucket<a class="headerlink" href="#9-create-minio-bucket" title="Anchor link to this section">&para;</a></h3>
+<p>Create the S3 bucket in MinIO for image storage:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Install MinIO client</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>brew<span class="w"> </span>install<span class="w"> </span>minio/stable/mc<span class="w">  </span><span class="c1"># macOS/Linux</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Configure and create bucket</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>mc<span class="w"> </span><span class="nb">alias</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span><span class="nb">local</span><span class="w"> </span>http://localhost:9000<span class="w"> </span>genji<span class="w"> </span>local_dev_password
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>mc<span class="w"> </span>mb<span class="w"> </span>local/genji-parkour-images
+</span></code></pre></div>
+<h3 id="10-import-database-optional">10. Import Database (Optional)<a class="headerlink" href="#10-import-database-optional" title="Anchor link to this section">&para;</a></h3>
+<p>To work with real data, import from the VPS:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>./scripts/import-db-from-vps.sh<span class="w"> </span>dev
+</span></code></pre></div>
+<p>This requires SSH access to the VPS. See <a href="../#ssh-configuration">Getting Started</a> for SSH configuration.</p>
 <h2 id="verification">Verification<a class="headerlink" href="#verification" title="Anchor link to this section">&para;</a></h2>
 <p>Verify your installation by running the linters:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>just<span class="w"> </span>lint-all
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>just<span class="w"> </span>lint-all
 </span></code></pre></div>
 <p>All checks should pass (or report only pre-existing issues).</p>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
@@ -3291,7 +3329,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 23, 2026 21:09:27 UTC"><span class="timeago" datetime="2026-01-23T21:09:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 23, 2026 21:09:27 UTC">2026-01-23</span>
   </span>
 
     

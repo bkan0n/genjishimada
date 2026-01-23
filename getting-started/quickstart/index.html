@@ -680,6 +680,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#start-local-infrastructure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Start Local Infrastructure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#running-the-api" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -736,17 +747,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#running-both-services-in-docker-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running Both Services in Docker (optional)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#testing-the-integration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -781,10 +781,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-check-rabbitmq" class="md-nav__link">
+  <a href="#3-check-rabbitmq-management-ui" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Check RabbitMQ
+        3. Check RabbitMQ Management UI
       
     </span>
   </a>
@@ -946,6 +946,28 @@
     <span class="md-ellipsis">
       
         Database Connection Failed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rabbitmq-connection-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RabbitMQ Connection Failed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#minio-connection-failed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MinIO Connection Failed
       
     </span>
   </a>
@@ -3258,54 +3280,60 @@
 <p>Get the API and bot running locally in minutes.</p>
 <div class="admonition info">
 <p class="admonition-title">Prerequisites</p>
-<p>This guide assumes you've completed the <a href="../installation/">Installation</a> steps and have Docker services running.</p>
+<p>This guide assumes you've completed the <a href="../installation/">Installation</a> steps.</p>
 </div>
+<h2 id="start-local-infrastructure">Start Local Infrastructure<a class="headerlink" href="#start-local-infrastructure" title="Anchor link to this section">&para;</a></h2>
+<p>Start PostgreSQL, RabbitMQ, and MinIO:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>up<span class="w"> </span>-d
+</span></code></pre></div>
+<p>Verify all services are healthy:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps
+</span></code></pre></div>
+<p>All services should show "Up (healthy)" status.</p>
 <h2 id="running-the-api">Running the API<a class="headerlink" href="#running-the-api" title="Anchor link to this section">&para;</a></h2>
 <p>Start the Litestar API server:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>just<span class="w"> </span>run-api
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>just<span class="w"> </span>run-api
 </span></code></pre></div>
 <p>This command:
-- Changes to the <code>apps/api</code> directory
+- Automatically loads <code>.env.local</code>
 - Runs <code>litestar run</code> with hot reload enabled
 - Serves on <code>http://localhost:8000</code></p>
-<p>If you are running the API on the host, set <code>PSQL_DSN</code> in <code>.env</code> so it points at <code>localhost:65432</code>.</p>
 <h3 id="verify-api-is-running">Verify API is Running<a class="headerlink" href="#verify-api-is-running" title="Anchor link to this section">&para;</a></h3>
 <p>Open your browser to:</p>
 <ul>
-<li><strong>API Docs</strong>: <a href="http://localhost:8000/docs">http://localhost:8000/docs</a></li>
+<li><strong>API Docs</strong>: <a href="http://localhost:8000/schema">http://localhost:8000/schema</a></li>
 <li><strong>Health Check</strong>: <a href="http://localhost:8000/healthcheck">http://localhost:8000/healthcheck</a></li>
 </ul>
 <p>You should see the interactive OpenAPI documentation.</p>
 <h2 id="running-the-bot">Running the Bot<a class="headerlink" href="#running-the-bot" title="Anchor link to this section">&para;</a></h2>
-<p>The bot is configured to call the API at the Docker service name (<code>genjishimada-api-dev</code> in development). The simplest local setup is to run the bot in Docker:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>genjishimada-bot-dev
+<p>Start the Discord bot:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>just<span class="w"> </span>run-bot
 </span></code></pre></div>
-<p>If you run the bot on the host with <code>just run-bot</code>, ensure the API hostname resolves (for example by running the API container and joining the same Docker network).</p>
+<p>This command:
+- Automatically loads <code>.env.local</code>
+- Runs the bot with your configured Discord token
+- Connects to the local API at <code>localhost:8000</code></p>
 <h3 id="verify-bot-is-running">Verify Bot is Running<a class="headerlink" href="#verify-bot-is-running" title="Anchor link to this section">&para;</a></h3>
 <p>Check the terminal output for:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Logged in as YourBotName#1234
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Bot is ready.
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>Logged in as YourBotName#1234
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>Bot is ready.
 </span></code></pre></div>
 <p>In your Discord server, the bot should appear online.</p>
-<h2 id="running-both-services-in-docker-optional">Running Both Services in Docker (optional)<a class="headerlink" href="#running-both-services-in-docker-optional" title="Anchor link to this section">&para;</a></h2>
-<p>If you want Docker to run everything:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>up<span class="w"> </span>-d
-</span></code></pre></div>
-<p>This will start API, bot, database, and RabbitMQ in containers.</p>
 <h2 id="testing-the-integration">Testing the Integration<a class="headerlink" href="#testing-the-integration" title="Anchor link to this section">&para;</a></h2>
 <h3 id="1-trigger-a-bot-command">1. Trigger a Bot Command<a class="headerlink" href="#1-trigger-a-bot-command" title="Anchor link to this section">&para;</a></h3>
 <p>In Discord, send a command to test the bot:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>/map search parkour
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>/map search parkour
 </span></code></pre></div>
 <h3 id="2-check-api-logs">2. Check API Logs<a class="headerlink" href="#2-check-api-logs" title="Anchor link to this section">&para;</a></h3>
 <p>In the API terminal, you should see incoming requests from the bot.</p>
-<h3 id="3-check-rabbitmq">3. Check RabbitMQ<a class="headerlink" href="#3-check-rabbitmq" title="Anchor link to this section">&para;</a></h3>
-<p>RabbitMQ is not exposed directly in this repo; it is typically proxied via Caddy in production. For local checks, use container logs:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>genjishimada-rabbitmq-dev
-</span></code></pre></div>
+<h3 id="3-check-rabbitmq-management-ui">3. Check RabbitMQ Management UI<a class="headerlink" href="#3-check-rabbitmq-management-ui" title="Anchor link to this section">&para;</a></h3>
+<p>Visit <a href="http://localhost:15672">http://localhost:15672</a>:
+- Username: <code>genji</code>
+- Password: <code>local_dev_password</code></p>
+<p>You can see queues, messages, and connections.</p>
 <h2 id="development-workflow">Development Workflow<a class="headerlink" href="#development-workflow" title="Anchor link to this section">&para;</a></h2>
 <h3 id="make-code-changes">Make Code Changes<a class="headerlink" href="#make-code-changes" title="Anchor link to this section">&para;</a></h3>
-<p>The API runs with <code>--reload</code>, so changes are automatically picked up. For the bot, you'll need to restart the process.</p>
+<p>The API runs with <code>--reload</code>, so changes are automatically picked up. For the bot, you'll need to restart the process (Ctrl+C and run <code>just run-bot</code> again).</p>
 <h3 id="run-tests">Run Tests<a class="headerlink" href="#run-tests" title="Anchor link to this section">&para;</a></h3>
 <p>Test the API:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>just<span class="w"> </span>test-api
@@ -3321,22 +3349,26 @@
 <p><strong>API logs</strong>: Displayed in the terminal where <code>just run-api</code> is running</p>
 <p><strong>Bot logs</strong>: Displayed in the terminal where <code>just run-bot</code> is running</p>
 <p><strong>Database logs</strong>:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>genjishimada-db-dev
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>postgres-local
 </span></code></pre></div></p>
 <p><strong>RabbitMQ logs</strong>:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>genjishimada-rabbitmq-dev
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>rabbitmq-local
+</span></code></pre></div></p>
+<p><strong>MinIO logs</strong>:
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>minio-local
 </span></code></pre></div></p>
 <h3 id="stop-services">Stop Services<a class="headerlink" href="#stop-services" title="Anchor link to this section">&para;</a></h3>
-<p>Stop Docker services:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>down
+<p>Stop infrastructure services:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>down
 </span></code></pre></div>
 <p>Stop API/bot: Press <code>Ctrl+C</code> in their respective terminals.</p>
 <h3 id="re-sync-dependencies">Re-sync Dependencies<a class="headerlink" href="#re-sync-dependencies" title="Anchor link to this section">&para;</a></h3>
 <p>After pulling changes or switching branches:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>just<span class="w"> </span>sync
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>just<span class="w"> </span>sync
 </span></code></pre></div>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
 <ul>
+<li><a href="../../api/local-development/">Local Development Guide</a> - Detailed local development documentation</li>
 <li><a href="../../bot/architecture/core-bot/">Bot Architecture</a> - Understand how the bot works</li>
 <li><a href="../../api/">API Documentation</a> - Learn about API endpoints</li>
 <li><a href="../../contributing/workflow/">Contributing Guide</a> - Make your first contribution</li>
@@ -3344,11 +3376,11 @@
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Anchor link to this section">&para;</a></h2>
 <h3 id="port-already-in-use">Port Already in Use<a class="headerlink" href="#port-already-in-use" title="Anchor link to this section">&para;</a></h3>
 <p>If port 8000 is already in use, find and kill the process:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>lsof<span class="w"> </span>-ti:8000<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span><span class="nb">kill</span><span class="w"> </span>-9
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>lsof<span class="w"> </span>-ti:8000<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span><span class="nb">kill</span><span class="w"> </span>-9
 </span></code></pre></div>
 <h3 id="bot-wont-connect">Bot Won't Connect<a class="headerlink" href="#bot-wont-connect" title="Anchor link to this section">&para;</a></h3>
 <ol>
-<li>Verify <code>DISCORD_TOKEN</code> is set in <code>.env</code></li>
+<li>Verify <code>DISCORD_TOKEN</code> is set in <code>.env.local</code></li>
 <li>Check that the bot has proper permissions in your Discord server</li>
 <li>Ensure intents are enabled in the <a href="https://discord.com/developers/applications">Discord Developer Portal</a></li>
 </ol>
@@ -3356,16 +3388,48 @@
 <ol>
 <li>
 <p>Verify Docker services are running:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>ps
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps
 </span></code></pre></div></p>
 </li>
 <li>
 <p>Check PostgreSQL logs:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>logs<span class="w"> </span>genjishimada-db-dev
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>postgres-local
 </span></code></pre></div></p>
 </li>
 <li>
-<p>Verify database credentials in <code>.env</code> match <code>docker-compose.dev.yml</code></p>
+<p>Verify database credentials in <code>.env.local</code>:
+   <div class="language-text highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>POSTGRES_HOST=localhost
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>POSTGRES_USER=genji
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>POSTGRES_PASSWORD=local_dev_password
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>POSTGRES_DB=genjishimada
+</span></code></pre></div></p>
+</li>
+</ol>
+<h3 id="rabbitmq-connection-failed">RabbitMQ Connection Failed<a class="headerlink" href="#rabbitmq-connection-failed" title="Anchor link to this section">&para;</a></h3>
+<ol>
+<li>
+<p>Verify RabbitMQ is healthy:
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps<span class="w"> </span>rabbitmq-local
+</span></code></pre></div></p>
+</li>
+<li>
+<p>Check RabbitMQ logs:
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>rabbitmq-local
+</span></code></pre></div></p>
+</li>
+<li>
+<p>Visit management UI: <a href="http://localhost:15672">http://localhost:15672</a></p>
+</li>
+</ol>
+<h3 id="minio-connection-failed">MinIO Connection Failed<a class="headerlink" href="#minio-connection-failed" title="Anchor link to this section">&para;</a></h3>
+<ol>
+<li>
+<p>Verify MinIO is healthy:
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps<span class="w"> </span>minio-local
+</span></code></pre></div></p>
+</li>
+<li>
+<p>Ensure bucket exists (see <a href="../installation/#9-create-minio-bucket">Installation Guide</a>)</p>
 </li>
 </ol>
 
@@ -3390,7 +3454,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 23, 2026 21:09:27 UTC"><span class="timeago" datetime="2026-01-23T21:09:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 23, 2026 21:09:27 UTC">2026-01-23</span>
   </span>
 
     
