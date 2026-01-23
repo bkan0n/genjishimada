@@ -34,7 +34,7 @@ lint-api:
 
 # Test API (requires Docker to be running for test database)
 test-api:
-    uv run --project apps/api --group dev-api --group dev pytest -n 8 apps/api -x
+    uv run pytest -n 8 apps/api -x
 
 # ----------------------------
 # Bot app (genjishimada-bot)
