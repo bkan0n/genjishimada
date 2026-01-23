@@ -33,55 +33,101 @@ just setup
 
 This command runs `uv sync --all-groups`, which installs dependencies for all workspaces (API, bot, SDK, and docs).
 
-### 3. Configure Environment Variables
+### 3. Configure Local Environment
 
-Create a `.env` file in the repository root and set the required variables:
-
-```env
-# Discord
-DISCORD_TOKEN=your_discord_bot_token
-
-# Database
-POSTGRES_USER=genjishimada
-POSTGRES_PASSWORD=your_password
-POSTGRES_DB=genjishimada
-
-# RabbitMQ
-RABBITMQ_USER=admin
-RABBITMQ_PASS=your_password
-RABBITMQ_HOST=localhost
-
-# API
-API_KEY=your_api_key_for_bot
-APP_ENVIRONMENT=development
-
-# S3-compatible storage (Cloudflare R2)
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-R2_ACCOUNT_ID=your_r2_account_id
-
-# Email
-RESEND_API_KEY=your_resend_key
-
-# Monitoring
-SENTRY_DSN=your_sentry_dsn
-```
-
-If you are running the API on the host, set `PSQL_DSN` to point at the local Postgres port:
-
-```env
-PSQL_DSN=postgresql://genjishimada:your_password@localhost:65432/genjishimada
-```
-
-### 4. Start Infrastructure Services
-
-Start the database and RabbitMQ only:
+Copy the local environment template and customize it:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d \
-  genjishimada-db-dev \
-  genjishimada-rabbitmq-dev
+cp .env.local.example .env.local
 ```
+
+Edit `.env.local` with your settings:
+
+```env
+# Discord (use a test bot token)
+DISCORD_TOKEN=your_dev_bot_token_here
+DISCORD_GUILD_ID=your_test_guild_id_here
+
+# Database (already configured for local Docker services)
+POSTGRES_HOST=localhost
+POSTGRES_USER=genji
+POSTGRES_PASSWORD=local_dev_password
+POSTGRES_DB=genjishimada
+
+# RabbitMQ (already configured for local Docker services)
+RABBITMQ_HOST=localhost
+RABBITMQ_USER=genji
+RABBITMQ_PASS=local_dev_password
+
+# MinIO (S3-compatible local storage)
+S3_ENDPOINT_URL=http://localhost:9000
+S3_BUCKET_NAME=genji-parkour-images
+S3_PUBLIC_URL=http://localhost:9000/genji-parkour-images
+AWS_ACCESS_KEY_ID=genji
+AWS_SECRET_ACCESS_KEY=local_dev_password
+
+# API Key (for bot to call API)
+API_KEY=local_dev_api_key
+
+# Application
+APP_ENVIRONMENT=local
+```
+
+### 4. Start Local Infrastructure
+
+Start PostgreSQL, RabbitMQ, and MinIO for local development:
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+```
+
+This starts:
+- **PostgreSQL** on port 5432
+- **RabbitMQ** on ports 5672 (AMQP) and 15672 (Management UI)
+- **MinIO** on ports 9000 (API) and 9001 (Console)
+
+### 5. Import Database from VPS (Optional)
+
+If you want to work with production or development data locally:
+
+```bash
+# Import from dev environment
+./scripts/import-db-from-vps.sh dev
+
+# Or from production (be careful!)
+./scripts/import-db-from-vps.sh prod
+```
+
+This requires SSH access to the VPS. See [SSH Configuration](#ssh-configuration) below.
+
+### 6. Create MinIO Bucket
+
+The first time you run MinIO, create the bucket:
+
+```bash
+# Install MinIO client (mc)
+brew install minio/stable/mc  # macOS
+# or download from https://min.io/docs/minio/linux/reference/minio-mc.html
+
+# Configure MinIO client
+mc alias set local http://localhost:9000 genji local_dev_password
+
+# Create bucket
+mc mb local/genji-parkour-images
+```
+
+## SSH Configuration
+
+To import databases from the VPS, add an SSH config entry in `~/.ssh/config`:
+
+```
+Host genji-vps
+    HostName your-vps-ip-or-hostname
+    User your-username
+    IdentityFile ~/.ssh/your-key
+```
+
+Ask a project maintainer for VPS connection details.
 
 ## Next Steps
 
@@ -106,11 +152,21 @@ Ensure Docker is running and you have sufficient resources allocated. On macOS, 
 Verify that PostgreSQL is running:
 
 ```bash
-docker compose -f docker-compose.dev.yml ps genjishimada-db-dev
+docker compose -f docker-compose.local.yml ps postgres-local
 ```
 
 Check logs if the container is not healthy:
 
 ```bash
-docker compose -f docker-compose.dev.yml logs genjishimada-db-dev
+docker compose -f docker-compose.local.yml logs postgres-local
 ```
+
+### MinIO Connection Issues
+
+Verify MinIO is running:
+
+```bash
+docker compose -f docker-compose.local.yml ps minio-local
+```
+
+Access the MinIO console at http://localhost:9001 (user: genji, password: local_dev_password)
