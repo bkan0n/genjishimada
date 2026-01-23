@@ -101,21 +101,35 @@ If you run the API/bot in Docker, set `RABBITMQ_HOST` to the service name (`genj
 
 ### API Health Check
 
+**Local development:**
 ```bash
 curl http://localhost:8000/healthcheck
 ```
 
-If the API runs in Docker without a port mapping, access it through your reverse proxy instead.
+**Remote deployments:** Access through your reverse proxy or internal Docker network.
 
 ### Database Health
 
+**Local development:**
+```bash
+docker exec genjishimada-db-local pg_isready -U genji
+```
+
+**Remote staging:**
 ```bash
 docker compose -f docker-compose.dev.yml exec genjishimada-db-dev pg_isready
 ```
 
+**Remote production:**
+```bash
+docker compose -f docker-compose.prod.yml exec genjishimada-db pg_isready
+```
+
 ### RabbitMQ Health
 
-RabbitMQ is not exposed directly in this repo; use container logs or your reverse proxy setup.
+**Local development:** Access management UI at http://localhost:15672
+
+**Remote deployments:** Use container logs or your reverse proxy setup.
 
 ## Next Steps
 
