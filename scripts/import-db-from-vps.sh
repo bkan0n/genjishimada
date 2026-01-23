@@ -46,11 +46,11 @@ fi
 if [ "$ENVIRONMENT" = "prod" ]; then
     REMOTE_CONTAINER="genjishimada-db"
     REMOTE_DB="genjishimada"
-    REMOTE_USER="postgres"
+    REMOTE_USER="genjishimada"
 else
     REMOTE_CONTAINER="genjishimada-db-dev"
     REMOTE_DB="genjishimada"
-    REMOTE_USER="postgres"
+    REMOTE_USER="genjishimada"
 fi
 
 echo -e "${YELLOW}=== Database Import from VPS ${ENVIRONMENT} ===${NC}"

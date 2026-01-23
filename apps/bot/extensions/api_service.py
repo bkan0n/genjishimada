@@ -124,11 +124,16 @@ if TYPE_CHECKING:
     D = TypeVar("D")
     Response = Coroutine[Any, Any, T]
 
-_BASE = (
-    "http://genjishimada-api-dev:8000"
-    if os.getenv("APP_ENVIRONMENT") == "development"
-    else "http://genjishimada-api:8000"
-)
+APP_ENVIRONMENT = os.getenv("APP_ENVIRONMENT", "local")
+if APP_ENVIRONMENT == "local":
+    _BASE = "http://localhost:8000"
+elif APP_ENVIRONMENT == "development":
+    _BASE = "http://genjishimada-api-dev:8000"
+elif APP_ENVIRONMENT == "production":
+    _BASE = "http://genjishimada-api:8000"
+else:
+    raise RuntimeError(f"Invalid APP_ENVIRONMENT: {APP_ENVIRONMENT}")
+
 
 log = getLogger(__name__)
 
