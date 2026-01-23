@@ -24,7 +24,7 @@ services:
     hostname: genjishimada-rabbitmq-local
     build:
       context: ./infra/rabbitmq
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.local
     restart: unless-stopped
     environment:
       RABBITMQ_USER: genji
