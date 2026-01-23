@@ -78,10 +78,16 @@ Examples:
 
 ### Monitoring
 
-RabbitMQ is not exposed directly in this repo. Production access is handled via your reverse proxy (e.g., Caddy). For local debugging, use container logs:
+**Local development:** Access management UI at http://localhost:15672 (genji/local_dev_password)
+
+**Remote deployments:** RabbitMQ is not exposed directly. Use container logs:
 
 ```bash
+# Staging
 docker compose -f docker-compose.dev.yml logs -f genjishimada-rabbitmq-dev
+
+# Production
+docker compose -f docker-compose.prod.yml logs -f genjishimada-rabbitmq
 ```
 
 ## Cloudflare R2

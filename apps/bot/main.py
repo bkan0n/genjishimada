@@ -84,7 +84,14 @@ async def main() -> None:
     )
 
     logging.getLogger("discord.gateway").setLevel("WARNING")
-    prefix = "?" if APP_ENVIRONMENT == "production" else "!"
+    if APP_ENVIRONMENT == "production":
+        prefix = "?"
+    elif APP_ENVIRONMENT == "development":
+        prefix = "!"
+    elif APP_ENVIRONMENT == "local":
+        prefix = "$"
+    else:
+        raise RuntimeError(f"Invalid APP_ENVIRONMENT: {APP_ENVIRONMENT}")
     async with aiohttp.ClientSession() as http_session:
         bot = core.Genji(prefix=prefix, session=http_session)
 

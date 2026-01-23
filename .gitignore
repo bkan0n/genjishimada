@@ -270,3 +270,11 @@ poetry.toml
 .DS_Store
 
 # End of https://www.toptal.com/developers/gitignore/api/python
+
+docs/plans/.env.local
+
+# Local database backups
+backups/*
+!backups/.gitkeep
+/docs/plans/
+.env.local

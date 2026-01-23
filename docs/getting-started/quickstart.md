@@ -3,7 +3,23 @@
 Get the API and bot running locally in minutes.
 
 !!! info "Prerequisites"
-    This guide assumes you've completed the [Installation](installation.md) steps and have Docker services running.
+    This guide assumes you've completed the [Installation](installation.md) steps.
+
+## Start Local Infrastructure
+
+Start PostgreSQL, RabbitMQ, and MinIO:
+
+```bash
+docker compose -f docker-compose.local.yml up -d
+```
+
+Verify all services are healthy:
+
+```bash
+docker compose -f docker-compose.local.yml ps
+```
+
+All services should show "Up (healthy)" status.
 
 ## Running the API
 
@@ -14,30 +30,31 @@ just run-api
 ```
 
 This command:
-- Changes to the `apps/api` directory
+- Automatically loads `.env.local`
 - Runs `litestar run` with hot reload enabled
 - Serves on `http://localhost:8000`
-
-If you are running the API on the host, set `PSQL_DSN` in `.env` so it points at `localhost:65432`.
 
 ### Verify API is Running
 
 Open your browser to:
 
-- **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **API Docs**: [http://localhost:8000/schema](http://localhost:8000/schema)
 - **Health Check**: [http://localhost:8000/healthcheck](http://localhost:8000/healthcheck)
 
 You should see the interactive OpenAPI documentation.
 
 ## Running the Bot
 
-The bot is configured to call the API at the Docker service name (`genjishimada-api-dev` in development). The simplest local setup is to run the bot in Docker:
+Start the Discord bot:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d genjishimada-bot-dev
+just run-bot
 ```
 
-If you run the bot on the host with `just run-bot`, ensure the API hostname resolves (for example by running the API container and joining the same Docker network).
+This command:
+- Automatically loads `.env.local`
+- Runs the bot with your configured Discord token
+- Connects to the local API at `localhost:8000`
 
 ### Verify Bot is Running
 
@@ -49,16 +66,6 @@ Bot is ready.
 ```
 
 In your Discord server, the bot should appear online.
-
-## Running Both Services in Docker (optional)
-
-If you want Docker to run everything:
-
-```bash
-docker compose -f docker-compose.dev.yml up -d
-```
-
-This will start API, bot, database, and RabbitMQ in containers.
 
 ## Testing the Integration
 
@@ -74,19 +81,19 @@ In Discord, send a command to test the bot:
 
 In the API terminal, you should see incoming requests from the bot.
 
-### 3. Check RabbitMQ
+### 3. Check RabbitMQ Management UI
 
-RabbitMQ is not exposed directly in this repo; it is typically proxied via Caddy in production. For local checks, use container logs:
+Visit [http://localhost:15672](http://localhost:15672):
+- Username: `genji`
+- Password: `local_dev_password`
 
-```bash
-docker compose -f docker-compose.dev.yml logs -f genjishimada-rabbitmq-dev
-```
+You can see queues, messages, and connections.
 
 ## Development Workflow
 
 ### Make Code Changes
 
-The API runs with `--reload`, so changes are automatically picked up. For the bot, you'll need to restart the process.
+The API runs with `--reload`, so changes are automatically picked up. For the bot, you'll need to restart the process (Ctrl+C and run `just run-bot` again).
 
 ### Run Tests
 
@@ -118,20 +125,25 @@ This formats code with Ruff and type-checks with BasedPyright.
 
 **Database logs**:
 ```bash
-docker compose -f docker-compose.dev.yml logs -f genjishimada-db-dev
+docker compose -f docker-compose.local.yml logs -f postgres-local
 ```
 
 **RabbitMQ logs**:
 ```bash
-docker compose -f docker-compose.dev.yml logs -f genjishimada-rabbitmq-dev
+docker compose -f docker-compose.local.yml logs -f rabbitmq-local
+```
+
+**MinIO logs**:
+```bash
+docker compose -f docker-compose.local.yml logs -f minio-local
 ```
 
 ### Stop Services
 
-Stop Docker services:
+Stop infrastructure services:
 
 ```bash
-docker compose -f docker-compose.dev.yml down
+docker compose -f docker-compose.local.yml down
 ```
 
 Stop API/bot: Press `Ctrl+C` in their respective terminals.
@@ -146,6 +158,7 @@ just sync
 
 ## Next Steps
 
+- [Local Development Guide](../api/local-development.md) - Detailed local development documentation
 - [Bot Architecture](../bot/architecture/core-bot.md) - Understand how the bot works
 - [API Documentation](../api/index.md) - Learn about API endpoints
 - [Contributing Guide](../contributing/workflow.md) - Make your first contribution
@@ -162,7 +175,7 @@ lsof -ti:8000 | xargs kill -9
 
 ### Bot Won't Connect
 
-1. Verify `DISCORD_TOKEN` is set in `.env`
+1. Verify `DISCORD_TOKEN` is set in `.env.local`
 2. Check that the bot has proper permissions in your Discord server
 3. Ensure intents are enabled in the [Discord Developer Portal](https://discord.com/developers/applications)
 
@@ -170,12 +183,41 @@ lsof -ti:8000 | xargs kill -9
 
 1. Verify Docker services are running:
    ```bash
-   docker compose -f docker-compose.dev.yml ps
+   docker compose -f docker-compose.local.yml ps
    ```
 
 2. Check PostgreSQL logs:
    ```bash
-   docker compose -f docker-compose.dev.yml logs genjishimada-db-dev
+   docker compose -f docker-compose.local.yml logs postgres-local
    ```
 
-3. Verify database credentials in `.env` match `docker-compose.dev.yml`
+3. Verify database credentials in `.env.local`:
+   ```
+   POSTGRES_HOST=localhost
+   POSTGRES_USER=genji
+   POSTGRES_PASSWORD=local_dev_password
+   POSTGRES_DB=genjishimada
+   ```
+
+### RabbitMQ Connection Failed
+
+1. Verify RabbitMQ is healthy:
+   ```bash
+   docker compose -f docker-compose.local.yml ps rabbitmq-local
+   ```
+
+2. Check RabbitMQ logs:
+   ```bash
+   docker compose -f docker-compose.local.yml logs rabbitmq-local
+   ```
+
+3. Visit management UI: [http://localhost:15672](http://localhost:15672)
+
+### MinIO Connection Failed
+
+1. Verify MinIO is healthy:
+   ```bash
+   docker compose -f docker-compose.local.yml ps minio-local
+   ```
+
+2. Ensure bucket exists (see [Installation Guide](installation.md#9-create-minio-bucket))

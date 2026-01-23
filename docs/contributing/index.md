@@ -22,10 +22,48 @@ Ensure you have the required tools installed:
 
 - Python 3.13+
 - uv (package manager)
-- Docker (for databases)
+- Docker and Docker Compose (for local infrastructure)
 - just (task runner)
 
-See the [Installation Guide](../getting-started/installation.md) for setup instructions.
+See the [Installation Guide](../getting-started/installation.md) for detailed setup instructions.
+
+### Local Development Setup
+
+1. **Install dependencies**:
+   ```bash
+   just setup
+   ```
+
+2. **Configure environment**:
+   ```bash
+   cp .env.local.example .env.local
+   # Edit .env.local with your Discord token
+   ```
+
+3. **Start infrastructure** (PostgreSQL, RabbitMQ, MinIO):
+   ```bash
+   docker compose -f docker-compose.local.yml up -d
+   ```
+
+4. **Create MinIO bucket**:
+   ```bash
+   mc alias set local http://localhost:9000 genji local_dev_password
+   mc mb local/genji-parkour-images
+   ```
+
+5. **Import database** (optional):
+   ```bash
+   ./scripts/import-db-from-vps.sh dev
+   ```
+
+6. **Run API and bot**:
+   ```bash
+   # Terminal 1
+   just run-api
+
+   # Terminal 2
+   just run-bot
+   ```
 
 ### Development Workflow
 
@@ -223,10 +261,9 @@ Migrations are **manual**. There is no migration runner in this repo.
    );
    ```
 
-3. Apply the migration manually using your preferred Postgres client. Example (dev container):
+3. Apply the migration manually using your preferred Postgres client. Example (local database):
    ```bash
-   docker compose -f docker-compose.dev.yml exec genjishimada-db-dev \
-     psql -U genjishimada -d genjishimada -f /path/to/migrations/0004_add_new_feature.sql
+   docker exec -i genjishimada-db-local psql -U genji -d genjishimada < apps/api/migrations/0004_add_new_feature.sql
    ```
 
 ### Migration Guidelines

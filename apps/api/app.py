@@ -34,7 +34,9 @@ RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
 POSTGRES_USER = os.getenv("POSTGRES_USER")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
-POSTGRES_HOST = "genjishimada-db" if APP_ENVIRONMENT == "production" else "genjishimada-db-dev"
+POSTGRES_HOST = os.getenv(
+    "POSTGRES_HOST", "genjishimada-db" if APP_ENVIRONMENT == "production" else "genjishimada-db-dev"
+)
 DEFAULT_DSN = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:5432/{POSTGRES_DB}"
 
 

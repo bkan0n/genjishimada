@@ -20,8 +20,31 @@ Examples:
 
 ## Access
 
-RabbitMQ is not exposed directly in this repo. Production access is handled via your reverse proxy (e.g., Caddy). For local debugging, use container logs:
+### Local Development
 
+For local development, RabbitMQ management UI is available at:
+
+```
+http://localhost:15672
+Username: genji
+Password: local_dev_password
+```
+
+View logs:
+```bash
+docker compose -f docker-compose.local.yml logs -f rabbitmq-local
+```
+
+### Remote Deployments
+
+RabbitMQ is not exposed directly on remote servers. Production access is handled via your reverse proxy (e.g., Caddy).
+
+View staging logs:
 ```bash
 docker compose -f docker-compose.dev.yml logs -f genjishimada-rabbitmq-dev
+```
+
+View production logs:
+```bash
+docker compose -f docker-compose.prod.yml logs -f genjishimada-rabbitmq
 ```

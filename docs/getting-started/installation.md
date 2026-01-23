@@ -137,25 +137,54 @@ This command:
 2. Installs Python dependencies
 3. Sets up development tools (Ruff, BasedPyright, pytest)
 
-### 7. Configure Environment
+### 7. Configure Local Environment
 
-Create a `.env` file in the repo root and set the required values. See [Configuration Guide](../bot/operations/configuration.md) for details. If you plan to run the API on the host, set `PSQL_DSN` to point at `localhost:65432`.
-
-### 8. Start Infrastructure
-
-Start PostgreSQL and RabbitMQ using Docker Compose:
+Copy the local environment template:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d \
-  genjishimada-db-dev \
-  genjishimada-rabbitmq-dev
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` with your Discord bot token and other settings. The database, RabbitMQ, and MinIO settings are pre-configured for local development.
+
+### 8. Start Local Infrastructure
+
+Start PostgreSQL, RabbitMQ, and MinIO for local development:
+
+```bash
+docker compose -f docker-compose.local.yml up -d
 ```
 
 Check that services are healthy:
 
 ```bash
-docker compose -f docker-compose.dev.yml ps
+docker compose -f docker-compose.local.yml ps
 ```
+
+All services should show status "Up (healthy)".
+
+### 9. Create MinIO Bucket
+
+Create the S3 bucket in MinIO for image storage:
+
+```bash
+# Install MinIO client
+brew install minio/stable/mc  # macOS/Linux
+
+# Configure and create bucket
+mc alias set local http://localhost:9000 genji local_dev_password
+mc mb local/genji-parkour-images
+```
+
+### 10. Import Database (Optional)
+
+To work with real data, import from the VPS:
+
+```bash
+./scripts/import-db-from-vps.sh dev
+```
+
+This requires SSH access to the VPS. See [Getting Started](index.md#ssh-configuration) for SSH configuration.
 
 ## Verification
 
