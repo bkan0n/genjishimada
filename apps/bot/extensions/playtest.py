@@ -644,8 +644,9 @@ class ModActionsDifficultyRatingSelect(discord.ui.Select):
         """
         if self.values:
             self.view.difficulty = cast("DifficultyAll", self.values[0])
+        view = self.view
         self.view.rebuild()
-        await itx.response.edit_message(view=self.view)
+        await itx.response.edit_message(view=view)
 
 
 class ModActionsReasonModal(discord.ui.Modal):
@@ -673,8 +674,9 @@ class ModActionsReasonModal(discord.ui.Modal):
             itx (GenjiItx): The modal submit interaction.
         """
         self.original_view.reason = self.reason.value
+        original_view = self.original_view
         self.original_view.rebuild()
-        await itx.response.edit_message(view=self.original_view)
+        await itx.response.edit_message(view=original_view)
         self.stop()
 
 
