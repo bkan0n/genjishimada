@@ -6816,7 +6816,7 @@
           "Maps"
         ],
         "summary": "Search Maps",
-        "description": "Return maps matching the provided filters, including playtest status, visibility, categories, creators, mechanics, restrictions, difficulty, medals, and completion context. Supports pagination or returning all results.",
+        "description": "Return maps matching the provided filters, including playtest status, visibility, categories, creators, mechanics, restrictions, tags, difficulty, medals, and completion context. Supports pagination or returning all results.",
         "operationId": "ApiV3MapsGetMaps",
         "parameters": [
           {
@@ -7048,6 +7048,41 @@
             "allowReserved": false
           },
           {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "difficulty:asc",
+                      "difficulty:desc",
+                      "checkpoints:asc",
+                      "checkpoints:desc",
+                      "ratings:asc",
+                      "ratings:desc",
+                      "map_name:asc",
+                      "map_name:desc",
+                      "title:asc",
+                      "title:desc",
+                      "code:asc",
+                      "code:desc"
+                    ]
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
             "name": "creator_ids",
             "in": "query",
             "schema": {
@@ -7151,6 +7186,32 @@
                       "Emote Save Bhop",
                       "Double Jump",
                       "Bhop"
+                    ]
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "Other Heroes",
+                      "XP Based",
+                      "Custom Grav/Speed"
                     ]
                   },
                   "type": "array"
@@ -14262,6 +14323,17 @@
             },
             "type": "array"
           },
+          "tags": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "Other Heroes",
+                "XP Based",
+                "Custom Grav/Speed"
+              ]
+            },
+            "type": "array"
+          },
           "description": {
             "oneOf": [
               {
@@ -14574,6 +14646,24 @@
                     "Emote Save Bhop",
                     "Double Jump",
                     "Bhop"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "Other Heroes",
+                    "XP Based",
+                    "Custom Grav/Speed"
                   ]
                 },
                 "type": "array"
@@ -15280,6 +15370,24 @@
               }
             ]
           },
+          "tags": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "Other Heroes",
+                    "XP Based",
+                    "Custom Grav/Speed"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "description": {
             "oneOf": [
               {
@@ -15663,6 +15771,17 @@
                 "Emote Save Bhop",
                 "Double Jump",
                 "Bhop"
+              ]
+            },
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "Other Heroes",
+                "XP Based",
+                "Custom Grav/Speed"
               ]
             },
             "type": "array"

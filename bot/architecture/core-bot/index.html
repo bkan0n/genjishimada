@@ -1238,6 +1238,8 @@
       
         
       
+        
+      
     
     
     
@@ -1588,6 +1590,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../ux/map-search-sqlspec/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Map Search SQL Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
       
@@ -1611,10 +1641,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_5" >
         
           
-          <label class="md-nav__link" for="__nav_5_4" id="__nav_5_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_5_5" id="__nav_5_5_label" tabindex="">
             
   
   
@@ -1632,8 +1662,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3061,31 +3091,43 @@
 <p>The bot starts in <code>apps/bot/main.py</code> inside the <code>main()</code> coroutine. The sequence is:</p>
 <ol>
 <li>Configure Sentry (when <code>SENTRY_DSN</code> is present) and set up filtered Discord logging via <code>setup_logging()</code>.</li>
-<li>Create an <code>aiohttp.ClientSession</code> and instantiate <code>core.Genji</code>, passing the configured prefix (<code>"?"</code> in production, <code>"!"</code> otherwise).</li>
-<li>Start the asynchronous context manager for the bot and call <code>bot.start(DISCORD_TOKEN)</code> to connect to the Discord gateway.</li>
+<li>Create an <code>aiohttp.ClientSession</code> and instantiate <code>core.Genji</code>, passing the configured prefix (<code>"?"</code> in production,
+   <code>"!"</code> otherwise).</li>
+<li>Start the asynchronous context manager for the bot and call <code>bot.start(DISCORD_TOKEN)</code> to connect to the Discord
+   gateway.</li>
 </ol>
 <p><code>core/genji.py</code> defines the <code>Genji</code> subclass of <code>commands.Bot</code>. During <code>__init__</code> the class:</p>
 <ul>
 <li>Applies the gateway intents defined at module level.</li>
-<li>Stores the shared HTTP session and constructs a <code>VideoThumbnailService</code> helper.</li>
-<li>Loads <code>configs/prod.toml</code> when <code>APP_ENVIRONMENT</code> is <code>"production"</code>, or <code>configs/dev.toml</code> for all other environments, using the <code>utilities.config.decode</code> helper.</li>
+<li>Stores the shared HTTP session and constructs a <code>VideoThumbnailHandler</code> helper.</li>
+<li>Loads <code>configs/prod.toml</code> when <code>APP_ENVIRONMENT</code> is <code>"production"</code>, or <code>configs/dev.toml</code> for all other environments,
+  using the <code>utilities.config.decode</code> helper.</li>
 </ul>
 <h2 id="extension-loading">Extension loading<a class="headerlink" href="#extension-loading" title="Anchor link to this section">&para;</a></h2>
-<p><code>Genji.setup_hook</code> runs once the Discord connection is preparing. It loads every module under <code>extensions/</code> (discovered via <code>pkgutil</code> in <code>extensions.__init__.EXTENSIONS</code>) plus the debugging cog <code>jishaku</code>. After extensions are loaded, the method schedules <code>self.rabbit.start()</code> on the bot loop so that queue consumers begin once all handlers are registered.</p>
-<p>Each extension exposes an async <code>setup(bot)</code> function that attaches services or cogs to the bot. Notable patterns include:</p>
+<p><code>Genji.setup_hook</code> runs once the Discord connection is preparing. It loads every module under <code>extensions/</code> (discovered
+via <code>pkgutil</code> in <code>extensions.__init__.EXTENSIONS</code>) plus the debugging cog <code>jishaku</code>. After extensions are loaded, the
+method schedules <code>self.rabbit.start()</code> on the bot loop so that queue consumers begin once all handlers are registered.</p>
+<p>Each extension exposes an async <code>setup(bot)</code> function that attaches services or cogs to the bot. Notable patterns
+include:</p>
 <ul>
 <li><code>extensions.api_service.setup</code> instantiates <code>APIService</code> and assigns it to <code>bot.api</code> for use across other modules.</li>
-<li><code>extensions.newsfeed.setup</code>, <code>extensions.completions.setup</code>, <code>extensions.playtest.setup</code>, and <code>extensions.xp.setup</code> create service classes that are stored on the bot for later access.</li>
-<li><code>extensions.notifications.setup</code> attaches <code>NotificationService</code> to <code>bot.notifications</code>.</li>
-<li><code>extensions.rabbit.setup</code> prepares the <code>RabbitService</code>, which <code>setup_hook</code> starts after all handlers are registered.</li>
+<li><code>extensions.newsfeed.setup</code>, <code>extensions.completions.setup</code>, <code>extensions.playtest.setup</code>, and <code>extensions.xp.setup</code>
+  create service classes that are stored on the bot for later access.</li>
+<li><code>extensions.notifications.setup</code> attaches <code>NotificationHandler</code> to <code>bot.notifications</code>.</li>
+<li><code>extensions.rabbit.setup</code> prepares the <code>RabbitHandler</code>, which <code>setup_hook</code> starts after all handlers are registered.</li>
 </ul>
 <h2 id="service-lifecycle">Service lifecycle<a class="headerlink" href="#service-lifecycle" title="Anchor link to this section">&para;</a></h2>
-<p>Service classes that inherit from <code>utilities.base.BaseService</code> (for example <code>CompletionsService</code>, <code>PlaytestService</code>, and <code>XPService</code>) lazily resolve the configured guild and their target channels. The base class spawns a task that waits for the bot to become ready, fetches <code>bot.config.guild</code>, and calls each service's <code>_resolve_channels()</code> hook before handling work.</p>
+<p>Handler classes that inherit from <code>utilities.base.BaseHandler</code> (for example <code>CompletionHandler</code>, <code>PlaytestHandler</code>, and
+<code>XPHandler</code>) lazily resolve the configured guild and their target channels. The base class spawns a task that waits for
+the bot to become ready, fetches <code>bot.config.guild</code>, and calls each handlers's <code>_resolve_channels()</code> hook before
+handling
+work.</p>
 <p>When adding a new feature module:</p>
 <ol>
 <li>Create an extension module under <code>extensions/</code> with an <code>async def setup(bot)</code> entry point.</li>
-<li>Attach any long-lived service to the bot (optionally inheriting from <code>BaseService</code>).</li>
-<li>Register queue handlers with <code>queue_consumer</code> if the feature processes RabbitMQ events (see <a href="../messaging/">Messaging &amp; Queues</a>).</li>
+<li>Attach any long-lived handler to the bot (optionally inheriting from <code>BaseHandler</code>).</li>
+<li>Register queue handlers with <code>queue_consumer</code> if the feature processes RabbitMQ events (
+   see <a href="../messaging/">Messaging &amp; Queues</a>).</li>
 <li>Ensure the module is importable so that <code>extensions.__init__</code> discovers it automatically during startup.</li>
 </ol>
 <h2 id="file-locations">File Locations<a class="headerlink" href="#file-locations" title="Anchor link to this section">&para;</a></h2>
@@ -3104,7 +3146,7 @@
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>│   ├── notifications.py  # Notification service
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│   └── xp.py             # XP service
 </span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>├── utilities/            # Shared utilities
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>│   ├── base.py           # BaseService
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>│   ├── base.py           # BaseHandler
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>│   ├── config.py         # Config schema
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>│   └── formatter.py      # Embed formatters
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>└── configs/              # TOML configuration
@@ -3139,7 +3181,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 24, 2026 17:49:06 UTC"><span class="timeago" datetime="2026-01-24T17:49:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 24, 2026 17:49:06 UTC">2026-01-24</span>
   </span>
 
     

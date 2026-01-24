@@ -1236,6 +1236,8 @@
       
         
       
+        
+      
     
     
     
@@ -1480,6 +1482,34 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../../bot/ux/map-search-sqlspec/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Map Search SQL Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
       
@@ -1500,10 +1530,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_5" >
         
           
-          <label class="md-nav__link" for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
             
   
   
@@ -1521,8 +1551,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2410,6 +2440,17 @@
     <span class="md-ellipsis">
       
         VerificationChangedEvent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#genjishimada_sdk.completions.VerificationMessageDeleteEvent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VerificationMessageDeleteEvent
       
     </span>
   </a>
@@ -9785,6 +9826,106 @@
 
 
 
+<h3 id="genjishimada_sdk.completions.VerificationMessageDeleteEvent" class="doc doc-heading">
+            <code>VerificationMessageDeleteEvent</code>
+
+
+<a href="#genjishimada_sdk.completions.VerificationMessageDeleteEvent" class="headerlink" title="Anchor link to this section">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="msgspec.Struct">Struct</span></code></p>
+
+
+
+        <p>Event emitted to delete a verification queue message.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="verification_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.VerificationMessageDeleteEvent.verification_id)" href="#genjishimada_sdk.completions.VerificationMessageDeleteEvent.verification_id">verification_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Discord message ID of the verification to delete.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.VerificationMessageDeleteEvent.verification_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">verification_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.VerificationMessageDeleteEvent.verification_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="genjishimada_sdk.completions.WorldRecordXPCheckResponse" class="doc doc-heading">
             <code>WorldRecordXPCheckResponse</code>
 
@@ -9930,7 +10071,7 @@
 
 
 <h3 id="genjishimada_sdk.completions.__all__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;CompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionCreatedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionModerateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionPatchRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionVerificationUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedResultResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedTextsResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;FailedAutoverifyEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;MapRecordProgressionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;OcrResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;PendingVerificationResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;QualityUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousFlag&#39;</span><span class="p">,</span> <span class="s1">&#39;TimePlayedPerRankResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteUpdateEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationChangedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;WorldRecordXPCheckResponse&#39;</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;CompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionCreatedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionModerateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionPatchRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionVerificationUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedResultResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedTextsResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;FailedAutoverifyEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;MapRecordProgressionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;OcrResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;PendingVerificationResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;QualityUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousFlag&#39;</span><span class="p">,</span> <span class="s1">&#39;TimePlayedPerRankResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteUpdateEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationChangedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationMessageDeleteEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;WorldRecordXPCheckResponse&#39;</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>

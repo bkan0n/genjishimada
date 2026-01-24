@@ -12,31 +12,31 @@
         <meta name="author" content="Genji Parkour Team">
       
       
-        <link rel="canonical" href="https://docs.genji.pk/web/security-and-sessions/">
+        <link rel="canonical" href="https://docs.genji.pk/bot/ux/map-search-sqlspec/">
       
       
-        <link rel="prev" href="../integrations/">
+        <link rel="prev" href="../newsfeed-and-embeds/">
       
       
-        <link rel="next" href="../localization/">
+        <link rel="next" href="../../operations/configuration/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
     
     
       
-        <title>Security And Sessions - Genji Shimada Documentation</title>
+        <title>Map Search SQL Builder - Genji Shimada Documentation</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,13 +55,13 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../css/timeago.css">
+      <link rel="stylesheet" href="../../../css/timeago.css">
     
-      <link rel="stylesheet" href="../../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#security-and-sessions" class="md-skip">
+        <a href="#map-search-sql-builder-sqlspec" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Genji Shimada Documentation" class="md-header__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
+    <a href="../../.." title="Genji Shimada Documentation" class="md-header__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -126,7 +126,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Security And Sessions
+              Map Search SQL Builder
             
           </span>
         </div>
@@ -238,7 +238,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../.." class="md-tabs__link">
+      <a href="../../.." class="md-tabs__link">
         
   
   
@@ -259,7 +259,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../getting-started/" class="md-tabs__link">
+        <a href="../../../getting-started/" class="md-tabs__link">
           
   
   
@@ -281,7 +281,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../services/" class="md-tabs__link">
+        <a href="../../../services/" class="md-tabs__link">
           
   
   
@@ -299,13 +299,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../../web/" class="md-tabs__link">
           
   
   
@@ -323,11 +321,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../bot/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../" class="md-tabs__link">
           
   
   
@@ -349,7 +349,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../api/" class="md-tabs__link">
+        <a href="../../../api/" class="md-tabs__link">
           
   
   
@@ -371,7 +371,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../sdk/" class="md-tabs__link">
+        <a href="../../../sdk/" class="md-tabs__link">
           
   
   
@@ -393,7 +393,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../operations/" class="md-tabs__link">
+        <a href="../../../operations/" class="md-tabs__link">
           
   
   
@@ -415,7 +415,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../contributing/" class="md-tabs__link">
+        <a href="../../../contributing/" class="md-tabs__link">
           
   
   
@@ -459,7 +459,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Genji Shimada Documentation" class="md-nav__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
+    <a href="../../.." title="Genji Shimada Documentation" class="md-nav__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -489,7 +489,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -545,7 +545,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../getting-started/" class="md-nav__link ">
+            <a href="../../../getting-started/" class="md-nav__link ">
               
   
   
@@ -589,7 +589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/installation/" class="md-nav__link">
+      <a href="../../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -617,7 +617,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -689,7 +689,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../services/" class="md-nav__link ">
+            <a href="../../../services/" class="md-nav__link ">
               
   
   
@@ -733,7 +733,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/bot/" class="md-nav__link">
+      <a href="../../../services/bot/" class="md-nav__link">
         
   
   
@@ -761,7 +761,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/api/" class="md-nav__link">
+      <a href="../../../services/api/" class="md-nav__link">
         
   
   
@@ -789,7 +789,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/database/" class="md-nav__link">
+      <a href="../../../services/database/" class="md-nav__link">
         
   
   
@@ -817,7 +817,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../../services/rabbitmq/" class="md-nav__link">
         
   
   
@@ -845,7 +845,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ocr/" class="md-nav__link">
+      <a href="../../../services/ocr/" class="md-nav__link">
         
   
   
@@ -873,7 +873,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/translate/" class="md-nav__link">
+      <a href="../../../services/translate/" class="md-nav__link">
         
   
   
@@ -881,6 +881,322 @@
     
   
     Translate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../../web/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Web
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Web
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../web/repository-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Repository Layout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../web/runtime-container/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime Container
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../web/deployment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deployment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../web/frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frontend Build
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../web/backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Backend Application
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../web/integrations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../web/security-and-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security And Sessions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../web/localization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Localization And Translations
   
 
     
@@ -924,14 +1240,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -948,18 +1256,18 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../" class="md-nav__link ">
               
   
   
   <span class="md-ellipsis">
     
   
-    Web
+    Bot
   
 
     
@@ -970,18 +1278,18 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_4">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
   
-    Web
+    Bot
   
 
           </label>
@@ -995,15 +1303,80 @@
   
   
   
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
     <li class="md-nav__item">
-      <a href="../repository-layout/" class="md-nav__link">
+      <a href="../../architecture/core-bot/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Repository Layout
+    Core Bot Lifecycle
   
 
     
@@ -1024,14 +1397,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../runtime-container/" class="md-nav__link">
+      <a href="../../architecture/services/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Runtime Container
+    Services &amp; Extensions
   
 
     
@@ -1052,14 +1425,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../deployment/" class="md-nav__link">
+      <a href="../../architecture/messaging/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Deployment
+    Messaging &amp; Queues
   
 
     
@@ -1073,29 +1446,9 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../frontend/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Frontend Build
-  
-
-    
-  </span>
-  
-  
-
-      </a>
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -1108,42 +1461,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../backend/" class="md-nav__link">
+      <a href="../newsfeed-and-embeds/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Backend Application
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../integrations/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Integrations
+    Developer Utilities
   
 
     
@@ -1180,7 +1505,7 @@
   <span class="md-ellipsis">
     
   
-    Security And Sessions
+    Map Search SQL Builder
   
 
     
@@ -1198,7 +1523,7 @@
   <span class="md-ellipsis">
     
   
-    Security And Sessions
+    Map Search SQL Builder
   
 
     
@@ -1224,10 +1549,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#api-backed-sessions" class="md-nav__link">
+  <a href="#location" class="md-nav__link">
     <span class="md-ellipsis">
       
-        API-Backed Sessions
+        Location
       
     </span>
   </a>
@@ -1235,10 +1560,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#auth-and-role-checks" class="md-nav__link">
+  <a href="#how-the-query-is-built" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Auth And Role Checks
+        How the query is built
       
     </span>
   </a>
@@ -1246,10 +1571,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#csrf" class="md-nav__link">
+  <a href="#cte-model" class="md-nav__link">
     <span class="md-ellipsis">
       
-        CSRF
+        CTE model
       
     </span>
   </a>
@@ -1257,10 +1582,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#csp-and-nonce" class="md-nav__link">
+  <a href="#where-clause-ordering" class="md-nav__link">
     <span class="md-ellipsis">
       
-        CSP And Nonce
+        WHERE clause ordering
       
     </span>
   </a>
@@ -1268,10 +1593,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#sentry-tunnel" class="md-nav__link">
+  <a href="#select-columns" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sentry Tunnel
+        SELECT columns
       
     </span>
   </a>
@@ -1279,10 +1604,54 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#cookies-and-domains" class="md-nav__link">
+  <a href="#pagination" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Cookies And Domains
+        Pagination
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parameter-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter ordering
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-new-filter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a new filter
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-new-column" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a new column
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-new-intersection-source" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a new intersection source
       
     </span>
   </a>
@@ -1304,343 +1673,24 @@
   
   
   
-    <li class="md-nav__item">
-      <a href="../localization/" class="md-nav__link">
+    
+    
+      
         
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Localization And Translations
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
       
-    </li>
-  
-
+    
+    
     
       
-      
-  
-  
-  
-  
-    
-    
       
         
           
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="../../bot/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Bot
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Bot
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
       
     
     
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2" >
-        
-          
-          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Architecture
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_2">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Architecture
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../bot/architecture/core-bot/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Core Bot Lifecycle
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../bot/architecture/services/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Services &amp; Extensions
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../bot/architecture/messaging/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Messaging &amp; Queues
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../bot/ux/newsfeed-and-embeds/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Developer Utilities
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../bot/ux/map-search-sqlspec/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Map Search SQL Builder
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-      
-        
-      
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1649,7 +1699,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_5" >
         
           
-          <label class="md-nav__link" for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_5" id="__nav_5_5_label" tabindex="">
             
   
   
@@ -1685,7 +1735,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../bot/operations/configuration/" class="md-nav__link">
+      <a href="../../operations/configuration/" class="md-nav__link">
         
   
   
@@ -1765,7 +1815,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../api/" class="md-nav__link ">
+            <a href="../../../api/" class="md-nav__link ">
               
   
   
@@ -1809,7 +1859,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/architecture/" class="md-nav__link">
+      <a href="../../../api/architecture/" class="md-nav__link">
         
   
   
@@ -1837,7 +1887,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/local-development/" class="md-nav__link">
+      <a href="../../../api/local-development/" class="md-nav__link">
         
   
   
@@ -1865,7 +1915,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/deployment/" class="md-nav__link">
+      <a href="../../../api/deployment/" class="md-nav__link">
         
   
   
@@ -1893,7 +1943,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/openapi/" class="md-nav__link">
+      <a href="../../../api/openapi/" class="md-nav__link">
         
   
   
@@ -1921,7 +1971,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/authentication/" class="md-nav__link">
+      <a href="../../../api/authentication/" class="md-nav__link">
         
   
   
@@ -2013,7 +2063,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../sdk/" class="md-nav__link ">
+            <a href="../../../sdk/" class="md-nav__link ">
               
   
   
@@ -2110,7 +2160,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../sdk/reference/" class="md-nav__link ">
+            <a href="../../../sdk/reference/" class="md-nav__link ">
               
   
   
@@ -2154,7 +2204,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/auth/" class="md-nav__link">
+      <a href="../../../sdk/reference/auth/" class="md-nav__link">
         
   
   
@@ -2182,7 +2232,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/change-requests/" class="md-nav__link">
+      <a href="../../../sdk/reference/change-requests/" class="md-nav__link">
         
   
   
@@ -2210,7 +2260,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/completions/" class="md-nav__link">
+      <a href="../../../sdk/reference/completions/" class="md-nav__link">
         
   
   
@@ -2238,7 +2288,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/difficulties/" class="md-nav__link">
+      <a href="../../../sdk/reference/difficulties/" class="md-nav__link">
         
   
   
@@ -2266,7 +2316,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/internal/" class="md-nav__link">
+      <a href="../../../sdk/reference/internal/" class="md-nav__link">
         
   
   
@@ -2294,7 +2344,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/logs/" class="md-nav__link">
+      <a href="../../../sdk/reference/logs/" class="md-nav__link">
         
   
   
@@ -2322,7 +2372,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/lootbox/" class="md-nav__link">
+      <a href="../../../sdk/reference/lootbox/" class="md-nav__link">
         
   
   
@@ -2350,7 +2400,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/maps/" class="md-nav__link">
+      <a href="../../../sdk/reference/maps/" class="md-nav__link">
         
   
   
@@ -2378,7 +2428,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/newsfeed/" class="md-nav__link">
+      <a href="../../../sdk/reference/newsfeed/" class="md-nav__link">
         
   
   
@@ -2406,7 +2456,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/notifications/" class="md-nav__link">
+      <a href="../../../sdk/reference/notifications/" class="md-nav__link">
         
   
   
@@ -2434,7 +2484,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/rank-card/" class="md-nav__link">
+      <a href="../../../sdk/reference/rank-card/" class="md-nav__link">
         
   
   
@@ -2462,7 +2512,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/tags/" class="md-nav__link">
+      <a href="../../../sdk/reference/tags/" class="md-nav__link">
         
   
   
@@ -2490,7 +2540,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/users/" class="md-nav__link">
+      <a href="../../../sdk/reference/users/" class="md-nav__link">
         
   
   
@@ -2518,7 +2568,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/reference/xp/" class="md-nav__link">
+      <a href="../../../sdk/reference/xp/" class="md-nav__link">
         
   
   
@@ -2554,7 +2604,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../sdk/usage/" class="md-nav__link">
+      <a href="../../../sdk/usage/" class="md-nav__link">
         
   
   
@@ -2628,7 +2678,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../operations/" class="md-nav__link ">
+            <a href="../../../operations/" class="md-nav__link ">
               
   
   
@@ -2672,7 +2722,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/infrastructure/" class="md-nav__link">
+      <a href="../../../operations/infrastructure/" class="md-nav__link">
         
   
   
@@ -2700,7 +2750,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/docker-compose/" class="md-nav__link">
+      <a href="../../../operations/docker-compose/" class="md-nav__link">
         
   
   
@@ -2728,7 +2778,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/backups/" class="md-nav__link">
+      <a href="../../../operations/backups/" class="md-nav__link">
         
   
   
@@ -2756,7 +2806,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/reverse-proxy/" class="md-nav__link">
+      <a href="../../../operations/reverse-proxy/" class="md-nav__link">
         
   
   
@@ -2784,7 +2834,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/identity-and-auth/" class="md-nav__link">
+      <a href="../../../operations/identity-and-auth/" class="md-nav__link">
         
   
   
@@ -2812,7 +2862,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/cloudflare/" class="md-nav__link">
+      <a href="../../../operations/cloudflare/" class="md-nav__link">
         
   
   
@@ -2840,7 +2890,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../operations/monitoring/" class="md-nav__link">
+      <a href="../../../operations/monitoring/" class="md-nav__link">
         
   
   
@@ -2904,7 +2954,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../contributing/" class="md-nav__link ">
+            <a href="../../../contributing/" class="md-nav__link ">
               
   
   
@@ -2948,7 +2998,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../contributing/workflow/" class="md-nav__link">
+      <a href="../../../contributing/workflow/" class="md-nav__link">
         
   
   
@@ -2976,7 +3026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../contributing/documentation/" class="md-nav__link">
+      <a href="../../../contributing/documentation/" class="md-nav__link">
         
   
   
@@ -3029,7 +3079,7 @@
   
   
     <li class="md-path__item">
-      <a href="../.." class="md-path__link">
+      <a href="../../.." class="md-path__link">
         
   <span class="md-ellipsis">
     Home
@@ -3047,10 +3097,10 @@
     
     
       <li class="md-path__item">
-        <a href="../" class="md-path__link">
+        <a href="../../" class="md-path__link">
           
   <span class="md-ellipsis">
-    Web
+    Bot
   </span>
 
         </a>
@@ -3072,36 +3122,112 @@
   
 
 
-<h1 id="security-and-sessions">Security And Sessions<a class="headerlink" href="#security-and-sessions" title="Anchor link to this section">&para;</a></h1>
-<p>This app uses a mix of Laravel defaults and custom session handling.</p>
-<h2 id="api-backed-sessions">API-Backed Sessions<a class="headerlink" href="#api-backed-sessions" title="Anchor link to this section">&para;</a></h2>
+<h1 id="map-search-sql-builder-sqlspec">Map Search SQL Builder (SQLSpec)<a class="headerlink" href="#map-search-sql-builder-sqlspec" title="Anchor link to this section">&para;</a></h1>
+<p>This guide documents the SQLSpec-based map search query builder used by the API
+map search flow. It is designed to be readable, stable, and easy to extend.</p>
+<h2 id="location">Location<a class="headerlink" href="#location" title="Anchor link to this section">&para;</a></h2>
 <ul>
-<li><code>config/session.php</code> sets the driver to <code>api</code> and enables encryption.</li>
-<li><code>ApiSessionHandler</code> stores session data via the Genji API.</li>
-<li>Remember-token flows use <code>device_session_id</code> cookies to keep sessions consistent across devices.</li>
+<li>Builder: <code>apps/api/utilities/map_search.py</code></li>
 </ul>
-<h2 id="auth-and-role-checks">Auth And Role Checks<a class="headerlink" href="#auth-and-role-checks" title="Anchor link to this section">&para;</a></h2>
+<h2 id="how-the-query-is-built">How the query is built<a class="headerlink" href="#how-the-query-is-built" title="Anchor link to this section">&para;</a></h2>
+<p>The builder composes a single SELECT statement that can include:</p>
+<ol>
+<li>Filter-driven CTEs</li>
+<li>An <code>intersection_map_ids</code> CTE (AND semantics across CTE filters)</li>
+<li>A main SELECT with core map fields and computed columns</li>
+<li>A <code>LEFT JOIN LATERAL</code> to the latest incomplete playtest meta row</li>
+<li>WHERE filters, ordered for stability</li>
+<li>ORDER BY and pagination</li>
+</ol>
+<h2 id="cte-model">CTE model<a class="headerlink" href="#cte-model" title="Anchor link to this section">&para;</a></h2>
+<p>CTEs are built in a fixed order to keep the SQL predictable and ensure filter
+interactions are consistent:</p>
+<ol>
+<li>mechanics</li>
+<li>restrictions</li>
+<li>creator_ids</li>
+<li>creator_names (one CTE per name, then intersected)</li>
+<li>minimum_quality</li>
+<li>medals</li>
+<li>completions</li>
+</ol>
+<p>If any CTEs are active, they are intersected via:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>intersection_map_ids AS (
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    SELECT map_id FROM cte_1
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    INTERSECT
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    SELECT map_id FROM cte_2
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    ...
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>)
+</span></code></pre></div>
+<p>When <code>filters.code</code> is set and <code>filters.force_filters</code> is <code>False</code>, CTEs are
+skipped. This allows fast, direct lookups by map code.</p>
+<h2 id="where-clause-ordering">WHERE clause ordering<a class="headerlink" href="#where-clause-ordering" title="Anchor link to this section">&para;</a></h2>
+<p>The WHERE clause is appended in a consistent order. Add new conditions at the
+end unless the new filter must appear earlier to preserve parameter ordering or
+execution characteristics.</p>
+<p>Current order:</p>
+<ol>
+<li>code</li>
+<li>playtesting</li>
+<li>playtest_filter (thread_id NULL / NOT NULL)</li>
+<li>difficulty range</li>
+<li>difficulty exact</li>
+<li>archived</li>
+<li>hidden</li>
+<li>official</li>
+<li>map_name</li>
+<li>category</li>
+<li>playtest_thread_id</li>
+<li>finalized_playtests</li>
+</ol>
+<h2 id="select-columns">SELECT columns<a class="headerlink" href="#select-columns" title="Anchor link to this section">&para;</a></h2>
+<p>The SELECT list is intentionally stable. Do not reorder columns unless you have
+an API-level reason to do so. It includes:</p>
 <ul>
-<li>Discord moderator access is enforced in <code>RequireDiscordModerator</code>.</li>
-<li>Email users are still supported through the Genji API endpoints.</li>
+<li>Core map fields (<code>m.*</code> subset)</li>
+<li><code>pm.thread_id</code> from the lateral join</li>
+<li><code>time</code> subquery for user completion time</li>
+<li>Ratings, playtest JSON, creators JSON, guides array, medals JSON</li>
+<li>Mechanics and restrictions arrays (COALESCE with empty arrays)</li>
+<li><code>COUNT(*) OVER() AS total_results</code></li>
 </ul>
-<h2 id="csrf">CSRF<a class="headerlink" href="#csrf" title="Anchor link to this section">&para;</a></h2>
-<p><code>resources/js/app.js</code> patches <code>fetch()</code> to attach <code>X-CSRF-TOKEN</code> and <code>X-Requested-With</code> headers on non-GET requests.</p>
-<h2 id="csp-and-nonce">CSP And Nonce<a class="headerlink" href="#csp-and-nonce" title="Anchor link to this section">&para;</a></h2>
+<p>Most computed columns are raw SQL fragments to keep the output stable and avoid
+sqlglot rewriting.</p>
+<h2 id="pagination">Pagination<a class="headerlink" href="#pagination" title="Anchor link to this section">&para;</a></h2>
+<p>Pagination uses SQLSpec's <code>paginate()</code> helper on the compiled SQL statement.</p>
 <ul>
-<li><code>config/csp.php</code> defines a strict CSP and uses a nonce generator.</li>
-<li><code>AppServiceProvider</code> wires a CSP nonce into Vite via <code>Vite::useCspNonce()</code>.</li>
+<li>When <code>filters.return_all</code> is <code>True</code>, pagination is skipped.</li>
 </ul>
-<h2 id="sentry-tunnel">Sentry Tunnel<a class="headerlink" href="#sentry-tunnel" title="Anchor link to this section">&para;</a></h2>
-<ul>
-<li><code>/api/_/e</code> validates DSN headers and same-site origin before forwarding.</li>
-<li>Size limits are enforced to avoid oversized payloads.</li>
-</ul>
-<h2 id="cookies-and-domains">Cookies And Domains<a class="headerlink" href="#cookies-and-domains" title="Anchor link to this section">&para;</a></h2>
-<ul>
-<li>Session cookie domain and HTTPS requirements are controlled by <code>SESSION_DOMAIN</code> and <code>SESSION_SECURE_COOKIE</code>.</li>
-<li>SameSite is set to <code>lax</code> by default.</li>
-</ul>
+<h2 id="parameter-ordering">Parameter ordering<a class="headerlink" href="#parameter-ordering" title="Anchor link to this section">&para;</a></h2>
+<p>Parameters are registered as the query is assembled. If you introduce new
+parameters, add them at a point in the build process that keeps the order
+stable and predictable.</p>
+<h2 id="adding-a-new-filter">Adding a new filter<a class="headerlink" href="#adding-a-new-filter" title="Anchor link to this section">&para;</a></h2>
+<ol>
+<li>Add a field to <code>MapSearchFilters</code>.</li>
+<li>Decide whether it belongs in:</li>
+<li>a CTE (set-based filtering), or</li>
+<li>the WHERE clause (direct filtering).</li>
+<li>Implement the CTE in <code>_build_ctes()</code> or add the WHERE condition in
+   <code>_apply_where_clauses()</code>.</li>
+</ol>
+<p>Use a CTE if the filter should participate in the intersection behavior with
+other set-based filters.</p>
+<h2 id="adding-a-new-column">Adding a new column<a class="headerlink" href="#adding-a-new-column" title="Anchor link to this section">&para;</a></h2>
+<ol>
+<li>Add a helper method that returns a SQL fragment or expression.</li>
+<li>Add it to <code>_build_select_columns()</code> in the correct position.</li>
+<li>If the column needs parameters, register them on the query with
+   <code>query.add_parameter()</code> and use placeholders in the fragment.</li>
+</ol>
+<h2 id="adding-a-new-intersection-source">Adding a new intersection source<a class="headerlink" href="#adding-a-new-intersection-source" title="Anchor link to this section">&para;</a></h2>
+<p>If a new filter should participate in the <code>intersection_map_ids</code> CTE:</p>
+<ol>
+<li>Add the CTE builder method.</li>
+<li>Register it in <code>_build_ctes()</code> in the correct order.</li>
+<li>Ensure its output is <code>SELECT map_id ...</code> so the intersection works without
+   additional transformations.</li>
+</ol>
 
 
 
@@ -3124,7 +3250,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:23:15 UTC"><span class="timeago" datetime="2026-01-19T15:23:15+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:23:15 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 24, 2026 17:49:06 UTC"><span class="timeago" datetime="2026-01-24T17:49:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 24, 2026 17:49:06 UTC">2026-01-24</span>
   </span>
 
     
@@ -3134,7 +3260,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 04:49:43 UTC"><span class="timeago" datetime="2026-01-19T04:49:43+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 04:49:43 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 24, 2026 17:49:06 UTC"><span class="timeago" datetime="2026-01-24T17:49:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 24, 2026 17:49:06 UTC">2026-01-24</span>
   </span>
 
     
@@ -3171,7 +3297,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../integrations/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Integrations">
+          <a href="../newsfeed-and-embeds/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Developer Utilities">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3181,20 +3307,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                Integrations
+                Developer Utilities
               </div>
             </div>
           </a>
         
         
           
-          <a href="../localization/" class="md-footer__link md-footer__link--next" aria-label="Next: Localization And Translations">
+          <a href="../../operations/configuration/" class="md-footer__link md-footer__link--next" aria-label="Next: Configuration &amp;amp; Deployment">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Localization And Translations
+                Configuration &amp; Deployment
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -3254,14 +3380,14 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "toc.integrate", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "toc.integrate", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../js/timeago.min.js"></script>
+        <script src="../../../js/timeago.min.js"></script>
       
-        <script src="../../js/timeago_mkdocs_material.js"></script>
+        <script src="../../../js/timeago_mkdocs_material.js"></script>
       
     
   </body>
