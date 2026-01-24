@@ -147,12 +147,28 @@ class RabbitHandler:
         """
         queues: dict[str, QueueHandler] = {}
 
-        for attr_name in dir(self.bot):
+        log.debug("[DEBUG] Starting handler discovery")
+        bot_attrs = dir(self.bot)
+        log.debug(f"[DEBUG] Bot has {len(bot_attrs)} attributes")
+
+        for attr_name in bot_attrs:
+            # Skip private attributes to avoid scanning the same instance multiple times
+            # (properties store their values in private backing fields like _completions_manager)
+            if attr_name.startswith("_"):
+                continue
+
             instance = getattr(self.bot, attr_name, None)
             if instance is None:
                 continue
 
-            for meth_name in dir(instance):
+            # Skip non-handler instances for cleaner logs
+            if not hasattr(type(instance), "__module__") or not type(instance).__module__.startswith("extensions"):
+                continue
+
+            log.debug(f"[DEBUG] Scanning instance: {attr_name} ({type(instance).__name__})")
+            instance_methods = dir(instance)
+
+            for meth_name in instance_methods:
                 candidate = getattr(instance, meth_name)
                 if not callable(candidate):
                     continue
@@ -162,6 +178,11 @@ class RabbitHandler:
                 if not queue_name:
                     continue
 
+                log.debug(
+                    f"[DEBUG]   Found handler: {meth_name} -> queue={queue_name}, "
+                    f"candidate_id={id(candidate)}, func_id={id(func)}"
+                )
+
                 # Apply job-status wrapper if available
                 if hasattr(instance, "_wrap_job_status"):
                     handler: QueueHandler = instance._wrap_job_status(candidate)  # noqa: SLF001
@@ -169,12 +190,16 @@ class RabbitHandler:
                     handler = candidate  # pyright: ignore[reportAssignmentType]
 
                 if queue_name in queues:
+                    existing_id = id(queues[queue_name])
+                    new_id = id(handler)
                     log.warning(
-                        "Duplicate handler for queue %s: existing=%r, new=%s.%s; keeping existing.",
+                        "Duplicate handler for queue %s: existing=%r (id=%s), new=%s.%s (id=%s); keeping existing.",
                         queue_name,
                         queues[queue_name],
+                        existing_id,
                         type(instance).__name__,
                         meth_name,
+                        new_id,
                     )
                     continue
 
