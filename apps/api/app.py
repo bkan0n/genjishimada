@@ -14,7 +14,7 @@ from litestar.exceptions import HTTPException
 from litestar.logging.config import LoggingConfig
 from litestar.middleware import DefineMiddleware
 from litestar.openapi.config import OpenAPIConfig
-from litestar.openapi.plugins import ScalarRenderPlugin
+from litestar.openapi.plugins import RedocRenderPlugin
 from litestar.openapi.spec import Server
 from litestar.static_files.config import create_static_files_router
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR, HTTP_503_SERVICE_UNAVAILABLE
@@ -133,7 +133,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         title="Genji Shimada API",
         description="REST API for Genji Shimada project.",
         version="0.0.1",
-        render_plugins=[ScalarRenderPlugin()],
+        render_plugins=[RedocRenderPlugin()],
         path="/docs",
         servers=[
             Server(
