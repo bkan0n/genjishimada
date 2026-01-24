@@ -38,6 +38,7 @@ from genjishimada_sdk.completions import (
     UpvoteCreateRequest,
     UpvoteUpdateEvent,
     VerificationChangedEvent,
+    VerificationMessageDeleteEvent,
 )
 from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, DifficultyTop
 from genjishimada_sdk.maps import MapMasteryCreateRequest, OverwatchCode
@@ -49,7 +50,7 @@ from extensions._queue_registry import queue_consumer
 from utilities import transformers
 from utilities.base import (
     BaseCog,
-    BaseService,
+    BaseHandler,
     ConfirmationView,
 )
 from utilities.completions import (
@@ -498,7 +499,7 @@ class CompletionView(ui.LayoutView):
         await itx.client.tree.on_error(itx, cast("app_commands.AppCommandError", error))
 
 
-class CompletionsService(BaseService):
+class CompletionHandler(BaseHandler):
     submission_channel: TextChannel
     verification_channel: TextChannel
     upvote_channel: TextChannel
@@ -667,6 +668,20 @@ class CompletionsService(BaseService):
             await self.auto_skill_role(member)
         assert completion_data.verification_id
         stoppable_view = self.verification_views.pop(completion_data.verification_id, None)
+        if stoppable_view:
+            stoppable_view.stop()
+
+    @queue_consumer("api.completion.verification.delete", struct_type=VerificationMessageDeleteEvent)
+    async def _process_delete_verification_message(
+        self, event: VerificationMessageDeleteEvent, _: AbstractIncomingMessage
+    ) -> None:
+        """Delete a verification queue message when a faster submission replaces it."""
+        log.debug(f"[x] [RabbitMQ] Deleting verification message: {event.verification_id}")
+        with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
+            await (self.verification_channel.get_partial_message(event.verification_id)).delete()
+
+        # Remove from verification_views if exists
+        stoppable_view = self.verification_views.pop(event.verification_id, None)
         if stoppable_view:
             stoppable_view.stop()
 
@@ -1332,7 +1347,7 @@ class CompletionsCog(BaseCog):
 
 async def setup(bot: Genji) -> None:
     """Load the CompletionsCog cog."""
-    bot.completions = CompletionsService(bot)
+    bot.completions = CompletionHandler(bot)
     await bot.add_cog(CompletionsCog(bot))
 
 

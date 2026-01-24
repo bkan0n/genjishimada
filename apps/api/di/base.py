@@ -19,6 +19,7 @@ class RabbitMessageBody(msgspec.Struct):
 
 IGNORE_IDEMPOTENCY = {
     "api.completion.upvote",
+    "api.completion.verification.delete",
     "api.notification.delivery",
     "api.playtest.vote.cast",
     "api.playtest.vote.remove",

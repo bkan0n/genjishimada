@@ -162,6 +162,26 @@
       }
     },
     {
+      "name": "api.completion.verification.delete",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "api.completion.verification.delete.dlq",
+        "x-queue-type": "classic"
+      }
+    },
+    {
+      "name": "api.completion.verification.delete.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "classic"
+      }
+    },
+    {
       "name": "api.playtest.reset.dlq",
       "vhost": "/",
       "durable": true,

@@ -20,6 +20,7 @@ from genjishimada_sdk.completions import (
     UpvoteSubmissionJobResponse,
     UpvoteUpdateEvent,
     VerificationChangedEvent,
+    VerificationMessageDeleteEvent,
 )
 from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
@@ -30,12 +31,35 @@ from litestar.datastructures import Headers, State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from di.base import BaseService
-from utilities.errors import CustomHTTPException
+from utilities.errors import ConstraintHandler, CustomHTTPException, handle_db_exceptions
 
 log = getLogger(__name__)
 
 if TYPE_CHECKING:
     from di import NotificationService
+
+# Constraint error mappings for completion operations
+COMPLETION_UNIQUE_CONSTRAINTS = {
+    "completions_pkey": ConstraintHandler(
+        message="This completion already exists.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "unique_user_map_completion": ConstraintHandler(
+        message="You already have a completion for this map.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
+
+COMPLETION_FK_CONSTRAINTS = {
+    "completions_user_id_fkey": ConstraintHandler(
+        message="User does not exist.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "completions_map_id_fkey": ConstraintHandler(
+        message="Map does not exist.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
 
 
 class CompletionsService(BaseService):
@@ -200,17 +224,68 @@ class CompletionsService(BaseService):
         models = msgspec.convert(rows, list[CompletionResponse])
         return models
 
-    async def submit_completion(self, data: CompletionCreateRequest) -> int:
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def submit_completion(self, data: CompletionCreateRequest, request: Request) -> int:
         """Submit a new completion record and publish an event.
 
         Args:
-            request (Request): Request obj.
             data (CompletionCreateDTO): DTO containing completion details.
+            request (Request): Request obj.
 
         Returns:
             int: ID of the newly inserted completion record.
 
         """
+        # Check for existing pending verification
+        pending_query = """
+            SELECT c.id, c.time, c.verification_id
+            FROM core.completions c
+            JOIN core.maps m ON m.id = c.map_id
+            WHERE c.user_id = $1
+              AND m.code = $2
+              AND c.verified IS FALSE
+              AND c.verified_by IS NULL
+              AND c.legacy = FALSE
+            ORDER BY c.time ASC
+            LIMIT 1;
+        """
+        pending = await self._conn.fetchrow(pending_query, data.user_id, data.code)
+
+        if pending:
+            pending_id = pending["id"]
+            pending_time = pending["time"]
+            pending_verification_id = pending["verification_id"]
+
+            if data.time >= pending_time:
+                # Reject: new time is same or slower
+                raise CustomHTTPException(
+                    status_code=HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"You already have a pending verification for this map with time {pending_time}s. "
+                        f"Your new submission ({data.time}s) must be faster. "
+                        f"Please wait for verification or submit a faster time."
+                    ),
+                )
+            else:
+                # Accept: new time is faster - mark old submission as rejected by bot
+                bot_id = 969632729643753482
+                reject_query = """
+                    UPDATE core.completions
+                    SET verified_by = $1
+                    WHERE id = $2
+                """
+                await self._conn.execute(reject_query, bot_id, pending_id)
+
+                # If there's a verification message, delete it from Discord
+                if pending_verification_id:
+                    delete_event = VerificationMessageDeleteEvent(pending_verification_id)
+                    await self.publish_message(
+                        routing_key="api.completion.verification.delete",
+                        data=delete_event,
+                        headers=request.headers,
+                        use_pool=False,
+                    )
+
         query = """
         WITH target_map AS (
             SELECT
@@ -290,6 +365,7 @@ class CompletionsService(BaseService):
 
         return query.strip(), values
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def edit_completion(self, state: State, record_id: int, data: CompletionPatchRequest) -> None:
         """Apply partial updates to a completion record.
 
@@ -499,6 +575,7 @@ class CompletionsService(BaseService):
         rows = await self._conn.fetch(query)
         return msgspec.convert(rows, list[PendingVerificationResponse])
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def verify_completion(
         self,
         request: Request,
@@ -1038,6 +1115,7 @@ class CompletionsService(BaseService):
         rows = await self._conn.fetch(query, user_id)
         return msgspec.convert(rows, list[SuspiciousCompletionResponse])
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def set_suspicious_flags(self, data: SuspiciousCompletionCreateRequest) -> None:
         """Insert a suspicious flag for a completion.
 
@@ -1074,6 +1152,7 @@ class CompletionsService(BaseService):
         val = await self._conn.fetchval(query, message_id)
         return val or 0
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def upvote_submission(self, request: Request, data: UpvoteCreateRequest) -> UpvoteSubmissionJobResponse:
         """Upvote a completion submission.
 
@@ -1241,6 +1320,7 @@ class CompletionsService(BaseService):
         rows = await self._conn.fetch(query, page_size, offset)
         return msgspec.convert(rows, list[CompletionResponse])
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def set_quality_vote_for_map_code(self, code: OverwatchCode, user_id: int, quality: int) -> None:
         """Set the quality vote for a map code per user."""
         query = """
@@ -1461,6 +1541,7 @@ class CompletionsService(BaseService):
 
         return msgspec.convert(rows, list[CompletionResponse])
 
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def moderate_completion(  # noqa: PLR0912
         self,
         completion_id: int,

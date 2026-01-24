@@ -30,6 +30,8 @@ from genjishimada_sdk.maps import (
     QualityValueRequest,
     Restrictions,
     SendToPlaytestRequest,
+    SortKey,
+    Tags,
     TrendingMapResponse,
     UnlinkMapsCreateRequest,
 )
@@ -52,11 +54,12 @@ from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST
 
 from di.jobs import InternalJobsService, provide_internal_jobs_service
 from di.lootbox import LootboxService, provide_lootbox_service
-from di.maps import CompletionFilter, MapSearchFilters, MapService, MedalFilter, PlaytestFilter, provide_map_service
+from di.maps import MapService, provide_map_service
 from di.newsfeed import NewsfeedService, provide_newsfeed_service
 from di.users import UserService, provide_user_service
 from utilities.errors import CustomHTTPException
 from utilities.jobs import wait_for_job_completion
+from utilities.map_search import CompletionFilter, MapSearchFilters, MedalFilter, PlaytestFilter
 
 log = getLogger(__name__)
 
@@ -80,7 +83,7 @@ class BaseMapsController(litestar.Controller):
         summary="Search Maps",
         description=(
             "Return maps matching the provided filters, including playtest status, visibility, categories, "
-            "creators, mechanics, restrictions, difficulty, medals, and completion context. Supports pagination "
+            "creators, mechanics, restrictions, tags, difficulty, medals, and completion context. Supports pagination "
             "or returning all results."
         ),
         opt={"required_scopes": {"maps:read"}},
@@ -96,10 +99,12 @@ class BaseMapsController(litestar.Controller):
         code: OverwatchCode | None = None,
         category: list[MapCategory] | None = None,
         map_name: list[OverwatchMap] | None = None,
+        sort: list[SortKey] | None = None,
         creator_ids: list[int] | None = None,
         creator_names: list[str] | None = None,
         mechanics: list[Mechanics] | None = None,
         restrictions: list[Restrictions] | None = None,
+        tags: list[Tags] | None = None,
         difficulty_exact: DifficultyTop | None = None,
         difficulty_range_min: DifficultyTop | None = None,
         difficulty_range_max: DifficultyTop | None = None,
@@ -126,10 +131,12 @@ class BaseMapsController(litestar.Controller):
             code (OverwatchCode | None): Filter by exact map code.
             category (list[MapCategory] | None): Filter by one or more categories.
             map_name (list[OverwatchMap] | None): Filter by one or more map names.
+            sort (list[SortKey] | None): Ordered sort keys (e.g., "difficulty:asc").
             creator_ids (list[int] | None): Filter by creator user IDs.
             creator_names (list[str] | None): Filter by creator display names.
             mechanics (list[Mechanics] | None): Filter by mechanics.
             restrictions (list[Restrictions] | None): Filter by restrictions.
+            tags (list[Tags] | None): Filter by tags.
             difficulty_exact (DifficultyTop | None): Filter by exact normalized difficulty.
             difficulty_range_min (DifficultyTop | None): Minimum difficulty bound (inclusive).
             difficulty_range_max (DifficultyTop | None): Maximum difficulty bound (inclusive).
@@ -158,10 +165,12 @@ class BaseMapsController(litestar.Controller):
             code=code,
             category=category,
             map_name=map_name,
+            sort=sort,
             creator_ids=creator_ids,
             creator_names=creator_names,
             mechanics=mechanics,
             restrictions=restrictions,
+            tags=tags,
             difficulty_exact=difficulty_exact,
             difficulty_range_min=difficulty_range_min,
             difficulty_range_max=difficulty_range_max,

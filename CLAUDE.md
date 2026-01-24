@@ -163,7 +163,7 @@ The API and bot communicate asynchronously via RabbitMQ using a producer-consume
 
 **Bot Side (Consumer):**
 
-- `apps/bot/extensions/rabbit.py` - RabbitService manages connections and consumers
+- `apps/bot/extensions/rabbit.py` - RabbitHandler manages connections and consumers
 - `apps/bot/extensions/_queue_registry.py` - `@queue_consumer` decorator for handlers
 - Handlers decode msgspec structs and process events
 - Supports automatic DLQ (dead letter queue) processing with alerting
@@ -268,6 +268,46 @@ async def handle_completion(self, event: CompletionCreatedEvent, message: Abstra
 
 - Use `CustomHTTPException` from `utilities/errors.py` for API errors
 - Bot errors logged to Sentry with AsyncioIntegration
+
+### Database Exception Handling
+
+All DI service methods that perform database writes MUST use the `@handle_db_exceptions` decorator:
+
+```python
+from utilities.errors import ConstraintHandler, handle_db_exceptions
+from litestar.status_codes import HTTP_400_BAD_REQUEST
+
+# Define constraint mappings at module level
+MODULE_UNIQUE_CONSTRAINTS = {
+    "constraint_name": ConstraintHandler(
+        message="User-friendly error message",
+        status_code=HTTP_400_BAD_REQUEST
+    )
+}
+
+MODULE_FK_CONSTRAINTS = {
+    "fk_constraint_name": ConstraintHandler(
+        message="User-friendly error message",
+        status_code=HTTP_400_BAD_REQUEST
+    )
+}
+
+
+class MyService(BaseService):
+    @handle_db_exceptions(unique_constraints=MODULE_UNIQUE_CONSTRAINTS, fk_constraints=MODULE_FK_CONSTRAINTS)
+    async def create_something(self, ...):
+# Database operation
+```
+
+This ensures consistent error handling across all database operations.
+
+**Benefits:**
+
+- Converts database constraint violations into user-friendly HTTP errors
+- Automatically handles UniqueViolationError, ForeignKeyViolationError, and CheckViolationError
+- Provides fallback generic messages for unmapped constraints
+- Logs unhandled constraints for developer awareness
+- Centralizes constraint documentation in constraint mappings
 
 ## Environment Variables
 

@@ -69,6 +69,7 @@ git checkout -b feature/your-feature-name
 ```
 
 **Branch naming conventions**:
+
 - `feature/` - New features
 - `fix/` - Bug fixes
 - `docs/` - Documentation changes
@@ -86,10 +87,12 @@ just lint-all
 ```
 
 This runs:
+
 - Ruff (formatting and linting)
 - BasedPyright (type checking)
 
 **Fix linting issues**:
+
 ```bash
 # Format code
 uv run ruff format .
@@ -142,6 +145,7 @@ git commit -m "feat: add map search endpoint
 ```
 
 **Types**:
+
 - `feat` - New feature
 - `fix` - Bug fix
 - `docs` - Documentation
@@ -257,7 +261,8 @@ Use `BaseService.publish_message()`:
 from di.base import BaseService
 from genjishimada_sdk.completions import CompletionCreatedEvent
 
-class CompletionsService(BaseService):
+
+class CompletionHandler(BaseService):
     async def create_completion(self, user_id: int, map_id: int) -> int:
         # Create in database
         completion_id = await insert_completion(...)

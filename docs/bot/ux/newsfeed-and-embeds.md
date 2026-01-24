@@ -85,6 +85,13 @@ Location: `apps/bot/utilities/base.py`
 app command error handler. If you build a view on top of `BaseView`, you are in the same error handling flow as
 the rest of the bot.
 
+## Map Search SQL Builder
+
+The API's SQLSpec-based map search builder is documented separately and lives
+alongside other UX-oriented operational docs.
+
+- See `docs/bot/ux/map-search-sqlspec.md` for the full developer guide.
+
 Key points:
 
 - `rebuild_components()` is the hook you override to re-render the view.

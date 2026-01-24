@@ -31,6 +31,7 @@ __all__ = (
     "UpvoteSubmissionJobResponse",
     "UpvoteUpdateEvent",
     "VerificationChangedEvent",
+    "VerificationMessageDeleteEvent",
     "WorldRecordXPCheckResponse",
 )
 
@@ -301,6 +302,16 @@ class VerificationChangedEvent(Struct):
     verified: bool
     verified_by: int
     reason: str | None
+
+
+class VerificationMessageDeleteEvent(Struct):
+    """Event emitted to delete a verification queue message.
+
+    Attributes:
+        verification_id: Discord message ID of the verification to delete.
+    """
+
+    verification_id: int
 
 
 class SuspiciousCompletionCreateRequest(Struct):

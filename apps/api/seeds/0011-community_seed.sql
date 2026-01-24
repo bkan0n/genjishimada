@@ -18,12 +18,16 @@ VALUES
 
 -- Quality votes for popular maps statistics
 INSERT INTO maps.ratings (map_id, user_id, quality)
-VALUES
-  (3, 100000000000000000, 5),
-  (3, 100000000000000001, 4),
-  (4, 100000000000000000, 3),
-  (4, 100000000000000001, 4),
-  (5, 100000000000000000, 5);
+SELECT m.id, v.user_id, v.quality
+FROM (
+    VALUES
+        ('4EASY', 100000000000000000, 5),
+        ('4EASY', 100000000000000001, 4),
+        ('5EASY', 100000000000000000, 3),
+        ('5EASY', 100000000000000001, 4),
+        ('6EASY', 100000000000000000, 5)
+) AS v(code, user_id, quality)
+JOIN core.maps m ON m.code = v.code;
 
 -- =============================================================================
 -- ADDITIONAL COMPLETIONS FOR MAP STATISTICS
@@ -31,7 +35,11 @@ VALUES
 
 -- More completions to test completion time statistics
 INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, verified_by, message_id)
-VALUES
-  (1, 100000000000000000, 11000, TRUE, 'https://example.com/s1.png', 202, 13),
-  (1, 100000000000000001, 13000, TRUE, 'https://example.com/s2.png', 202, 14),
-  (1, 100000000000000002, 14000, TRUE, 'https://example.com/s3.png', 202, 15);
+SELECT m.id, v.user_id, v.time, v.verified, v.screenshot, v.verified_by, v.message_id
+FROM (
+    VALUES
+        ('1EASY', 100000000000000000, 11000, TRUE, 'https://example.com/s1.png', 202, 13),
+        ('1EASY', 100000000000000001, 13000, TRUE, 'https://example.com/s2.png', 202, 14),
+        ('1EASY', 100000000000000002, 14000, TRUE, 'https://example.com/s3.png', 202, 15)
+) AS v(code, user_id, time, verified, screenshot, verified_by, message_id)
+JOIN core.maps m ON m.code = v.code;

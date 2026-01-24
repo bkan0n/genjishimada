@@ -13,7 +13,7 @@ from genjishimada_sdk.xp import XP_AMOUNTS, XP_TYPES, XpGrantEvent, XpGrantReque
 
 from extensions._queue_registry import queue_consumer
 from utilities import transformers
-from utilities.base import BaseService
+from utilities.base import BaseHandler
 
 if TYPE_CHECKING:
     import core
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 log = getLogger(__name__)
 
 
-class XPService(BaseService):
+class XPHandler(BaseHandler):
     xp_channel: TextChannel
 
     async def _resolve_channels(self) -> None:
@@ -243,5 +243,5 @@ async def setup(bot: core.Genji) -> None:
     Args:
         bot (core.Genji): The running bot instance.
     """
-    bot.xp = XPService(bot)
+    bot.xp = XPHandler(bot)
     await bot.add_cog(XPCog(bot))

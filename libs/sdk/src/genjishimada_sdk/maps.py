@@ -75,6 +75,8 @@ __all__ = (
     "QualityValueRequest",
     "Restrictions",
     "SendToPlaytestRequest",
+    "SortKey",
+    "Tags",
     "TopCreatorsResponse",
     "TrendingMapResponse",
     "UnlinkMapsCreateRequest",
@@ -210,6 +212,27 @@ Restrictions = Literal[
     "Bhop",
 ]
 
+SortKey = Literal[
+    "difficulty:asc",
+    "difficulty:desc",
+    "checkpoints:asc",
+    "checkpoints:desc",
+    "ratings:asc",
+    "ratings:desc",
+    "map_name:asc",
+    "map_name:desc",
+    "title:asc",
+    "title:desc",
+    "code:asc",
+    "code:desc",
+]
+
+Tags = Literal[
+    "Other Heroes",
+    "XP Based",
+    "Custom Grav/Speed",
+]
+
 PlaytestStatus = Literal["Approved", "In Progress", "Rejected"]
 
 MedalType = Literal["Gold", "Silver", "Bronze"]
@@ -275,6 +298,7 @@ class MapCreateRequest(Struct):
         archived: Whether the map is archived.
         mechanics: Mechanics required for the map.
         restrictions: Restrictions applied to the map.
+        tags: Tags applied to the map.
         description: Optional map description.
         medals: Medal thresholds for the map.
         guide_url: URL to a primary guide.
@@ -294,6 +318,7 @@ class MapCreateRequest(Struct):
     archived: bool = False
     mechanics: list[Mechanics] = []
     restrictions: list[Restrictions] = []
+    tags: list[Tags] = []
     description: str | None = None
     medals: MedalsResponse | None = None
     guide_url: GuideURL | None = None
@@ -327,6 +352,7 @@ class MapPatchRequest(Struct, kw_only=True):
     archived: bool | UnsetType = UNSET
     mechanics: list[Mechanics] | UnsetType | None = UNSET
     restrictions: list[Restrictions] | UnsetType | None = UNSET
+    tags: list[Tags] | UnsetType | None = UNSET
     description: str | UnsetType | None = UNSET
     medals: MedalsResponse | UnsetType | None = UNSET
     title: str | UnsetType | None = UNSET
@@ -390,6 +416,7 @@ class MapResponse(Struct):
         raw_difficulty: Raw numerical difficulty score.
         mechanics: Mechanics required for the map.
         restrictions: Restrictions applied to the map.
+        tags: Tags applied to the map.
         description: Optional map description.
         medals: Medal thresholds for the map.
         title: Optional display title for the map.
@@ -418,6 +445,7 @@ class MapResponse(Struct):
     raw_difficulty: Annotated[float, Meta(ge=0, le=10)] | None = None
     mechanics: list[Mechanics] = []
     restrictions: list[Restrictions] = []
+    tags: list[Tags] = []
     description: str | None = None
     medals: MedalsResponse | None = None
     title: str | None = None
@@ -1006,6 +1034,7 @@ class MapEditCreateRequest(Struct, kw_only=True):
     official: bool | UnsetType = UNSET
     mechanics: list[Mechanics] | UnsetType | None = UNSET
     restrictions: list[Restrictions] | UnsetType | None = UNSET
+    tags: list[Tags] | UnsetType | None = UNSET
     description: str | UnsetType | None = UNSET
     medals: MedalsResponse | UnsetType | None = UNSET
     title: str | UnsetType | None = UNSET
@@ -1026,6 +1055,7 @@ class MapEditCreateRequest(Struct, kw_only=True):
             "official",
             "mechanics",
             "restrictions",
+            "tags",
             "description",
             "medals",
             "title",

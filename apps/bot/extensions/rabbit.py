@@ -33,9 +33,9 @@ DLQ_MAX_PER_QUEUE_TICK = int(os.getenv("DLQ_MAX_PER_QUEUE_TICK", "5000"))  # saf
 F = TypeVar("F", bound=Callable[..., Awaitable[None]])
 
 
-class RabbitService:
+class RabbitHandler:
     def __init__(self, bot: core.Genji) -> None:
-        """Initialize a new RabbitService instance.
+        """Initialize a new RabbitHandler instance.
 
         Args:
             bot (core.Genji): The Genji bot instance used for contextual operations.
@@ -347,4 +347,4 @@ class RabbitService:
 
 async def setup(bot: core.Genji) -> None:
     """Setup the message queue extension."""
-    bot.rabbit = RabbitService(bot)
+    bot.rabbit = RabbitHandler(bot)

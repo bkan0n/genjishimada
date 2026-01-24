@@ -235,6 +235,15 @@ class MapEditService(BaseService):
                 JOIN maps.restrictions res ON res.id = rl.restriction_id
                 WHERE rl.map_id = (SELECT id FROM target_map)
                 GROUP BY rl.map_id
+              ),
+              tags AS (
+                SELECT
+                  tl.map_id,
+                  array_agg(tag.name ORDER BY tag.position) AS tags
+                FROM maps.tag_links tl
+                JOIN maps.tags tag ON tag.id = tl.tag_id
+                WHERE tl.map_id = (SELECT id FROM target_map)
+                GROUP BY tl.map_id
               )
               SELECT
                 tm.code,
@@ -249,10 +258,12 @@ class MapEditService(BaseService):
                 tm.archived,
                 tm.official,
                 mech.mechanics,
-                res.restrictions
+                res.restrictions,
+                tag.tags
               FROM target_map tm
               LEFT JOIN mechanics mech ON mech.map_id = tm.id
-              LEFT JOIN restrictions res ON res.map_id = tm.id;
+              LEFT JOIN restrictions res ON res.map_id = tm.id
+              LEFT JOIN tags tag ON tag.map_id = tm.id;
             """,
             edit_row["code"],
         )

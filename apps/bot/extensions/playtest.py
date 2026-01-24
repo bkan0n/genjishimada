@@ -39,7 +39,7 @@ from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedNewMap
 from genjishimada_sdk.notifications import NotificationChannel, NotificationEventType
 
 from extensions._queue_registry import queue_consumer
-from utilities import BaseCog, BaseService
+from utilities import BaseCog, BaseHandler
 from utilities.base import ConfirmationView
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.formatter import FilteredFormatter
@@ -57,12 +57,12 @@ log = getLogger(__name__)
 
 
 _disabled_notifications_alert = (
-    "-# Map creator, you have disabled this type of notfication. "
+    "-# Map creator, you have disabled this type of notification. "
     "Please change your settings if you wish to receive this notification through DMs."
 )
 
 
-class PlaytestService(BaseService):
+class PlaytestHandler(BaseHandler):
     playtest_channel: discord.ForumChannel
     verification_channel: discord.TextChannel
 
@@ -283,6 +283,8 @@ class PlaytestService(BaseService):
         """
         image = await self.bot.api.get_plot_file(thread_id=thread_id)
         thread = await self._fetch_thread(thread_id)
+        if thread.archived or thread.locked:
+            await thread.edit(locked=False, archived=False)
         message = await thread.fetch_message(thread_id)
         await message.edit(attachments=[image])
 
@@ -327,6 +329,8 @@ class PlaytestService(BaseService):
             )
             if not delivered:
                 thread = await self._fetch_thread(thread_id)
+                if thread.archived or thread.locked:
+                    await thread.edit(locked=False, archived=False)
                 await thread.send(msg)
 
         await self.bot.api.edit_map(code, MapPatchRequest(difficulty=difficulty))
@@ -365,6 +369,8 @@ class PlaytestService(BaseService):
             )
             if not delivered:
                 thread = await self._fetch_thread(thread_id)
+                if thread.archived or thread.locked:
+                    await thread.edit(locked=False, archived=False)
                 await thread.send(msg)
         await self.bot.api.edit_map(code, MapPatchRequest(difficulty=difficulty))
         await self._grant_xp_upon_successful_playtest(thread_id)
@@ -400,6 +406,8 @@ class PlaytestService(BaseService):
             )
             if not delivered:
                 thread = await self._fetch_thread(thread_id)
+                if thread.archived or thread.locked:
+                    await thread.edit(locked=False, archived=False)
                 await thread.send(msg)
         await self._edit_thread_tags_close(thread_id=thread_id, cancelled=True)
         await self._delete_verification_message_if_any(thread_id=thread_id)
@@ -439,6 +447,8 @@ class PlaytestService(BaseService):
         full_msg = f"Your map ({code}) has been **reset** by <@{verifier_id}>. {msg_prefix}\n\nReason: {reason}"
 
         thread = await self._fetch_thread(thread_id)
+        if thread.archived or thread.locked:
+            await thread.edit(locked=False, archived=False)
         if notify_primary_creator_id is not None:
             delivered = await self._alert_creator(
                 creator_user_id=notify_primary_creator_id,
@@ -470,6 +480,8 @@ class PlaytestService(BaseService):
             label (str | None): Difficulty label, or None when removing a vote.
         """
         thread = await self._fetch_thread(thread_id)
+        if thread.archived or thread.locked:
+            await thread.edit(locked=False, archived=False)
         if label:
             await thread.send(f"<@{voter_id}> voted **{label}**")
         else:
@@ -496,6 +508,8 @@ class PlaytestService(BaseService):
 
         file = await self.bot.api.get_plot_file(thread_id=thread_id)
         thread = await self._fetch_thread(thread_id)
+        if thread.archived or thread.locked:
+            await thread.edit(locked=False, archived=False)
         msg = thread.get_partial_message(thread_id)
         await msg.edit(view=view, attachments=[file])
         assert playtest_data.playtest
@@ -504,12 +518,12 @@ class PlaytestService(BaseService):
             and not view.data.override_finalize
             and playtest_data.playtest.vote_count == playtest_data.playtest_threshold
         ):
-            guild = thread.guild if thread_id else (await self._fetch_thread(thread_id)).guild
+            guild = thread.guild
             mentions = []
             for c in playtest_data.creators:
                 m = guild.get_member(c.id)
                 mentions.append(m.mention if m else c.name)
-            await (await self._fetch_thread(thread_id)).send(
+            await thread.send(
                 f"{', '.join(mentions)} — The finalize submission button has been activated. "
                 "Please ensure your map is ready to be verified."
             )
@@ -1323,7 +1337,7 @@ async def setup(bot: core.Genji) -> None:
         bot (core.Genji): Bot instance to extend.
     """
     log.debug("[extensions.playtest] Setup called")
-    bot.playtest = PlaytestService(bot)
+    bot.playtest = PlaytestHandler(bot)
     await bot.add_cog(PlaytestCog(bot))
 
 

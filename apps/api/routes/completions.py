@@ -196,7 +196,7 @@ class CompletionsController(Controller):
                 status_code=HTTP_404_NOT_FOUND, detail="This map code does not exist or has been archived."
             )
 
-        completion_id = await svc.submit_completion(data)
+        completion_id = await svc.submit_completion(data, request)
         if not completion_id:
             raise ValueError("Some how completion ID is null?")
 

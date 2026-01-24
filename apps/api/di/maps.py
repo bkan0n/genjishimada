@@ -1,19 +1,12 @@
 import datetime as dt
-import functools
-import itertools
 from logging import getLogger
-from textwrap import dedent
-from typing import Any, Awaitable, Callable, Iterator, Literal, ParamSpec, Sequence, TypeVar, overload
+from typing import Any, Literal, Sequence, overload
 
-import asyncpg
 import msgspec
 from asyncpg import Connection
 from genjishimada_sdk.difficulties import (
     DIFFICULTY_MIDPOINTS,
-    DIFFICULTY_RANGES_ALL,
-    DIFFICULTY_RANGES_TOP,
     DifficultyAll,
-    DifficultyTop,
     convert_raw_difficulty_to_difficulty_all,
 )
 from genjishimada_sdk.internal import JobStatusResponse
@@ -21,7 +14,6 @@ from genjishimada_sdk.maps import (
     GuideFullResponse,
     GuideResponse,
     GuideURL,
-    MapCategory,
     MapCreateRequest,
     MapCreationJobResponse,
     MapMasteryCreateRequest,
@@ -36,671 +28,58 @@ from genjishimada_sdk.maps import (
     OverwatchMap,
     PlaytestCreatedEvent,
     PlaytestCreatePartialRequest,
-    PlaytestStatus,
     QualityValueRequest,
     Restrictions,
     SendToPlaytestRequest,
+    Tags,
     TrendingMapResponse,
 )
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedNewMap
 from genjishimada_sdk.users import Creator
 from litestar import Request
 from litestar.datastructures import State
-from litestar.exceptions import HTTPException
 from litestar.response import Stream
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from di.base import BaseService
 from di.newsfeed import NewsfeedService
-from utilities.errors import CustomHTTPException, parse_pg_detail
+from utilities.errors import ConstraintHandler, CustomHTTPException, handle_db_exceptions
+from utilities.map_search import MapSearchFilters, MapSearchSQLSpecBuilder
 from utilities.playtest_plot import build_playtest_plot
 from utilities.shared_queries import get_map_mastery_data
 
-log = getLogger("__name__")
-
-P = ParamSpec("P")
-R = TypeVar("R")
-
-_TriFilter = Literal["All", "With", "Without"]
-CompletionFilter = _TriFilter
-MedalFilter = _TriFilter
-PlaytestFilter = Literal["All", "Only", "None"]
-
-
-class QueryWithArgs(msgspec.Struct):
-    query: str
-    args: list[Any]
-
-    def __iter__(self) -> Iterator[Any]:
-        """Allow unpacking into `(query, args)`.
-
-        Yields:
-            str: The SQL query string.
-            list[Any]: The list of parameter values.
-
-        """
-        yield self.query
-        yield self.args
-
-
-class MapSearchFilters(msgspec.Struct):
-    playtesting: PlaytestStatus | None = None
-    archived: bool | None = None
-    hidden: bool | None = None
-    official: bool | None = None
-    playtest_thread_id: int | None = None
-    code: OverwatchCode | None = None
-    category: list[MapCategory] | None = None
-    map_name: list[OverwatchMap] | None = None
-    creator_ids: list[int] | None = None
-    creator_names: list[str] | None = None
-    mechanics: list[Mechanics] | None = None
-    restrictions: list[Restrictions] | None = None
-    difficulty_exact: DifficultyTop | None = None
-    difficulty_range_min: DifficultyTop | None = None
-    difficulty_range_max: DifficultyTop | None = None
-    finalized_playtests: bool | None = None
-    minimum_quality: int | None = None
-    user_id: int | None = None
-    medal_filter: MedalFilter = "All"
-    completion_filter: CompletionFilter = "All"
-    playtest_filter: PlaytestFilter = "All"
-    return_all: bool = False
-    force_filters: bool = False
-    page_size: Literal[10, 20, 25, 50, 12] = 10
-    page_number: int = 1
-
-
-class MapSearchSQLBuilder:
-    def __init__(self, filters: MapSearchFilters) -> None:
-        """Initialize the SQL builder with filters.
-
-        Args:
-            filters (MapSearchFilters): Filters to apply to the query.
-
-        """
-        self._filters: MapSearchFilters = filters
-        self.validate()
-
-        self._params: list[Any] = []
-        self._counter: itertools.count[int] = itertools.count(1)
-        self._cte_definitions: list[str] = []
-        self._intersect_subqueries: list[str] = []
-        self._where_clauses: list[str] = []
-
-    def validate(self) -> None:
-        """Validate the consistency of filter combinations.
-
-        Raises:
-            ValueError: If mutually exclusive filters are used together,
-                such as `difficulty_exact` and difficulty range filters,
-                or both `creator_ids` and `creator_names`.
-
-        """
-        if self._filters.difficulty_exact and (
-            self._filters.difficulty_range_min or self._filters.difficulty_range_max
-        ):
-            raise ValueError("Cannot use exact difficulty with range-based filtering")
-
-        if self._filters.creator_ids and self._filters.creator_names:
-            raise ValueError("Cannot use creator_ids and creator_names simultaneously")
-
-    def _add_cte_definition(self, name: str, sql: str, *param_values: Any) -> None:  # noqa: ANN401
-        """Register a new Common Table Expression (CTE).
-
-        Args:
-            name (str): The CTE alias.
-            sql (str): The SQL subquery for the CTE.
-            *param_values (Any): Parameters to bind to the CTE query.
-
-        """
-        _sql = dedent(sql)
-        self._cte_definitions.append(f"{name} AS (\n    {_sql.strip()}\n)")
-        self._intersect_subqueries.append(f"    SELECT map_id FROM {name}")
-        self._params.extend(param_values)
-
-    def _generate_mechanics_cte(self) -> None:
-        """Generate a CTE restricting results to maps containing given mechanics.
-
-        Skips generation if no mechanics are provided in the filters.
-        """
-        if not self._filters.mechanics:
-            return
-        placeholders = ", ".join(f"${next(self._counter)}" for _ in self._filters.mechanics)
-        mechanic_links_query = (
-            "SELECT map_id FROM maps.mechanic_links ml "
-            "JOIN maps.mechanics m ON ml.mechanic_id = m.id "
-            f"WHERE m.name IN ({placeholders})"
-        )
-        self._add_cte_definition(
-            "limited_mechanics",
-            mechanic_links_query,
-            *self._filters.mechanics,
-        )
-
-    def _generate_restrictions_cte(self) -> None:
-        """Generate a CTE restricting results to maps containing given restrictions.
-
-        Skips generation if no restrictions are provided in the filters.
-        """
-        if not self._filters.restrictions:
-            return
-        placeholders = ", ".join(f"${next(self._counter)}" for _ in self._filters.restrictions)
-        restriction_links_query = (
-            "SELECT map_id FROM maps.restriction_links rl "
-            "JOIN maps.restrictions r ON rl.restriction_id = r.id "
-            f"WHERE r.name IN ({placeholders})"
-        )
-        self._add_cte_definition(
-            "limited_restrictions",
-            restriction_links_query,
-            *self._filters.restrictions,
-        )
-
-    def _generate_creator_ids_cte(self) -> None:
-        """Generate a CTE restricting results to maps created by given user IDs.
-
-        Skips generation if no creator IDs are provided in the filters.
-        """
-        if not self._filters.creator_ids:
-            return
-        placeholders = ", ".join(f"${next(self._counter)}" for _ in self._filters.creator_ids)
-        creator_ids_query = f"SELECT map_id FROM maps.creators WHERE user_id IN ({placeholders})"
-        self._add_cte_definition(
-            "limited_creator_ids",
-            creator_ids_query,
-            *self._filters.creator_ids,
-        )
-
-    def _generate_creator_names_cte(self) -> None:
-        """Generate one or more CTEs.
-
-        Restricts results to maps created by users whose nickname,
-        global name, or Overwatch usernames match the provided strings.
-
-        Skips generation if no creator names are provided in the filters.
-        """
-        if not self._filters.creator_names:
-            return
-        for i, _name in enumerate(self._filters.creator_names):
-            p = f"${next(self._counter)}"
-            creator_name_query = (
-                "SELECT DISTINCT c.map_id "
-                "FROM maps.creators c "
-                "JOIN core.users u ON c.user_id = u.id "
-                "LEFT JOIN users.overwatch_usernames ow ON u.id = ow.user_id "
-                f"WHERE u.nickname ILIKE '%' || {p} || '%' "
-                f"OR u.global_name ILIKE '%' || {p} || '%' "
-                f"OR ow.username ILIKE '%' || {p} || '%' "
-            )
-            self._add_cte_definition(
-                f"creator_match_{i}",
-                creator_name_query,
-                _name,
-            )
-
-    def _generate_minimum_quality_cte(self) -> None:
-        """Generate a CTE restricting results to maps with a minimum quality rating.
-
-        Skips generation if no minimum quality is set.
-        """
-        if not self._filters.minimum_quality:
-            return
-        minimum_quality_query = f"""
-            SELECT map_id FROM
-                (SELECT map_id, avg(quality) as avg_quality FROM maps.ratings GROUP BY map_id) as miaq
-            WHERE avg_quality >= ${next(self._counter)}
-        """
-        self._add_cte_definition(
-            "limited_quality",
-            minimum_quality_query,
-            self._filters.minimum_quality,
-        )
-
-    def _generate_medals_cte(self) -> None:
-        """Generate a CTE restricting results by medal presence.
-
-        "With" → only maps with medals.
-        "Without" → only maps without medals.
-        "All" → no filter applied.
-        """
-        if not self._filters.medal_filter:
-            return
-        match self._filters.medal_filter:
-            case "With":
-                query = "SELECT map_id FROM maps.medals"
-            case "Without":
-                query = (
-                    "SELECT m.id AS map_id "
-                    "FROM core.maps m "
-                    "WHERE NOT EXISTS ("
-                    "    SELECT 1 FROM maps.medals med WHERE med.map_id = m.id)"
-                )
-            case _:
-                return
-
-        self._add_cte_definition("limited_medals", query)
-
-    def _generate_completions_cte(self) -> None:
-        """Generate a CTE restricting results by user completion status.
-
-        "With" → maps the user has verified completions on.
-        "Without" → maps the user has no verified completions on.
-        "All" → no filter applied.
-
-        Skips generation if no `user_id` is set.
-        """
-        if not self._filters.user_id:
-            return
-
-        match self._filters.completion_filter:
-            case "Without":
-                query = (
-                    "SELECT m.id AS map_id "
-                    "FROM core.maps m "
-                    "WHERE m.id NOT IN ( "
-                    "    SELECT c.map_id"
-                    "    FROM core.completions c"
-                    f"    WHERE c.user_id = ${next(self._counter)}"
-                    "      AND c.verified AND NOT c.legacy) "
-                )
-            case "With":
-                query = f"""
-                    SELECT map_id
-                    FROM core.completions
-                    WHERE user_id = ${next(self._counter)}
-                      AND verified AND NOT legacy
-                    GROUP BY map_id
-                """
-            case _:
-                return
-
-        self._add_cte_definition("limited_user_completion", query, self._filters.user_id)
-
-    def _generate_cte_definitions(self) -> str:
-        """Generate Common Table Expressions (CTEs) based on the filters.
-
-        If a `code` filter is present, all other filters are ignored.
-
-        Returns:
-            str: A `WITH ...` clause containing applicable CTEs,
-            or an empty string if none are required.
-
-        """
-        if self._filters.code and not self._filters.force_filters:
-            return ""
-        self._generate_mechanics_cte()
-        self._generate_restrictions_cte()
-        self._generate_creator_ids_cte()
-        self._generate_creator_names_cte()
-        self._generate_minimum_quality_cte()
-        self._generate_medals_cte()
-        self._generate_completions_cte()
-
-        if self._intersect_subqueries:
-            joined_subqueries = f"intersection_map_ids AS (\n{'\n    INTERSECT\n'.join(self._intersect_subqueries)}\n)"
-            self._cte_definitions.append(joined_subqueries)
-
-        if self._cte_definitions:
-            joined_ctes = ", ".join(self._cte_definitions)
-            return f"WITH {joined_ctes}"
-        return ""
-
-    def _generate_where_clauses(self) -> str:  # noqa: PLR0912, PLR0915
-        """Construct the `WHERE` clause from applicable filters.
-
-        Returns:
-            str: A `WHERE ...` clause, or an empty string if none apply.
-
-        """
-        if self._filters.code:
-            self._where_clauses.append(f"m.code = ${next(self._counter)}")
-            self._params.append(self._filters.code)
-
-        if self._filters.playtesting:
-            self._where_clauses.append(f"m.playtesting = ${next(self._counter)}")
-            self._params.append(self._filters.playtesting)
-
-        if self._filters.playtest_filter:
-            match self._filters.playtest_filter:
-                case "None":
-                    self._where_clauses.append("pm.thread_id IS NULL")
-                case "Only":
-                    self._where_clauses.append("pm.thread_id IS NOT NULL")
-                case _:
-                    pass
-
-        if self._filters.difficulty_range_min or self._filters.difficulty_range_max:
-            raw_min, raw_max = self._get_raw_difficulty_bounds(
-                self._filters.difficulty_range_min,
-                self._filters.difficulty_range_max,
-            )
-            self._where_clauses.append(f"m.raw_difficulty BETWEEN ${next(self._counter)} AND ${next(self._counter)}")
-            self._params.extend([raw_min, raw_max])
-
-        if self._filters.difficulty_exact:
-            top = self._filters.difficulty_exact
-            if top == "Hell":
-                self._where_clauses.append("m.difficulty = 'Hell'")
-            else:
-                lo_key = f"{top} -"
-                hi_key = f"{top} +"
-                raw_min = DIFFICULTY_RANGES_ALL[lo_key][0]  # pyright: ignore[reportArgumentType]
-                raw_max = DIFFICULTY_RANGES_ALL[hi_key][1]  # pyright: ignore[reportArgumentType]
-
-                p1 = f"${next(self._counter)}"
-                p2 = f"${next(self._counter)}"
-                self._where_clauses.append(f"(m.raw_difficulty >= {p1} AND m.raw_difficulty < {p2})")
-                self._params.extend([raw_min, raw_max])
-
-        if self._filters.archived is not None:
-            self._where_clauses.append(f"m.archived = ${next(self._counter)}")
-            self._params.append(self._filters.archived)
-
-        if self._filters.hidden is not None:
-            self._where_clauses.append(f"m.hidden = ${next(self._counter)}")
-            self._params.append(self._filters.hidden)
-
-        if self._filters.official is not None:
-            self._where_clauses.append(f"m.official = ${next(self._counter)}")
-            self._params.append(self._filters.official)
-
-        if self._filters.map_name:
-            self._where_clauses.append(f"m.map_name = ANY(${next(self._counter)})")
-            self._params.append(self._filters.map_name)
-
-        if self._filters.category:
-            self._where_clauses.append(f"m.category = ANY(${next(self._counter)})")
-            self._params.append(self._filters.category)
-
-        if self._filters.playtest_thread_id:
-            self._where_clauses.append(f"pm.thread_id = ${next(self._counter)}")
-            self._params.append(self._filters.playtest_thread_id)
-
-        if self._filters.finalized_playtests:
-            self._where_clauses.append("pm.verification_id IS NOT NULL AND m.playtesting='In Progress'")
-
-        if self._where_clauses:
-            joined_where_clauses = " AND ".join(self._where_clauses)
-            return f"WHERE {joined_where_clauses}"
-
-        return ""
-
-    @staticmethod
-    def _get_raw_difficulty_bounds(
-        min_difficulty: DifficultyTop | None, max_difficulty: DifficultyTop | None
-    ) -> tuple[float, float]:
-        """Convert difficulty labels into raw numeric bounds.
-
-        Args:
-            min_difficulty (DifficultyTop | None): Lower difficulty bound.
-            max_difficulty (DifficultyTop | None): Upper difficulty bound.
-
-        Returns:
-            tuple[float, float]: Numeric `(min, max)` bounds.
-
-        """
-        min_key = min_difficulty or "Easy"
-        max_key = max_difficulty or "Hell"
-        raw_min = DIFFICULTY_RANGES_TOP.get(min_key, (0.0, 0.0))[0]
-        raw_max = DIFFICULTY_RANGES_TOP.get(max_key, (10.0, 10.0))[1]
-        return raw_min, raw_max
-
-    def _user_completion_time_col(self) -> str:
-        """Return a SELECT fragment + params for the user's verified completion time.
-
-        - Returns latest verified non-legacy completion time if user_id is set.
-        - Returns NULL if user_id is None.
-        """
-        if self._filters.user_id is None:
-            frag = "NULL AS time,"
-            return frag
-
-        frag = f"""
-        (
-            SELECT c.time
-            FROM core.completions c
-            WHERE c.map_id = m.id
-              AND c.user_id = ${next(self._counter)}
-              AND c.verified
-              AND c.legacy = FALSE
-            ORDER BY c.inserted_at DESC
-            LIMIT 1
-        ) AS time,
-        """
-        self._params.append(self._filters.user_id)
-        return frag
-
-    def _generate_added_columns(self) -> str:
-        res = self._user_completion_time_col()
-        return res
-
-    def _generate_full_query(
-        self,
-        columns: str,
-        joined_cte_definitions: str,
-        joined_where_clauses: str,
-    ) -> str:
-        """Assemble the final SQL query.
-
-        Includes CTEs, SELECT fields, joins, WHERE clauses,
-        ORDER BY, and pagination.
-
-        Args:
-            columns (str): Additional columns.
-            joined_cte_definitions (str): The WITH clause.
-            joined_where_clauses (str): The WHERE clause.
-
-        Returns:
-            str: The complete parameterized SQL query string.
-
-        """
-        limit_offset = ""
-        if not self._filters.return_all:
-            limit_offset = f"LIMIT ${next(self._counter)} OFFSET ${next(self._counter)}"
-
-        main_query = dedent(f"""
-{joined_cte_definitions}
-SELECT
-    m.id,
-    m.code,
-    m.map_name,
-    m.category,
-    m.checkpoints,
-    m.official,
-    m.playtesting,
-    m.archived,
-    m.hidden,
-    m.created_at,
-    m.updated_at,
-    pm.thread_id,
-    {columns}
-    (SELECT avg(quality)::float FROM maps.ratings r WHERE r.map_id = m.id) AS ratings,
-    CASE WHEN playtesting::text = 'In Progress' and pm.thread_id IS NOT NULL
-    THEN
-    jsonb_build_object(
-        'thread_id', pm.thread_id,
-        'initial_difficulty', pm.initial_difficulty,
-        'verification_id', pm.verification_id,
-        'completed', pm.completed,
-        'vote_average', (
-            SELECT avg(difficulty)::float
-            FROM playtests.votes v
-            WHERE v.map_id = m.id
-        ),
-        'vote_count', (
-            SELECT count(*)
-            FROM playtests.votes v
-            WHERE v.map_id = m.id
-        ),
-        'voters', (
-            SELECT array_agg(DISTINCT v.user_id)
-            FROM playtests.votes v
-            WHERE v.map_id = m.id
-        )
-    ) END AS playtest,
-    (
-        SELECT jsonb_agg(
-            DISTINCT jsonb_build_object(
-               'id', c.user_id,
-               'is_primary', c.is_primary,
-               'name', coalesce(ow.username, u.nickname, u.global_name, 'Unknown Username')
-           )
-        )
-        FROM maps.creators c
-        JOIN core.users u ON c.user_id = u.id
-        LEFT JOIN users.overwatch_usernames ow ON c.user_id = ow.user_id AND ow.is_primary
-        WHERE c.map_id = m.id
-    ) AS creators,
-    (SELECT array_agg(DISTINCT g.url) FROM maps.guides g WHERE g.map_id = m.id) AS guides,
-    (
-       SELECT jsonb_build_object(
-           'gold', med.gold,
-           'silver', med.silver,
-           'bronze', med.bronze
-       )
-       FROM maps.medals med WHERE med.map_id = m.id
-    ) AS medals,
-    COALESCE((
-        SELECT array_agg(DISTINCT mech.name)
-        FROM maps.mechanic_links ml
-        JOIN maps.mechanics mech ON mech.id = ml.mechanic_id
-        WHERE ml.map_id = m.id
-    ), ARRAY[]::text[]) AS mechanics,
-
-    COALESCE((
-        SELECT array_agg(DISTINCT res.name)
-        FROM maps.restriction_links rl
-        JOIN maps.restrictions res ON res.id = rl.restriction_id
-        WHERE rl.map_id = m.id
-    ), ARRAY[]::text[]) AS restrictions,
-    m.description,
-    m.raw_difficulty,
-    m.difficulty,
-    m.title,
-    m.linked_code,
-    m.custom_banner AS map_banner,
-    COUNT(*) OVER() AS total_results
-{"FROM intersection_map_ids i" if self._intersect_subqueries else ""}
-{"JOIN core.maps m ON m.id = i.map_id" if self._intersect_subqueries else "FROM core.maps m"}
-LEFT JOIN LATERAL (
-    SELECT
-        thread_id,
-        initial_difficulty,
-        verification_id,
-        created_at,
-        updated_at,
-        completed
-    FROM playtests.meta
-    WHERE map_id = m.id AND completed IS FALSE
-    ORDER BY created_at DESC
-    LIMIT 1
-) pm ON TRUE
-{joined_where_clauses}
-ORDER BY raw_difficulty
-{limit_offset}
-""")
-        return main_query
-
-    def build(self) -> QueryWithArgs:
-        """Build the full parameterized SQL query.
-
-        Returns:
-            QueryWithArgs: The query string with its parameters.
-
-        """
-        columns = self._generate_added_columns()
-        ctes = self._generate_cte_definitions()
-        where_clauses = self._generate_where_clauses()
-        if not self._filters.return_all:
-            limit = self._filters.page_size
-            offset = (self._filters.page_number - 1) * self._filters.page_size
-            self._params.append(limit)
-            self._params.append(offset)
-        query = self._generate_full_query(columns, ctes, where_clauses)
-        log.info(query)
-        return QueryWithArgs(query, self._params)
-
-
-def _handle_exceptions(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
-    """Catch asyncpg constraint violations via decorator.
-
-    Catches `UniqueViolationError` and `ForeignKeyViolationError`,
-    converting them into `CustomHTTPException` with meaningful messages.
-
-    Args:
-        func (Callable): Async function to wrap.
-
-    Returns:
-        Callable: Wrapped function with exception handling applied.
-
-    Raises:
-        CustomHTTPException: For known constraint violations (duplicate codes,
-            mechanics, restrictions, creators, or invalid user IDs).
-        Exception: Any other unhandled exceptions are re-raised.
-
-    """
-
-    @functools.wraps(func)
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        try:
-            return await func(*args, **kwargs)
-        except asyncpg.exceptions.UniqueViolationError as e:
-            if e.constraint_name == "maps_code_key":
-                raise CustomHTTPException(
-                    detail="Provided code already exists.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                    extra=parse_pg_detail(e.detail),
-                )
-            elif e.constraint_name == "mechanic_links_pkey":
-                raise CustomHTTPException(
-                    detail="You have a duplicate mechanic.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                )
-            elif e.constraint_name == "restriction_links_pkey":
-                raise CustomHTTPException(
-                    detail="You have a duplicate restriction.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                )
-            elif e.constraint_name == "creators_pkey":
-                raise CustomHTTPException(
-                    detail="You have a duplicate creator ID.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                )
-            log.info(
-                (
-                    "Playtest submission failed with a Unique key error. This needs to be caught.\n"
-                    f"Constraint name: {e.constraint_name}\ndetail: {e.detail}"
-                ),
-                exc_info=e,
-            )
-            raise HTTPException
-
-        except asyncpg.exceptions.ForeignKeyViolationError as e:
-            if e.constraint_name == "creators_user_id_fkey":
-                raise CustomHTTPException(
-                    detail="There is no user associated with supplied ID.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                    extra=parse_pg_detail(e.detail),
-                )
-
-            log.info(
-                (
-                    "Playtest submission failed with a Foreign key error. This needs to be caught.\n"
-                    f"Constraint name: {e.constraint_name}\ndetail: {e.detail}"
-                ),
-                exc_info=e,
-            )
-            raise HTTPException
-        except Exception as e:
-            log.info("Playtest submission failed. This needs to be caught.", exc_info=e)
-            raise e
-
-    return wrapper
+log = getLogger(__name__)
+
+# Constraint error mappings for map operations
+MAP_UNIQUE_CONSTRAINTS = {
+    "maps_code_key": ConstraintHandler(
+        message="Provided code already exists.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "mechanic_links_pkey": ConstraintHandler(
+        message="You have a duplicate mechanic.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "restriction_links_pkey": ConstraintHandler(
+        message="You have a duplicate restriction.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "creators_pkey": ConstraintHandler(
+        message="You have a duplicate creator ID.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
+
+MAP_FK_CONSTRAINTS = {
+    "creators_user_id_fkey": ConstraintHandler(
+        message="There is no user associated with supplied ID.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
 
 
 class MapService(BaseService):
-    @_handle_exceptions
+    @handle_db_exceptions(unique_constraints=MAP_UNIQUE_CONSTRAINTS, fk_constraints=MAP_FK_CONSTRAINTS)
     async def create_map(
         self,
         data: MapCreateRequest,
@@ -730,6 +109,7 @@ class MapService(BaseService):
             await self._insert_guide(map_id, data.guide_url, data.primary_creator_id)
             await self._insert_mechanics(map_id, data.mechanics, remove_existing=False)
             await self._insert_restrictions(map_id, data.restrictions, remove_existing=False)
+            await self._insert_tags(map_id, data.tags, remove_existing=False)
             await self._insert_medals(map_id, data.medals, remove_existing=False)
             job_status = None
             if data.playtesting == "In Progress":
@@ -767,7 +147,7 @@ class MapService(BaseService):
 
         return MapCreationJobResponse(job_status, map_data)
 
-    @_handle_exceptions
+    @handle_db_exceptions(unique_constraints=MAP_UNIQUE_CONSTRAINTS, fk_constraints=MAP_FK_CONSTRAINTS)
     async def patch_map(self, code: OverwatchCode, data: MapPatchRequest) -> MapResponse:
         """Edit a map.
 
@@ -788,6 +168,7 @@ class MapService(BaseService):
             await self._insert_creators(map_id, data.creators, remove_existing=True)
             await self._insert_mechanics(map_id, data.mechanics, remove_existing=True)
             await self._insert_restrictions(map_id, data.restrictions, remove_existing=True)
+            await self._insert_tags(map_id, data.tags, remove_existing=True)
             await self._insert_medals(map_id, data.medals, remove_existing=True)
             final_code = data.code if data.code is not msgspec.UNSET else code
             return await self.fetch_maps(single=True, filters=MapSearchFilters(code=final_code))
@@ -917,8 +298,10 @@ class MapService(BaseService):
             list[MapReadDTO] | MapReadDTO | None: Matching maps (or first map when `single=True`).
 
         """
-        builder = MapSearchSQLBuilder(filters)
-        query, args = builder.build()
+        builder = MapSearchSQLSpecBuilder(filters)
+        built = builder.build()
+        query = built.query
+        args = built.args
         if use_pool:
             async with self._pool.acquire() as conn:
                 rows = await conn.fetch(query, *args)
@@ -1064,7 +447,7 @@ class MapService(BaseService):
             data (MapPatchDTO): Partial update payload.
 
         """
-        ignore = ["creators", "mechanics", "restrictions", "medals"]
+        ignore = ["creators", "mechanics", "restrictions", "tags", "medals"]
         cleaned: dict[str, Any] = {
             k: v for k, v in msgspec.structs.asdict(data).items() if v is not msgspec.UNSET and k not in ignore
         }
@@ -1192,6 +575,40 @@ class MapService(BaseService):
         """
         for m in restrictions:
             await self._conn.execute(query, map_id, m)
+
+    async def _insert_tags(
+        self,
+        map_id: int,
+        tags: Sequence[Tags] | msgspec.UnsetType | None,
+        *,
+        remove_existing: bool,
+    ) -> None:
+        """Insert or replace tags linked to a map.
+
+        Args:
+            map_id (int): Target map ID.
+            tags (Sequence[Tags] | msgspec.UnsetType | None): Tags to persist; skipped if UNSET.
+                If empty/None, nothing is inserted.
+            remove_existing (bool): If True, clears existing rows before inserting.
+
+        """
+        if tags is msgspec.UNSET:
+            return
+
+        if remove_existing:
+            remove_query = "DELETE FROM maps.tag_links WHERE map_id=$1"
+            await self._conn.execute(remove_query, map_id)
+
+        if not tags:
+            return
+
+        query = """
+            INSERT INTO maps.tag_links (map_id, tag_id)
+            SELECT $1, t.id AS tag_id
+            FROM maps.tags t WHERE t.name = $2;
+        """
+        for tag in tags:
+            await self._conn.execute(query, map_id, tag)
 
     async def _insert_medals(
         self,

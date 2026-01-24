@@ -41,7 +41,7 @@ def queue_consumer(
 
         async def handler(self, event: StructType, message: AbstractIncomingMessage) -> None
 
-    and returns a function compatible with the RabbitService consumer engine.
+    and returns a function compatible with the RabbitHandler consumer engine.
 
     The wrapper performs these steps:
 
@@ -54,7 +54,7 @@ def queue_consumer(
     4. Calls the original handler with ``(self, event, message)``.
 
     Metadata is attached to the wrapper for later inspection by
-    ``RabbitService`` (``_queue_name``, ``_struct_type``, ``_idempotent``).
+    ``RabbitHandler`` (``_queue_name``, ``_struct_type``, ``_idempotent``).
 
     Args:
         queue_name (str):

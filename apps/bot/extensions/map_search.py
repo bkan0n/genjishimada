@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Literal, Sequence, cast, get_args
 
 from discord import ButtonStyle, app_commands, ui
 from genjishimada_sdk.difficulties import DifficultyTop
-from genjishimada_sdk.maps import GuideURL, MapCategory, Mechanics, OverwatchCode, OverwatchMap, Restrictions
+from genjishimada_sdk.maps import GuideURL, MapCategory, Mechanics, OverwatchCode, OverwatchMap, Restrictions, Tags
 
 from extensions.api_service import CompletionFilter, MedalFilter, OfficialFilter, PlaytestFilter
 from utilities import transformers
@@ -305,6 +305,7 @@ class MapSearchCog(BaseCog):
         minimum_quality=[
             app_commands.Choice(name=s, value=i + 1) for i, s in enumerate(generate_all_star_rating_strings())
         ],
+        tag=[app_commands.Choice(name=t, value=t) for t in get_args(Tags)],
     )
     async def map_search(  # noqa: PLR0913
         self,
@@ -315,6 +316,7 @@ class MapSearchCog(BaseCog):
         creator: app_commands.Transform[int, transformers.UserTransformer] | None,
         mechanic: app_commands.Transform[Mechanics, transformers.MechanicsTransformer] | None,
         restriction: app_commands.Transform[Restrictions, transformers.RestrictionsTransformer] | None,
+        tag: app_commands.Choice[str] | None,
         minimum_quality: app_commands.Choice[int] | None,
         category: MapCategory | None,
         official_filter: OfficialFilter = "Global Only",
@@ -326,7 +328,7 @@ class MapSearchCog(BaseCog):
 
         Runs a query against the API using the provided filters and displays the
         results in a paginated view. Supports filtering by restrictions, mechanics,
-        playtest/medal/completion state, and category.
+        tags, playtest/medal/completion state, and category.
 
         Args:
             itx: The command interaction context.
@@ -336,6 +338,7 @@ class MapSearchCog(BaseCog):
             creator: Optional creator user ID.
             mechanic: Optional mechanic filter.
             restriction: Optional restriction filter.
+            tag: Optional tag filter.
             minimum_quality: Optional minimum star rating filter.
             category: Optional category filter.
             official_filter: Optional official map filter. Defaults to "Official Only".
@@ -346,6 +349,7 @@ class MapSearchCog(BaseCog):
         await itx.response.defer(ephemeral=True)
         restrictions: list[Restrictions] | None = [restriction] if restriction else None
         mechanics: list[Mechanics] | None = [mechanic] if mechanic else None
+        tags: list[Tags] | None = [cast("Tags", tag.value)] if tag else None
         if official_filter == "All":
             official_val = None
         elif official_filter == "Global Only":
@@ -361,6 +365,7 @@ class MapSearchCog(BaseCog):
                     official=official_val,
                     restrictions=restrictions,
                     mechanics=mechanics,
+                    tags=tags,
                     difficulty_exact=cast("DifficultyTop", difficulty.value) if difficulty else None,
                     minimum_quality=minimum_quality.value if minimum_quality else None,
                     creator_ids=[creator] if creator else None,
@@ -388,6 +393,7 @@ class MapSearchCog(BaseCog):
         minimum_quality=[
             app_commands.Choice(name=s, value=i + 1) for i, s in enumerate(generate_all_star_rating_strings())
         ],
+        tag=[app_commands.Choice(name=t, value=t) for t in get_args(Tags)],
     )
     @app_commands.rename(
         map_name="地图名",
@@ -396,6 +402,7 @@ class MapSearchCog(BaseCog):
         creator="作者",
         mechanic="技巧",
         restriction="封禁",
+        tag="标签",
         minimum_quality="最低分",
         category="类别",
         official_filter="服务器筛选",
@@ -409,6 +416,7 @@ class MapSearchCog(BaseCog):
         creator="可选地图作者用户名 或 Discord ID",
         mechanic="可选地图使用到的特定技巧",
         restriction="可选地图封禁了哪些技巧",
+        tag="可选地图标签",
         minimum_quality="可选地图最低不低于多少评分",
         category="可选地图类别",
         official_filter="可选显示国际服地图, 默认只显示国服地图",
@@ -424,6 +432,7 @@ class MapSearchCog(BaseCog):
         creator: app_commands.Transform[int, transformers.UserTransformer] | None,
         mechanic: app_commands.Transform[Mechanics, transformers.MechanicsTransformer] | None,
         restriction: app_commands.Transform[Restrictions, transformers.RestrictionsTransformer] | None,
+        tag: app_commands.Choice[str] | None,
         minimum_quality: app_commands.Choice[int] | None,
         category: MapCategory | None,
         official_filter: CNOfficialFilter = "非官方（CN）",  # noqa: RUF001
@@ -435,7 +444,7 @@ class MapSearchCog(BaseCog):
 
         Runs a query against the API using the provided filters and displays the
         results in a paginated view. Supports filtering by restrictions, mechanics,
-        playtest/medal/completion state, and category.
+        tags, playtest/medal/completion state, and category.
 
         Args:
             itx: The command interaction context.
@@ -445,6 +454,7 @@ class MapSearchCog(BaseCog):
             creator: Optional creator user ID.
             mechanic: Optional mechanic filter.
             restriction: Optional restriction filter.
+            tag: Optional tag filter.
             minimum_quality: Optional minimum star rating filter.
             category: Optional category filter.
             official_filter: Optional official map filter. Defaults to "Official Only".
@@ -455,6 +465,7 @@ class MapSearchCog(BaseCog):
         await itx.response.defer(ephemeral=True)
         restrictions: list[Restrictions] | None = [restriction] if restriction else None
         mechanics: list[Mechanics] | None = [mechanic] if mechanic else None
+        tags: list[Tags] | None = [cast("Tags", tag.value)] if tag else None
         if official_filter == CN_FILTER_2_TRANSLATIONS_TEMP["All"]:
             official_val = None
         elif official_filter == CN_FILTER_2_TRANSLATIONS_TEMP["Global Only"]:
@@ -470,6 +481,7 @@ class MapSearchCog(BaseCog):
                     official=official_val,
                     restrictions=restrictions,
                     mechanics=mechanics,
+                    tags=tags,
                     difficulty_exact=cast("DifficultyTop", difficulty.value) if difficulty else None,
                     minimum_quality=minimum_quality.value if minimum_quality else None,
                     creator_ids=[creator] if creator else None,

@@ -8,7 +8,8 @@ INSERT INTO core.users (id, nickname, global_name, coins)
 VALUES
   (300, 'NotificationUser1', 'NotificationUser1', 0),
   (301, 'NotificationUser2', 'NotificationUser2', 0),
-  (302, 'NotificationUser3', 'NotificationUser3', 0);
+  (302, 'NotificationUser3', 'NotificationUser3', 0),
+  (303, 'NotificationUser4', 'NotificationUser4', 0);
 
 -- =============================================================================
 -- NOTIFICATION EVENTS (for event retrieval tests)

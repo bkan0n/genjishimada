@@ -1,8 +1,9 @@
 import pytest
+from asyncpg import Connection
+from genjishimada_sdk.difficulties import DIFFICULTY_RANGES_TOP
 from litestar import Litestar
 from litestar.status_codes import HTTP_200_OK, HTTP_201_CREATED, HTTP_204_NO_CONTENT, HTTP_400_BAD_REQUEST
 from litestar.testing import AsyncTestClient
-from asyncpg import Connection
 # ruff: noqa: D102, D103, ANN001, ANN201
 
 
@@ -103,3 +104,641 @@ class TestMapsEndpoints:
         assert data[0]["url"] == 'https://www.youtube.com/watch?v=FJs41oeAnHU'
         assert data[0]["user_id"] == 54
         assert data[0]["usernames"] is not None
+
+    @pytest.mark.asyncio
+    async def test_search_maps_basic(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(item["map_name"] == "Hanamura" for item in data)
+        assert all(item["category"] == "Classic" for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_by_code(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "code": "1EASY",
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["code"] == "1EASY"
+
+    @pytest.mark.asyncio
+    async def test_search_maps_by_creator_name(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "creator_names": ["Pixel"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(
+            any("Pixel" in creator["name"] for creator in item["creators"])
+            for item in data
+        )
+
+    @pytest.mark.asyncio
+    async def test_search_maps_by_creator_ids(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "creator_ids": [100000000000000001],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(
+            any(creator["id"] == 100000000000000001 for creator in item["creators"])
+            for item in data
+        )
+
+    @pytest.mark.asyncio
+    async def test_search_maps_mechanics_filter(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "mechanics": ["Bhop"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert "1EASY" in {item["code"] for item in data}
+        assert all("Bhop" in item["mechanics"] for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_restrictions_filter(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "restrictions": ["Wall Climb"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert "1EASY" in {item["code"] for item in data}
+        assert all("Wall Climb" in item["restrictions"] for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_tags_filter_single(self, test_client):
+        """Test filtering maps by a single tag."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "tags": ["Other Heroes"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Maps 1 and 4 have "Other Heroes" tag
+        codes = {item["code"] for item in data}
+        assert "1EASY" in codes
+        assert all("Other Heroes" in item["tags"] for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_tags_filter_multiple(self, test_client):
+        """Test filtering maps by multiple tags (AND logic - must have all tags)."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "tags": ["Other Heroes", "XP Based"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Only map 4 (5EASY) has both tags
+        codes = {item["code"] for item in data}
+        assert "5EASY" in codes
+        assert all("Other Heroes" in item["tags"] for item in data)
+        assert all("XP Based" in item["tags"] for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_tags_with_mechanics(self, test_client):
+        """Test combining tags filter with mechanics filter."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "tags": ["Other Heroes"],
+                "mechanics": ["Bhop"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        # Should return maps that have both "Other Heroes" tag AND "Bhop" mechanic
+        if data:
+            assert all("Other Heroes" in item["tags"] for item in data)
+            assert all("Bhop" in item["mechanics"] for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_difficulty_asc(self, test_client):
+        """Test sorting maps by difficulty ascending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["difficulty:asc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by raw_difficulty ascending
+        difficulties = [item["raw_difficulty"] for item in data]
+        assert difficulties == sorted(difficulties)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_difficulty_desc(self, test_client):
+        """Test sorting maps by difficulty descending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["difficulty:desc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by raw_difficulty descending
+        difficulties = [item["raw_difficulty"] for item in data]
+        assert difficulties == sorted(difficulties, reverse=True)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_checkpoints_asc(self, test_client):
+        """Test sorting maps by checkpoints ascending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["checkpoints:asc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by checkpoints ascending
+        checkpoints = [item["checkpoints"] for item in data]
+        assert checkpoints == sorted(checkpoints)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_code_asc(self, test_client):
+        """Test sorting maps by code ascending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["code:asc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by code ascending
+        codes = [item["code"] for item in data]
+        assert codes == sorted(codes)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_multiple_keys(self, test_client):
+        """Test sorting maps by multiple keys (difficulty desc, then code asc)."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["difficulty:desc", "code:asc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify primary sort by difficulty descending
+        difficulties = [item["raw_difficulty"] for item in data]
+        # For items with same difficulty, verify secondary sort by code ascending
+        for i in range(len(data) - 1):
+            if data[i]["raw_difficulty"] == data[i + 1]["raw_difficulty"]:
+                assert data[i]["code"] <= data[i + 1]["code"]
+
+    @pytest.mark.asyncio
+    async def test_search_maps_sort_ratings_desc(self, test_client):
+        """Test sorting maps by ratings descending."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "sort": ["ratings:desc"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # Verify maps are sorted by ratings descending (nulls first per SQL)
+        ratings = [item["ratings"] for item in data]
+        # Filter out None values for comparison
+        non_null_ratings = [r for r in ratings if r is not None]
+        if non_null_ratings:
+            assert non_null_ratings == sorted(non_null_ratings, reverse=True)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_completion_filter(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "completion_filter": "With",
+                "user_id": 200,
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 50,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(item["time"] is not None for item in data)
+
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "completion_filter": "Without",
+                "user_id": 200,
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 50,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        codes = {item["code"] for item in data}
+        assert "1EASY" not in codes
+
+    @pytest.mark.asyncio
+    async def test_search_maps_minimum_quality(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "minimum_quality": 4,
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 50,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(item["ratings"] is not None and item["ratings"] >= 4 for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_medal_filter_with(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "medal_filter": "With",
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert "1EASY" in {item["code"] for item in data}
+        assert all(item["medals"] is not None for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_medal_filter_without(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "medal_filter": "Without",
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert "1EASY" not in {item["code"] for item in data}
+        assert all(item["medals"] is None for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_playtest_filter_only(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "playtest_filter": "Only",
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 50,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        codes = {item["code"] for item in data}
+        assert codes.issubset({"PTEST1", "PTEST2", "PTEST3"})
+
+    @pytest.mark.asyncio
+    async def test_search_maps_playtest_filter_none(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "playtest_filter": "None",
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(item["playtest"] is None for item in data)
+        codes = {item["code"] for item in data}
+        assert not codes.intersection({"PTEST1", "PTEST2", "PTEST3"})
+
+    @pytest.mark.asyncio
+    async def test_search_maps_playtest_status_filter(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "playtest_status": "In Progress",
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(item["playtesting"] == "In Progress" for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_playtest_thread_id(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "playtest_thread_id": 2000000001,
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(item["playtest"] is not None and item["playtest"]["thread_id"] == 2000000001 for item in data)
+        assert {item["code"] for item in data}.issubset({"PTEST1"})
+
+    @pytest.mark.asyncio
+    async def test_search_maps_finalized_playtests(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "finalized_playtests": True,
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert {item["code"] for item in data}.issubset({"PTEST1", "PTEST2"})
+
+    @pytest.mark.asyncio
+    async def test_search_maps_difficulty_exact(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "difficulty_exact": "Hell",
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert all(item["difficulty"] == "Hell" for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_difficulty_range(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "difficulty_range_min": "Medium",
+                "difficulty_range_max": "Hard",
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        raw_min = DIFFICULTY_RANGES_TOP["Medium"][0]
+        raw_max = DIFFICULTY_RANGES_TOP["Hard"][1]
+        assert all(raw_min <= item["raw_difficulty"] <= raw_max for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_visibility_filters(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "archived": True,
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert "1MEDIU" in {item["code"] for item in data}
+        assert all(item["archived"] is True for item in data)
+
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "hidden": True,
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert "9EASY" in {item["code"] for item in data}
+        assert all(item["hidden"] is True for item in data)
+
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "official": False,
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        assert "8EASY" in {item["code"] for item in data}
+        assert all(item["official"] is False for item in data)
+
+    @pytest.mark.asyncio
+    async def test_search_maps_force_filters(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "code": "1EASY",
+                "mechanics": ["Dash"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["code"] == "1EASY"
+
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "code": "1EASY",
+                "mechanics": ["Dash"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "force_filters": True,
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data == []
+
+    @pytest.mark.asyncio
+    async def test_search_maps_return_all(self, test_client):
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "return_all": True,
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert len(data) > 10
+
+    @pytest.mark.asyncio
+    async def test_search_maps_tags_and_sorting_combined(self, test_client):
+        """Integration test combining tag filter with sorting."""
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={
+                "tags": ["Other Heroes"],
+                "sort": ["difficulty:asc", "code:asc"],
+                "map_name": ["Hanamura"],
+                "category": ["Classic"],
+                "page_size": 10,
+                "page_number": 1,
+            },
+        )
+        assert response.status_code == HTTP_200_OK
+        data = response.json()
+        assert data
+        # All maps should have "Other Heroes" tag
+        assert all("Other Heroes" in item["tags"] for item in data)
+        # Maps should be sorted by difficulty ascending, then code ascending
+        difficulties = [item["raw_difficulty"] for item in data]
+        assert difficulties == sorted(difficulties)
+        # For items with same difficulty, verify secondary sort by code ascending
+        for i in range(len(data) - 1):
+            if data[i]["raw_difficulty"] == data[i + 1]["raw_difficulty"]:
+                assert data[i]["code"] <= data[i + 1]["code"]

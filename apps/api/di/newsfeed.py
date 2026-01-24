@@ -32,7 +32,7 @@ Friendly = str
 _EXCLUDED_FIELDS = {"hidden", "official", "archived", "playtesting"}
 
 # Fields that are list-like and should be normalized/sorted for comparison
-_LIST_FIELDS = {"creators", "mechanics", "restrictions"}
+_LIST_FIELDS = {"creators", "mechanics", "restrictions", "tags"}
 
 
 def _labelize(field: str) -> str:
