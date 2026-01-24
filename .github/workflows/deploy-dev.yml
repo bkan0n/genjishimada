@@ -53,19 +53,19 @@ jobs:
   lint:
     uses: ./.github/workflows/lint.yml
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
-    needs: [resolve-ref]
+    needs: [ resolve-ref ]
     with:
       ref: ${{ needs.resolve-ref.outputs.ref }}
 
   tests:
     uses: ./.github/workflows/tests.yml
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
-    needs: [resolve-ref]
+    needs: [ resolve-ref ]
     with:
       ref: ${{ needs.resolve-ref.outputs.ref }}
 
   dev-deploy:
-    needs: [resolve-ref, lint, tests]
+    needs: [ resolve-ref, lint, tests ]
     # Run if manually dispatched OR if this is a comment on a PR and branch-deploy says to continue
     if: |
       always() &&
@@ -118,27 +118,6 @@ jobs:
             --docker "host=ssh://${{ secrets.SERVER_HOST_USER }}@${{ secrets.SERVER_HOST_IP }}" \
             --description "Dev server context"
           docker context use dev-server
-
-      - name: Debug - List all environment variables
-        run: |
-          echo "=== Checking all RabbitMQ related vars ==="
-          echo "RABBITMQ_USER is set: $([[ -n "$RABBITMQ_USER" ]] && echo "YES" || echo "NO")"
-          echo "RABBITMQ_PASS is set: $([[ -n "$RABBITMQ_PASS" ]] && echo "YES" || echo "NO")"
-          echo "OAUTH_CLIENT_ID is set: $([[ -n "$OAUTH_CLIENT_ID" ]] && echo "YES" || echo "NO")"
-          echo "OAUTH_CLIENT_SECRET is set: $([[ -n "$OAUTH_CLIENT_SECRET" ]] && echo "YES" || echo "NO")"
-          
-          # Check if secrets are actually populated
-          if [[ -z "$OAUTH_CLIENT_ID" ]]; then
-            echo "ERROR: OAUTH_CLIENT_ID is empty!"
-          fi
-          if [[ -z "$OAUTH_CLIENT_SECRET" ]]; then
-            echo "ERROR: OAUTH_CLIENT_SECRET is empty!"
-          fi
-        env:
-          RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
-          RABBITMQ_PASS: ${{ secrets.RABBITMQ_PASS }}
-          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
-          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
 
       - name: Deploy full stack to Remote Dev Server
         run: |
