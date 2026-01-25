@@ -1,6 +1,6 @@
 """Service-layer domain exceptions."""
 
-from .auth import (
+from .auth import (  # noqa: I001
     AuthError,
     EmailAlreadyExistsError,
     EmailAlreadyVerifiedError,
@@ -11,8 +11,8 @@ from .auth import (
     TokenAlreadyUsedError,
     TokenExpiredError,
     TokenInvalidError,
-    UsernameValidationError,
     UserNotFoundError,
+    UsernameValidationError,
 )
 
 __all__ = [
