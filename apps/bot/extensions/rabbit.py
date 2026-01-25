@@ -208,6 +208,14 @@ class RabbitHandler:
 
         async def wrapped(message: AbstractIncomingMessage) -> None:
             try:
+                payload_preview = message.body.decode("utf-8", errors="replace")
+                log.info(
+                    "[RabbitMQ] Consuming queue=%s payload=%s delivery_tag=%s redelivered=%s",
+                    queue_name,
+                    payload_preview,
+                    message.delivery_tag,
+                    message.redelivered,
+                )
                 async with message.process():
                     await handler(message)
 
