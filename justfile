@@ -39,6 +39,10 @@ lint-api:
 test-api:
     uv run pytest -n 8 apps/api -x
 
+# Test v4 API only (requires Docker to be running for test database)
+test-api-v4:
+    uv run pytest -n 8 apps/api/test_v4 -x
+
 # ----------------------------
 # Bot app (genjishimada-bot)
 # ----------------------------
