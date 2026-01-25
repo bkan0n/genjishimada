@@ -18,6 +18,9 @@ lock:
 sync:
     uv sync --all-groups --all-packages
 
+fix:
+    uv sync --all-groups --all-packages --reinstall
+
 # ----------------------------
 # API app (genjishimada-api)
 # ----------------------------

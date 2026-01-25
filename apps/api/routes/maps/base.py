@@ -5,6 +5,7 @@ from logging import getLogger
 from typing import Literal
 
 import litestar
+import sentry_sdk
 from asyncpg import Connection
 from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
@@ -792,5 +793,6 @@ async def wait_and_publish_newsfeed(  # noqa: PLR0913
                 final_status.id,
                 final_status.status,
             )
-    except Exception:
+    except Exception as e:
         log.exception("Error while waiting for job completion for event publish.")
+        sentry_sdk.capture_exception(e)

@@ -148,6 +148,11 @@ class RabbitHandler:
         queues: dict[str, QueueHandler] = {}
 
         for attr_name in dir(self.bot):
+            # Skip private attributes to avoid scanning the same instance multiple times
+            # (properties store their values in private backing fields like _completions_manager)
+            if attr_name.startswith("_"):
+                continue
+
             instance = getattr(self.bot, attr_name, None)
             if instance is None:
                 continue
@@ -203,6 +208,14 @@ class RabbitHandler:
 
         async def wrapped(message: AbstractIncomingMessage) -> None:
             try:
+                payload_preview = message.body.decode("utf-8", errors="replace")
+                log.info(
+                    "[RabbitMQ] Consuming queue=%s payload=%s delivery_tag=%s redelivered=%s",
+                    queue_name,
+                    payload_preview,
+                    message.delivery_tag,
+                    message.redelivered,
+                )
                 async with message.process():
                     await handler(message)
 

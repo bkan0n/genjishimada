@@ -468,9 +468,6 @@ class CompletionView(ui.LayoutView):
             color = discord.Color.blue()
             user_type_disclaimer = (ui.TextDisplay("-# CN Submission"),)
 
-        log.info(self.official_map)
-        log.info(color)
-
         container = ui.Container(
             ui.Section(
                 ui.TextDisplay(
@@ -587,8 +584,6 @@ class CompletionHandler(BaseHandler):
         verifier_name = verifier.coalesced_name if verifier and verifier.coalesced_name else "Unknown User"
 
         map_data = await self.bot.api.get_map(code=_data.code)
-        log.info(map_data)
-        log.info(map_data.official)
         view = CompletionView(completion_data, verifier_name=verifier_name, official_map=map_data.official)
 
         if event.verified:

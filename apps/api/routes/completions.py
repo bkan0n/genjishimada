@@ -7,6 +7,7 @@ import aiohttp
 import msgspec
 import rapidfuzz.fuzz
 import rapidfuzz.process
+import sentry_sdk
 from asyncpg import Connection
 from genjishimada_sdk.completions import (
     CompletionCreatedEvent,
@@ -561,62 +562,103 @@ async def _attempt_auto_verify(  # noqa: PLR0913
     completion_id: int,
     data: CompletionCreateRequest,
 ) -> None:
-    hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
+    """Attempt to auto-verify a completion using OCR.
+
+    This function MUST always publish a message to RabbitMQ to ensure completions
+    never get stuck in limbo. If autoverification succeeds, the completion is verified.
+    Otherwise, it publishes to the submission queue for manual verification.
+
+    Any unhandled exception will trigger a fallback to manual verification.
+    """
+    # Fallback message in case anything goes wrong
+    idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
+
     try:
-        async with (
-            aiohttp.ClientSession() as session,
-            session.post(f"http://{hostname}:8000/extract", json={"image_url": data.screenshot}) as resp,
-        ):
-            resp.raise_for_status()
-            raw_ocr_data = await resp.read()
-            ocr_data = msgspec.json.decode(raw_ocr_data, type=OcrResponse)
+        hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
+        try:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(f"http://{hostname}:8000/extract", json={"image_url": data.screenshot}) as resp,
+            ):
+                resp.raise_for_status()
+                raw_ocr_data = await resp.read()
+                ocr_data = msgspec.json.decode(raw_ocr_data, type=OcrResponse)
 
-        extracted = ocr_data.extracted
+            extracted = ocr_data.extracted
 
-        user_name_response = await users.fetch_all_user_names(data.user_id, use_pool=True)
-        user_names = [x.upper() for x in user_name_response]
-        name_match = False
-        if extracted.name and user_names:
-            # noinspection PyTypeChecker
-            best_match = rapidfuzz.process.extractOne(
-                extracted.name,
-                user_names,
-                scorer=rapidfuzz.fuzz.ratio,
-                score_cutoff=60,
+            user_name_response = await users.fetch_all_user_names(data.user_id, use_pool=True)
+            user_names = [x.upper() for x in user_name_response]
+            name_match = False
+            if extracted.name and user_names:
+                # noinspection PyTypeChecker
+                best_match = rapidfuzz.process.extractOne(
+                    extracted.name,
+                    user_names,
+                    scorer=rapidfuzz.fuzz.ratio,
+                    score_cutoff=60,
+                )
+
+                if best_match:
+                    matched_name, score, _ = best_match
+                    log.debug(f"Name fuzzy match: '{extracted.name}' → '{matched_name}' (score: {score})")
+                    name_match = True
+                else:
+                    log.debug(f"No name match found for '{extracted.name}' against {user_names}")
+
+            extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "", use_pool=True)
+            if extracted_code_cleaned:
+                extracted_code_cleaned = extracted_code_cleaned.replace('"', "")
+
+            code_match = data.code == extracted_code_cleaned
+            time_match = data.time == extracted.time
+            user_match = name_match
+
+            log.debug(f"extracted: {extracted}")
+            log.debug(f"data: {data}")
+            log.debug(f"extracted_code_cleaned: {extracted_code_cleaned}")
+            log.debug(f"code_match: {code_match} ({data.code=} vs {extracted_code_cleaned=})")
+            log.debug(f"time_match: {time_match} ({data.time=} vs {extracted.time=})")
+            log.debug(f"user_match: {user_match} ({name_match=})")
+
+            if code_match and time_match and user_match:
+                verification_data = CompletionVerificationUpdateRequest(
+                    verified_by=969632729643753482,
+                    verified=True,
+                    reason="Auto Verified by Genji Shimada.",
+                )
+                await svc.verify_completion(request, completion_id, verification_data, use_pool=True)
+                return
+        except aiohttp.ClientConnectorDNSError:
+            # OCR service not reachable, fall back to manual verification
+            log.warning("OCR service DNS error, falling back to manual verification")
+            await svc.publish_message(
+                routing_key="api.completion.submission",
+                data=CompletionCreatedEvent(completion_id),
+                headers=request.headers,
+                idempotency_key=idempotency_key,
+                use_pool=True,
             )
-
-            if best_match:
-                matched_name, score, _ = best_match
-                log.debug(f"Name fuzzy match: '{extracted.name}' → '{matched_name}' (score: {score})")
-                name_match = True
-            else:
-                log.debug(f"No name match found for '{extracted.name}' against {user_names}")
-
-        extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "", use_pool=True)
-        if extracted_code_cleaned:
-            extracted_code_cleaned = extracted_code_cleaned.replace('"', "")
-
-        code_match = data.code == extracted_code_cleaned
-        time_match = data.time == extracted.time
-        user_match = name_match
-
-        log.debug(f"extracted: {extracted}")
-        log.debug(f"data: {data}")
-        log.debug(f"extracted_code_cleaned: {extracted_code_cleaned}")
-        log.debug(f"code_match: {code_match} ({data.code=} vs {extracted_code_cleaned=})")
-        log.debug(f"time_match: {time_match} ({data.time=} vs {extracted.time=})")
-        log.debug(f"user_match: {user_match} ({name_match=})")
-
-        if code_match and time_match and user_match:
-            verification_data = CompletionVerificationUpdateRequest(
-                verified_by=969632729643753482,
-                verified=True,
-                reason="Auto Verified by Genji Shimada.",
-            )
-            await svc.verify_completion(request, completion_id, verification_data, use_pool=True)
             return
-    except aiohttp.ClientConnectorDNSError:
-        idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
+
+        # Autoverification failed validation, send failure details and fall back to manual
+        await svc.publish_message(
+            routing_key="api.completion.autoverification.failed",
+            data=FailedAutoverifyEvent(
+                submitted_code=data.code,
+                submitted_time=data.time,
+                user_id=data.user_id,
+                extracted=extracted,
+                code_match=code_match,
+                time_match=time_match,
+                user_match=user_match,
+                extracted_code_cleaned=extracted_code_cleaned,
+                extracted_time=extracted.time,
+                usernames=user_names,
+            ),
+            headers=request.headers,
+            idempotency_key=None,
+            use_pool=True,
+        )
         await svc.publish_message(
             routing_key="api.completion.submission",
             data=CompletionCreatedEvent(completion_id),
@@ -624,33 +666,22 @@ async def _attempt_auto_verify(  # noqa: PLR0913
             idempotency_key=idempotency_key,
             use_pool=True,
         )
-        return
 
-    await svc.publish_message(
-        routing_key="api.completion.autoverification.failed",
-        data=FailedAutoverifyEvent(
-            submitted_code=data.code,
-            submitted_time=data.time,
-            user_id=data.user_id,
-            extracted=extracted,
-            code_match=code_match,
-            time_match=time_match,
-            user_match=user_match,
-            extracted_code_cleaned=extracted_code_cleaned,
-            extracted_time=extracted.time,
-            usernames=user_names,
-        ),
-        headers=request.headers,
-        idempotency_key=None,
-        use_pool=True,
-    )
-    idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
-    await svc.publish_message(
-        routing_key="api.completion.submission",
-        data=CompletionCreatedEvent(completion_id),
-        headers=request.headers,
-        idempotency_key=idempotency_key,
-        use_pool=True,
-    )
+    except Exception as e:
+        # CRITICAL: Any unhandled exception must still publish fallback message
+        # to prevent completion from getting stuck in limbo
+        log.exception(
+            "[!] Autoverification failed with unexpected error for completion_id=%s: %s",
+            completion_id,
+            e,
+        )
+        sentry_sdk.capture_exception(e)
 
-    return
+        # Ensure completion gets sent to manual verification queue
+        await svc.publish_message(
+            routing_key="api.completion.submission",
+            data=CompletionCreatedEvent(completion_id),
+            headers=request.headers,
+            idempotency_key=idempotency_key,
+            use_pool=True,
+        )

@@ -70,9 +70,9 @@ class BaseService:
             return JobStatusResponse(uuid4(), "succeeded")
 
         log.info("[→] Preparing to publish RabbitMQ message")
-        log.debug("Routing key: %s", routing_key)
-        log.debug("Headers: %s", headers)
-        log.debug("Payload: %s", message_body.decode("utf-8", errors="ignore"))
+        log.info("Routing key: %s", routing_key)
+        log.info("Headers: %s", headers)
+        log.info("Payload: %s", message_body.decode("utf-8", errors="ignore"))
 
         async with self._state.mq_channel_pool.acquire() as channel:
             try:
