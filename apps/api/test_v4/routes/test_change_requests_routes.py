@@ -30,7 +30,7 @@ class TestCreateEndpoint:
                 "code": "1EASY",
                 "user_id": 400,
                 "content": "Test request",
-                "change_request_type": "Test Type",
+                "change_request_type": "Difficulty Change",
                 "creator_mentions": "100000000000000001",
             },
         )
