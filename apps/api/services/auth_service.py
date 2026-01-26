@@ -412,7 +412,7 @@ class AuthService(BaseService):
             is_mod=token_data["is_mod"],
         )
 
-    async def resend_verification(self, email: str, client_ip: str | None = None) -> str:
+    async def resend_verification(self, email: str, client_ip: str | None = None) -> tuple[str, str]:
         """Resend email verification token.
 
         Args:
@@ -420,7 +420,7 @@ class AuthService(BaseService):
             client_ip: Client IP for rate limiting.
 
         Returns:
-            New verification token.
+            Tuple of (verification_token, username).
 
         Raises:
             UserNotFoundError: If no user with this email exists.
@@ -463,11 +463,13 @@ class AuthService(BaseService):
         # Record attempt
         await self._auth_repo.record_attempt(identifier, "verification_resend", success=True)
 
-        return token
+        return token, user_data["nickname"]
 
     # ===== Password Reset =====
 
-    async def request_password_reset(self, data: PasswordResetRequest, client_ip: str | None = None) -> str | None:
+    async def request_password_reset(
+        self, data: PasswordResetRequest, client_ip: str | None = None
+    ) -> tuple[str, str] | None:
         """Request a password reset token.
 
         Args:
@@ -475,7 +477,7 @@ class AuthService(BaseService):
             client_ip: Client IP for rate limiting.
 
         Returns:
-            Password reset token if user exists, None otherwise (for security).
+            Tuple of (password_reset_token, username) if user exists, None otherwise (for security).
 
         Raises:
             RateLimitExceededError: If rate limit exceeded.
@@ -514,7 +516,7 @@ class AuthService(BaseService):
         # Record attempt
         await self._auth_repo.record_attempt(identifier, "password_reset", success=True)
 
-        return token
+        return token, user_data["nickname"]
 
     async def confirm_password_reset(self, data: PasswordResetConfirmRequest) -> AuthUserResponse:
         """Confirm password reset and set new password.
