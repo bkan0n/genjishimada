@@ -1,14 +1,13 @@
 """Pytest configuration for v4 tests."""
 
-import asyncio
 import glob
 import os
 from typing import Any, AsyncIterator, Generator
 
 import asyncpg
+import pytest
 from litestar import Litestar
 from litestar.testing import AsyncTestClient
-import pytest
 from pytest_databases.docker.postgres import PostgresService
 
 from app import create_app
