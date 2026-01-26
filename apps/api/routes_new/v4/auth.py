@@ -8,7 +8,7 @@ from typing import Annotated
 
 import httpx
 from genjishimada_sdk.auth import (
-    EmailAuthStatus,  # noqa: F401 - Used in docstrings
+    EmailAuthStatus,
     EmailLoginRequest,
     EmailRegisterRequest,
     EmailVerifyRequest,
@@ -16,6 +16,7 @@ from genjishimada_sdk.auth import (
     PasswordResetRequest,
 )
 from litestar import Router, get, post
+from litestar.connection import Request
 from litestar.di import Provide
 from litestar.params import Body
 from litestar.response import Response
@@ -94,21 +95,24 @@ async def send_email_via_resend(to: str, subject: str, html: str) -> bool:
 async def register_endpoint(
     data: Annotated[EmailRegisterRequest, Body(title="Registration data")],
     auth_service: AuthService,
+    request: Request,
 ) -> Response:
     """Register a new email-based user account.
 
     Args:
         data: Registration payload with email, password, and username.
         auth_service: Authentication service.
+        request: Current request (for client IP).
 
     Returns:
-        AuthUserResponse with 201 status.
+        Response with user data and verification_email_sent flag with 201 status.
 
     Raises:
         CustomHTTPException: On validation, rate limit, or duplicate email errors.
     """
     try:
-        user, token = await auth_service.register(data, client_ip=None)
+        client_ip = request.client.host if request.client else None
+        user, token = await auth_service.register(data, client_ip=client_ip)
 
         # Send verification email
         verification_url = f"{SITE_URL}/verify-email?token={token}"
@@ -119,9 +123,21 @@ async def register_endpoint(
         <p><a href="{verification_url}">Verify Email</a></p>
         <p>This link will expire in 24 hours.</p>
         """
-        await send_email_via_resend(user.email, "Verify your email", html)
+        email_sent = await send_email_via_resend(user.email, "Verify your email", html)
 
-        return Response(user, status_code=HTTP_201_CREATED)
+        # Match v3 response format
+        return Response(
+            {
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "email_verified": user.email_verified,
+                },
+                "verification_email_sent": email_sent,
+            },
+            status_code=HTTP_201_CREATED,
+        )
 
     except EmailValidationError as e:
         raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
@@ -139,12 +155,14 @@ async def register_endpoint(
 async def login_endpoint(
     data: Annotated[EmailLoginRequest, Body(title="Login credentials")],
     auth_service: AuthService,
+    request: Request,
 ) -> Response:
     """Login with email and password.
 
     Args:
         data: Login payload with email and password.
         auth_service: Authentication service.
+        request: Current request (for client IP).
 
     Returns:
         AuthUserResponse with 200 status.
@@ -153,7 +171,8 @@ async def login_endpoint(
         CustomHTTPException: On invalid credentials or rate limit errors.
     """
     try:
-        user = await auth_service.login(data, client_ip=None)
+        client_ip = request.client.host if request.client else None
+        user = await auth_service.login(data, client_ip=client_ip)
         return Response(user, status_code=HTTP_200_OK)
 
     except InvalidCredentialsError as e:
@@ -177,7 +196,7 @@ async def verify_email_endpoint(
         AuthUserResponse with 200 status.
 
     Raises:
-        CustomHTTPException: On invalid, expired, or used token.
+        CustomHTTPException: On invalid, expired, used, or already verified errors.
     """
     try:
         user = await auth_service.verify_email(data)
@@ -189,18 +208,22 @@ async def verify_email_endpoint(
         raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
     except TokenExpiredError as e:
         raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
+    except EmailAlreadyVerifiedError as e:
+        raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
 
 
 @post("/resend-verification", opt={"exclude_from_auth": True})
 async def resend_verification_endpoint(
-    data: Annotated[dict, Body(title="Email address")],
+    data: Annotated[PasswordResetRequest, Body(title="Email address")],
     auth_service: AuthService,
+    request: Request,
 ) -> Response:
     """Resend verification email.
 
     Args:
-        data: Dict with 'email' key.
+        data: Request containing email address.
         auth_service: Authentication service.
+        request: Current request (for client IP).
 
     Returns:
         Success message with 200 status.
@@ -209,11 +232,8 @@ async def resend_verification_endpoint(
         CustomHTTPException: On errors.
     """
     try:
-        email = data.get("email")
-        if not email:
-            raise CustomHTTPException(detail="Email is required.", status_code=HTTP_400_BAD_REQUEST)
-
-        token, username = await auth_service.resend_verification(email, client_ip=None)
+        client_ip = request.client.host if request.client else None
+        token, username = await auth_service.resend_verification(data.email, client_ip=client_ip)
 
         # Send verification email
         verification_url = f"{SITE_URL}/verify-email?token={token}"
@@ -224,7 +244,7 @@ async def resend_verification_endpoint(
         <p><a href="{verification_url}">Verify Email</a></p>
         <p>This link will expire in 24 hours.</p>
         """
-        await send_email_via_resend(email, "Verify your email", html)
+        await send_email_via_resend(data.email, "Verify your email", html)
 
         return Response({"message": "Verification email sent."}, status_code=HTTP_200_OK)
 
@@ -240,12 +260,14 @@ async def resend_verification_endpoint(
 async def request_password_reset_endpoint(
     data: Annotated[PasswordResetRequest, Body(title="Password reset request")],
     auth_service: AuthService,
+    request: Request,
 ) -> Response:
     """Request a password reset token.
 
     Args:
         data: Password reset request with email.
         auth_service: Authentication service.
+        request: Current request (for client IP).
 
     Returns:
         Success message with 200 status (always, even if email not found for security).
@@ -254,7 +276,8 @@ async def request_password_reset_endpoint(
         CustomHTTPException: On rate limit errors.
     """
     try:
-        result = await auth_service.request_password_reset(data, client_ip=None)
+        client_ip = request.client.host if request.client else None
+        result = await auth_service.request_password_reset(data, client_ip=client_ip)
 
         if result:
             token, username = result
@@ -323,11 +346,23 @@ async def get_auth_status_endpoint(
         auth_service: Authentication service.
 
     Returns:
-        EmailAuthStatus with 200 status, or 404 if user has no email auth.
+        EmailAuthStatus with masked email and 200 status, or 404 if user has no email auth.
     """
     try:
         status = await auth_service.get_auth_status(user_id)
-        return Response(status, status_code=HTTP_200_OK)
+
+        # Mask email for privacy (matching v3 behavior)
+        local, domain = status.email.split("@")
+        masked_local = local[0] + "***" if len(local) > 1 else "***"
+        masked_email = f"{masked_local}@{domain}"
+
+        # Return with masked email
+        masked_status = EmailAuthStatus(
+            email_verified=status.email_verified,
+            email=masked_email,
+        )
+
+        return Response(masked_status, status_code=HTTP_200_OK)
 
     except UserNotFoundError:
         raise CustomHTTPException(
