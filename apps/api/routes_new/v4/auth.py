@@ -8,6 +8,7 @@ from typing import Annotated
 
 import httpx
 from genjishimada_sdk.auth import (
+    EmailAuthStatus,  # noqa: F401 - Used in docstrings
     EmailLoginRequest,
     EmailRegisterRequest,
     EmailVerifyRequest,
