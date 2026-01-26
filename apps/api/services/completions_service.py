@@ -1,0 +1,390 @@
+"""Completions service for business logic and orchestration."""
+
+from __future__ import annotations
+
+from logging import getLogger
+from typing import TYPE_CHECKING, Any, cast
+
+import msgspec
+from asyncpg import Connection, Pool
+from asyncpg.exceptions import CheckViolationError
+from genjishimada_sdk.completions import (
+    CompletionCreateRequest,
+    CompletionModerateRequest,
+    CompletionPatchRequest,
+    CompletionResponse,
+    CompletionSubmissionResponse,
+    CompletionVerificationUpdateRequest,
+    PendingVerificationResponse,
+    SuspiciousCompletionCreateRequest,
+    SuspiciousCompletionResponse,
+    UpvoteCreateRequest,
+    UpvoteSubmissionJobResponse,
+    UpvoteUpdateEvent,
+    VerificationChangedEvent,
+    VerificationMessageDeleteEvent,
+)
+from genjishimada_sdk.difficulties import DifficultyTop
+from genjishimada_sdk.internal import JobStatusResponse
+from genjishimada_sdk.maps import OverwatchCode
+from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
+from litestar import Request
+from litestar.datastructures import Headers, State
+from litestar.status_codes import HTTP_400_BAD_REQUEST
+
+from repository.completions_repository import CompletionsRepository
+from utilities.errors import ConstraintHandler, CustomHTTPException, handle_db_exceptions
+
+from .base import BaseService
+
+if TYPE_CHECKING:
+    from di.notifications import NotificationService
+
+log = getLogger(__name__)
+
+# Constraint error mappings for completion operations
+COMPLETION_UNIQUE_CONSTRAINTS = {
+    "completions_pkey": ConstraintHandler(
+        message="This completion already exists.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "unique_user_map_completion": ConstraintHandler(
+        message="You already have a completion for this map.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
+
+COMPLETION_FK_CONSTRAINTS = {
+    "completions_user_id_fkey": ConstraintHandler(
+        message="User does not exist.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+    "completions_map_id_fkey": ConstraintHandler(
+        message="Map does not exist.",
+        status_code=HTTP_400_BAD_REQUEST,
+    ),
+}
+
+
+class CompletionsService(BaseService):
+    """Service for completions domain."""
+
+    def __init__(self, pool: Pool, state: State, completions_repo: CompletionsRepository) -> None:
+        """Initialize completions service.
+
+        Args:
+            pool: AsyncPG connection pool.
+            state: Application state.
+            completions_repo: Completions repository.
+        """
+        super().__init__(pool, state)
+        self._completions_repo = completions_repo
+
+    async def get_completions_for_user(
+        self,
+        user_id: int,
+        difficulty: DifficultyTop | None = None,
+        page_size: int = 10,
+        page_number: int = 1,
+    ) -> list[CompletionResponse]:
+        """Retrieve verified completions for a user."""
+        rows = await self._completions_repo.fetch_user_completions(
+            user_id=user_id,
+            difficulty=difficulty,
+            page_size=page_size,
+            page_number=page_number,
+        )
+        return msgspec.convert(rows, list[CompletionResponse])
+
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def submit_completion(self, data: CompletionCreateRequest, request: Request) -> int:
+        """Submit a new completion record and publish an event."""
+        try:
+            completion_id, verification_id_to_delete = await self._completions_repo.submit_completion(
+                user_id=data.user_id,
+                code=data.code,
+                time=data.time,
+                screenshot=data.screenshot,
+                video=data.video,
+            )
+        except CheckViolationError as e:  # pragma: no cover - parity with v3
+            raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail=e.message or "")
+
+        if verification_id_to_delete:
+            delete_event = VerificationMessageDeleteEvent(verification_id_to_delete)
+            await self.publish_message(
+                routing_key="api.completion.verification.delete",
+                data=delete_event,
+                headers=request.headers,
+                idempotency_key=None,
+            )
+
+        return completion_id
+
+    def _build_patch_dict(self, patch: CompletionPatchRequest) -> dict[str, Any]:
+        """Build patch dict excluding UNSET fields."""
+        patch_data: dict[str, Any] = {}
+        for field_name, value in msgspec.structs.asdict(patch).items():
+            if value is not msgspec.UNSET:
+                patch_data[field_name] = value
+        return patch_data
+
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def edit_completion(self, state: State, record_id: int, data: CompletionPatchRequest) -> None:
+        """Apply partial updates to a completion record."""
+        _ = state
+        patch_data = self._build_patch_dict(data)
+        await self._completions_repo.edit_completion(record_id, patch_data)
+
+    async def check_for_previous_world_record(self, code: OverwatchCode, user_id: int) -> bool:
+        """Check if a record submitted by this user has ever received World Record XP."""
+        return await self._completions_repo.check_previous_world_record_xp(code, user_id)
+
+    async def get_completion_submission(self, record_id: int) -> CompletionSubmissionResponse:
+        """Retrieve detailed submission info for a completion."""
+        row = await self._completions_repo.fetch_completion_submission(record_id)
+        return msgspec.convert(row, CompletionSubmissionResponse)
+
+    async def get_pending_verifications(self) -> list[PendingVerificationResponse]:
+        """Retrieve completions awaiting verification."""
+        rows = await self._completions_repo.fetch_pending_verifications()
+        return msgspec.convert(rows, list[PendingVerificationResponse])
+
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def verify_completion(
+        self,
+        request: Request,
+        record_id: int,
+        data: CompletionVerificationUpdateRequest,
+        use_pool: bool = False,
+    ) -> JobStatusResponse:
+        """Update verification status for a completion and publish an event."""
+        if use_pool:
+            async with self._pool.acquire() as conn:
+                await self._completions_repo.update_verification(
+                    record_id,
+                    data.verified,
+                    data.verified_by,
+                    data.reason,
+                    conn=cast(Connection, conn),
+                )
+        else:
+            await self._completions_repo.update_verification(
+                record_id,
+                data.verified,
+                data.verified_by,
+                data.reason,
+            )
+
+        message_data = VerificationChangedEvent(
+            completion_id=record_id,
+            verified=data.verified,
+            verified_by=data.verified_by,
+            reason=data.reason,
+        )
+        idempotency_key = f"completion:verify:{record_id}"
+        job_status = await self.publish_message(
+            routing_key="api.completion.verification",
+            data=message_data,
+            headers=request.headers,
+            idempotency_key=idempotency_key,
+        )
+        return job_status
+
+    async def get_completions_leaderboard(
+        self, code: str, page_number: int, page_size: int
+    ) -> list[CompletionResponse]:
+        """Retrieve the leaderboard for a map."""
+        rows = await self._completions_repo.fetch_map_leaderboard(
+            code=code,
+            page_size=page_size,
+            page_number=page_number,
+        )
+        return msgspec.convert(rows, list[CompletionResponse])
+
+    async def get_world_records_per_user(self, user_id: int) -> list[CompletionResponse]:
+        """Get all world records for a specific user."""
+        rows = await self._completions_repo.fetch_world_records_per_user(user_id)
+        return msgspec.convert(rows, list[CompletionResponse])
+
+    async def get_legacy_completions_per_map(
+        self,
+        code: OverwatchCode,
+        page_number: int,
+        page_size: int,
+    ) -> list[CompletionResponse]:
+        """Get legacy completions for a map code."""
+        rows = await self._completions_repo.fetch_legacy_completions(code, page_size, page_number)
+        return msgspec.convert(rows, list[CompletionResponse])
+
+    async def get_suspicious_flags(self, user_id: int) -> list[SuspiciousCompletionResponse]:
+        """Retrieve suspicious flags associated with a user."""
+        rows = await self._completions_repo.fetch_suspicious_flags(user_id)
+        return msgspec.convert(rows, list[SuspiciousCompletionResponse])
+
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def set_suspicious_flags(self, data: SuspiciousCompletionCreateRequest) -> None:
+        """Insert a suspicious flag for a completion."""
+        await self._completions_repo.insert_suspicious_flag(
+            message_id=data.message_id,
+            verification_id=data.verification_id,
+            context=data.context,
+            flag_type=data.flag_type,
+            flagged_by=data.flagged_by,
+        )
+
+    async def get_upvotes_from_message_id(self, message_id: int) -> int:
+        """Get the upvotes for a particular completion by message_id."""
+        return await self._completions_repo.fetch_upvote_count(message_id)
+
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def upvote_submission(self, request: Request, data: UpvoteCreateRequest) -> UpvoteSubmissionJobResponse:
+        """Upvote a completion submission."""
+        count = await self._completions_repo.insert_upvote(data.user_id, data.message_id)
+        upvote_channel_amount_breakpoint = 10
+        if count is None:
+            raise CustomHTTPException(
+                detail="User has already upvoted this completion.", status_code=HTTP_400_BAD_REQUEST
+            )
+        job_status = None
+        if count != 0 and count % upvote_channel_amount_breakpoint == 0:
+            message_data = UpvoteUpdateEvent(
+                data.user_id,
+                data.message_id,
+            )
+            job_status = await self.publish_message(
+                routing_key="api.completion.upvote",
+                data=message_data,
+                headers=request.headers,
+                idempotency_key=None,
+            )
+        return UpvoteSubmissionJobResponse(job_status, count)
+
+    async def get_all_completions(self, page_size: int, page_number: int) -> list[CompletionResponse]:
+        """Get all completions from most recent."""
+        rows = await self._completions_repo.fetch_all_completions(page_size, page_number)
+        return msgspec.convert(rows, list[CompletionResponse])
+
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def set_quality_vote_for_map_code(self, code: OverwatchCode, user_id: int, quality: int) -> None:
+        """Set the quality vote for a map code per user."""
+        await self._completions_repo.upsert_quality_vote(code, user_id, quality)
+
+    async def get_records_filtered(  # noqa: PLR0913
+        self,
+        code: OverwatchCode | None = None,
+        user_id: int | None = None,
+        verification_status: str = "All",
+        latest_only: bool = True,
+        page_size: int = 10,
+        page_number: int = 1,
+    ) -> list[CompletionResponse]:
+        """Fetch records with filters for moderation."""
+        rows = await self._completions_repo.fetch_records_filtered(
+            code=code,
+            user_id=user_id,
+            verification_status=verification_status,
+            latest_only=latest_only,
+            page_size=page_size,
+            page_number=page_number,
+        )
+        return msgspec.convert(rows, list[CompletionResponse])
+
+    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def moderate_completion(  # noqa: PLR0912
+        self,
+        completion_id: int,
+        data: CompletionModerateRequest,
+        notification_service: NotificationService | None = None,
+        headers: Headers | None = None,
+    ) -> None:
+        """Moderate a completion record."""
+        completion_info = await self._completions_repo.fetch_completion_for_moderation(completion_id)
+        if not completion_info:
+            raise CustomHTTPException(
+                detail="Completion not found",
+                status_code=HTTP_400_BAD_REQUEST,
+            )
+
+        user_id = completion_info["user_id"]
+        map_code = completion_info["code"]
+        old_time = completion_info["old_time"]
+        old_verified = completion_info["old_verified"]
+
+        notification_messages: list[str] = []
+
+        # Handle time change
+        if data.time is not msgspec.UNSET:
+            if data.time_change_reason is msgspec.UNSET:
+                raise CustomHTTPException(
+                    detail="time_change_reason is required when changing time",
+                    status_code=HTTP_400_BAD_REQUEST,
+                )
+            await self._completions_repo.update_completion_time(completion_id, data.time)
+            notification_messages.append(
+                f"Your completion time on **{map_code}** was changed from **{old_time}s** to **{data.time}s**.\n"
+                f"Reason: {data.time_change_reason}"
+            )
+
+        # Handle verification change
+        if data.verified is not msgspec.UNSET:
+            await self._completions_repo.update_completion_verified(completion_id, data.verified)
+
+            if data.verified != old_verified:
+                if data.verified:
+                    notification_messages.append(f"Your completion on **{map_code}** has been verified by a moderator.")
+                else:
+                    reason_msg = f"\nReason: {data.verification_reason}" if data.verification_reason else ""
+                    notification_messages.append(
+                        f"Your completion on **{map_code}** has been unverified by a moderator.{reason_msg}"
+                    )
+
+        # Handle suspicious flag
+        if data.mark_suspicious:
+            if data.suspicious_context is msgspec.UNSET or data.suspicious_flag_type is msgspec.UNSET:
+                raise CustomHTTPException(
+                    detail="suspicious_context and suspicious_flag_type are required when marking as suspicious",
+                    status_code=HTTP_400_BAD_REQUEST,
+                )
+            existing = await self._completions_repo.check_suspicious_flag_exists(completion_id)
+            if not existing:
+                await self._completions_repo.insert_suspicious_flag_by_completion_id(
+                    completion_id,
+                    data.suspicious_context,
+                    data.suspicious_flag_type,
+                    data.moderated_by,
+                )
+                notification_messages.append(
+                    f"Your completion on **{map_code}** has been flagged as suspicious ({data.suspicious_flag_type}).\n"
+                    f"Context: {data.suspicious_context}"
+                )
+
+        if data.unmark_suspicious:
+            deleted_count = await self._completions_repo.delete_suspicious_flag(completion_id)
+            if deleted_count > 0:
+                notification_messages.append(
+                    f"The suspicious flag on your completion for **{map_code}** has been removed."
+                )
+
+        # Send notification if any changes were made
+        if notification_messages and notification_service is not None and headers is not None:
+            notification_body = "\n\n".join(notification_messages)
+
+            notification_data = NotificationCreateRequest(
+                user_id=user_id,
+                event_type=NotificationEventType.RECORD_EDITED,  # type: ignore
+                title=f"Completion Updated - {map_code}",
+                body=notification_body,
+                discord_message=notification_body,
+                metadata={"map_code": map_code, "completion_id": completion_id},
+            )
+
+            await notification_service.create_and_dispatch(notification_data, headers)
+
+
+async def provide_completions_service(
+    state: State,
+    completions_repo: CompletionsRepository,
+) -> CompletionsService:
+    """Litestar DI provider for CompletionsService."""
+    return CompletionsService(state.db_pool, state, completions_repo)
