@@ -573,6 +573,145 @@ class AuthService(BaseService):
 
     # ===== Session Management =====
 
+    async def session_read(self, session_id: str) -> str | None:
+        """Read session payload.
+
+        Args:
+            session_id: The session ID.
+
+        Returns:
+            Base64-encoded session payload or None if not found.
+        """
+        return await self._auth_repo.read_session(session_id, SESSION_LIFETIME_MINUTES)
+
+    async def session_write(
+        self,
+        session_id: str,
+        payload: str,
+        user_id: int | None,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> None:
+        """Write session data.
+
+        Args:
+            session_id: The session ID.
+            payload: Base64-encoded session data.
+            user_id: Optional authenticated user ID.
+            ip_address: Client IP address.
+            user_agent: Client user agent.
+        """
+        await self._auth_repo.write_session(session_id, payload, user_id, ip_address, user_agent)
+
+    async def session_destroy(self, session_id: str) -> bool:
+        """Destroy a session.
+
+        Args:
+            session_id: The session ID.
+
+        Returns:
+            True if session was deleted, False if not found.
+        """
+        return await self._auth_repo.delete_session(session_id)
+
+    async def session_gc(self) -> int:
+        """Garbage collect expired sessions.
+
+        Returns:
+            Number of sessions deleted.
+        """
+        return await self._auth_repo.delete_expired_sessions(SESSION_LIFETIME_MINUTES)
+
+    async def session_get_user_sessions(self, user_id: int) -> list[dict]:
+        """Get all active sessions for a user.
+
+        Args:
+            user_id: The user ID.
+
+        Returns:
+            List of session info dicts.
+        """
+        return await self._auth_repo.get_user_sessions(user_id, SESSION_LIFETIME_MINUTES)
+
+    async def session_destroy_all_for_user(self, user_id: int, except_session_id: str | None = None) -> int:
+        """Destroy all sessions for a user.
+
+        Args:
+            user_id: The user ID.
+            except_session_id: Optional session ID to preserve.
+
+        Returns:
+            Number of sessions destroyed.
+        """
+        return await self._auth_repo.delete_user_sessions(user_id, except_session_id)
+
+    async def check_if_mod(self, session_id: str) -> bool:
+        """Check if a session belongs to a moderator.
+
+        Args:
+            session_id: The session ID.
+
+        Returns:
+            True if session user is a moderator, False otherwise.
+        """
+        return await self._auth_repo.check_is_mod(session_id)
+
+    # ===== Remember Token Management =====
+
+    async def create_remember_token(
+        self,
+        user_id: int,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> str:
+        """Create a remember token for persistent login.
+
+        Args:
+            user_id: The user ID.
+            ip_address: Client IP address.
+            user_agent: Client user agent.
+
+        Returns:
+            The plaintext remember token.
+        """
+        token, token_hash = self.generate_token()
+        expires_at = datetime.now(timezone.utc) + timedelta(days=REMEMBER_TOKEN_LIFETIME_DAYS)
+
+        await self._auth_repo.create_remember_token(
+            user_id,
+            token_hash,
+            expires_at,
+            ip_address,
+            user_agent,
+        )
+
+        return token
+
+    async def validate_remember_token(self, token: str) -> int | None:
+        """Validate a remember token and return user ID.
+
+        Args:
+            token: The plaintext remember token.
+
+        Returns:
+            User ID if token is valid, None otherwise.
+        """
+        token_hash = self.hash_token(token)
+        return await self._auth_repo.validate_remember_token(token_hash)
+
+    async def revoke_remember_tokens(self, user_id: int) -> int:
+        """Revoke all remember tokens for a user.
+
+        Args:
+            user_id: The user ID.
+
+        Returns:
+            Number of tokens revoked.
+        """
+        return await self._auth_repo.revoke_remember_tokens(user_id)
+
+    # ===== User Status =====
+
     async def get_auth_status(self, user_id: int) -> EmailAuthStatus:
         """Get email authentication status for a user.
 

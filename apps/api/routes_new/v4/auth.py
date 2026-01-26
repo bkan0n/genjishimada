@@ -14,8 +14,10 @@ from genjishimada_sdk.auth import (
     EmailVerifyRequest,
     PasswordResetConfirmRequest,
     PasswordResetRequest,
+    SessionReadResponse,
+    SessionWriteRequest,
 )
-from litestar import Router, get, post
+from litestar import Router, delete, get, post, put
 from litestar.connection import Request
 from litestar.di import Provide
 from litestar.params import Body
@@ -371,6 +373,208 @@ async def get_auth_status_endpoint(
         )
 
 
+# ===== Session Management Endpoints =====
+
+
+@get("/sessions/{session_id:str}", opt={"exclude_from_auth": True})
+async def session_read_endpoint(
+    session_id: str,
+    auth_service: AuthService,
+) -> Response:
+    """Read session data by ID. Includes is_mod flag. Used by Laravel session driver.
+
+    Args:
+        session_id: The session ID.
+        auth_service: Authentication service.
+
+    Returns:
+        SessionReadResponse with payload and is_mod flag with 200 status.
+    """
+    payload = await auth_service.session_read(session_id)
+
+    # Get is_mod from user's record
+    is_mod = False
+    if payload:
+        is_mod = await auth_service.check_if_mod(session_id)
+
+    return Response(SessionReadResponse(payload=payload, is_mod=is_mod), status_code=HTTP_200_OK)
+
+
+@put("/sessions/{session_id:str}", opt={"exclude_from_auth": True})
+async def session_write_endpoint(
+    session_id: str,
+    data: Annotated[SessionWriteRequest, Body(title="Session Data")],
+    auth_service: AuthService,
+    request: Request,
+) -> Response:
+    """Write session data. Used by Laravel session driver.
+
+    Args:
+        session_id: The session ID.
+        data: Session write payload.
+        auth_service: Authentication service.
+        request: Current request (for client IP and user agent).
+
+    Returns:
+        Success response with 200 status.
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("User-Agent")
+
+    await auth_service.session_write(
+        session_id=session_id,
+        payload=data.payload,
+        user_id=data.user_id,
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+
+    return Response({"success": True}, status_code=HTTP_200_OK)
+
+
+@delete("/sessions/{session_id:str}", opt={"exclude_from_auth": True})
+async def session_destroy_endpoint(
+    session_id: str,
+    auth_service: AuthService,
+) -> Response:
+    """Destroy a session. Used by Laravel session driver.
+
+    Args:
+        session_id: The session ID.
+        auth_service: Authentication service.
+
+    Returns:
+        Response indicating whether session was deleted with 200 status.
+    """
+    deleted = await auth_service.session_destroy(session_id)
+    return Response({"deleted": deleted}, status_code=HTTP_200_OK)
+
+
+@post("/sessions/gc", opt={"exclude_from_auth": True})
+async def session_gc_endpoint(
+    auth_service: AuthService,
+) -> Response:
+    """Garbage collect expired sessions. Should be called periodically.
+
+    Args:
+        auth_service: Authentication service.
+
+    Returns:
+        Response with count of deleted sessions with 200 status.
+    """
+    count = await auth_service.session_gc()
+    return Response({"deleted_count": count}, status_code=HTTP_200_OK)
+
+
+@get("/sessions/user/{user_id:int}")
+async def get_user_sessions_endpoint(
+    user_id: int,
+    auth_service: AuthService,
+) -> Response:
+    """Get all active sessions for a user.
+
+    Args:
+        user_id: The user ID.
+        auth_service: Authentication service.
+
+    Returns:
+        Response with list of sessions with 200 status.
+    """
+    sessions = await auth_service.session_get_user_sessions(user_id)
+    return Response({"sessions": sessions}, status_code=HTTP_200_OK)
+
+
+@delete("/sessions/user/{user_id:int}")
+async def destroy_user_sessions_endpoint(
+    user_id: int,
+    auth_service: AuthService,
+    except_session_id: str | None = None,
+) -> Response:
+    """Destroy all sessions for a user. Logout user from all devices.
+
+    Args:
+        user_id: The user ID.
+        auth_service: Authentication service.
+        except_session_id: Optional session to keep.
+
+    Returns:
+        Response with count of destroyed sessions with 200 status.
+    """
+    count = await auth_service.session_destroy_all_for_user(user_id, except_session_id)
+    return Response({"destroyed_count": count}, status_code=HTTP_200_OK)
+
+
+# ===== Remember Token Endpoints =====
+
+
+@post("/remember-token", opt={"exclude_from_auth": True})
+async def create_remember_token_endpoint(
+    data: Annotated[dict, Body(title="User ID")],
+    auth_service: AuthService,
+    request: Request,
+) -> Response:
+    """Create a long-lived token for persistent login.
+
+    Args:
+        data: Request containing user_id.
+        auth_service: Authentication service.
+        request: Current request (for client IP and user agent).
+
+    Returns:
+        Response with token with 201 status.
+    """
+    client_ip = request.client.host if request.client else None
+    user_agent = request.headers.get("User-Agent")
+
+    token = await auth_service.create_remember_token(
+        user_id=data["user_id"],
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+
+    return Response({"token": token}, status_code=HTTP_201_CREATED)
+
+
+@post("/remember-token/validate", opt={"exclude_from_auth": True})
+async def validate_remember_token_endpoint(
+    data: Annotated[dict, Body(title="Token")],
+    auth_service: AuthService,
+) -> Response:
+    """Check if a remember token is valid and return user_id.
+
+    Args:
+        data: Request containing token.
+        auth_service: Authentication service.
+
+    Returns:
+        Response with valid flag and user_id with 200 status.
+    """
+    user_id = await auth_service.validate_remember_token(data["token"])
+
+    if user_id is None:
+        return Response({"valid": False, "user_id": None}, status_code=HTTP_200_OK)
+
+    return Response({"valid": True, "user_id": user_id}, status_code=HTTP_200_OK)
+
+
+@delete("/remember-token/user/{user_id:int}", opt={"exclude_from_auth": True})
+async def revoke_remember_tokens_endpoint(
+    user_id: int,
+    auth_service: AuthService,
+) -> Response:
+    """Revoke all remember tokens for a user. Logout user from all devices.
+
+    Args:
+        user_id: The user ID.
+        auth_service: Authentication service.
+
+    Returns:
+        Response with count of revoked tokens with 200 status.
+    """
+    count = await auth_service.revoke_remember_tokens(user_id)
+    return Response({"revoked_count": count}, status_code=HTTP_200_OK)
+
+
 # Create router with /v4/auth prefix
 router = Router(
     path="/v4/auth",
@@ -382,6 +586,17 @@ router = Router(
         request_password_reset_endpoint,
         reset_password_endpoint,
         get_auth_status_endpoint,
+        # Session management
+        session_read_endpoint,
+        session_write_endpoint,
+        session_destroy_endpoint,
+        session_gc_endpoint,
+        get_user_sessions_endpoint,
+        destroy_user_sessions_endpoint,
+        # Remember token
+        create_remember_token_endpoint,
+        validate_remember_token_endpoint,
+        revoke_remember_tokens_endpoint,
     ],
     dependencies={
         "auth_repo": Provide(provide_auth_repository),
