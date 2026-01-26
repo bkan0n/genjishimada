@@ -117,7 +117,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
     )
 
     v3_router = litestar.Router("/api/v3", route_handlers=route_handlers)
-    v4_router = litestar.Router("/api", route_handlers=v4_route_handlers)
+    v4_router = litestar.Router("/api/v4", route_handlers=v4_route_handlers)
 
     @get("/healthcheck", tags=["Utilities"], opt={"exclude_from_auth": True})
     async def _health_check(conn: Connection) -> bool:

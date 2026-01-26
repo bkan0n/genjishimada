@@ -1,5 +1,3 @@
-"""V4 API routes."""
-
 import importlib
 import inspect
 import os
@@ -23,4 +21,13 @@ for item in os.listdir(MODULE_PATH):
             if isinstance(obj, Router) or (
                 inspect.isclass(obj) and issubclass(obj, Controller) and obj.__module__ == mod.__name__
             ):
+                route_handlers.append(obj)
+
+    elif item_path.is_dir() and (item_path / "__init__.py").exists():
+        submodule_name = f"{MODULE_NAME}.{item}"
+        # noinspection SpellCheckingInspection
+        submod = importlib.import_module(submodule_name)
+
+        for _, obj in inspect.getmembers(submod):
+            if isinstance(obj, Router):
                 route_handlers.append(obj)
