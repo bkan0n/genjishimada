@@ -211,12 +211,17 @@ class UserService(BaseService):
                 item.is_primary,
             )
 
-    async def fetch_overwatch_usernames(self, user_id: int, use_pool: bool = False) -> list[OverwatchUsernameItem]:
+    async def fetch_overwatch_usernames(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[OverwatchUsernameItem]:
         """Fetch Overwatch usernames for a user.
 
         Args:
             user_id (int): The ID of the user.
-            use_pool (bool, optional): If True, use a connection pool to fetch the usernames. Defaults to False.
+            conn (Connection | None): Optional connection for transaction support.
 
         Returns:
             list[OverwatchUsernameItem]: The list of username records for the user.
@@ -233,15 +238,12 @@ class UserService(BaseService):
             ORDER BY is_primary DESC;
         """
 
-        if use_pool:
-            async with self._pool.acquire() as conn:
-                rows = await conn.fetch(query, user_id)
-        else:
-            rows = await self._conn.fetch(query, user_id)
+        _conn = conn or self._pool
+        rows = await _conn.fetch(query, user_id)
 
         return msgspec.convert(rows, list[OverwatchUsernameItem])
 
-    async def fetch_all_user_names(self, user_id: int, use_pool: bool = False) -> list[str]:
+    async def fetch_all_user_names(self, user_id: int, *, conn: Connection | None = None) -> list[str]:
         """Fetch all display names for a user, including Overwatch usernames."""
         query = """
                 SELECT DISTINCT name
@@ -265,11 +267,8 @@ class UserService(BaseService):
                 ) all_names;
                 """
 
-        if use_pool:
-            async with self._pool.acquire() as conn:
-                rows = await conn.fetch(query, user_id)
-        else:
-            rows = await self._conn.fetch(query, user_id)
+        _conn = conn or self._pool
+        rows = await _conn.fetch(query, user_id)
 
         res = [row["name"] for row in rows]
         return res

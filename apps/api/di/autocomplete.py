@@ -162,7 +162,8 @@ class AutocompleteService(BaseService):
         archived: bool | None = None,
         hidden: bool | None = None,
         playtesting: PlaytestStatus | None = None,
-        use_pool: bool = False,
+        *,
+        conn: Connection | None = None,
     ) -> OverwatchCode | None:
         """Transform a map name into a code.
 
@@ -171,7 +172,7 @@ class AutocompleteService(BaseService):
             archived (bool | None, optional): Filter by archived flag, or `None` for no filter.
             hidden (bool | None, optional): Filter by hidden flag, or `None` for no filter.
             playtesting (PlaytestStatus | None, optional): Filter by playtesting status, or `None` for no filter.
-            use_pool (bool): Use a pool instead of a route-based connection.
+            conn (Connection | None): Optional connection for transaction support.
 
         Returns:
             OverwatchCode | None: The closest matching map code, or `None` if no matches are found.
@@ -190,11 +191,8 @@ class AutocompleteService(BaseService):
                 END DESC
             LIMIT 1;
         """
-        if use_pool:
-            async with self._pool.acquire() as conn:
-                res = cast("OverwatchCode", await conn.fetchval(query, search, archived, hidden, playtesting))
-        else:
-            res = cast("OverwatchCode", await self._conn.fetchval(query, search, archived, hidden, playtesting))
+        _conn = conn or self._pool
+        res = cast("OverwatchCode", await _conn.fetchval(query, search, archived, hidden, playtesting))
         if res is None:
             return None
         return f'"{res}"'  # type: ignore
@@ -204,8 +202,9 @@ class AutocompleteService(BaseService):
         search: str,
         limit: int = 10,
         fake_users_only: bool = False,
-        use_pool: bool = False,
         ignore_fake_users: bool = False,
+        *,
+        conn: Connection | None = None,
     ) -> list[tuple[int, str]] | None:
         """Get similar users by nickname, global name, or Overwatch username.
 
@@ -213,8 +212,8 @@ class AutocompleteService(BaseService):
             search (str): Input string to compare.
             limit (int, optional): Maximum number of results. Defaults to 10.
             fake_users_only (bool): Filter out actually discord users and display fake members only.
-            use_pool (bool): Use a pool instead of a route-based connection.
             ignore_fake_users: Ignore fake users
+            conn (Connection | None): Optional connection for transaction support.
 
         Returns:
             list[tuple[int, str]] | None: A list of `(user_id, display_name)` tuples, or `None` if no matches are found.
@@ -266,11 +265,8 @@ class AutocompleteService(BaseService):
             END AS name
         FROM user_names;
         """
-        if use_pool:
-            async with self._pool.acquire() as conn:
-                res = await conn.fetch(query, search, limit, fake_users_only, ignore_fake_users)
-        else:
-            res = await self._conn.fetch(query, search, limit, fake_users_only, ignore_fake_users)
+        _conn = conn or self._pool
+        res = await _conn.fetch(query, search, limit, fake_users_only, ignore_fake_users)
         if not res:
             return None
         return [(r["user_id"], r["name"]) for r in res]

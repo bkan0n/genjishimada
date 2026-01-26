@@ -586,7 +586,7 @@ async def _attempt_auto_verify(  # noqa: PLR0913
 
             extracted = ocr_data.extracted
 
-            user_name_response = await users.fetch_all_user_names(data.user_id, use_pool=True)
+            user_name_response = await users.fetch_all_user_names(data.user_id)
             user_names = [x.upper() for x in user_name_response]
             name_match = False
             if extracted.name and user_names:
@@ -605,7 +605,7 @@ async def _attempt_auto_verify(  # noqa: PLR0913
                 else:
                     log.debug(f"No name match found for '{extracted.name}' against {user_names}")
 
-            extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "", use_pool=True)
+            extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "")
             if extracted_code_cleaned:
                 extracted_code_cleaned = extracted_code_cleaned.replace('"', "")
 
