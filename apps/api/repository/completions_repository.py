@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from asyncpg import Connection, Pool
 
 from repository.base import BaseRepository
@@ -985,4 +987,289 @@ class CompletionsRepository(BaseRepository):
         """
         offset = (page_number - 1) * page_size
         rows = await _conn.fetch(query, page_size, offset)
+        return [dict(row) for row in rows]
+
+    async def fetch_suspicious_flags(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch suspicious flags for a user.
+
+        Args:
+            user_id: User ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of suspicious flag records as dicts.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT
+                usf.id, u.id AS user_id, usf.context, usf.flag_type, cc.message_id, cc.verification_id, usf.flagged_by
+            FROM users.suspicious_flags usf
+            LEFT JOIN core.completions cc ON cc.id = usf.completion_id
+            LEFT JOIN core.users u ON cc.user_id = u.id
+            WHERE u.id = $1
+        """
+        rows = await _conn.fetch(query, user_id)
+        return [dict(row) for row in rows]
+
+    async def fetch_upvote_count(
+        self,
+        message_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int:
+        """Fetch upvote count for a message.
+
+        Args:
+            message_id: Discord message ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Upvote count.
+        """
+        _conn = self._get_connection(conn)
+        query = """SELECT count(*) as upvotes FROM completions.upvotes WHERE message_id=$1 GROUP BY message_id;"""
+        val = await _conn.fetchval(query, message_id)
+        return val or 0
+
+    async def check_previous_world_record_xp(
+        self,
+        code: str,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Check if user has ever received WR XP for this map.
+
+        Args:
+            code: Map code.
+            user_id: User ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            True if user has received WR XP, False otherwise.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+        WITH target_map AS (
+            SELECT id AS map_id FROM core.maps WHERE code = $1
+        )
+        SELECT EXISTS(
+            SELECT 1 FROM core.completions c
+            LEFT JOIN target_map tm ON c.map_id = tm.map_id
+            WHERE user_id=$2 AND NOT legacy AND wr_xp_check
+        )
+        """
+        return await _conn.fetchval(query, code, user_id)
+
+    async def fetch_records_filtered(  # noqa: PLR0913
+        self,
+        code: str | None,
+        user_id: int | None,
+        verification_status: str,
+        latest_only: bool,
+        page_size: int,
+        page_number: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch records with filters for moderation.
+
+        Args:
+            code: Optional map code filter.
+            user_id: Optional user ID filter.
+            verification_status: "Verified", "Unverified", or "All".
+            latest_only: Whether to only show latest per user per map.
+            page_size: Number of results per page (0 for all).
+            page_number: Page number (1-indexed).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of completion records as dicts.
+        """
+        _conn = self._get_connection(conn)
+
+        params: list[Any] = []
+        param_idx = 1
+        where_clauses: list[str] = []
+
+        if code:
+            where_clauses.append(f"m.code = ${param_idx}")
+            params.append(code)
+            param_idx += 1
+
+        if user_id:
+            where_clauses.append(f"c.user_id = ${param_idx}")
+            params.append(user_id)
+            param_idx += 1
+
+        if verification_status == "Verified":
+            where_clauses.append("c.verified = TRUE")
+        elif verification_status == "Unverified":
+            where_clauses.append("c.verified = FALSE")
+
+        where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+        if latest_only:
+            query = f"""
+            WITH latest_per_user_per_map AS (
+                SELECT DISTINCT ON (c.user_id, c.map_id)
+                    c.id,
+                    c.user_id,
+                    c.map_id,
+                    c.time,
+                    c.screenshot,
+                    c.video,
+                    c.completion,
+                    c.verified,
+                    c.message_id,
+                    c.legacy,
+                    c.legacy_medal,
+                    c.inserted_at
+                FROM core.completions c
+                JOIN core.maps m ON m.id = c.map_id
+                {where_sql}
+                ORDER BY c.user_id, c.map_id, c.inserted_at DESC
+            ),
+            name_split AS (
+                SELECT
+                    un.user_id,
+                    un.name,
+                    COALESCE(STRING_AGG(
+                        CASE WHEN un.rn > 1 THEN un.name END,
+                        ', '
+                    ), '') AS also_known_as
+                FROM (
+                    SELECT
+                        u.id AS user_id,
+                        COALESCE(u.nickname, u.global_name) AS name,
+                        ROW_NUMBER() OVER (PARTITION BY u.id ORDER BY
+                            CASE WHEN u.nickname IS NOT NULL THEN 1
+                                 WHEN u.global_name IS NOT NULL THEN 2
+                            END
+                        ) AS rn
+                    FROM core.users u
+                ) un
+                GROUP BY un.user_id, un.name
+            ),
+            ranked AS (
+                SELECT
+                    l.*,
+                    RANK() OVER (PARTITION BY l.map_id ORDER BY l.time, l.inserted_at) AS rank
+                FROM latest_per_user_per_map l
+            )
+            SELECT
+                m.code,
+                r.user_id,
+                ns.name,
+                ns.also_known_as,
+                r.time,
+                r.screenshot,
+                r.video,
+                r.completion,
+                r.verified,
+                r.rank,
+                CASE
+                    WHEN r.legacy THEN r.legacy_medal
+                    WHEN r.time <= md.gold THEN 'Gold'
+                    WHEN r.time <= md.silver THEN 'Silver'
+                    WHEN r.time <= md.bronze THEN 'Bronze'
+                END AS medal,
+                m.map_name,
+                m.difficulty,
+                r.message_id,
+                r.legacy,
+                r.legacy_medal,
+                COALESCE(
+                    (SELECT COUNT(*) > 0 FROM users.suspicious_flags WHERE completion_id = r.id), FALSE
+                ) AS suspicious,
+                (SELECT COUNT(*) FROM completions.upvotes WHERE message_id = r.message_id) AS upvotes,
+                r.id
+            FROM ranked r
+            JOIN core.maps m ON m.id = r.map_id
+            LEFT JOIN maps.medals md ON md.map_id = r.map_id
+            JOIN name_split ns ON ns.user_id = r.user_id
+            WHERE r.message_id IS NOT NULL
+            ORDER BY r.time ASC, r.inserted_at ASC
+            LIMIT ${param_idx} OFFSET ${param_idx + 1};
+            """
+        else:
+            query = f"""
+            WITH name_split AS (
+                SELECT
+                    un.user_id,
+                    un.name,
+                    COALESCE(STRING_AGG(
+                        CASE WHEN un.rn > 1 THEN un.name END,
+                        ', '
+                    ), '') AS also_known_as
+                FROM (
+                    SELECT
+                        u.id AS user_id,
+                        COALESCE(u.nickname, u.global_name) AS name,
+                        ROW_NUMBER() OVER (PARTITION BY u.id ORDER BY
+                            CASE WHEN u.nickname IS NOT NULL THEN 1
+                                 WHEN u.global_name IS NOT NULL THEN 2
+                            END
+                        ) AS rn
+                    FROM core.users u
+                ) un
+                GROUP BY un.user_id, un.name
+            ),
+            ranked AS (
+                SELECT
+                    c.*,
+                    RANK() OVER (PARTITION BY c.map_id ORDER BY c.time, c.inserted_at) AS rank
+                FROM core.completions c
+                JOIN core.maps m ON m.id = c.map_id
+                {where_sql}
+            )
+            SELECT
+                m.code,
+                r.user_id,
+                ns.name,
+                ns.also_known_as,
+                r.time,
+                r.screenshot,
+                r.video,
+                r.completion,
+                r.verified,
+                r.rank,
+                CASE
+                    WHEN r.legacy THEN r.legacy_medal
+                    WHEN r.time <= md.gold THEN 'Gold'
+                    WHEN r.time <= md.silver THEN 'Silver'
+                    WHEN r.time <= md.bronze THEN 'Bronze'
+                END AS medal,
+                m.map_name,
+                m.difficulty,
+                r.message_id,
+                r.legacy,
+                r.legacy_medal,
+                COALESCE(
+                    (SELECT COUNT(*) > 0 FROM users.suspicious_flags WHERE completion_id = r.id), FALSE
+                ) AS suspicious,
+                (SELECT COUNT(*) FROM completions.upvotes WHERE message_id = r.message_id) AS upvotes,
+                r.id
+            FROM ranked r
+            JOIN core.maps m ON m.id = r.map_id
+            LEFT JOIN maps.medals md ON md.map_id = r.map_id
+            JOIN name_split ns ON ns.user_id = r.user_id
+            WHERE r.message_id IS NOT NULL
+            ORDER BY r.time ASC, r.inserted_at ASC
+            LIMIT ${param_idx} OFFSET ${param_idx + 1};
+            """
+
+        if page_size == 0:
+            query = query.replace(f"LIMIT ${param_idx} OFFSET ${param_idx + 1};", ";")
+            rows = await _conn.fetch(query, *params)
+        else:
+            offset = (page_number - 1) * page_size
+            params.extend([page_size, offset])
+            rows = await _conn.fetch(query, *params)
+
         return [dict(row) for row in rows]
