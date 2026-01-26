@@ -27,8 +27,11 @@ class TestRegisterEndpoint:
 
         assert response.status_code == 201
         data = response.json()
-        assert "email" in data
-        assert data["username"] == "newuser"
+        # v4 wraps response in {"user": {...}, "verification_email_sent": bool}
+        assert "user" in data
+        assert "verification_email_sent" in data
+        assert data["user"]["username"] == "newuser"
+        assert data["user"]["email_verified"] is False
 
     @pytest.mark.asyncio
     async def test_register_returns_400_on_duplicate_email(self, test_client):
@@ -105,7 +108,10 @@ class TestLoginEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["email"] == email
+        # v4 wraps response in {"user": {...}}
+        assert "user" in data
+        assert data["user"]["email"] == email
+        assert data["user"]["username"] == "loginuser"
 
     @pytest.mark.asyncio
     async def test_login_returns_401_on_invalid_password(self, test_client):

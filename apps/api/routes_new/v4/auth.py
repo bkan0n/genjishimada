@@ -175,7 +175,21 @@ async def login_endpoint(
     try:
         client_ip = request.client.host if request.client else None
         user = await auth_service.login(data, client_ip=client_ip)
-        return Response(user, status_code=HTTP_200_OK)
+
+        # Wrap response to match v3 API contract
+        return Response(
+            {
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "email_verified": user.email_verified,
+                    "coins": user.coins,
+                    "is_mod": user.is_mod,
+                },
+            },
+            status_code=HTTP_200_OK,
+        )
 
     except InvalidCredentialsError as e:
         raise CustomHTTPException(detail=e.message, status_code=HTTP_401_UNAUTHORIZED)
@@ -195,14 +209,29 @@ async def verify_email_endpoint(
         auth_service: Authentication service.
 
     Returns:
-        AuthUserResponse with 200 status.
+        Response with message and user data with 200 status (matching v3 format).
 
     Raises:
         CustomHTTPException: On invalid, expired, used, or already verified errors.
     """
     try:
         user = await auth_service.verify_email(data)
-        return Response(user, status_code=HTTP_200_OK)
+
+        # Wrap response to match v3 API contract
+        return Response(
+            {
+                "message": "Email verified successfully.",
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "email_verified": user.email_verified,
+                    "coins": user.coins,
+                    "is_mod": user.is_mod,
+                },
+            },
+            status_code=HTTP_200_OK,
+        )
 
     except TokenInvalidError as e:
         raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
@@ -223,7 +252,22 @@ async def verify_email_endpoint_v3_alias(
     """v3-compatible alias for verify endpoint (v3 path: /verify-email)."""
     try:
         user = await auth_service.verify_email(data)
-        return Response(user, status_code=HTTP_200_OK)
+
+        # Wrap response to match v3 API contract
+        return Response(
+            {
+                "message": "Email verified successfully.",
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "email_verified": user.email_verified,
+                    "coins": user.coins,
+                    "is_mod": user.is_mod,
+                },
+            },
+            status_code=HTTP_200_OK,
+        )
 
     except TokenInvalidError as e:
         raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
@@ -374,14 +418,29 @@ async def reset_password_endpoint(
         auth_service: Authentication service.
 
     Returns:
-        AuthUserResponse with 200 status.
+        Response with message and user data with 200 status (matching v3 format).
 
     Raises:
         CustomHTTPException: On validation or token errors.
     """
     try:
         user = await auth_service.confirm_password_reset(data)
-        return Response(user, status_code=HTTP_200_OK)
+
+        # Wrap response to match v3 API contract
+        return Response(
+            {
+                "message": "Password reset successfully.",
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "email_verified": user.email_verified,
+                    "coins": user.coins,
+                    "is_mod": user.is_mod,
+                },
+            },
+            status_code=HTTP_200_OK,
+        )
 
     except PasswordValidationError as e:
         raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
@@ -489,7 +548,7 @@ async def session_write_endpoint(
     return Response({"success": True}, status_code=HTTP_200_OK)
 
 
-@delete("/sessions/{session_id:str}", opt={"exclude_from_auth": True})
+@delete("/sessions/{session_id:str}", status_code=HTTP_200_OK, opt={"exclude_from_auth": True})
 async def session_destroy_endpoint(
     session_id: str,
     auth_service: AuthService,
@@ -541,7 +600,7 @@ async def get_user_sessions_endpoint(
     return Response({"sessions": sessions}, status_code=HTTP_200_OK)
 
 
-@delete("/sessions/user/{user_id:int}")
+@delete("/sessions/user/{user_id:int}", status_code=HTTP_200_OK)
 async def destroy_user_sessions_endpoint(
     user_id: int,
     auth_service: AuthService,
@@ -614,7 +673,7 @@ async def validate_remember_token_endpoint(
     return Response({"valid": True, "user_id": user_id}, status_code=HTTP_200_OK)
 
 
-@delete("/remember-token/user/{user_id:int}", opt={"exclude_from_auth": True})
+@delete("/remember-token/user/{user_id:int}", status_code=HTTP_200_OK, opt={"exclude_from_auth": True})
 async def revoke_remember_tokens_endpoint(
     user_id: int,
     auth_service: AuthService,
