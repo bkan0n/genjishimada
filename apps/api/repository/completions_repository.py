@@ -662,3 +662,327 @@ class CompletionsRepository(BaseRepository):
         offset = (page_number - 1) * page_size
         rows = await _conn.fetch(query, code, page_size, offset)
         return [dict(row) for row in rows]
+
+    async def fetch_completion_submission(
+        self,
+        record_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Fetch detailed submission info for a completion.
+
+        Args:
+            record_id: Completion record ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Submission details as dict.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+        WITH hypothetical_target AS (
+            SELECT
+                c.*,
+                m.code        AS code,
+                m.difficulty  AS difficulty,
+                m.map_name
+            FROM core.completions c
+            JOIN core.maps m ON m.id = c.map_id
+            WHERE c.id = $1
+        ),
+        latest_per_user AS (
+            SELECT DISTINCT ON (c.user_id)
+                c.user_id,
+                c.time,
+                c.inserted_at
+            FROM core.completions c
+            WHERE c.map_id = (SELECT map_id FROM hypothetical_target)
+              AND c.verified = TRUE
+              AND c.completion = FALSE
+            ORDER BY c.user_id, c.inserted_at DESC
+        ),
+        eligible_ranked AS (
+            SELECT user_id, time
+            FROM latest_per_user
+
+            UNION ALL
+
+            SELECT ht.user_id, ht.time
+            FROM hypothetical_target ht
+            WHERE ht.completion = FALSE
+                AND NOT EXISTS (
+                SELECT 1
+                FROM latest_per_user l
+                WHERE l.user_id = ht.user_id
+                    AND l.time = ht.time
+                )
+        ),
+        ranked AS (
+            SELECT
+                user_id,
+                time,
+                RANK() OVER (ORDER BY time) AS rank
+            FROM eligible_ranked
+        ),
+        final AS (
+            SELECT
+                ht.id,
+                ht.user_id,
+                ht.time,
+                ht.screenshot,
+                ht.video,
+                ht.verified,
+                ht.completion,
+                ht.inserted_at,
+                ht.code,
+                ht.difficulty,
+                ht.map_name,
+                r.rank AS hypothetical_rank,
+                md.gold,
+                md.silver,
+                md.bronze,
+                ht.verified_by,
+                ht.verification_id,
+                ht.message_id
+            FROM hypothetical_target ht
+            LEFT JOIN ranked r
+              ON r.user_id = ht.user_id AND r.time = ht.time
+            LEFT JOIN maps.medals md
+              ON md.map_id = ht.map_id
+        ),
+        user_names AS (
+            SELECT
+                u.id AS user_id,
+                ARRAY_REMOVE(
+                    COALESCE(
+                        ARRAY_AGG(owu.username ORDER BY owu.is_primary DESC, owu.username),
+                        ARRAY[]::text[]
+                    )
+                    || ARRAY[u.nickname, u.global_name],
+                    NULL
+                ) AS all_usernames
+            FROM final f
+            JOIN core.users u ON u.id = f.user_id
+            LEFT JOIN users.overwatch_usernames owu ON owu.user_id = u.id
+            GROUP BY u.id, u.nickname, u.global_name
+        ),
+        name_split AS (
+            SELECT
+                un.user_id,
+                un.all_usernames[1] AS name,
+                COALESCE(
+                    array_to_string(
+                        ARRAY(
+                            SELECT DISTINCT x
+                            FROM unnest(un.all_usernames[2:array_length(un.all_usernames, 1)]) AS x
+                            WHERE x IS NOT NULL AND x <> ''
+                        ),
+                        ', '
+                    ),
+                    ''
+                ) AS also_known_as
+            FROM user_names un
+        ),
+        medal_eval AS (
+            SELECT
+                f.*,
+                ns.name,
+                ns.also_known_as,
+                CASE
+                    WHEN f.completion = FALSE AND f.gold   IS NOT NULL AND f.time <= f.gold   THEN 'Gold'
+                    WHEN f.completion = FALSE AND f.silver IS NOT NULL AND f.time <= f.silver THEN 'Silver'
+                    WHEN f.completion = FALSE AND f.bronze IS NOT NULL AND f.time <= f.bronze THEN 'Bronze'
+                END AS hypothetical_medal
+            FROM final f
+            JOIN name_split ns ON ns.user_id = f.user_id
+        )
+        SELECT
+            id,
+            user_id,
+            time,
+            screenshot,
+            video,
+            verified,
+            completion,
+            inserted_at,
+            code,
+            difficulty,
+            map_name,
+            hypothetical_rank,
+            hypothetical_medal,
+            name,
+            also_known_as,
+            verified_by,
+            verification_id,
+            message_id,
+            EXISTS (
+              SELECT 1
+              FROM users.suspicious_flags sf
+              JOIN core.completions c2
+                ON c2.id = sf.completion_id
+              WHERE c2.user_id = me.user_id
+            ) AS suspicious
+        FROM medal_eval me;
+        """
+        row = await _conn.fetchrow(query, record_id)
+        return dict(row) if row else {}
+
+    async def fetch_pending_verifications(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch completions awaiting verification.
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of pending verification records as dicts.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT id, verification_id FROM core.completions
+            WHERE verified=FALSE AND verified_by IS NULL AND verification_id IS NOT NULL
+            ORDER BY inserted_at DESC;
+        """
+        rows = await _conn.fetch(query)
+        return [dict(row) for row in rows]
+
+    async def fetch_all_completions(
+        self,
+        page_size: int,
+        page_number: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch all verified completions sorted by most recent.
+
+        Args:
+            page_size: Number of results per page.
+            page_number: Page number (1-indexed).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of completion records as dicts.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+        WITH latest_per_user_per_map AS (
+            SELECT DISTINCT ON (c.user_id, c.map_id)
+                c.id,
+                c.user_id,
+                c.map_id,
+                c.time,
+                c.completion,
+                c.inserted_at
+            FROM core.completions c
+            WHERE c.verified
+              AND c.legacy = FALSE
+            ORDER BY c.user_id,
+                c.map_id,
+                c.inserted_at DESC
+        ), current_ranks AS (
+            SELECT
+                l.map_id,
+                l.user_id,
+                CASE
+                    WHEN l.completion = FALSE
+                        THEN rank() OVER (PARTITION BY l.map_id ORDER BY l.time, l.inserted_at)
+                    ELSE NULL::int
+                END AS current_rank
+            FROM latest_per_user_per_map l
+        )
+        SELECT
+            m.code,
+            c.user_id,
+            coalesce(ow.username, u.nickname, u.global_name, 'Unknown Username') AS name,
+            (
+                SELECT
+                    ou.username
+                FROM users.overwatch_usernames ou
+                WHERE ou.user_id = c.user_id
+                  AND NOT ou.is_primary
+                ORDER BY c.inserted_at DESC NULLS LAST
+                LIMIT 1
+            ) AS also_known_as,
+            c.time,
+            c.screenshot,
+            c.video,
+            c.completion,
+            c.verified,
+            CASE WHEN lp.id = c.id THEN r.current_rank END AS rank,
+            CASE
+                WHEN med.gold IS NOT NULL AND c.time <= med.gold
+                    THEN 'Gold'
+                WHEN med.silver IS NOT NULL AND c.time <= med.silver
+                    THEN 'Silver'
+                WHEN med.bronze IS NOT NULL AND c.time <= med.bronze
+                    THEN 'Bronze'
+            END AS medal,
+            m.map_name,
+            m.difficulty,
+            c.message_id,
+            (SELECT COUNT(*) FROM completions.upvotes WHERE message_id=c.message_id) AS upvotes,
+            c.legacy,
+            c.legacy_medal,
+            FALSE AS suspicious,
+            count(*) OVER () AS total_results
+        FROM core.completions c
+        JOIN core.maps m ON m.id = c.map_id
+        JOIN core.users u ON u.id = c.user_id
+        LEFT JOIN users.overwatch_usernames ow ON ow.user_id = u.id AND ow.is_primary
+        LEFT JOIN maps.medals med ON med.map_id = m.id
+        LEFT JOIN latest_per_user_per_map lp ON lp.user_id = c.user_id AND lp.map_id = c.map_id
+        LEFT JOIN current_ranks r ON r.user_id = c.user_id AND r.map_id = c.map_id
+        LEFT JOIN LATERAL (
+            WITH ow AS (
+                SELECT username, is_primary
+                FROM users.overwatch_usernames
+                WHERE user_id = c.user_id
+            ),
+                display AS (
+                    SELECT COALESCE(
+                            (SELECT username FROM ow WHERE is_primary LIMIT 1),
+                            u.nickname,
+                            u.global_name,
+                            'Unknown Username'
+                           ) AS name
+                ),
+                candidates AS (
+                    SELECT u.global_name AS n
+                    UNION ALL SELECT u.nickname
+                    UNION ALL SELECT username FROM ow
+                ),
+                dedup AS (
+                    SELECT DISTINCT ON (lower(btrim(n))) btrim(n) AS n
+                    FROM candidates
+                    WHERE n IS NOT NULL AND btrim(n) <> ''
+                    ORDER BY lower(btrim(n))
+                )
+            SELECT
+                (SELECT name FROM display) AS name,
+                NULLIF(
+                        array_to_string(
+                                ARRAY(
+                                        SELECT n
+                                        FROM dedup
+                                        WHERE lower(n) <> lower((SELECT name FROM display))
+                                        ORDER BY n
+                                ),
+                                ', '
+                        ),
+                        ''
+                ) AS also_known_as
+            ) names ON TRUE
+
+        WHERE TRUE
+          AND c.verified
+          AND c.legacy = FALSE
+          AND c.message_id IS NOT NULL
+        ORDER BY c.inserted_at DESC
+        LIMIT $1 OFFSET $2;
+        """
+        offset = (page_number - 1) * page_size
+        rows = await _conn.fetch(query, page_size, offset)
+        return [dict(row) for row in rows]
