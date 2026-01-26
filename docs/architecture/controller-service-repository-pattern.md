@@ -397,6 +397,48 @@ async def create_endpoint(self, data: Request, service: Service) -> Response[Non
 
 **Migration effort:** ~2 hours for 6 endpoints
 
+## Read-Only Domain Example: Community
+
+The community domain demonstrates the simplest v4 pattern:
+
+**Characteristics:**
+- No validation (query parameters only)
+- No events (no async operations)
+- No transactions (single queries)
+- Service is pure pass-through with SDK conversion
+
+**Code Metrics:**
+- Repository: 759 lines (12 methods, all SQL)
+- Service: 150 lines (12 pass-through methods)
+- Controller: 248 lines (12 endpoint methods)
+- Tests: ~200 lines total
+
+**Pattern:**
+
+```python
+# Repository: Return dicts
+async def fetch_something(self, *, conn: Connection | None = None) -> list[dict]:
+    _conn = self._get_connection(conn)
+    rows = await _conn.fetch(query)
+    return [dict(row) for row in rows]
+
+# Service: Convert to SDK
+async def get_something(self) -> list[SomeResponse]:
+    rows = await self._repo.fetch_something()
+    return msgspec.convert(rows, list[SomeResponse])
+
+# Controller: Pass through
+async def get_something_endpoint(self, service: Service) -> list[SomeResponse]:
+    return await service.get_something()
+```
+
+**Testing:**
+- Repository tests use real database (verify SQL)
+- Service tests use mocks (verify conversion)
+- Route tests use real database (integration)
+
+**Migration effort:** ~4 hours for 12 endpoints
+
 ## Key Principles
 
 - **DRY**: Share patterns across domains
