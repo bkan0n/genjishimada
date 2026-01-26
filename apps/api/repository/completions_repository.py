@@ -110,6 +110,7 @@ class CompletionsRepository(BaseRepository):
                 tm.map_name,
                 tm.difficulty,
                 tm.raw_difficulty,
+                regexp_replace(tm.difficulty, ' (\\+|\\-)$', '') AS top_difficulty,
                 cb.user_id,
                 cb.time,
                 cb.completion,
@@ -177,7 +178,7 @@ class CompletionsRepository(BaseRepository):
         FROM with_map wm
         JOIN name_split ns ON ns.user_id = wm.user_id
         WHERE wm.user_id = $1
-        AND ($2::text IS NULL OR wm.difficulty = $2::text)
+        AND ($2::text IS NULL OR wm.top_difficulty = $2::text)
         ORDER BY
             wm.raw_difficulty,
             (wm.rank IS NULL),
