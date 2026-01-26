@@ -1437,3 +1437,252 @@ class CompletionsRepository(BaseRepository):
         _conn = self._get_connection(conn)
         query, args = self.build_completion_patch_query(record_id, patch_data)
         await _conn.execute(query, *args)
+
+    async def update_verification(
+        self,
+        record_id: int,
+        verified: bool,
+        verified_by: int,
+        reason: str | None,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Update verification status for a completion.
+
+        Args:
+            record_id: Completion record ID.
+            verified: Verification status.
+            verified_by: User ID of verifier.
+            reason: Optional reason for verification decision.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = "UPDATE core.completions SET verified=$2, verified_by=$3, reason=$4 WHERE id=$1;"
+        await _conn.execute(query, record_id, verified, verified_by, reason)
+
+    async def insert_suspicious_flag(  # noqa: PLR0913
+        self,
+        message_id: int | None,
+        verification_id: int | None,
+        context: str,
+        flag_type: str,
+        flagged_by: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Insert a suspicious flag for a completion.
+
+        Args:
+            message_id: Discord message ID (if completion has been posted).
+            verification_id: Discord verification message ID (if pending).
+            context: Context for the flag.
+            flag_type: Type of suspicious activity.
+            flagged_by: User ID of flagger.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            WITH message_to_completion_id AS (
+            SELECT id
+            FROM core.completions
+            WHERE
+                ($1::bigint IS NOT NULL AND message_id = $1::bigint) OR
+                ($1::bigint IS NULL     AND verification_id = $2::bigint)
+            LIMIT 1
+            )
+            INSERT INTO users.suspicious_flags (completion_id, context, flag_type, flagged_by)
+            SELECT id, $3, $4, $5
+            FROM message_to_completion_id;
+        """
+        await _conn.execute(query, message_id, verification_id, context, flag_type, flagged_by)
+
+    async def insert_upvote(
+        self,
+        user_id: int,
+        message_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int | None:
+        """Insert an upvote for a completion.
+
+        Args:
+            user_id: User ID upvoting.
+            message_id: Discord message ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            New upvote count, or None if user already upvoted.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO completions.upvotes (user_id, message_id)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+            RETURNING (
+                SELECT COUNT(*) + 1
+                FROM completions.upvotes
+                WHERE message_id = $2
+            ) AS count;
+        """
+        count = await _conn.fetchval(query, user_id, message_id)
+        return count
+
+    async def upsert_quality_vote(
+        self,
+        code: str,
+        user_id: int,
+        quality: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Set quality vote for a map.
+
+        Args:
+            code: Map code.
+            user_id: User ID voting.
+            quality: Quality rating.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+        WITH target_map AS (
+            SELECT id AS map_id FROM core.maps WHERE code = $1
+        )
+        INSERT INTO maps.ratings (map_id, user_id, quality, verified)
+        SELECT tm.map_id, $2, $3, FALSE
+        FROM target_map AS tm
+        ON CONFLICT (map_id, user_id)
+        DO UPDATE
+          SET quality = EXCLUDED.quality;
+        """
+        await _conn.execute(query, code, user_id, quality)
+
+    async def fetch_completion_for_moderation(
+        self,
+        completion_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch completion info for moderation.
+
+        Args:
+            completion_id: Completion ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Dict with user_id, code, old_time, old_verified, or None if not found.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT c.user_id, m.code, c.time as old_time, c.verified as old_verified
+            FROM core.completions c
+            LEFT JOIN core.maps m ON m.id = c.map_id
+            WHERE c.id = $1
+        """
+        row = await _conn.fetchrow(query, completion_id)
+        return dict(row) if row else None
+
+    async def update_completion_time(
+        self,
+        completion_id: int,
+        new_time: float,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Update completion time.
+
+        Args:
+            completion_id: Completion ID.
+            new_time: New time in seconds.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = "UPDATE core.completions SET time = $1 WHERE id = $2"
+        await _conn.execute(query, new_time, completion_id)
+
+    async def update_completion_verified(
+        self,
+        completion_id: int,
+        verified: bool,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Update completion verification status.
+
+        Args:
+            completion_id: Completion ID.
+            verified: New verification status.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = "UPDATE core.completions SET verified = $1 WHERE id = $2"
+        await _conn.execute(query, verified, completion_id)
+
+    async def check_suspicious_flag_exists(
+        self,
+        completion_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Check if completion already has suspicious flag.
+
+        Args:
+            completion_id: Completion ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            True if flag exists, False otherwise.
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT id FROM users.suspicious_flags WHERE completion_id = $1"
+        existing = await _conn.fetchval(query, completion_id)
+        return existing is not None
+
+    async def insert_suspicious_flag_by_completion_id(
+        self,
+        completion_id: int,
+        context: str,
+        flag_type: str,
+        flagged_by: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Insert suspicious flag by completion ID.
+
+        Args:
+            completion_id: Completion ID.
+            context: Context for the flag.
+            flag_type: Type of suspicious activity.
+            flagged_by: User ID of flagger.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO users.suspicious_flags (completion_id, context, flag_type, flagged_by)
+            VALUES ($1, $2, $3, $4)
+        """
+        await _conn.execute(query, completion_id, context, flag_type, flagged_by)
+
+    async def delete_suspicious_flag(
+        self,
+        completion_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int:
+        """Delete suspicious flag for a completion.
+
+        Args:
+            completion_id: Completion ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Number of flags deleted.
+        """
+        _conn = self._get_connection(conn)
+        count_query = "SELECT COUNT(*) FROM users.suspicious_flags WHERE completion_id = $1"
+        deleted_count = await _conn.fetchval(count_query, completion_id)
+
+        delete_query = "DELETE FROM users.suspicious_flags WHERE completion_id = $1"
+        await _conn.execute(delete_query, completion_id)
+
+        return deleted_count
