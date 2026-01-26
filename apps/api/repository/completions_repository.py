@@ -5,10 +5,19 @@ from __future__ import annotations
 from typing import Any
 
 from asyncpg import Connection, Pool
+from asyncpg.exceptions import CheckViolationError, ForeignKeyViolationError, UniqueViolationError
 from litestar.datastructures import State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from repository.base import BaseRepository
+from repository.exceptions import (
+    CheckConstraintViolationError,
+    UniqueConstraintViolationError,
+    extract_constraint_name,
+)
+from repository.exceptions import (
+    ForeignKeyViolationError as RepoFKError,
+)
 from utilities.errors import CustomHTTPException
 
 
@@ -1380,9 +1389,18 @@ class CompletionsRepository(BaseRepository):
         RETURNING id;
         """
 
-        completion_id = await _conn.fetchval(insert_query, code, user_id, time, screenshot, video)
-
-        return completion_id, verification_id_to_delete
+        try:
+            completion_id = await _conn.fetchval(insert_query, code, user_id, time, screenshot, video)
+            return completion_id, verification_id_to_delete
+        except UniqueViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise UniqueConstraintViolationError(constraint_name, "core.completions", str(e)) from e
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "core.completions", str(e)) from e
+        except CheckViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise CheckConstraintViolationError(constraint_name, "core.completions", str(e)) from e
 
     def build_completion_patch_query(
         self,
@@ -1438,7 +1456,17 @@ class CompletionsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
         query, args = self.build_completion_patch_query(record_id, patch_data)
-        await _conn.execute(query, *args)
+        try:
+            await _conn.execute(query, *args)
+        except UniqueViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise UniqueConstraintViolationError(constraint_name, "core.completions", str(e)) from e
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "core.completions", str(e)) from e
+        except CheckViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise CheckConstraintViolationError(constraint_name, "core.completions", str(e)) from e
 
     async def update_verification(
         self,
@@ -1460,7 +1488,17 @@ class CompletionsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
         query = "UPDATE core.completions SET verified=$2, verified_by=$3, reason=$4 WHERE id=$1;"
-        await _conn.execute(query, record_id, verified, verified_by, reason)
+        try:
+            await _conn.execute(query, record_id, verified, verified_by, reason)
+        except UniqueViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise UniqueConstraintViolationError(constraint_name, "core.completions", str(e)) from e
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "core.completions", str(e)) from e
+        except CheckViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise CheckConstraintViolationError(constraint_name, "core.completions", str(e)) from e
 
     async def insert_suspicious_flag(  # noqa: PLR0913
         self,
@@ -1496,7 +1534,14 @@ class CompletionsRepository(BaseRepository):
             SELECT id, $3, $4, $5
             FROM message_to_completion_id;
         """
-        await _conn.execute(query, message_id, verification_id, context, flag_type, flagged_by)
+        try:
+            await _conn.execute(query, message_id, verification_id, context, flag_type, flagged_by)
+        except UniqueViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise UniqueConstraintViolationError(constraint_name, "users.suspicious_flags", str(e)) from e
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "users.suspicious_flags", str(e)) from e
 
     async def insert_upvote(
         self,
@@ -1526,8 +1571,15 @@ class CompletionsRepository(BaseRepository):
                 WHERE message_id = $2
             ) AS count;
         """
-        count = await _conn.fetchval(query, user_id, message_id)
-        return count
+        try:
+            count = await _conn.fetchval(query, user_id, message_id)
+            return count
+        except UniqueViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise UniqueConstraintViolationError(constraint_name, "completions.upvotes", str(e)) from e
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "completions.upvotes", str(e)) from e
 
     async def upsert_quality_vote(
         self,
@@ -1557,7 +1609,17 @@ class CompletionsRepository(BaseRepository):
         DO UPDATE
           SET quality = EXCLUDED.quality;
         """
-        await _conn.execute(query, code, user_id, quality)
+        try:
+            await _conn.execute(query, code, user_id, quality)
+        except UniqueViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise UniqueConstraintViolationError(constraint_name, "maps.ratings", str(e)) from e
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "maps.ratings", str(e)) from e
+        except CheckViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise CheckConstraintViolationError(constraint_name, "maps.ratings", str(e)) from e
 
     async def fetch_completion_for_moderation(
         self,
@@ -1663,7 +1725,14 @@ class CompletionsRepository(BaseRepository):
             INSERT INTO users.suspicious_flags (completion_id, context, flag_type, flagged_by)
             VALUES ($1, $2, $3, $4)
         """
-        await _conn.execute(query, completion_id, context, flag_type, flagged_by)
+        try:
+            await _conn.execute(query, completion_id, context, flag_type, flagged_by)
+        except UniqueViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise UniqueConstraintViolationError(constraint_name, "users.suspicious_flags", str(e)) from e
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "users.suspicious_flags", str(e)) from e
 
     async def delete_suspicious_flag(
         self,
