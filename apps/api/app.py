@@ -23,6 +23,7 @@ from litestar_asyncpg import AsyncpgConfig, AsyncpgConnection, AsyncpgPlugin, Po
 from middleware.auth import CustomAuthenticationMiddleware
 from middleware.guards import scope_guard
 from routes import route_handlers
+from routes_new.v4 import route_handlers as v4_route_handlers
 from utilities.errors import CustomHTTPException
 
 APP_ENVIRONMENT = os.getenv("APP_ENVIRONMENT")
@@ -116,6 +117,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
     )
 
     v3_router = litestar.Router("/api/v3", route_handlers=route_handlers)
+    v4_router = litestar.Router("/api", route_handlers=v4_route_handlers)
 
     @get("/healthcheck", tags=["Utilities"], opt={"exclude_from_auth": True})
     async def _health_check(conn: Connection) -> bool:
@@ -167,6 +169,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         route_handlers=[
             _health_check,
             v3_router,
+            v4_router,
             create_static_files_router(
                 path="/",
                 directories=["html"],
