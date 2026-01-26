@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, cast
 
 import msgspec
 from asyncpg import Connection, Pool
-from asyncpg.exceptions import CheckViolationError
 from genjishimada_sdk.completions import (
     CompletionCreateRequest,
     CompletionModerateRequest,
@@ -33,7 +33,12 @@ from litestar.datastructures import Headers, State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from repository.completions_repository import CompletionsRepository
-from utilities.errors import ConstraintHandler, CustomHTTPException, handle_db_exceptions
+from repository.exceptions import (
+    CheckConstraintViolationError,
+    ForeignKeyViolationError,
+    UniqueConstraintViolationError,
+)
+from utilities.errors import CustomHTTPException
 
 from .base import BaseService
 
@@ -41,29 +46,6 @@ if TYPE_CHECKING:
     from di.notifications import NotificationService
 
 log = getLogger(__name__)
-
-# Constraint error mappings for completion operations
-COMPLETION_UNIQUE_CONSTRAINTS = {
-    "completions_pkey": ConstraintHandler(
-        message="This completion already exists.",
-        status_code=HTTP_400_BAD_REQUEST,
-    ),
-    "unique_user_map_completion": ConstraintHandler(
-        message="You already have a completion for this map.",
-        status_code=HTTP_400_BAD_REQUEST,
-    ),
-}
-
-COMPLETION_FK_CONSTRAINTS = {
-    "completions_user_id_fkey": ConstraintHandler(
-        message="User does not exist.",
-        status_code=HTTP_400_BAD_REQUEST,
-    ),
-    "completions_map_id_fkey": ConstraintHandler(
-        message="Map does not exist.",
-        status_code=HTTP_400_BAD_REQUEST,
-    ),
-}
 
 
 class CompletionsService(BaseService):
@@ -96,7 +78,6 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
-    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def submit_completion(self, data: CompletionCreateRequest, request: Request) -> int:
         """Submit a new completion record and publish an event."""
         try:
@@ -107,8 +88,21 @@ class CompletionsService(BaseService):
                 screenshot=data.screenshot,
                 video=data.video,
             )
-        except CheckViolationError as e:  # pragma: no cover - parity with v3
-            raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail=e.message or "")
+        except UniqueConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="You already have a completion for this map.",
+            ) from e
+        except ForeignKeyViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="Invalid user or map ID.",
+            ) from e
+        except CheckConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
 
         if verification_id_to_delete:
             delete_event = VerificationMessageDeleteEvent(verification_id_to_delete)
@@ -129,12 +123,53 @@ class CompletionsService(BaseService):
                 patch_data[field_name] = value
         return patch_data
 
-    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
+    async def _run_repo_write(
+        self,
+        operation: Callable[[], Awaitable[None]],
+        *,
+        unique_message: str,
+        fk_message: str,
+    ) -> None:
+        """Run a repository write and translate constraint errors."""
+        try:
+            await operation()
+        except UniqueConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=unique_message,
+            ) from e
+        except ForeignKeyViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=fk_message,
+            ) from e
+        except CheckConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
+
     async def edit_completion(self, state: State, record_id: int, data: CompletionPatchRequest) -> None:
         """Apply partial updates to a completion record."""
         _ = state
         patch_data = self._build_patch_dict(data)
-        await self._completions_repo.edit_completion(record_id, patch_data)
+        try:
+            await self._completions_repo.edit_completion(record_id, patch_data)
+        except UniqueConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="This completion already exists.",
+            ) from e
+        except ForeignKeyViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="Invalid user or map ID.",
+            ) from e
+        except CheckConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
 
     async def check_for_previous_world_record(self, code: OverwatchCode, user_id: int) -> bool:
         """Check if a record submitted by this user has ever received World Record XP."""
@@ -150,7 +185,6 @@ class CompletionsService(BaseService):
         rows = await self._completions_repo.fetch_pending_verifications()
         return msgspec.convert(rows, list[PendingVerificationResponse])
 
-    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def verify_completion(
         self,
         request: Request,
@@ -159,22 +193,38 @@ class CompletionsService(BaseService):
         use_pool: bool = False,
     ) -> JobStatusResponse:
         """Update verification status for a completion and publish an event."""
-        if use_pool:
-            async with self._pool.acquire() as conn:
+        try:
+            if use_pool:
+                async with self._pool.acquire() as conn:
+                    await self._completions_repo.update_verification(
+                        record_id,
+                        data.verified,
+                        data.verified_by,
+                        data.reason,
+                        conn=cast(Connection, conn),
+                    )
+            else:
                 await self._completions_repo.update_verification(
                     record_id,
                     data.verified,
                     data.verified_by,
                     data.reason,
-                    conn=cast(Connection, conn),
                 )
-        else:
-            await self._completions_repo.update_verification(
-                record_id,
-                data.verified,
-                data.verified_by,
-                data.reason,
-            )
+        except UniqueConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="Verification record already exists.",
+            ) from e
+        except ForeignKeyViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="Invalid completion or user ID.",
+            ) from e
+        except CheckConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
 
         message_data = VerificationChangedEvent(
             completion_id=record_id,
@@ -222,25 +272,45 @@ class CompletionsService(BaseService):
         rows = await self._completions_repo.fetch_suspicious_flags(user_id)
         return msgspec.convert(rows, list[SuspiciousCompletionResponse])
 
-    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def set_suspicious_flags(self, data: SuspiciousCompletionCreateRequest) -> None:
         """Insert a suspicious flag for a completion."""
-        await self._completions_repo.insert_suspicious_flag(
-            message_id=data.message_id,
-            verification_id=data.verification_id,
-            context=data.context,
-            flag_type=data.flag_type,
-            flagged_by=data.flagged_by,
-        )
+        try:
+            await self._completions_repo.insert_suspicious_flag(
+                message_id=data.message_id,
+                verification_id=data.verification_id,
+                context=data.context,
+                flag_type=data.flag_type,
+                flagged_by=data.flagged_by,
+            )
+        except UniqueConstraintViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="This flag already exists.",
+            ) from e
+        except ForeignKeyViolationError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="Invalid completion or user ID.",
+            ) from e
 
     async def get_upvotes_from_message_id(self, message_id: int) -> int:
         """Get the upvotes for a particular completion by message_id."""
         return await self._completions_repo.fetch_upvote_count(message_id)
 
-    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def upvote_submission(self, request: Request, data: UpvoteCreateRequest) -> UpvoteSubmissionJobResponse:
         """Upvote a completion submission."""
-        count = await self._completions_repo.insert_upvote(data.user_id, data.message_id)
+        try:
+            count = await self._completions_repo.insert_upvote(data.user_id, data.message_id)
+        except UniqueConstraintViolationError as e:
+            raise CustomHTTPException(
+                detail="User has already upvoted this completion.",
+                status_code=HTTP_400_BAD_REQUEST,
+            ) from e
+        except ForeignKeyViolationError as e:
+            raise CustomHTTPException(
+                detail="Invalid completion or user ID.",
+                status_code=HTTP_400_BAD_REQUEST,
+            ) from e
         upvote_channel_amount_breakpoint = 10
         if count is None:
             raise CustomHTTPException(
@@ -265,10 +335,25 @@ class CompletionsService(BaseService):
         rows = await self._completions_repo.fetch_all_completions(page_size, page_number)
         return msgspec.convert(rows, list[CompletionResponse])
 
-    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def set_quality_vote_for_map_code(self, code: OverwatchCode, user_id: int, quality: int) -> None:
         """Set the quality vote for a map code per user."""
-        await self._completions_repo.upsert_quality_vote(code, user_id, quality)
+        try:
+            await self._completions_repo.upsert_quality_vote(code, user_id, quality)
+        except UniqueConstraintViolationError as e:
+            raise CustomHTTPException(
+                detail="Quality vote already exists.",
+                status_code=HTTP_400_BAD_REQUEST,
+            ) from e
+        except ForeignKeyViolationError as e:
+            raise CustomHTTPException(
+                detail="Invalid user or map ID.",
+                status_code=HTTP_400_BAD_REQUEST,
+            ) from e
+        except CheckConstraintViolationError as e:
+            raise CustomHTTPException(
+                detail=str(e),
+                status_code=HTTP_400_BAD_REQUEST,
+            ) from e
 
     async def get_records_filtered(  # noqa: PLR0913
         self,
@@ -290,7 +375,6 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
-    @handle_db_exceptions(unique_constraints=COMPLETION_UNIQUE_CONSTRAINTS, fk_constraints=COMPLETION_FK_CONSTRAINTS)
     async def moderate_completion(  # noqa: PLR0912
         self,
         completion_id: int,
@@ -320,18 +404,28 @@ class CompletionsService(BaseService):
                     detail="time_change_reason is required when changing time",
                     status_code=HTTP_400_BAD_REQUEST,
                 )
-            await self._completions_repo.update_completion_time(completion_id, data.time)
+            new_time = cast(float, data.time)
+            await self._run_repo_write(
+                lambda: self._completions_repo.update_completion_time(completion_id, new_time),
+                unique_message="This completion already exists.",
+                fk_message="Invalid completion or user ID.",
+            )
             notification_messages.append(
-                f"Your completion time on **{map_code}** was changed from **{old_time}s** to **{data.time}s**.\n"
+                f"Your completion time on **{map_code}** was changed from **{old_time}s** to **{new_time}s**.\n"
                 f"Reason: {data.time_change_reason}"
             )
 
         # Handle verification change
         if data.verified is not msgspec.UNSET:
-            await self._completions_repo.update_completion_verified(completion_id, data.verified)
+            verified = cast(bool, data.verified)
+            await self._run_repo_write(
+                lambda: self._completions_repo.update_completion_verified(completion_id, verified),
+                unique_message="This completion already exists.",
+                fk_message="Invalid completion or user ID.",
+            )
 
-            if data.verified != old_verified:
-                if data.verified:
+            if verified != old_verified:
+                if verified:
                     notification_messages.append(f"Your completion on **{map_code}** has been verified by a moderator.")
                 else:
                     reason_msg = f"\nReason: {data.verification_reason}" if data.verification_reason else ""
@@ -346,17 +440,23 @@ class CompletionsService(BaseService):
                     detail="suspicious_context and suspicious_flag_type are required when marking as suspicious",
                     status_code=HTTP_400_BAD_REQUEST,
                 )
+            suspicious_context = cast(str, data.suspicious_context)
+            suspicious_flag_type = cast(str, data.suspicious_flag_type)
             existing = await self._completions_repo.check_suspicious_flag_exists(completion_id)
             if not existing:
-                await self._completions_repo.insert_suspicious_flag_by_completion_id(
-                    completion_id,
-                    data.suspicious_context,
-                    data.suspicious_flag_type,
-                    data.moderated_by,
+                await self._run_repo_write(
+                    lambda: self._completions_repo.insert_suspicious_flag_by_completion_id(
+                        completion_id,
+                        suspicious_context,
+                        suspicious_flag_type,
+                        data.moderated_by,
+                    ),
+                    unique_message="This flag already exists.",
+                    fk_message="Invalid completion or user ID.",
                 )
                 notification_messages.append(
-                    f"Your completion on **{map_code}** has been flagged as suspicious ({data.suspicious_flag_type}).\n"
-                    f"Context: {data.suspicious_context}"
+                    f"Your completion on **{map_code}** has been flagged as suspicious ({suspicious_flag_type}).\n"
+                    f"Context: {suspicious_context}"
                 )
 
         if data.unmark_suspicious:
