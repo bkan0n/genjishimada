@@ -214,6 +214,27 @@ async def verify_email_endpoint(
         raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
 
 
+# v3-compatible alias for /verify endpoint
+@post("/verify-email", opt={"exclude_from_auth": True})
+async def verify_email_endpoint_v3_alias(
+    data: Annotated[EmailVerifyRequest, Body(title="Verification token")],
+    auth_service: AuthService,
+) -> Response:
+    """v3-compatible alias for verify endpoint (v3 path: /verify-email)."""
+    try:
+        user = await auth_service.verify_email(data)
+        return Response(user, status_code=HTTP_200_OK)
+
+    except TokenInvalidError as e:
+        raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
+    except TokenAlreadyUsedError as e:
+        raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
+    except TokenExpiredError as e:
+        raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
+    except EmailAlreadyVerifiedError as e:
+        raise CustomHTTPException(detail=e.message, status_code=HTTP_400_BAD_REQUEST)
+
+
 @post("/resend-verification", opt={"exclude_from_auth": True})
 async def resend_verification_endpoint(
     data: Annotated[PasswordResetRequest, Body(title="Email address")],
@@ -277,6 +298,42 @@ async def request_password_reset_endpoint(
     Raises:
         CustomHTTPException: On rate limit errors.
     """
+    try:
+        client_ip = request.client.host if request.client else None
+        result = await auth_service.request_password_reset(data, client_ip=client_ip)
+
+        if result:
+            token, username = result
+            # Send password reset email
+            reset_url = f"{SITE_URL}/reset-password?token={token}"
+            html = f"""
+            <h1>Reset Your Password</h1>
+            <p>Hi {username},</p>
+            <p>You requested to reset your password. Click the link below to continue:</p>
+            <p><a href="{reset_url}">Reset Password</a></p>
+            <p>This link will expire in 1 hour.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+            """
+            await send_email_via_resend(data.email, "Reset your password", html)
+
+        # Always return success to prevent email enumeration
+        return Response(
+            {"message": "If an account with that email exists, a password reset link has been sent."},
+            status_code=HTTP_200_OK,
+        )
+
+    except RateLimitExceededError as e:
+        raise CustomHTTPException(detail=e.message, status_code=HTTP_429_TOO_MANY_REQUESTS)
+
+
+# v3-compatible alias for /request-password-reset endpoint
+@post("/forgot-password", opt={"exclude_from_auth": True})
+async def request_password_reset_endpoint_v3_alias(
+    data: Annotated[PasswordResetRequest, Body(title="Password reset request")],
+    auth_service: AuthService,
+    request: Request,
+) -> Response:
+    """v3-compatible alias for request-password-reset endpoint (v3 path: /forgot-password)."""
     try:
         client_ip = request.client.host if request.client else None
         result = await auth_service.request_password_reset(data, client_ip=client_ip)
@@ -582,8 +639,10 @@ router = Router(
         register_endpoint,
         login_endpoint,
         verify_email_endpoint,
+        verify_email_endpoint_v3_alias,  # v3 compatibility: /verify-email
         resend_verification_endpoint,
         request_password_reset_endpoint,
+        request_password_reset_endpoint_v3_alias,  # v3 compatibility: /forgot-password
         reset_password_endpoint,
         get_auth_status_endpoint,
         # Session management
