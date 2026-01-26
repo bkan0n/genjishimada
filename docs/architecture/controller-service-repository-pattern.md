@@ -349,6 +349,54 @@ async def test_register_endpoint_returns_201(test_client):
     assert response.status_code == 201
 ```
 
+## Hybrid Domain Example: Change Requests
+
+The change_requests domain demonstrates a simple write-enabled domain:
+
+**Characteristics:**
+- Mix of reads and writes
+- NO validation (data pre-validated by bot)
+- NO events (notifications handled externally)
+- NO transactions (single-table operations)
+- Light business logic (permission check with string comparison)
+
+**Code Metrics:**
+- Repository: ~150 lines (6 methods)
+- Service: ~100 lines (6 methods, 1 with logic)
+- Controller: ~120 lines (6 endpoints)
+- Tests: ~300 lines total
+
+**Business Logic Example:**
+```python
+# Service handles permission check logic
+async def check_permission(self, thread_id: int, user_id: int, code: str) -> bool:
+    creator_mentions = await self._repo.fetch_creator_mentions(thread_id, code)
+    if not creator_mentions:
+        return False
+    return str(user_id) in creator_mentions  # String comparison
+```
+
+**Write Pattern:**
+```python
+# Repository raises FK violations
+async def create_request(...) -> None:
+    try:
+        await _conn.execute(query, ...)
+    except asyncpg.ForeignKeyViolationError as e:
+        raise ForeignKeyViolationError(...)
+
+# Service passes through (no translation needed, internal API)
+async def create_request(self, data: Request) -> None:
+    await self._repo.create_request(...)
+
+# Controller returns None with 201 status
+async def create_endpoint(self, data: Request, service: Service) -> Response[None]:
+    await service.create_request(data)
+    return Response(None, status_code=HTTP_201_CREATED)
+```
+
+**Migration effort:** ~2 hours for 6 endpoints
+
 ## Key Principles
 
 - **DRY**: Share patterns across domains
