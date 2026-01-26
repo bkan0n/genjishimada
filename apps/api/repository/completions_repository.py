@@ -332,3 +332,333 @@ class CompletionsRepository(BaseRepository):
         """
         rows = await _conn.fetch(query, user_id)
         return [dict(row) for row in rows]
+
+    async def fetch_map_leaderboard(
+        self,
+        code: str,
+        page_size: int,
+        page_number: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch leaderboard for a map.
+
+        Args:
+            code: Map code.
+            page_size: Number of results per page (0 for all).
+            page_number: Page number (1-indexed).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of completion records as dicts.
+        """
+        _conn = self._get_connection(conn)
+        query_template = """
+        WITH target_map AS (
+            SELECT
+                id AS map_id,
+                code,
+                map_name,
+                difficulty
+            FROM core.maps
+            WHERE code = $1
+        ), latest_per_user_all AS (
+            SELECT DISTINCT ON (c.user_id)
+                c.user_id,
+                c.map_id,
+                c.time,
+                c.completion,
+                c.verified,
+                c.screenshot,
+                c.video,
+                c.legacy,
+                c.legacy_medal,
+                c.message_id,
+                c.inserted_at
+            FROM core.completions c
+            JOIN target_map tm ON tm.map_id = c.map_id
+            WHERE c.verified = TRUE
+            ORDER BY c.user_id,
+                c.inserted_at DESC
+        ), split AS (
+            SELECT
+                l.user_id,
+                l.map_id,
+                l.time,
+                l.completion,
+                l.verified,
+                l.screenshot,
+                l.video,
+                l.legacy,
+                l.legacy_medal,
+                l.message_id,
+                l.inserted_at
+            FROM latest_per_user_all l
+        ), rankable AS (
+            SELECT
+                s.*,
+                rank() OVER (ORDER BY s.time) AS rank
+            FROM split s
+            WHERE s.completion = FALSE
+        ), nonrankable AS (
+            SELECT
+                s.*,
+                NULL::integer AS rank
+            FROM split s
+            WHERE s.completion = TRUE
+        ), combined AS (
+            SELECT *
+            FROM rankable
+            UNION ALL
+            SELECT *
+            FROM nonrankable
+        ), with_map AS (
+            SELECT
+                tm.code,
+                tm.map_name,
+                tm.difficulty,
+                cb.user_id,
+                cb.time,
+                cb.completion,
+                cb.verified,
+                cb.screenshot,
+                cb.video,
+                cb.legacy,
+                cb.legacy_medal,
+                cb.inserted_at,
+                cb.rank,
+                cb.message_id,
+                (cb.rank IS NULL) AS is_nonrankable,
+                md.gold,
+                md.silver,
+                md.bronze
+            FROM combined cb
+            JOIN target_map tm ON tm.map_id = cb.map_id
+            LEFT JOIN maps.medals md ON md.map_id = cb.map_id
+        ), user_names AS (
+            SELECT
+                u.id AS user_id,
+                max(owu.username) FILTER (WHERE owu.is_primary) AS primary_ow,
+                array_remove(array_agg(owu.username), NULL) AS all_ow_names,
+                u.nickname,
+                u.global_name
+            FROM (
+                SELECT DISTINCT
+                    user_id
+                FROM with_map
+            ) um
+            JOIN core.users u ON u.id = um.user_id
+            LEFT JOIN users.overwatch_usernames owu ON owu.user_id = u.id
+            GROUP BY u.id,
+                u.nickname,
+                u.global_name
+        ), name_split AS (
+            SELECT
+                un.user_id,
+                coalesce(nullif(un.primary_ow, ''), nullif(un.nickname, ''), nullif(un.global_name, ''),
+                         'Unknown User') AS name,
+                nullif(array_to_string(array(SELECT DISTINCT
+                                                 x
+                                             FROM unnest(un.all_ow_names) x
+                                             WHERE x IS NOT NULL
+                                               AND x <> coalesce(un.primary_ow, '')), ', '), '') AS also_known_as
+            FROM user_names un
+        )
+        SELECT
+            wm.code AS code,
+            wm.user_id AS user_id,
+            ns.name AS name,
+            ns.also_known_as AS also_known_as,
+            wm.time AS time,
+            wm.screenshot AS screenshot,
+            wm.video AS video,
+            wm.completion AS completion,
+            wm.verified AS verified,
+            wm.message_id,
+            (SELECT COUNT(*) FROM completions.upvotes WHERE message_id=wm.message_id) AS upvotes,
+            wm.rank AS rank,
+            CASE
+                WHEN wm.rank IS NOT NULL AND wm.gold IS NOT NULL AND wm.time <= wm.gold
+                    THEN 'Gold'
+                WHEN wm.rank IS NOT NULL AND wm.silver IS NOT NULL AND wm.time <= wm.silver
+                    THEN 'Silver'
+                WHEN wm.rank IS NOT NULL AND wm.bronze IS NOT NULL AND wm.time <= wm.bronze
+                    THEN 'Bronze'
+            END AS medal,
+            wm.map_name AS map_name,
+            wm.difficulty AS difficulty,
+            wm.legacy AS legacy,
+            wm.legacy_medal AS legacy_medal,
+            FALSE AS suspicious,
+            COUNT(*) OVER() AS total_results
+        FROM with_map wm
+        JOIN name_split ns ON ns.user_id = wm.user_id
+        ORDER BY wm.code,
+            CASE
+                WHEN wm.legacy = FALSE AND wm.rank IS NOT NULL THEN 0
+                WHEN wm.legacy = FALSE AND wm.rank IS NULL     THEN 1
+                WHEN wm.legacy = TRUE  AND wm.rank IS NOT NULL THEN 2
+                ELSE 3
+            END,
+            wm.time,
+            wm.inserted_at
+        {limit_offset}
+        """
+
+        if page_size == 0:
+            query = query_template.format(limit_offset="")
+            rows = await _conn.fetch(query, code)
+        else:
+            query = query_template.format(limit_offset="LIMIT $2 OFFSET $3")
+            offset = (page_number - 1) * page_size
+            rows = await _conn.fetch(query, code, page_size, offset)
+
+        return [dict(row) for row in rows]
+
+    async def fetch_legacy_completions(
+        self,
+        code: str,
+        page_size: int,
+        page_number: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch legacy completions for a map.
+
+        Args:
+            code: Map code.
+            page_size: Number of results per page.
+            page_number: Page number (1-indexed).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of legacy completion records as dicts.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+        WITH target_map AS (
+            SELECT
+                id AS map_id,
+                code,
+                map_name,
+                difficulty
+            FROM core.maps
+            WHERE code = $1
+        ),
+            latest_legacy_per_user AS (
+                SELECT DISTINCT ON (c.user_id)
+                    c.user_id,
+                    c.map_id,
+                    c.time,
+                    c.completion,
+                    c.verified,
+                    c.screenshot,
+                    c.video,
+                    c.legacy,
+                    c.legacy_medal,
+                    c.message_id,
+                    c.inserted_at
+                FROM core.completions c
+                JOIN target_map tm ON tm.map_id = c.map_id
+                WHERE c.legacy = TRUE
+                ORDER BY c.user_id, c.inserted_at DESC
+            ),
+            ranked AS (
+                SELECT
+                    l.*,
+                    CASE
+                        WHEN l.completion = FALSE THEN
+                                    RANK() OVER (ORDER BY l.time, l.inserted_at)
+                        ELSE NULL::int
+                    END AS rank
+                FROM latest_legacy_per_user l
+            ),
+            with_map AS (
+                SELECT
+                    tm.code,
+                    tm.map_name,
+                    tm.difficulty,
+                    r.user_id,
+                    r.time,
+                    r.screenshot,
+                    r.video,
+                    r.completion,
+                    r.verified,
+                    r.rank,
+                    r.message_id,
+                    r.inserted_at,
+                    r.legacy,
+                    r.legacy_medal
+                FROM ranked r
+                JOIN target_map tm ON tm.map_id = r.map_id
+            ),
+            user_names AS (
+                SELECT
+                    u.id AS user_id,
+                            MAX(owu.username) FILTER (WHERE owu.is_primary) AS primary_ow,
+                    ARRAY_REMOVE(ARRAY_AGG(DISTINCT owu.username), NULL) AS all_ow_names,
+                    u.nickname,
+                    u.global_name
+                FROM (SELECT DISTINCT user_id FROM with_map) um
+                JOIN core.users u ON u.id = um.user_id
+                LEFT JOIN users.overwatch_usernames owu ON owu.user_id = u.id
+                GROUP BY u.id, u.nickname, u.global_name
+            ),
+            name_split AS (
+                SELECT
+                    un.user_id,
+                    COALESCE(
+                            NULLIF(un.primary_ow, ''),
+                            NULLIF(un.nickname, ''),
+                            NULLIF(un.global_name, ''),
+                            'Unknown User'
+                    ) AS name,
+                    NULLIF((
+                               SELECT string_agg(DISTINCT v, ', ')
+                               FROM unnest(
+                                       ARRAY[
+                                           NULLIF(un.global_name, ''),
+                                           NULLIF(un.nickname, '')
+                                           ] || COALESCE(un.all_ow_names, '{}')
+                                    ) AS v
+                               WHERE v IS NOT NULL
+                                 AND v <> ''
+                                 AND v <> COALESCE(
+                                       NULLIF(un.primary_ow, ''),
+                                       NULLIF(un.nickname, ''),
+                                       NULLIF(un.global_name, ''),
+                                       'Unknown User'
+                                          )
+                           ), '') AS also_known_as
+                FROM user_names un
+            )
+        SELECT
+            wm.code                               AS code,
+            wm.user_id                            AS user_id,
+            ns.name                               AS name,
+            ns.also_known_as                      AS also_known_as,
+            wm.time                               AS time,
+            wm.screenshot                         AS screenshot,
+            wm.video                              AS video,
+            wm.completion                         AS completion,
+            wm.verified                           AS verified,
+            wm.rank                               AS rank,
+            wm.legacy_medal                       AS medal,
+            wm.map_name                           AS map_name,
+            wm.difficulty                         AS difficulty,
+            wm.message_id                         AS message_id,
+            (SELECT COUNT(*) FROM completions.upvotes WHERE message_id=wm.message_id) AS upvotes,
+            wm.legacy                             AS legacy,
+            wm.legacy_medal                       AS legacy_medal,
+            FALSE                                 AS suspicious
+        FROM with_map wm
+        JOIN name_split ns ON ns.user_id = wm.user_id
+        ORDER BY
+            wm.time,
+            wm.inserted_at
+        LIMIT $2
+        OFFSET $3;
+        """
+        offset = (page_number - 1) * page_size
+        rows = await _conn.fetch(query, code, page_size, offset)
+        return [dict(row) for row in rows]
