@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from asyncpg import Connection, Pool
+from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from repository.base import BaseRepository
+from utilities.errors import CustomHTTPException
 
 
 class CompletionsRepository(BaseRepository):
@@ -1273,3 +1275,165 @@ class CompletionsRepository(BaseRepository):
             rows = await _conn.fetch(query, *params)
 
         return [dict(row) for row in rows]
+
+    async def submit_completion(  # noqa: PLR0913
+        self,
+        user_id: int,
+        code: str,
+        time: float,
+        screenshot: str,
+        video: str | None,
+        *,
+        conn: Connection | None = None,
+    ) -> tuple[int, int | None]:
+        """Submit a new completion record.
+
+        This includes logic to check for pending verifications and reject/supersede them.
+
+        Args:
+            user_id: User ID submitting the completion.
+            code: Map code.
+            time: Completion time in seconds.
+            screenshot: Screenshot URL.
+            video: Optional video URL.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Tuple of new completion ID and verification ID to delete (if any).
+
+        Raises:
+            CustomHTTPException: If submission is slower than pending verification.
+        """
+        _conn = self._get_connection(conn)
+
+        # Check for existing pending verification
+        pending_query = """
+            SELECT c.id, c.time, c.verification_id
+            FROM core.completions c
+            JOIN core.maps m ON m.id = c.map_id
+            WHERE c.user_id = $1
+              AND m.code = $2
+              AND c.verified IS FALSE
+              AND c.verified_by IS NULL
+              AND c.legacy = FALSE
+            ORDER BY c.time ASC
+            LIMIT 1;
+        """
+        pending = await _conn.fetchrow(pending_query, user_id, code)
+
+        verification_id_to_delete = None
+        if pending:
+            pending_time = pending["time"]
+            pending_verification_id = pending["verification_id"]
+
+            if time >= pending_time:
+                # Reject: new time is same or slower
+                raise CustomHTTPException(
+                    status_code=HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"You already have a pending verification for this map with time {pending_time}s. "
+                        f"Your new submission ({time}s) must be faster. "
+                        f"Please wait for verification or submit a faster time."
+                    ),
+                )
+            # Accept: new time is faster - mark old submission as rejected by bot
+            bot_id = 969632729643753482
+            reject_query = """
+                UPDATE core.completions
+                SET verified_by = $1
+                WHERE id = $2
+            """
+            await _conn.execute(reject_query, bot_id, pending["id"])
+            verification_id_to_delete = pending_verification_id
+
+        # Insert new completion
+        insert_query = """
+        WITH target_map AS (
+            SELECT
+                id AS map_id,
+                official,
+                (playtesting = 'In Progress') AS in_playtest
+            FROM core.maps
+            WHERE code = $1
+        ),
+        computed AS (
+            SELECT
+                map_id,
+                (in_playtest
+                 OR $5::text IS NULL OR $5::text = ''
+                 OR NOT official) AS completion_flag
+            FROM target_map
+        )
+        INSERT INTO core.completions (
+            map_id,
+            user_id,
+            time,
+            screenshot,
+            video,
+            completion
+        )
+        SELECT
+            c.map_id, $2, $3, $4, $5, c.completion_flag
+        FROM computed c
+        RETURNING id;
+        """
+
+        completion_id = await _conn.fetchval(insert_query, code, user_id, time, screenshot, video)
+
+        return completion_id, verification_id_to_delete
+
+    def build_completion_patch_query(
+        self,
+        record_id: int,
+        patch_data: dict[str, Any],
+    ) -> tuple[str, list[Any]]:
+        """Build dynamic UPDATE query for patching a completion.
+
+        Args:
+            record_id: Completion record ID.
+            patch_data: Dictionary of fields to update (excluding UNSET values).
+
+        Returns:
+            Tuple of (query_string, parameters).
+
+        Raises:
+            ValueError: If no fields to update.
+        """
+        set_clauses = []
+        values = [record_id]
+
+        index = 2  # Start at $2 because $1 is id
+        for field_name, value in patch_data.items():
+            set_clauses.append(f"{field_name.lower()} = ${index}")
+            values.append(value)
+            index += 1
+
+        if not set_clauses:
+            raise ValueError("No fields to update")
+
+        set_clause = ", ".join(set_clauses)
+        query = f"""
+            UPDATE core.completions
+            SET {set_clause}
+            WHERE id = $1
+        """
+
+        return query.strip(), values
+
+    async def edit_completion(
+        self,
+        record_id: int,
+        patch_data: dict[str, Any],
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Apply partial updates to a completion record.
+
+        Args:
+            record_id: Completion record ID.
+            patch_data: Dictionary of fields to update.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query, args = self.build_completion_patch_query(record_id, patch_data)
+        await _conn.execute(query, *args)
