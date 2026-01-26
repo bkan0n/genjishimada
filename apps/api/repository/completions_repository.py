@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from asyncpg import Connection, Pool
+from litestar.datastructures import State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from repository.base import BaseRepository
@@ -1686,3 +1687,8 @@ class CompletionsRepository(BaseRepository):
         await _conn.execute(delete_query, completion_id)
 
         return deleted_count
+
+
+async def provide_completions_repository(state: State) -> CompletionsRepository:
+    """Litestar DI provider for CompletionsRepository."""
+    return CompletionsRepository(state.db_pool)
