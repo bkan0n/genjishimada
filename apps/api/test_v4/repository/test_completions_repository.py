@@ -38,3 +38,31 @@ class TestRepositorySmoke:
     async def test_repository_instantiates(self, completions_repo: CompletionsRepository) -> None:
         """Ensure repository can be instantiated."""
         assert completions_repo is not None
+
+
+class TestRepositoryQueries:
+    """Basic query shape tests."""
+
+    async def test_fetch_user_completions_returns_list(self, completions_repo: CompletionsRepository) -> None:
+        """Ensure user completions query returns a list."""
+        result = await completions_repo.fetch_user_completions(
+            user_id=1,
+            difficulty=None,
+            page_size=10,
+            page_number=1,
+        )
+        assert isinstance(result, list)
+
+    async def test_fetch_map_leaderboard_returns_list(self, completions_repo: CompletionsRepository) -> None:
+        """Ensure map leaderboard query returns a list."""
+        result = await completions_repo.fetch_map_leaderboard(
+            code="1EASY",
+            page_size=10,
+            page_number=1,
+        )
+        assert isinstance(result, list)
+
+    async def test_fetch_pending_verifications_returns_list(self, completions_repo: CompletionsRepository) -> None:
+        """Ensure pending verifications query returns a list."""
+        result = await completions_repo.fetch_pending_verifications()
+        assert isinstance(result, list)
