@@ -57,8 +57,6 @@ log = getLogger(__name__)
 class CompletionsController(Controller):
     """Completions."""
 
-    _tasks = set()
-
     tags = ["Completions"]
     path = "/completions"
     dependencies = {
@@ -118,20 +116,22 @@ class CompletionsController(Controller):
         suspicious_flags = await svc.get_suspicious_flags(data.user_id)
 
         if not (data.video or suspicious_flags):
-            task = asyncio.create_task(
-                _attempt_auto_verify(
-                    request=request,
-                    svc=svc,
-                    autocomplete=autocomplete,
-                    users=users,
-                    completion_id=completion_id,
-                    data=data,
+            try:
+                auto_verified = await asyncio.wait_for(
+                    _attempt_auto_verify(
+                        request=request,
+                        svc=svc,
+                        autocomplete=autocomplete,
+                        users=users,
+                        completion_id=completion_id,
+                        data=data,
+                    ),
+                    timeout=5.0,
                 )
-            )
-            self._tasks.add(task)
-            task.add_done_callback(lambda t: self._tasks.remove(t))
-
-            return CompletionSubmissionJobResponse(None, completion_id)
+                if auto_verified:
+                    return CompletionSubmissionJobResponse(None, completion_id)
+            except asyncio.TimeoutError:
+                log.warning(f"Auto-verification timed out for completion {completion_id}, falling back to manual")
 
         idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
         job_status = await svc.publish_message(
@@ -366,8 +366,12 @@ async def _attempt_auto_verify(  # noqa: PLR0913
     users: UserService,
     completion_id: int,
     data: CompletionCreateRequest,
-) -> None:
-    """Attempt to auto-verify a completion using OCR."""
+) -> bool:
+    """Attempt to auto-verify a completion using OCR.
+
+    Returns:
+        True if auto-verification succeeded, False otherwise.
+    """
     idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
 
     try:
@@ -422,8 +426,8 @@ async def _attempt_auto_verify(  # noqa: PLR0913
                     verified=True,
                     reason="Auto Verified by Genji Shimada.",
                 )
-                await svc.verify_completion(request, completion_id, verification_data)
-                return
+                await svc.verify_completion_with_pool(request, completion_id, verification_data)
+                return True
         except aiohttp.ClientConnectorDNSError:
             log.warning("OCR service DNS error, falling back to manual verification")
             await svc.publish_message(
@@ -432,8 +436,9 @@ async def _attempt_auto_verify(  # noqa: PLR0913
                 headers=request.headers,
                 idempotency_key=idempotency_key,
             )
-            return
+            return False
 
+        # Autoverification failed validation, send failure details and fall back to manual
         await svc.publish_message(
             routing_key="api.completion.autoverification.failed",
             data=FailedAutoverifyEvent(
@@ -457,6 +462,7 @@ async def _attempt_auto_verify(  # noqa: PLR0913
             headers=request.headers,
             idempotency_key=idempotency_key,
         )
+        return False
 
     except Exception as e:
         log.exception(
@@ -472,3 +478,4 @@ async def _attempt_auto_verify(  # noqa: PLR0913
             headers=request.headers,
             idempotency_key=idempotency_key,
         )
+        return False

@@ -240,6 +240,16 @@ class CompletionsService(BaseService):
         )
         return job_status
 
+    async def verify_completion_with_pool(
+        self,
+        request: Request,
+        record_id: int,
+        data: CompletionVerificationUpdateRequest,
+    ) -> JobStatusResponse:
+        """Verify completion using pool connection."""
+        async with self._pool.acquire() as conn:
+            return await self.verify_completion(request, record_id, data, conn=cast(Connection, conn))
+
     async def get_completions_leaderboard(
         self, code: str, page_number: int, page_size: int
     ) -> list[CompletionResponse]:
