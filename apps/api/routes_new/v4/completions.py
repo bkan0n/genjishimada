@@ -12,9 +12,11 @@ import msgspec
 import rapidfuzz.fuzz
 import rapidfuzz.process
 import sentry_sdk
+from asyncpg import Connection
 from genjishimada_sdk.completions import (
     CompletionCreatedEvent,
     CompletionCreateRequest,
+    CompletionCreateRequest2,
     CompletionModerateRequest,
     CompletionPatchRequest,
     CompletionResponse,
@@ -36,7 +38,7 @@ from genjishimada_sdk.maps import OverwatchCode
 from litestar import Controller, Request, get, patch, post, put
 from litestar.datastructures import State
 from litestar.di import Provide
-from litestar.status_codes import HTTP_400_BAD_REQUEST
+from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from di import (
     AutocompleteService,
@@ -56,6 +58,8 @@ log = getLogger(__name__)
 
 class CompletionsController(Controller):
     """Completions."""
+
+    _tasks = set()
 
     tags = ["Completions"]
     path = "/completions"
@@ -99,16 +103,71 @@ class CompletionsController(Controller):
         """Get completions for a specific user."""
         return await svc.get_world_records_per_user(user_id)
 
+    @post("/testing/testing")
+    async def testing_testing(  # noqa: PLR0913
+        self,
+        svc: CompletionsService,
+        request: Request,
+        data: CompletionCreateRequest2,
+        autocomplete: AutocompleteService,
+        users: UserService,
+        conn: Connection,
+    ) -> CompletionSubmissionJobResponse:
+        """Test."""
+        _ = conn
+        completion_id = data.completion_id
+        data2 = CompletionCreateRequest(
+            code=data.code,
+            user_id=data.user_id,
+            time=data.time,
+            screenshot=data.screenshot,
+            video=data.video,
+        )
+
+        if not data.video:
+            task = asyncio.create_task(
+                _attempt_auto_verify(
+                    request=request,
+                    svc=svc,
+                    autocomplete=autocomplete,
+                    users=users,
+                    completion_id=completion_id,
+                    data=data2,
+                )
+            )
+            self._tasks.add(task)
+            task.add_done_callback(lambda t: self._tasks.remove(t))
+
+            return CompletionSubmissionJobResponse(None, completion_id)
+
+        idempotency_key = f"completion:submission:{data.user_id}:{completion_id}2"
+        job_status = await svc.publish_message(
+            routing_key="api.completion.submission",
+            data=CompletionCreatedEvent(completion_id),
+            headers=request.headers,
+            idempotency_key=idempotency_key,
+        )
+        return CompletionSubmissionJobResponse(job_status, completion_id)
+
     @post(path="/", summary="Submit Completion", description="Submit a new completion record and publish an event.")
-    async def submit_completion(
+    async def submit_completion(  # noqa: PLR0913
         self,
         svc: CompletionsService,
         request: Request,
         data: CompletionCreateRequest,
         autocomplete: AutocompleteService,
         users: UserService,
+        conn: Connection,
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion."""
+        query = """
+            SELECT EXISTS(SELECT 1 FROM core.maps WHERE code=$1 and archived=FALSE);
+        """
+        if not await conn.fetchval(query, data.code):
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND, detail="This map code does not exist or has been archived."
+            )
+
         completion_id = await svc.submit_completion(data, request)
         if not completion_id:
             raise ValueError("Some how completion ID is null?")
@@ -116,22 +175,20 @@ class CompletionsController(Controller):
         suspicious_flags = await svc.get_suspicious_flags(data.user_id)
 
         if not (data.video or suspicious_flags):
-            try:
-                auto_verified = await asyncio.wait_for(
-                    _attempt_auto_verify(
-                        request=request,
-                        svc=svc,
-                        autocomplete=autocomplete,
-                        users=users,
-                        completion_id=completion_id,
-                        data=data,
-                    ),
-                    timeout=5.0,
+            task = asyncio.create_task(
+                _attempt_auto_verify(
+                    request=request,
+                    svc=svc,
+                    autocomplete=autocomplete,
+                    users=users,
+                    completion_id=completion_id,
+                    data=data,
                 )
-                if auto_verified:
-                    return CompletionSubmissionJobResponse(None, completion_id)
-            except asyncio.TimeoutError:
-                log.warning(f"Auto-verification timed out for completion {completion_id}, falling back to manual")
+            )
+            self._tasks.add(task)
+            task.add_done_callback(lambda t: self._tasks.remove(t))
+
+            return CompletionSubmissionJobResponse(None, completion_id)
 
         idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
         job_status = await svc.publish_message(
@@ -366,12 +423,8 @@ async def _attempt_auto_verify(  # noqa: PLR0913
     users: UserService,
     completion_id: int,
     data: CompletionCreateRequest,
-) -> bool:
-    """Attempt to auto-verify a completion using OCR.
-
-    Returns:
-        True if auto-verification succeeded, False otherwise.
-    """
+) -> None:
+    """Attempt to auto-verify a completion using OCR."""
     idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
 
     try:
@@ -387,7 +440,7 @@ async def _attempt_auto_verify(  # noqa: PLR0913
 
             extracted = ocr_data.extracted
 
-            user_name_response = await users.fetch_all_user_names(data.user_id)
+            user_name_response = await users.fetch_all_user_names(data.user_id, use_pool=True)
             user_names = [x.upper() for x in user_name_response]
             name_match = False
             if extracted.name and user_names:
@@ -405,7 +458,7 @@ async def _attempt_auto_verify(  # noqa: PLR0913
                 else:
                     log.debug(f"No name match found for '{extracted.name}' against {user_names}")
 
-            extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "")
+            extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "", use_pool=True)
             if extracted_code_cleaned:
                 extracted_code_cleaned = extracted_code_cleaned.replace('"', "")
 
@@ -426,8 +479,8 @@ async def _attempt_auto_verify(  # noqa: PLR0913
                     verified=True,
                     reason="Auto Verified by Genji Shimada.",
                 )
-                await svc.verify_completion_with_pool(request, completion_id, verification_data)
-                return True
+                await svc.verify_completion(request, completion_id, verification_data, use_pool=True)
+                return
         except aiohttp.ClientConnectorDNSError:
             log.warning("OCR service DNS error, falling back to manual verification")
             await svc.publish_message(
@@ -436,9 +489,8 @@ async def _attempt_auto_verify(  # noqa: PLR0913
                 headers=request.headers,
                 idempotency_key=idempotency_key,
             )
-            return False
+            return
 
-        # Autoverification failed validation, send failure details and fall back to manual
         await svc.publish_message(
             routing_key="api.completion.autoverification.failed",
             data=FailedAutoverifyEvent(
@@ -462,7 +514,6 @@ async def _attempt_auto_verify(  # noqa: PLR0913
             headers=request.headers,
             idempotency_key=idempotency_key,
         )
-        return False
 
     except Exception as e:
         log.exception(
@@ -478,4 +529,3 @@ async def _attempt_auto_verify(  # noqa: PLR0913
             headers=request.headers,
             idempotency_key=idempotency_key,
         )
-        return False
