@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from asyncpg import Connection
+from genjishimada_sdk.maps import OverwatchCode
 from litestar.datastructures import State
 
 from .base import BaseRepository
@@ -374,6 +375,339 @@ class CommunityRepository(BaseRepository):
             WHEN rank_name = 'Grandmaster' THEN 2
             WHEN rank_name = 'God' THEN 1
         END DESC;
+        """
+        rows = await _conn.fetch(query)
+        return [dict(row) for row in rows]
+
+    async def fetch_map_completion_statistics(
+        self,
+        code: OverwatchCode,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Get min, max, and average verified completion times for a map.
+
+        Filters verified runs for the target code and aggregates summary stats.
+
+        Args:
+            code: Overwatch map code.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            list[dict]: Single-row summary with min/max/avg.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+        WITH target_map AS (
+            SELECT
+                id AS map_id
+            FROM core.maps
+            WHERE code = $1
+        ),
+        filtered_completions AS (
+            SELECT *
+            FROM core.completions
+            WHERE map_id = (SELECT map_id FROM target_map) AND time < 99999999.99 AND verified = TRUE
+        )
+        SELECT round(min(r.time), 2) AS min, round(max(r.time), 2) AS max, round(avg(r.time), 2) AS avg
+        FROM core.maps m
+        LEFT JOIN filtered_completions r ON m.id = r.map_id
+        WHERE m.id = (SELECT map_id FROM target_map)
+        GROUP BY m.id
+        """
+        rows = await _conn.fetch(query, code)
+        return [dict(row) for row in rows]
+
+    async def fetch_maps_per_difficulty(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Count official, visible maps by base difficulty.
+
+        Strips trailing '+'/'-' from difficulty (e.g., 'Hard +' → 'Hard') and returns
+        counts per base difficulty in canonical order.
+
+        Returns:
+            list[dict]: Counts per base difficulty.
+        """
+        _conn = self._get_connection(conn)
+
+        query = r"""
+        WITH filtered AS (
+            SELECT
+                regexp_replace(m.difficulty, '\s*[-+]\s*$', '', '') AS base_difficulty
+            FROM core.maps m
+            WHERE m.official IS TRUE
+              AND m.archived IS FALSE
+              AND m.hidden   IS FALSE
+        )
+        SELECT
+            base_difficulty AS difficulty,
+            COUNT(*) AS amount
+        FROM filtered
+        GROUP BY base_difficulty
+        ORDER BY
+            array_position(ARRAY['Easy','Medium','Hard','Very Hard','Extreme','Hell'], base_difficulty) NULLS LAST;
+        """
+        rows = await _conn.fetch(query)
+        return [dict(row) for row in rows]
+
+    async def fetch_popular_maps(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Return top maps per difficulty by completions (tiebreaker: quality).
+
+        For each base difficulty, ranks maps by completion volume, breaking ties by
+        average quality (desc) and a deterministic fallback, and returns the top 5.
+
+        Returns:
+            list[dict]: Top maps per difficulty with rank.
+        """
+        _conn = self._get_connection(conn)
+
+        query = r"""
+        WITH eligible_maps AS (
+            SELECT
+                m.id,
+                code,
+                regexp_replace(m.difficulty, '\s*[-+]\s*$', '', '') AS base_difficulty
+            FROM core.maps m
+            WHERE m.official IS TRUE
+              AND m.archived IS FALSE
+              AND m.hidden   IS FALSE
+        ),
+        completion_data AS (
+            SELECT
+                c.map_id,
+                COUNT(*) AS completions
+            FROM core.completions c
+            JOIN eligible_maps em ON em.id = c.map_id
+            GROUP BY c.map_id
+        ),
+        rating_data AS (
+            SELECT
+                em.id AS map_id,
+                code,
+                em.base_difficulty,
+                AVG(mr.quality) AS quality
+            FROM eligible_maps em
+            LEFT JOIN maps.ratings mr
+              ON mr.map_id = em.id
+             AND mr.verified
+            GROUP BY em.id, code, em.base_difficulty
+        ),
+        map_data AS (
+            SELECT
+                em.id AS map_id,
+                em.code,
+                COALESCE(cd.completions, 0) AS completions,
+                rd.base_difficulty          AS difficulty,
+                rd.quality
+            FROM eligible_maps em
+            LEFT JOIN completion_data cd ON cd.map_id = em.id
+            LEFT JOIN rating_data     rd ON rd.map_id = em.id
+        ),
+        ranked_maps AS (
+            SELECT
+                md.map_id,
+                code,
+                md.completions,
+                round(md.quality, 2) AS quality,
+                md.difficulty,
+                        ROW_NUMBER() OVER (
+                    PARTITION BY md.difficulty
+                    ORDER BY md.completions DESC,
+                        md.quality DESC NULLS LAST,
+                        md.map_id           -- deterministic tiebreaker; swap if you prefer updated_at, code, etc.
+                    ) AS pos
+            FROM map_data md
+        )
+        SELECT
+            code,
+            completions,
+            ROUND(COALESCE(quality, 0), 2) AS quality,   -- <-- changed
+            difficulty,
+            pos AS ranking
+        FROM ranked_maps
+        WHERE pos <= 5
+        ORDER BY
+            array_position(ARRAY['Easy','Medium','Hard','Very Hard','Extreme','Hell'], difficulty),
+            pos;
+        """
+        rows = await _conn.fetch(query)
+        return [dict(row) for row in rows]
+
+    async def fetch_popular_creators(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Return top creators by average map quality (min 3 maps).
+
+        Aggregates average quality per creator across their maps and filters to
+        creators with at least three rated maps.
+
+        Returns:
+            list[dict]: Creators with map count and average quality.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+        WITH map_creator_data AS (
+            SELECT m.code, mc.user_id, round(avg(quality), 2) AS quality
+            FROM core.maps m
+            LEFT JOIN maps.creators mc ON m.id = mc.map_id
+            LEFT JOIN maps.ratings mr ON m.id = mr.map_id
+            WHERE quality IS NOT NULL AND mr.verified
+            GROUP BY mc.user_id, m.code
+        ), quality_data AS (
+            SELECT
+                count(code) AS map_count,
+                coalesce(own.username, u.nickname) AS name,
+                avg(quality) AS average_quality
+            FROM map_creator_data mcd
+            LEFT JOIN core.users u ON mcd.user_id = u.id
+            LEFT JOIN users.overwatch_usernames own ON u.id = own.user_id
+            GROUP BY mcd.user_id, own.username, u.nickname
+            ORDER BY average_quality DESC
+        )
+        SELECT * FROM quality_data WHERE map_count >= 3
+        """
+        rows = await _conn.fetch(query)
+        return [dict(row) for row in rows]
+
+    async def fetch_unarchived_map_count(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Count visible, unarchived maps grouped by map name.
+
+        Returns:
+            list[dict]: Per-name counts for non-archived, non-hidden maps.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            SELECT
+                name as map_name,
+                count(m.map_name) as amount
+            FROM maps.names amn
+            LEFT JOIN core.maps m ON amn.name = m.map_name
+            WHERE m.archived IS FALSE AND m.hidden IS FALSE
+            GROUP BY name
+            ORDER BY amount DESC
+        """
+        rows = await _conn.fetch(query)
+        return [dict(row) for row in rows]
+
+    async def fetch_total_map_count(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Count all maps grouped by map name, regardless of archive/visibility.
+
+        Returns:
+            list[dict]: Per-name counts for all maps.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            SELECT
+                name as map_name,
+                count(m.map_name) as amount
+            FROM maps.names amn
+            LEFT JOIN core.maps m ON amn.name = m.map_name
+            GROUP BY name
+            ORDER BY amount DESC
+        """
+        rows = await _conn.fetch(query)
+        return [dict(row) for row in rows]
+
+    async def fetch_map_record_progression(
+        self,
+        user_id: int,
+        code: OverwatchCode,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Get a user's record progression over time for a specific map.
+
+        Returns all historical record entries (time vs. inserted_at) for the user and map.
+
+        Args:
+            user_id: Target user ID.
+            code: Overwatch map code.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            list[dict]: Time-series of record improvements.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+        WITH target_map AS (
+            SELECT
+                id AS map_id
+            FROM core.maps
+            WHERE code = $1
+        )
+        SELECT
+            time,
+            inserted_at
+        FROM core.completions
+        WHERE user_id = $2
+            AND map_id = (SELECT map_id FROM target_map)
+            AND time < 99999999.99
+        ORDER BY time;
+        """
+        rows = await _conn.fetch(query, code, user_id)
+        return [dict(row) for row in rows]
+
+    async def fetch_time_played_per_rank(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Sum verified playtime by base difficulty.
+
+        Aggregates total verified run time across all maps, normalized to base
+        difficulty (stripping '+'/'-'), and returns totals per difficulty.
+
+        Returns:
+            list[dict]: Total seconds played per base difficulty.
+        """
+        _conn = self._get_connection(conn)
+
+        query = r"""
+        WITH record_sum_by_map_code AS (
+            SELECT
+                SUM(c.time) AS total_seconds,
+                c.map_id
+            FROM core.completions c
+            WHERE c.verified
+              AND c.time < 99999999.99
+            GROUP BY c.map_id
+        ),
+            difficulty_norm AS (
+                SELECT
+                    rs.total_seconds,
+                    regexp_replace(m.difficulty, '\s*[-+]\s*$', '', '') AS base_difficulty
+                FROM record_sum_by_map_code rs
+                JOIN core.maps m ON m.id = rs.map_id
+            )
+        SELECT
+            SUM(total_seconds) AS total_seconds,
+            base_difficulty    AS difficulty
+        FROM difficulty_norm
+        WHERE base_difficulty IS NOT NULL
+        GROUP BY base_difficulty
+        ORDER BY array_position(ARRAY['Easy','Medium','Hard','Very Hard','Extreme','Hell'], base_difficulty);
         """
         rows = await _conn.fetch(query)
         return [dict(row) for row in rows]
