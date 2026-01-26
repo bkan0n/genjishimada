@@ -190,26 +190,18 @@ class CompletionsService(BaseService):
         request: Request,
         record_id: int,
         data: CompletionVerificationUpdateRequest,
-        use_pool: bool = False,
+        *,
+        conn: Connection | None = None,
     ) -> JobStatusResponse:
         """Update verification status for a completion and publish an event."""
         try:
-            if use_pool:
-                async with self._pool.acquire() as conn:
-                    await self._completions_repo.update_verification(
-                        record_id,
-                        data.verified,
-                        data.verified_by,
-                        data.reason,
-                        conn=cast(Connection, conn),
-                    )
-            else:
-                await self._completions_repo.update_verification(
-                    record_id,
-                    data.verified,
-                    data.verified_by,
-                    data.reason,
-                )
+            await self._completions_repo.update_verification(
+                record_id,
+                data.verified,
+                data.verified_by,
+                data.reason,
+                conn=conn,
+            )
         except UniqueConstraintViolationError as e:
             raise CustomHTTPException(
                 status_code=HTTP_400_BAD_REQUEST,
