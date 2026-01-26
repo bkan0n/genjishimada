@@ -12,11 +12,9 @@ import msgspec
 import rapidfuzz.fuzz
 import rapidfuzz.process
 import sentry_sdk
-from asyncpg import Connection
 from genjishimada_sdk.completions import (
     CompletionCreatedEvent,
     CompletionCreateRequest,
-    CompletionCreateRequest2,
     CompletionModerateRequest,
     CompletionPatchRequest,
     CompletionResponse,
@@ -38,7 +36,7 @@ from genjishimada_sdk.maps import OverwatchCode
 from litestar import Controller, Request, get, patch, post, put
 from litestar.datastructures import State
 from litestar.di import Provide
-from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
+from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from di import (
     AutocompleteService,
@@ -103,71 +101,16 @@ class CompletionsController(Controller):
         """Get completions for a specific user."""
         return await svc.get_world_records_per_user(user_id)
 
-    @post("/testing/testing")
-    async def testing_testing(  # noqa: PLR0913
-        self,
-        svc: CompletionsService,
-        request: Request,
-        data: CompletionCreateRequest2,
-        autocomplete: AutocompleteService,
-        users: UserService,
-        conn: Connection,
-    ) -> CompletionSubmissionJobResponse:
-        """Test."""
-        _ = conn
-        completion_id = data.completion_id
-        data2 = CompletionCreateRequest(
-            code=data.code,
-            user_id=data.user_id,
-            time=data.time,
-            screenshot=data.screenshot,
-            video=data.video,
-        )
-
-        if not data.video:
-            task = asyncio.create_task(
-                _attempt_auto_verify(
-                    request=request,
-                    svc=svc,
-                    autocomplete=autocomplete,
-                    users=users,
-                    completion_id=completion_id,
-                    data=data2,
-                )
-            )
-            self._tasks.add(task)
-            task.add_done_callback(lambda t: self._tasks.remove(t))
-
-            return CompletionSubmissionJobResponse(None, completion_id)
-
-        idempotency_key = f"completion:submission:{data.user_id}:{completion_id}2"
-        job_status = await svc.publish_message(
-            routing_key="api.completion.submission",
-            data=CompletionCreatedEvent(completion_id),
-            headers=request.headers,
-            idempotency_key=idempotency_key,
-        )
-        return CompletionSubmissionJobResponse(job_status, completion_id)
-
     @post(path="/", summary="Submit Completion", description="Submit a new completion record and publish an event.")
-    async def submit_completion(  # noqa: PLR0913
+    async def submit_completion(
         self,
         svc: CompletionsService,
         request: Request,
         data: CompletionCreateRequest,
         autocomplete: AutocompleteService,
         users: UserService,
-        conn: Connection,
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion."""
-        query = """
-            SELECT EXISTS(SELECT 1 FROM core.maps WHERE code=$1 and archived=FALSE);
-        """
-        if not await conn.fetchval(query, data.code):
-            raise CustomHTTPException(
-                status_code=HTTP_404_NOT_FOUND, detail="This map code does not exist or has been archived."
-            )
-
         completion_id = await svc.submit_completion(data, request)
         if not completion_id:
             raise ValueError("Some how completion ID is null?")
@@ -479,7 +422,7 @@ async def _attempt_auto_verify(  # noqa: PLR0913
                     verified=True,
                     reason="Auto Verified by Genji Shimada.",
                 )
-                await svc.verify_completion(request, completion_id, verification_data, use_pool=True)
+                await svc.verify_completion(request, completion_id, verification_data)
                 return
         except aiohttp.ClientConnectorDNSError:
             log.warning("OCR service DNS error, falling back to manual verification")

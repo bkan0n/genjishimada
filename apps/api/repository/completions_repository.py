@@ -1402,6 +1402,25 @@ class CompletionsRepository(BaseRepository):
             constraint_name = extract_constraint_name(e) or "unknown"
             raise CheckConstraintViolationError(constraint_name, "core.completions", str(e)) from e
 
+    async def check_map_exists(
+        self,
+        code: str,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Check if a map exists and is not archived.
+
+        Args:
+            code: Map code.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            True if map exists and is not archived, False otherwise.
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT EXISTS(SELECT 1 FROM core.maps WHERE code=$1 and archived=FALSE);"
+        return await _conn.fetchval(query, code)
+
     def build_completion_patch_query(
         self,
         record_id: int,

@@ -30,7 +30,7 @@ from genjishimada_sdk.maps import OverwatchCode
 from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
 from litestar import Request
 from litestar.datastructures import Headers, State
-from litestar.status_codes import HTTP_400_BAD_REQUEST
+from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from repository.completions_repository import CompletionsRepository
 from repository.exceptions import (
@@ -80,6 +80,13 @@ class CompletionsService(BaseService):
 
     async def submit_completion(self, data: CompletionCreateRequest, request: Request) -> int:
         """Submit a new completion record and publish an event."""
+        map_exists = await self._completions_repo.check_map_exists(data.code)
+        if not map_exists:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail="This map code does not exist or has been archived.",
+            )
+
         try:
             completion_id, verification_id_to_delete = await self._completions_repo.submit_completion(
                 user_id=data.user_id,
