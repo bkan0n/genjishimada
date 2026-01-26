@@ -20,6 +20,7 @@ from litestar.static_files.config import create_static_files_router
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR, HTTP_503_SERVICE_UNAVAILABLE
 from litestar_asyncpg import AsyncpgConfig, AsyncpgConnection, AsyncpgPlugin, PoolConfig
 
+from events import listeners
 from middleware.auth import CustomAuthenticationMiddleware
 from middleware.guards import scope_guard
 from routes import route_handlers
@@ -183,6 +184,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
             CustomHTTPException: default_exception_handler,
             HTTP_500_INTERNAL_SERVER_ERROR: internal_server_error_handler,
         },
+        listeners=listeners,
         lifespan=[rabbitmq_connection],
         logging_config=logging_config,
         middleware=[auth_middleware],

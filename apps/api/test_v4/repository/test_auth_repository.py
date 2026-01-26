@@ -1,5 +1,6 @@
 """Tests for AuthRepository."""
 
+from typing import AsyncGenerator
 import uuid
 import pytest
 from datetime import datetime, timedelta, timezone
@@ -17,7 +18,7 @@ def unique_email() -> str:
 
 
 @pytest.fixture
-async def db_pool(postgres_service: PostgresService) -> asyncpg.Pool:
+async def db_pool(postgres_service: PostgresService) -> AsyncGenerator[asyncpg.Pool]:
     """Create asyncpg pool for tests."""
     pool = await asyncpg.create_pool(
         user=postgres_service.user,
@@ -153,4 +154,96 @@ class TestTokenOperations:
                 "SELECT used_at FROM users.email_tokens WHERE token_hash = $1",
                 token_hash,
             )
+            assert row is not None
             assert row["used_at"] is not None
+
+
+class TestAuthStatus:
+    """Test auth status helpers."""
+
+    async def test_get_auth_status_returns_email(self, auth_repo: AuthRepository) -> None:
+        """Test that auth status returns email for user."""
+        user_id = await auth_repo.generate_next_user_id()
+        await auth_repo.create_core_user(user_id, "statususer")
+        await auth_repo.create_email_auth(user_id, "status@test.com", "hash")
+
+        status = await auth_repo.get_auth_status(user_id)
+        assert status is not None
+        assert status["email"] == "status@test.com"
+
+
+class TestSessionOperations:
+    """Test session repository methods."""
+
+    async def test_write_and_read_session(self, auth_repo: AuthRepository) -> None:
+        """Test writing and reading a session."""
+        await auth_repo.write_session("sess-1", "payload", None, None, None)
+        payload = await auth_repo.read_session("sess-1", 120)
+        assert payload == "payload"
+
+    async def test_delete_session(self, auth_repo: AuthRepository) -> None:
+        """Test deleting a session."""
+        await auth_repo.write_session("sess-2", "payload", None, None, None)
+        deleted = await auth_repo.delete_session("sess-2")
+        assert deleted is True
+
+    async def test_delete_expired_sessions(self, auth_repo: AuthRepository) -> None:
+        """Test deleting expired sessions."""
+        async with auth_repo._pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO users.sessions (id, payload, last_activity) VALUES ($1, $2, now() - interval '3 hours')",
+                "expired-1",
+                "payload",
+            )
+
+        count = await auth_repo.delete_expired_sessions(120)
+        assert count >= 1
+
+    async def test_get_user_sessions_returns_rows(self, auth_repo: AuthRepository) -> None:
+        """Test fetching sessions for a user."""
+        user_id = await auth_repo.generate_next_user_id()
+        await auth_repo.create_core_user(user_id, "sessionuser")
+        await auth_repo.create_email_auth(user_id, unique_email(), "hash")
+
+        await auth_repo.write_session("sess-a", "payload", user_id, None, None)
+        await auth_repo.write_session("sess-b", "payload", user_id, None, None)
+
+        sessions = await auth_repo.get_user_sessions(user_id, 120)
+        assert len(sessions) >= 2
+
+
+class TestRememberTokens:
+    """Test remember token operations."""
+
+    async def test_create_validate_revoke_remember_token(self, auth_repo: AuthRepository) -> None:
+        """Test remember token lifecycle."""
+        user_id = await auth_repo.generate_next_user_id()
+        await auth_repo.create_core_user(user_id, "rememberuser")
+        await auth_repo.create_email_auth(user_id, unique_email(), "hash")
+
+        token_hash = "abc123"
+        expires_at = datetime.now(timezone.utc) + timedelta(days=1)
+        await auth_repo.create_remember_token(user_id, token_hash, expires_at, None, None)
+
+        validated_user_id = await auth_repo.validate_remember_token(token_hash)
+        assert validated_user_id == user_id
+
+        revoked = await auth_repo.revoke_remember_tokens(user_id)
+        assert revoked >= 1
+
+
+class TestModeratorChecks:
+    """Test moderator session checks."""
+
+    async def test_check_is_mod_returns_true(self, auth_repo: AuthRepository) -> None:
+        """Test that check_is_mod returns True for mod session."""
+        user_id = await auth_repo.generate_next_user_id()
+        await auth_repo.create_core_user(user_id, "moduser")
+        await auth_repo.create_email_auth(user_id, unique_email(), "hash")
+
+        async with auth_repo._pool.acquire() as conn:
+            await conn.execute("UPDATE core.users SET is_mod = true WHERE id = $1", user_id)
+
+        await auth_repo.write_session("mod-session", "payload", user_id, None, None)
+        is_mod = await auth_repo.check_is_mod("mod-session")
+        assert is_mod is True

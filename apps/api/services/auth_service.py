@@ -11,13 +11,33 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from asyncpg import Pool
 from genjishimada_sdk.auth import (
+    AuthUserPublic,
     AuthUserResponse,
+    AuthUserVerify,
+    CreateRememberTokenResponse,
+    DestroyUserSessionsResponse,
     EmailAuthStatus,
     EmailLoginRequest,
     EmailRegisterRequest,
     EmailVerifyRequest,
+    LoginResponse,
     PasswordResetConfirmRequest,
+    PasswordResetConfirmResponse,
+    PasswordResetEmailEvent,
     PasswordResetRequest,
+    PasswordResetRequestResponse,
+    RegisterResponse,
+    ResendVerificationResponse,
+    RevokeRememberTokensResponse,
+    SessionDestroyResponse,
+    SessionGcResponse,
+    SessionInfo,
+    SessionReadResponse,
+    SessionWriteResponse,
+    UserSessionsResponse,
+    ValidateRememberTokenResponse,
+    VerificationEmailEvent,
+    VerifyEmailResponse,
 )
 from litestar.datastructures import State
 
@@ -242,7 +262,7 @@ class AuthService(BaseService):
         self,
         data: EmailRegisterRequest,
         client_ip: str | None = None,
-    ) -> tuple[AuthUserResponse, str]:
+    ) -> tuple[RegisterResponse, VerificationEmailEvent]:
         """Register a new email-based user.
 
         Args:
@@ -250,7 +270,7 @@ class AuthService(BaseService):
             client_ip: Client IP for rate limiting.
 
         Returns:
-            Tuple of (AuthUserResponse, verification_token).
+            Tuple of (RegisterResponse, VerificationEmailEvent).
 
         Raises:
             EmailValidationError: If email format is invalid.
@@ -300,15 +320,16 @@ class AuthService(BaseService):
         await self._auth_repo.record_attempt(identifier, "register", success=True)
 
         return (
-            AuthUserResponse(
-                id=user_id,
-                email=data.email,
-                username=data.username,
-                email_verified=False,
-                coins=0,
-                is_mod=False,
+            RegisterResponse(
+                user=AuthUserPublic(
+                    id=user_id,
+                    email=data.email,
+                    username=data.username,
+                    email_verified=False,
+                ),
+                verification_email_sent=False,
             ),
-            token,
+            VerificationEmailEvent(email=data.email, username=data.username, token=token),
         )
 
     # ===== Login =====
@@ -317,7 +338,7 @@ class AuthService(BaseService):
         self,
         data: EmailLoginRequest,
         client_ip: str | None = None,
-    ) -> AuthUserResponse:
+    ) -> LoginResponse:
         """Authenticate user with email and password.
 
         Args:
@@ -325,7 +346,7 @@ class AuthService(BaseService):
             client_ip: Client IP for rate limiting.
 
         Returns:
-            AuthUserResponse with user data.
+            LoginResponse with user data.
 
         Raises:
             InvalidCredentialsError: If credentials are invalid.
@@ -352,25 +373,27 @@ class AuthService(BaseService):
         # Record success
         await self._auth_repo.record_attempt(identifier, "login", success=True)
 
-        return AuthUserResponse(
-            id=user_data["user_id"],
-            email=user_data["email"],
-            username=user_data["nickname"],
-            email_verified=user_data["email_verified_at"] is not None,
-            coins=user_data["coins"],
-            is_mod=user_data["is_mod"],
+        return LoginResponse(
+            user=AuthUserResponse(
+                id=user_data["user_id"],
+                email=user_data["email"],
+                username=user_data["nickname"],
+                email_verified=user_data["email_verified_at"] is not None,
+                coins=user_data["coins"],
+                is_mod=user_data["is_mod"],
+            )
         )
 
     # ===== Email Verification =====
 
-    async def verify_email(self, data: EmailVerifyRequest) -> AuthUserResponse:
+    async def verify_email(self, data: EmailVerifyRequest) -> VerifyEmailResponse:
         """Verify user's email address.
 
         Args:
             data: Email verification payload with token.
 
         Returns:
-            AuthUserResponse with updated verification status.
+            VerifyEmailResponse with updated verification status.
 
         Raises:
             TokenInvalidError: If token is not found.
@@ -403,16 +426,20 @@ class AuthService(BaseService):
             # Invalidate any other verification tokens
             await self._auth_repo.invalidate_user_tokens(token_data["user_id"], "verification", conn=conn)  # type: ignore[arg-type]
 
-        return AuthUserResponse(
-            id=token_data["user_id"],
-            email=token_data["email"],
-            username=token_data["nickname"],
-            email_verified=True,
-            coins=token_data["coins"],
-            is_mod=token_data["is_mod"],
+        return VerifyEmailResponse(
+            message="Email verified successfully.",
+            user=AuthUserVerify(
+                id=token_data["user_id"],
+                email=token_data["email"],
+                username=token_data["nickname"],
+                email_verified=True,
+                is_mod=token_data["is_mod"],
+            ),
         )
 
-    async def resend_verification(self, email: str, client_ip: str | None = None) -> tuple[str, str]:
+    async def resend_verification(
+        self, email: str, client_ip: str | None = None
+    ) -> tuple[ResendVerificationResponse, VerificationEmailEvent]:
         """Resend email verification token.
 
         Args:
@@ -420,7 +447,7 @@ class AuthService(BaseService):
             client_ip: Client IP for rate limiting.
 
         Returns:
-            Tuple of (verification_token, username).
+            Tuple of (ResendVerificationResponse, VerificationEmailEvent).
 
         Raises:
             UserNotFoundError: If no user with this email exists.
@@ -463,13 +490,18 @@ class AuthService(BaseService):
         # Record attempt
         await self._auth_repo.record_attempt(identifier, "verification_resend", success=True)
 
-        return token, user_data["nickname"]
+        return (
+            ResendVerificationResponse(
+                message="If an account exists with this email, a verification email has been sent."
+            ),
+            VerificationEmailEvent(email=email, username=user_data["nickname"], token=token),
+        )
 
     # ===== Password Reset =====
 
     async def request_password_reset(
         self, data: PasswordResetRequest, client_ip: str | None = None
-    ) -> tuple[str, str] | None:
+    ) -> tuple[PasswordResetRequestResponse, PasswordResetEmailEvent | None]:
         """Request a password reset token.
 
         Args:
@@ -477,7 +509,7 @@ class AuthService(BaseService):
             client_ip: Client IP for rate limiting.
 
         Returns:
-            Tuple of (password_reset_token, username) if user exists, None otherwise (for security).
+            Tuple of (PasswordResetRequestResponse, PasswordResetEmailEvent | None).
 
         Raises:
             RateLimitExceededError: If rate limit exceeded.
@@ -494,7 +526,12 @@ class AuthService(BaseService):
         if not user_data:
             # Still record the attempt to prevent enumeration timing attacks
             await self._auth_repo.record_attempt(identifier, "password_reset", success=False)
-            return None
+            return (
+                PasswordResetRequestResponse(
+                    message="If an account with that email exists, a password reset link has been sent."
+                ),
+                None,
+            )
 
         # Generate token
         token, token_hash = self.generate_token()
@@ -516,16 +553,25 @@ class AuthService(BaseService):
         # Record attempt
         await self._auth_repo.record_attempt(identifier, "password_reset", success=True)
 
-        return token, user_data["nickname"]
+        return (
+            PasswordResetRequestResponse(
+                message="If an account with that email exists, a password reset link has been sent."
+            ),
+            PasswordResetEmailEvent(
+                email=data.email,
+                username=user_data["nickname"],
+                token=token,
+            ),
+        )
 
-    async def confirm_password_reset(self, data: PasswordResetConfirmRequest) -> AuthUserResponse:
+    async def confirm_password_reset(self, data: PasswordResetConfirmRequest) -> PasswordResetConfirmResponse:
         """Confirm password reset and set new password.
 
         Args:
             data: Password reset confirmation with token and new password.
 
         Returns:
-            AuthUserResponse after password reset.
+            PasswordResetConfirmResponse after password reset.
 
         Raises:
             TokenInvalidError: If token is not found.
@@ -562,27 +608,33 @@ class AuthService(BaseService):
             # Revoke all remember tokens for security
             await self._auth_repo.revoke_remember_tokens(token_data["user_id"], conn=conn)  # type: ignore[arg-type]
 
-        return AuthUserResponse(
-            id=token_data["user_id"],
-            email=token_data["email"],
-            username=token_data["nickname"],
-            email_verified=token_data["email_verified_at"] is not None,
-            coins=token_data["coins"],
-            is_mod=token_data["is_mod"],
+        return PasswordResetConfirmResponse(
+            message="Password reset successfully.",
+            user=AuthUserVerify(
+                id=token_data["user_id"],
+                email=token_data["email"],
+                username=token_data["nickname"],
+                email_verified=token_data["email_verified_at"] is not None,
+                is_mod=token_data["is_mod"],
+            ),
         )
 
     # ===== Session Management =====
 
-    async def session_read(self, session_id: str) -> str | None:
+    async def session_read(self, session_id: str) -> SessionReadResponse:
         """Read session payload.
 
         Args:
             session_id: The session ID.
 
         Returns:
-            Base64-encoded session payload or None if not found.
+            SessionReadResponse with payload and is_mod flag.
         """
-        return await self._auth_repo.read_session(session_id, SESSION_LIFETIME_MINUTES)
+        payload = await self._auth_repo.read_session(session_id, SESSION_LIFETIME_MINUTES)
+        is_mod = False
+        if payload:
+            is_mod = await self._auth_repo.check_is_mod(session_id)
+        return SessionReadResponse(payload=payload, is_mod=is_mod)
 
     async def session_write(
         self,
@@ -591,7 +643,7 @@ class AuthService(BaseService):
         user_id: int | None,
         ip_address: str | None,
         user_agent: str | None,
-    ) -> None:
+    ) -> SessionWriteResponse:
         """Write session data.
 
         Args:
@@ -602,38 +654,45 @@ class AuthService(BaseService):
             user_agent: Client user agent.
         """
         await self._auth_repo.write_session(session_id, payload, user_id, ip_address, user_agent)
+        return SessionWriteResponse(success=True)
 
-    async def session_destroy(self, session_id: str) -> bool:
+    async def session_destroy(self, session_id: str) -> SessionDestroyResponse:
         """Destroy a session.
 
         Args:
             session_id: The session ID.
 
         Returns:
-            True if session was deleted, False if not found.
+            SessionDestroyResponse indicating whether session was deleted.
         """
-        return await self._auth_repo.delete_session(session_id)
+        deleted = await self._auth_repo.delete_session(session_id)
+        return SessionDestroyResponse(deleted=deleted)
 
-    async def session_gc(self) -> int:
+    async def session_gc(self) -> SessionGcResponse:
         """Garbage collect expired sessions.
 
         Returns:
-            Number of sessions deleted.
+            SessionGcResponse with number of sessions deleted.
         """
-        return await self._auth_repo.delete_expired_sessions(SESSION_LIFETIME_MINUTES)
+        count = await self._auth_repo.delete_expired_sessions(SESSION_LIFETIME_MINUTES)
+        return SessionGcResponse(deleted_count=count)
 
-    async def session_get_user_sessions(self, user_id: int) -> list[dict]:
+    async def session_get_user_sessions(self, user_id: int) -> UserSessionsResponse:
         """Get all active sessions for a user.
 
         Args:
             user_id: The user ID.
 
         Returns:
-            List of session info dicts.
+            UserSessionsResponse with session info list.
         """
-        return await self._auth_repo.get_user_sessions(user_id, SESSION_LIFETIME_MINUTES)
+        sessions = await self._auth_repo.get_user_sessions(user_id, SESSION_LIFETIME_MINUTES)
+        session_models = [SessionInfo(**session) for session in sessions]
+        return UserSessionsResponse(sessions=session_models)
 
-    async def session_destroy_all_for_user(self, user_id: int, except_session_id: str | None = None) -> int:
+    async def session_destroy_all_for_user(
+        self, user_id: int, except_session_id: str | None = None
+    ) -> DestroyUserSessionsResponse:
         """Destroy all sessions for a user.
 
         Args:
@@ -643,18 +702,8 @@ class AuthService(BaseService):
         Returns:
             Number of sessions destroyed.
         """
-        return await self._auth_repo.delete_user_sessions(user_id, except_session_id)
-
-    async def check_if_mod(self, session_id: str) -> bool:
-        """Check if a session belongs to a moderator.
-
-        Args:
-            session_id: The session ID.
-
-        Returns:
-            True if session user is a moderator, False otherwise.
-        """
-        return await self._auth_repo.check_is_mod(session_id)
+        count = await self._auth_repo.delete_user_sessions(user_id, except_session_id)
+        return DestroyUserSessionsResponse(destroyed_count=count)
 
     # ===== Remember Token Management =====
 
@@ -663,7 +712,7 @@ class AuthService(BaseService):
         user_id: int,
         ip_address: str | None,
         user_agent: str | None,
-    ) -> str:
+    ) -> CreateRememberTokenResponse:
         """Create a remember token for persistent login.
 
         Args:
@@ -672,7 +721,7 @@ class AuthService(BaseService):
             user_agent: Client user agent.
 
         Returns:
-            The plaintext remember token.
+            CreateRememberTokenResponse
         """
         token, token_hash = self.generate_token()
         expires_at = datetime.now(timezone.utc) + timedelta(days=REMEMBER_TOKEN_LIFETIME_DAYS)
@@ -685,30 +734,35 @@ class AuthService(BaseService):
             user_agent,
         )
 
-        return token
+        return CreateRememberTokenResponse(token=token)
 
-    async def validate_remember_token(self, token: str) -> int | None:
+    async def validate_remember_token(self, token: str) -> ValidateRememberTokenResponse:
         """Validate a remember token and return user ID.
 
         Args:
             token: The plaintext remember token.
 
         Returns:
-            User ID if token is valid, None otherwise.
+            ValidateRememberTokenResponse based on if user_id exists
         """
         token_hash = self.hash_token(token)
-        return await self._auth_repo.validate_remember_token(token_hash)
+        user_id = await self._auth_repo.validate_remember_token(token_hash)
+        if user_id is None:
+            return ValidateRememberTokenResponse(valid=False, user_id=None)
+        return ValidateRememberTokenResponse(valid=True, user_id=user_id)
 
-    async def revoke_remember_tokens(self, user_id: int) -> int:
+    async def revoke_remember_tokens(self, user_id: int) -> RevokeRememberTokensResponse:
         """Revoke all remember tokens for a user.
 
         Args:
             user_id: The user ID.
 
         Returns:
-            Number of tokens revoked.
+            RevokeRememberTokensResponse: Number of tokens revoked.
         """
-        return await self._auth_repo.revoke_remember_tokens(user_id)
+        count = await self._auth_repo.revoke_remember_tokens(user_id)
+        model = RevokeRememberTokensResponse(revoked_count=count)
+        return model
 
     # ===== User Status =====
 
@@ -728,8 +782,13 @@ class AuthService(BaseService):
         if not auth_data:
             raise UserNotFoundError(user_id)
 
+        email = auth_data["email"]
+        local, domain = email.split("@")
+        masked_local = local[0] + "***" if len(local) > 1 else "***"
+        masked_email = f"{masked_local}@{domain}"
+
         return EmailAuthStatus(
-            email=auth_data["email"],
+            email=masked_email,
             email_verified=auth_data["email_verified_at"] is not None,
         )
 
