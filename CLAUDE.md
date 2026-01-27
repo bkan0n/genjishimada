@@ -288,34 +288,39 @@ Use explicit try/except blocks only where specific error handling is needed. Not
 **Example pattern:**
 
 ```python
-from asyncpg.exceptions import ForeignKeyViolationError
-from litestar.exceptions import HTTPException
+from repository.exceptions import ForeignKeyViolationError
+from litestar import HTTPException
 from litestar.status_codes import HTTP_404_NOT_FOUND
 
 
 class MyService(BaseService):
     async def create_something(self, user_id: int, resource_id: int) -> Result:
+        """Create something with explicit error handling.
+
+        Raises:
+            HTTPException: 404 if user or resource not found.
+        """
         try:
             result = await self.repository.create(user_id, resource_id)
             return result
         except ForeignKeyViolationError as e:
-            if "fk_user" in str(e):
+            if "user_id" in e.constraint_name:
                 raise HTTPException(
-                    detail="User not found",
                     status_code=HTTP_404_NOT_FOUND,
+                    detail="User does not exist",
                 ) from e
-            if "fk_resource" in str(e):
+            if "resource_id" in e.constraint_name:
                 raise HTTPException(
-                    detail="Resource not found",
                     status_code=HTTP_404_NOT_FOUND,
+                    detail="Resource does not exist",
                 ) from e
             raise
 ```
 
 **Key principles:**
 
-- Catch specific exception types (ForeignKeyViolationError, UniqueViolationError)
-- Check the constraint name or error message to determine which constraint failed
+- Catch specific exception types from `repository.exceptions` (ForeignKeyViolationError, UniqueViolationError)
+- Use `e.constraint_name` attribute to determine which constraint failed
 - Raise HTTPException with appropriate status code and user-friendly message
 - Use `raise` to re-raise if the error doesn't match expected constraints
 - Always use `from e` to preserve the exception chain for debugging
