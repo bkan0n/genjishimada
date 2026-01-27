@@ -257,9 +257,9 @@ class NewsfeedAnnouncement(_TaggedPayload, tag="announcement", kw_only=True):
 
     title: str
     content: str
-    url: str | None
-    banner_url: GuideURL | None
-    thumbnail_url: GuideURL | None
+    url: str | None = None
+    banner_url: GuideURL | None = None
+    thumbnail_url: GuideURL | None = None
     from_discord: bool
 
 
