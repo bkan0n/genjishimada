@@ -70,7 +70,13 @@ class NewsfeedRepository(BaseRepository):
             WHERE id = $1
         """
         row = await _conn.fetchrow(query, event_id)
-        return dict(row) if row else None
+        if not row:
+            return None
+        result = dict(row)
+        # Parse JSON string to dict if needed
+        if isinstance(result["payload"], str):
+            result["payload"] = json.loads(result["payload"])
+        return result
 
     async def fetch_events(
         self,
@@ -100,7 +106,14 @@ class NewsfeedRepository(BaseRepository):
             LIMIT $2 OFFSET $3
         """
         rows = await _conn.fetch(query, event_type, limit, offset)
-        return [dict(row) for row in rows]
+        result = []
+        for row in rows:
+            row_dict = dict(row)
+            # Parse JSON string to dict if needed
+            if isinstance(row_dict["payload"], str):
+                row_dict["payload"] = json.loads(row_dict["payload"])
+            result.append(row_dict)
+        return result
 
 
 async def provide_newsfeed_repository(state: State) -> NewsfeedRepository:
