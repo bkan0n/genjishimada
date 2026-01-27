@@ -53,7 +53,13 @@ CREATE TRIGGER update_core_users_updated_at
     FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
-CREATE TYPE playtest_status AS enum ('Approved', 'In Progress', 'Rejected');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'playtest_status') THEN
+        CREATE TYPE playtest_status AS enum ('Approved', 'In Progress', 'Rejected');
+    END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS core.maps
 (
@@ -1541,7 +1547,13 @@ CREATE INDEX IF NOT EXISTS analytics_command_name_date_idx ON public.analytics (
 
 
 
-CREATE TYPE job_status AS enum ('queued','processing','succeeded','failed','timeout');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status') THEN
+        CREATE TYPE job_status AS enum ('queued','processing','succeeded','failed','timeout');
+    END IF;
+END
+$$;
 
 CREATE TABLE public.jobs
 (
