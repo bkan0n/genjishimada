@@ -73,7 +73,7 @@ class TestNotificationsQueries:
         # Verify the event was marked as read by checking read_at is not null
         async with db_pool.acquire() as conn:
             result = await conn.fetchrow(
-                "SELECT read_at FROM public.notification_events WHERE id = $1",
+                "SELECT read_at FROM notifications.events WHERE id = $1",
                 event_id,
             )
             assert result is not None
@@ -97,7 +97,7 @@ class TestNotificationsQueries:
         async with db_pool.acquire() as conn:
             result = await conn.fetchrow(
                 """
-                SELECT enabled FROM public.notification_preferences
+                SELECT enabled FROM notifications.preferences
                 WHERE user_id = $1 AND event_type = $2 AND channel = $3
                 """,
                 300,
