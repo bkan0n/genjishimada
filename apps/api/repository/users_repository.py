@@ -296,3 +296,43 @@ class UsersRepository(BaseRepository):
         """
         rows = await _conn.fetch(query, user_id)
         return [row["name"] for row in rows]
+
+    async def fetch_user_notifications(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int | None:
+        """Fetch notification flags bitmask for a user.
+
+        Args:
+            user_id: The user ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Bitmask value, or None if not set.
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT flags FROM users.notification_settings WHERE user_id = $1;"
+        return await _conn.fetchval(query, user_id)
+
+    async def upsert_user_notifications(
+        self,
+        user_id: int,
+        flags: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Upsert notification flags for a user.
+
+        Args:
+            user_id: The user ID.
+            flags: Bitmask value.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO users.notification_settings (user_id, flags) VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE SET flags = $2;
+        """
+        await _conn.execute(query, user_id, flags)
