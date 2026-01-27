@@ -62,7 +62,7 @@ class TestCommunityEndpoints:
 
         # Pages should be different (if there are enough users)
         if len(page1_data) > 0 and len(page2_data) > 0:
-            assert page1_data[0]["id"] != page2_data[0]["id"]
+            assert page1_data[0]["user_id"] != page2_data[0]["user_id"]
 
     # =========================================================================
     # XP TIER STATISTICS TESTS

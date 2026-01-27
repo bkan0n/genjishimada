@@ -16,9 +16,9 @@ pytest_plugins = [
     "pytest_databases.docker.postgres",
 ]
 
-MIGRATIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "migrations"))
+MIGRATIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "migrations"))
 
-SEEDS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "seeds"))
+SEEDS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "seeds"))
 
 
 def _apply_sql_dir(conn: Any, directory: str) -> None:
