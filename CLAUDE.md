@@ -271,43 +271,54 @@ async def handle_completion(self, event: CompletionCreatedEvent, message: Abstra
 
 ### Database Exception Handling
 
-All DI service methods that perform database writes MUST use the `@handle_db_exceptions` decorator:
+Use explicit try/except blocks only where specific error handling is needed. Not all database operations require exception handling - only add it when you need to catch and transform specific errors into user-friendly responses.
+
+**When to add exception handling:**
+
+- When a foreign key violation should return a specific user-friendly error
+- When a unique constraint violation needs a custom message
+- When you need to provide context about what failed and why
+
+**When to let exceptions propagate:**
+
+- For unexpected database errors (let the global error handler manage them)
+- When the default error message is sufficient
+- For read operations that should fail if data is missing
+
+**Example pattern:**
 
 ```python
-from utilities.errors import ConstraintHandler, handle_db_exceptions
-from litestar.status_codes import HTTP_400_BAD_REQUEST
-
-# Define constraint mappings at module level
-MODULE_UNIQUE_CONSTRAINTS = {
-    "constraint_name": ConstraintHandler(
-        message="User-friendly error message",
-        status_code=HTTP_400_BAD_REQUEST
-    )
-}
-
-MODULE_FK_CONSTRAINTS = {
-    "fk_constraint_name": ConstraintHandler(
-        message="User-friendly error message",
-        status_code=HTTP_400_BAD_REQUEST
-    )
-}
+from asyncpg.exceptions import ForeignKeyViolationError
+from litestar.exceptions import HTTPException
+from litestar.status_codes import HTTP_404_NOT_FOUND
 
 
 class MyService(BaseService):
-    @handle_db_exceptions(unique_constraints=MODULE_UNIQUE_CONSTRAINTS, fk_constraints=MODULE_FK_CONSTRAINTS)
-    async def create_something(self, ...):
-# Database operation
+    async def create_something(self, user_id: int, resource_id: int) -> Result:
+        try:
+            result = await self.repository.create(user_id, resource_id)
+            return result
+        except ForeignKeyViolationError as e:
+            if "fk_user" in str(e):
+                raise HTTPException(
+                    detail="User not found",
+                    status_code=HTTP_404_NOT_FOUND,
+                ) from e
+            if "fk_resource" in str(e):
+                raise HTTPException(
+                    detail="Resource not found",
+                    status_code=HTTP_404_NOT_FOUND,
+                ) from e
+            raise
 ```
 
-This ensures consistent error handling across all database operations.
+**Key principles:**
 
-**Benefits:**
-
-- Converts database constraint violations into user-friendly HTTP errors
-- Automatically handles UniqueViolationError, ForeignKeyViolationError, and CheckViolationError
-- Provides fallback generic messages for unmapped constraints
-- Logs unhandled constraints for developer awareness
-- Centralizes constraint documentation in constraint mappings
+- Catch specific exception types (ForeignKeyViolationError, UniqueViolationError)
+- Check the constraint name or error message to determine which constraint failed
+- Raise HTTPException with appropriate status code and user-friendly message
+- Use `raise` to re-raise if the error doesn't match expected constraints
+- Always use `from e` to preserve the exception chain for debugging
 
 ## Environment Variables
 
