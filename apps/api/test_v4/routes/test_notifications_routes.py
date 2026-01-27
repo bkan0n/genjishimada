@@ -1,14 +1,16 @@
 """Tests for v4 notifications routes."""
 
 import pytest
+from litestar import Litestar
 from litestar.status_codes import HTTP_200_OK, HTTP_201_CREATED, HTTP_204_NO_CONTENT
+from litestar.testing import AsyncTestClient
 
 
 class TestNotificationsEndpoints:
     """Test notifications endpoints."""
 
     @pytest.mark.asyncio
-    async def test_create_notification_returns_201(self, test_client):
+    async def test_create_notification_returns_201(self, test_client: AsyncTestClient[Litestar]) -> None:
         """Test creating notification returns 201."""
         response = await test_client.post(
             "/api/v4/notifications/events",
@@ -24,10 +26,10 @@ class TestNotificationsEndpoints:
         assert response.status_code == HTTP_201_CREATED
         data = response.json()
         assert "id" in data
-        assert data["user_id"] == 300
+        assert data["user_id"] == 300  # noqa: PLR2004
 
     @pytest.mark.asyncio
-    async def test_list_user_events_returns_200(self, test_client):
+    async def test_list_user_events_returns_200(self, test_client: AsyncTestClient[Litestar]) -> None:
         """Test listing user events returns 200."""
         response = await test_client.get("/api/v4/notifications/users/300/events")
         assert response.status_code == HTTP_200_OK
@@ -35,7 +37,7 @@ class TestNotificationsEndpoints:
         assert isinstance(data, list)
 
     @pytest.mark.asyncio
-    async def test_get_unread_count_returns_200(self, test_client):
+    async def test_get_unread_count_returns_200(self, test_client: AsyncTestClient[Litestar]) -> None:
         """Test getting unread count returns 200."""
         response = await test_client.get("/api/v4/notifications/users/300/unread-count")
         assert response.status_code == HTTP_200_OK
@@ -43,7 +45,7 @@ class TestNotificationsEndpoints:
         assert "count" in data
 
     @pytest.mark.asyncio
-    async def test_mark_read_returns_204(self, test_client):
+    async def test_mark_read_returns_204(self, test_client: AsyncTestClient[Litestar]) -> None:
         """Test marking as read returns 204."""
         response = await test_client.patch("/api/v4/notifications/events/1/read")
         assert response.status_code == HTTP_204_NO_CONTENT

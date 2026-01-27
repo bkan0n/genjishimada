@@ -3,12 +3,15 @@
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-
+from genjishimada_sdk.notifications import NotificationCreateRequest
+from litestar import Litestar
+from litestar.datastructures import Headers, State
+from litestar.testing import AsyncTestClient
 from services.notifications_service import NotificationsService
 
 
 @pytest.fixture
-def mock_repo():
+def mock_repo() -> Mock:
     """Create mock repository."""
     repo = Mock()
     repo.insert_event = AsyncMock(return_value=42)
@@ -24,19 +27,19 @@ def mock_repo():
 
 
 @pytest.fixture
-def mock_state(test_client):
+def mock_state(test_client: AsyncTestClient[Litestar]) -> State:
     """Create mock state."""
     return test_client.app.state
 
 
 @pytest.fixture
-def mock_pool():
+def mock_pool() -> Mock:
     """Create mock pool."""
     return Mock()
 
 
 @pytest.fixture
-def notifications_service(mock_repo, mock_state, mock_pool):
+def notifications_service(mock_repo: Mock, mock_state: State, mock_pool: Mock) -> NotificationsService:
     """Create service with mocked repository."""
     return NotificationsService(mock_pool, mock_state, mock_repo)
 
@@ -44,11 +47,10 @@ def notifications_service(mock_repo, mock_state, mock_pool):
 class TestServiceLayer:
     """Test service business logic."""
 
-    async def test_create_and_dispatch_calls_repo(self, notifications_service, mock_repo):
+    async def test_create_and_dispatch_calls_repo(
+        self, notifications_service: NotificationsService, mock_repo: Mock
+    ) -> None:
         """Test that create_and_dispatch calls repository."""
-        from genjishimada_sdk.notifications import NotificationCreateRequest
-        from litestar.datastructures import Headers
-
         request = NotificationCreateRequest(
             user_id=300,
             event_type="xp_gain",
@@ -62,9 +64,11 @@ class TestServiceLayer:
         result = await notifications_service.create_and_dispatch(request, headers)
 
         mock_repo.insert_event.assert_called_once()
-        assert result.id == 42
+        assert result.id == 42  # noqa: PLR2004
 
-    async def test_get_user_events_calls_repo(self, notifications_service, mock_repo):
+    async def test_get_user_events_calls_repo(
+        self, notifications_service: NotificationsService, mock_repo: Mock
+    ) -> None:
         """Test that get_user_events calls repository."""
         await notifications_service.get_user_events(300, unread_only=False, limit=50, offset=0)
         mock_repo.fetch_user_events.assert_called_once_with(
@@ -74,12 +78,14 @@ class TestServiceLayer:
             offset=0,
         )
 
-    async def test_get_unread_count_calls_repo(self, notifications_service, mock_repo):
+    async def test_get_unread_count_calls_repo(
+        self, notifications_service: NotificationsService, mock_repo: Mock
+    ) -> None:
         """Test that get_unread_count calls repository."""
         await notifications_service.get_unread_count(300)
         mock_repo.fetch_unread_count.assert_called_once_with(300)
 
-    async def test_mark_read_calls_repo(self, notifications_service, mock_repo):
+    async def test_mark_read_calls_repo(self, notifications_service: NotificationsService, mock_repo: Mock) -> None:
         """Test that mark_read calls repository."""
         await notifications_service.mark_read(42)
         mock_repo.mark_event_read.assert_called_once_with(42)
