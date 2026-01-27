@@ -46,6 +46,7 @@ COMMENT ON COLUMN core.users.coins IS 'Coins received from community contributio
 CREATE INDEX IF NOT EXISTS idx_users_nickname_trgm ON core.users USING gin (nickname gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_users_global_name_trgm ON core.users USING gin (global_name gin_trgm_ops);
 
+DROP TRIGGER IF EXISTS update_core_users_updated_at ON core.users;
 CREATE TRIGGER update_core_users_updated_at
     BEFORE UPDATE
     ON core.users

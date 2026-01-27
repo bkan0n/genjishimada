@@ -124,7 +124,7 @@ class TestWriteOperations:
                 "Classic",
             )
             # Delete it
-            await lootbox_repo.delete_oldest_user_key(user_id=999, key_type="Classic", conn=conn)
+            await lootbox_repo.delete_oldest_user_key(user_id=999, key_type="Classic", conn=conn)  # type: ignore[arg-type]
             # Verify deletion
             count = await conn.fetchval(
                 "SELECT count(*) FROM lootbox.user_keys WHERE user_id = $1 AND key_type = $2",
@@ -146,7 +146,7 @@ class TestWriteOperations:
                 reward_type="spray",
                 key_type="Classic",
                 reward_name="God Of War",
-                conn=conn,
+                conn=conn,  # type: ignore[arg-type]
             )
             # Verify insertion
             exists = await conn.fetchval(
@@ -159,7 +159,7 @@ class TestWriteOperations:
     async def test_add_user_coins(self, lootbox_repo: LootboxRepository, db_pool: asyncpg.Pool):
         """Test adding coins to user."""
         async with db_pool.acquire() as conn:
-            await lootbox_repo.add_user_coins(user_id=999, amount=100, conn=conn)
+            await lootbox_repo.add_user_coins(user_id=999, amount=100, conn=conn)  # type: ignore[arg-type]
             # Verify coins
             coins = await conn.fetchval("SELECT coins FROM core.users WHERE id = $1", 999)
             assert coins >= 100
@@ -172,7 +172,7 @@ class TestWriteOperations:
                 "INSERT INTO core.users (id) VALUES ($1) ON CONFLICT DO NOTHING",
                 999,
             )
-            await lootbox_repo.insert_user_key(user_id=999, key_type="Classic", conn=conn)
+            await lootbox_repo.insert_user_key(user_id=999, key_type="Classic", conn=conn)  # type: ignore[arg-type]
             # Verify insertion
             count = await conn.fetchval(
                 "SELECT count(*) FROM lootbox.user_keys WHERE user_id = $1 AND key_type = $2",
@@ -193,7 +193,7 @@ class TestWriteOperations:
                 user_id=999,
                 xp_amount=50,
                 multiplier=1.0,
-                conn=conn,
+                conn=conn,  # type: ignore[arg-type]
             )
             assert "previous_amount" in result
             assert "new_amount" in result
@@ -202,7 +202,7 @@ class TestWriteOperations:
     async def test_update_xp_multiplier(self, lootbox_repo: LootboxRepository, db_pool: asyncpg.Pool):
         """Test updating XP multiplier."""
         async with db_pool.acquire() as conn:
-            await lootbox_repo.update_xp_multiplier(multiplier=2.0, conn=conn)
+            await lootbox_repo.update_xp_multiplier(multiplier=2.0, conn=conn)  # type: ignore[arg-type]
             # Verify update
             value = await conn.fetchval("SELECT value FROM lootbox.xp_multiplier LIMIT 1")
             assert value == 2.0
@@ -210,7 +210,7 @@ class TestWriteOperations:
     async def test_update_active_key(self, lootbox_repo: LootboxRepository, db_pool: asyncpg.Pool):
         """Test updating active key."""
         async with db_pool.acquire() as conn:
-            await lootbox_repo.update_active_key(key_type="Winter", conn=conn)
+            await lootbox_repo.update_active_key(key_type="Winter", conn=conn)  # type: ignore[arg-type]
             # Verify update
             active = await conn.fetchval("SELECT key FROM lootbox.active_key LIMIT 1")
             assert active == "Winter"

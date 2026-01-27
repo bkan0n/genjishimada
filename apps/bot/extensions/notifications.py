@@ -22,7 +22,6 @@ from genjishimada_sdk.notifications import (
     NotificationDeliveryEvent,
     NotificationEventType,
 )
-from genjishimada_sdk.users import Notification
 
 from extensions._queue_registry import queue_consumer
 from utilities.base import BaseHandler

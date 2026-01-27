@@ -99,8 +99,6 @@ from genjishimada_sdk.tags import (
     TagsSearchResponse,
 )
 from genjishimada_sdk.users import (
-    NOTIFICATION_TYPES,
-    Notification,
     OverwatchUsernamesResponse,
     OverwatchUsernamesUpdateRequest,
     RankDetailResponse,
