@@ -14,7 +14,7 @@ from genjishimada_sdk.lootbox import (
     UserLootboxKeyAmountResponse,
     UserRewardResponse,
 )
-from genjishimada_sdk.xp import XpGrantEvent, XpGrantRequest, XpGrantResponse
+from genjishimada_sdk.xp import TierChangeResponse, XpGrantEvent, XpGrantRequest, XpGrantResponse
 from litestar.datastructures import State
 
 from repository.lootbox_repository import LootboxRepository
@@ -417,6 +417,50 @@ class LootboxService(BaseService):
             key_type: Key type to set as active.
         """
         await self._lootbox_repo.update_active_key(key_type)
+
+    async def get_xp_tier_change(self, old_xp: int, new_xp: int) -> TierChangeResponse:
+        """Calculate tier change when XP is updated.
+
+        Determines whether the user has ranked up, sub-ranked up,
+        or achieved a prestige level change.
+
+        Args:
+            old_xp: Previous XP amount.
+            new_xp: New XP amount.
+
+        Returns:
+            TierChangeResponse with tier and prestige change details.
+        """
+        result = await self._lootbox_repo.fetch_xp_tier_change(old_xp, new_xp)
+        return msgspec.convert(result, TierChangeResponse)
+
+    async def debug_grant_reward_no_key(
+        self,
+        user_id: int,
+        key_type: LootboxKeyType,
+        reward_type: str,
+        reward_name: str,
+    ) -> None:
+        """DEBUG ONLY: Grant a reward to a user without consuming a key.
+
+        Args:
+            user_id: Target user ID.
+            key_type: Key type.
+            reward_type: Reward type.
+            reward_name: Reward name or coin amount.
+        """
+        if reward_type != "coins":
+            await self._lootbox_repo.insert_user_reward(
+                user_id=user_id,
+                reward_type=reward_type,
+                key_type=key_type,
+                reward_name=reward_name,
+                conn=None,
+            )
+        else:
+            # Grant coins
+            coin_amount = int(reward_name)
+            await self._lootbox_repo.add_user_coins(user_id, coin_amount, conn=None)
 
 
 async def provide_lootbox_service(state: State) -> LootboxService:
