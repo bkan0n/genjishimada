@@ -277,13 +277,24 @@ class NotificationsService(BaseService):
             event_type: Event type string.
             channel: Channel string.
             enabled: Whether the preference is enabled.
+
+        Raises:
+            HTTPException: 404 if user does not exist.
         """
-        await self._notifications_repo.upsert_preference(
-            user_id=user_id,
-            event_type=event_type,
-            channel=channel,
-            enabled=enabled,
-        )
+        try:
+            await self._notifications_repo.upsert_preference(
+                user_id=user_id,
+                event_type=event_type,
+                channel=channel,
+                enabled=enabled,
+            )
+        except ForeignKeyViolationError as e:
+            if "user_id" in e.constraint_name:
+                raise HTTPException(
+                    status_code=HTTP_404_NOT_FOUND,
+                    detail="User does not exist",
+                ) from e
+            raise
 
     async def bulk_update_preferences(self, user_id: int, preferences: list[NotificationPreference]) -> None:
         """Bulk update preferences.
