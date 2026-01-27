@@ -288,6 +288,294 @@ class LootboxRepository(BaseRepository):
         result = await _conn.fetchval(query)
         return result or 1.0
 
+    async def delete_oldest_user_key(
+        self,
+        user_id: int,
+        key_type: LootboxKeyType,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Delete the oldest key of a given type for a user.
+
+        Args:
+            user_id: Target user ID.
+            key_type: Key type to delete.
+            conn: Optional connection for transaction participation.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            DELETE FROM lootbox.user_keys
+            WHERE earned_at = (
+                SELECT MIN(earned_at)
+                FROM lootbox.user_keys
+                WHERE user_id = $1::bigint AND key_type = $2::text
+            ) AND user_id = $1::bigint AND key_type = $2::text
+        """
+        await _conn.execute(query, user_id, key_type)
+
+    async def check_user_has_reward(
+        self,
+        user_id: int,
+        reward_type: str,
+        key_type: LootboxKeyType,
+        reward_name: str,
+        *,
+        conn: Connection | None = None,
+    ) -> str | None:
+        """Check if user already has a reward and return its rarity.
+
+        Args:
+            user_id: Target user ID.
+            reward_type: Reward type.
+            key_type: Key type.
+            reward_name: Reward name.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            Rarity string if reward exists, None otherwise.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            SELECT rt.rarity
+            FROM lootbox.user_rewards ur
+            JOIN lootbox.reward_types rt ON ur.reward_name = rt.name
+                AND ur.reward_type = rt.type
+                AND ur.key_type = rt.key_type
+            WHERE ur.user_id = $1::bigint AND
+              ur.reward_type = $2::text AND
+              ur.key_type = $3::text AND
+              ur.reward_name = $4::text
+        """
+        return await _conn.fetchval(query, user_id, reward_type, key_type, reward_name)
+
+    async def insert_user_reward(
+        self,
+        user_id: int,
+        reward_type: str,
+        key_type: LootboxKeyType,
+        reward_name: str,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Insert a reward for a user.
+
+        Args:
+            user_id: Target user ID.
+            reward_type: Reward type.
+            key_type: Key type.
+            reward_name: Reward name.
+            conn: Optional connection for transaction participation.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            INSERT INTO lootbox.user_rewards (user_id, reward_type, key_type, reward_name)
+            VALUES ($1, $2, $3, $4)
+        """
+        await _conn.execute(query, user_id, reward_type, key_type, reward_name)
+
+    async def add_user_coins(
+        self,
+        user_id: int,
+        amount: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Add coins to a user's balance.
+
+        Args:
+            user_id: Target user ID.
+            amount: Coin amount to add.
+            conn: Optional connection for transaction participation.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            INSERT INTO core.users (id, coins) VALUES ($1, $2)
+            ON CONFLICT (id) DO UPDATE SET coins = users.coins + excluded.coins
+        """
+        await _conn.execute(query, user_id, amount)
+
+    async def insert_user_key(
+        self,
+        user_id: int,
+        key_type: LootboxKeyType,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Insert a key for a user.
+
+        Args:
+            user_id: Target user ID.
+            key_type: Key type to grant.
+            conn: Optional connection for transaction participation.
+        """
+        _conn = self._get_connection(conn)
+
+        query = "INSERT INTO lootbox.user_keys (user_id, key_type) VALUES ($1, $2)"
+        await _conn.execute(query, user_id, key_type)
+
+    async def insert_active_key(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Insert the currently active key for a user.
+
+        Args:
+            user_id: Target user ID.
+            conn: Optional connection for transaction participation.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            INSERT INTO lootbox.user_keys (user_id, key_type)
+            SELECT $1, key FROM lootbox.active_key LIMIT 1
+        """
+        await _conn.execute(query, user_id)
+
+    async def fetch_random_reward(
+        self,
+        rarity: str,
+        key_type: LootboxKeyType,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Fetch a random reward with duplicate and coin calculation.
+
+        Args:
+            rarity: Reward rarity to select.
+            key_type: Key type filter.
+            user_id: User ID for duplicate check.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            Dict with reward info including duplicate flag and coin_amount.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            WITH selected_rewards AS (
+                SELECT *
+                FROM lootbox.reward_types
+                WHERE
+                    rarity = $1::text AND
+                    key_type = $2::text
+                ORDER BY random()
+                LIMIT 1
+            )
+            SELECT
+                sr.*,
+                EXISTS(
+                    SELECT 1
+                    FROM lootbox.user_rewards ur
+                    WHERE ur.user_id = $3::bigint AND
+                        ur.reward_name = sr.name AND
+                        ur.reward_type = sr.type AND
+                        ur.key_type = $2::text
+                ) AS duplicate,
+                CASE
+                    WHEN EXISTS(
+                        SELECT 1
+                        FROM lootbox.user_rewards ur
+                        WHERE ur.user_id = $3::bigint AND
+                            ur.reward_name = sr.name AND
+                            ur.reward_type = sr.type AND
+                            ur.key_type = $2::text
+                    )
+                    THEN CASE
+                        WHEN sr.rarity = 'common' THEN 100
+                        WHEN sr.rarity = 'rare' THEN 250
+                        WHEN sr.rarity = 'epic' THEN 500
+                        WHEN sr.rarity = 'legendary' THEN 1000
+                        ELSE 0
+                    END
+                ELSE 0
+                END AS coin_amount
+            FROM selected_rewards sr
+        """
+        row = await _conn.fetchrow(query, rarity.lower(), key_type, user_id)
+        return dict(row) if row else {}
+
+    async def upsert_user_xp(
+        self,
+        user_id: int,
+        xp_amount: int,
+        multiplier: float,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Upsert user XP with multiplier applied.
+
+        Args:
+            user_id: Target user ID.
+            xp_amount: Base XP amount to grant.
+            multiplier: XP multiplier to apply.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            Dict with previous_amount and new_amount.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+        WITH old_values AS (
+          SELECT amount
+          FROM lootbox.xp
+          WHERE user_id = $1
+        ),
+        upsert_result AS (
+          INSERT INTO lootbox.xp (user_id, amount)
+          SELECT $1, floor($2::numeric * $3::numeric)::bigint
+          ON CONFLICT (user_id) DO UPDATE
+          SET amount = lootbox.xp.amount + EXCLUDED.amount
+          RETURNING lootbox.xp.amount
+        )
+        SELECT
+          COALESCE((SELECT amount FROM old_values), 0) AS previous_amount,
+          (SELECT amount FROM upsert_result)           AS new_amount
+        """
+        row = await _conn.fetchrow(query, user_id, xp_amount, multiplier)
+        return dict(row) if row else {}
+
+    async def update_xp_multiplier(
+        self,
+        multiplier: float,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Update the global XP multiplier.
+
+        Args:
+            multiplier: New multiplier value.
+            conn: Optional connection for transaction participation.
+        """
+        _conn = self._get_connection(conn)
+
+        query = "UPDATE lootbox.xp_multiplier SET value=$1"
+        await _conn.execute(query, multiplier)
+
+    async def update_active_key(
+        self,
+        key_type: LootboxKeyType,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Update the globally active key.
+
+        Args:
+            key_type: Key type to set as active.
+            conn: Optional connection for transaction participation.
+        """
+        _conn = self._get_connection(conn)
+
+        query = "UPDATE lootbox.active_key SET key = $1"
+        await _conn.execute(query, key_type)
+
 
 async def provide_lootbox_repository(state: State) -> LootboxRepository:
     """Provide LootboxRepository DI.
