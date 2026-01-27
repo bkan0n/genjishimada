@@ -190,3 +190,109 @@ class UsersRepository(BaseRepository):
                 table="core.users",
                 detail=e.detail,
             ) from e
+
+    async def delete_overwatch_usernames(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Delete all Overwatch usernames for a user.
+
+        Args:
+            user_id: The user ID.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        await _conn.execute("DELETE FROM users.overwatch_usernames WHERE user_id = $1", user_id)
+
+    async def insert_overwatch_username(
+        self,
+        user_id: int,
+        username: str,
+        is_primary: bool,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Insert a single Overwatch username for a user.
+
+        Args:
+            user_id: The user ID.
+            username: The Overwatch username.
+            is_primary: Whether this is the primary username.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO users.overwatch_usernames (user_id, username, is_primary)
+            VALUES ($1, $2, $3)
+        """
+        await _conn.execute(query, user_id, username, is_primary)
+
+    async def fetch_overwatch_usernames(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch Overwatch usernames for a user.
+
+        Args:
+            user_id: The user ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of username records as dicts (username, is_primary).
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT username, is_primary
+            FROM core.users u
+            LEFT JOIN users.overwatch_usernames owu ON u.id = owu.user_id
+            WHERE user_id = $1
+            ORDER BY is_primary DESC;
+        """
+        rows = await _conn.fetch(query, user_id)
+        return [dict(row) for row in rows]
+
+    async def fetch_all_user_names(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[str]:
+        """Fetch all display names for a user.
+
+        Includes Overwatch usernames, global_name, and nickname.
+
+        Args:
+            user_id: The user ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of display names.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT DISTINCT name
+            FROM (
+                SELECT username AS name
+                FROM core.users u
+                LEFT JOIN users.overwatch_usernames owu ON u.id = owu.user_id
+                WHERE u.id = $1 AND username IS NOT NULL
+
+                UNION
+
+                SELECT global_name AS name
+                FROM core.users
+                WHERE id = $1 AND global_name IS NOT NULL
+
+                UNION
+
+                SELECT nickname AS name
+                FROM core.users
+                WHERE id = $1 AND nickname IS NOT NULL
+            ) all_names;
+        """
+        rows = await _conn.fetch(query, user_id)
+        return [row["name"] for row in rows]
