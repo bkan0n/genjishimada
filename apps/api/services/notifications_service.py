@@ -19,11 +19,12 @@ from genjishimada_sdk.notifications import (
 )
 from genjishimada_sdk.users import Notification  # Legacy enum
 from litestar.datastructures import Headers
+from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_404_NOT_FOUND
 
+from repository.exceptions import ForeignKeyViolationError
 from repository.notifications_repository import NotificationsRepository
 from services.base import BaseService
-from utilities.errors import ConstraintHandler, handle_db_exceptions
 
 if TYPE_CHECKING:
     from asyncpg import Pool
@@ -44,22 +45,6 @@ LEGACY_TO_NEW_MAPPING: dict[Notification, tuple[NotificationEventType, Notificat
     Notification.PING_ON_COMMUNITY_RANK_UPDATE: (NotificationEventType.RANK_UP, NotificationChannel.DISCORD_PING),
 }
 
-# Constraint error mappings for notifications operations
-NOTIFICATIONS_FK_CONSTRAINTS = {
-    "events_user_id_fkey": ConstraintHandler(
-        message="User does not exist.",
-        status_code=HTTP_404_NOT_FOUND,
-    ),
-    "preferences_user_id_fkey": ConstraintHandler(
-        message="User does not exist.",
-        status_code=HTTP_404_NOT_FOUND,
-    ),
-    "delivery_log_event_id_fkey": ConstraintHandler(
-        message="Notification event does not exist.",
-        status_code=HTTP_404_NOT_FOUND,
-    ),
-}
-
 
 class NotificationsService(BaseService):
     """Service for notifications business logic."""
@@ -75,7 +60,6 @@ class NotificationsService(BaseService):
         super().__init__(pool, state)
         self._notifications_repo = notifications_repo
 
-    @handle_db_exceptions(fk_constraints=NOTIFICATIONS_FK_CONSTRAINTS)
     async def create_and_dispatch(
         self,
         data: NotificationCreateRequest,
@@ -94,15 +78,26 @@ class NotificationsService(BaseService):
 
         Returns:
             The created notification event.
+
+        Raises:
+            HTTPException: 404 if user does not exist.
         """
         # 1. Store notification in database
-        event_id = await self._notifications_repo.insert_event(
-            user_id=data.user_id,
-            event_type=data.event_type,
-            title=data.title,
-            body=data.body,
-            metadata=data.metadata,
-        )
+        try:
+            event_id = await self._notifications_repo.insert_event(
+                user_id=data.user_id,
+                event_type=data.event_type,
+                title=data.title,
+                body=data.body,
+                metadata=data.metadata,
+            )
+        except ForeignKeyViolationError as e:
+            if "user_id" in e.constraint_name:
+                raise HTTPException(
+                    status_code=HTTP_404_NOT_FOUND,
+                    detail="User does not exist",
+                ) from e
+            raise
 
         # Fetch the created event to return
         event_row = await self._notifications_repo.fetch_event_by_id(event_id)
@@ -268,7 +263,6 @@ class NotificationsService(BaseService):
 
         return result
 
-    @handle_db_exceptions(fk_constraints=NOTIFICATIONS_FK_CONSTRAINTS)
     async def update_preference(
         self,
         user_id: int,
@@ -291,7 +285,6 @@ class NotificationsService(BaseService):
             enabled=enabled,
         )
 
-    @handle_db_exceptions(fk_constraints=NOTIFICATIONS_FK_CONSTRAINTS)
     async def bulk_update_preferences(self, user_id: int, preferences: list[NotificationPreference]) -> None:
         """Bulk update preferences.
 
