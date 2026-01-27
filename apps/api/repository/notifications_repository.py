@@ -6,8 +6,11 @@ import json
 from typing import Any, Literal
 
 from asyncpg import Connection, Pool
+from asyncpg.exceptions import ForeignKeyViolationError as AsyncpgFKError
+from litestar.datastructures import State
 
 from repository.base import BaseRepository
+from repository.exceptions import ForeignKeyViolationError, extract_constraint_name
 
 
 class NotificationsRepository(BaseRepository):
@@ -43,6 +46,9 @@ class NotificationsRepository(BaseRepository):
 
         Returns:
             ID of the newly created event.
+
+        Raises:
+            ForeignKeyViolationError: If user_id does not exist.
         """
         _conn = self._get_connection(conn)
         query = """
@@ -52,8 +58,16 @@ class NotificationsRepository(BaseRepository):
         """
         # Convert metadata dict to JSON string for asyncpg
         metadata_json = json.dumps(metadata) if metadata is not None else None
-        event_id = await _conn.fetchval(query, user_id, event_type, title, body, metadata_json)
-        return event_id
+        try:
+            event_id = await _conn.fetchval(query, user_id, event_type, title, body, metadata_json)
+            return event_id
+        except AsyncpgFKError as e:
+            constraint = extract_constraint_name(e) or "unknown"
+            raise ForeignKeyViolationError(
+                constraint_name=constraint,
+                table="notifications.events",
+                detail=str(e),
+            ) from e
 
     async def fetch_event_by_id(
         self,
@@ -283,6 +297,9 @@ class NotificationsRepository(BaseRepository):
             channel: Channel string.
             enabled: Whether the preference is enabled.
             conn: Optional connection for transaction participation.
+
+        Raises:
+            ForeignKeyViolationError: If user_id does not exist.
         """
         _conn = self._get_connection(conn)
 
@@ -292,4 +309,17 @@ class NotificationsRepository(BaseRepository):
             ON CONFLICT (user_id, event_type, channel)
             DO UPDATE SET enabled = $4
         """
-        await _conn.execute(query, user_id, event_type, channel, enabled)
+        try:
+            await _conn.execute(query, user_id, event_type, channel, enabled)
+        except AsyncpgFKError as e:
+            constraint = extract_constraint_name(e) or "unknown"
+            raise ForeignKeyViolationError(
+                constraint_name=constraint,
+                table="notifications.preferences",
+                detail=str(e),
+            ) from e
+
+
+async def provide_notifications_repository(state: State) -> NotificationsRepository:
+    """Litestar DI provider for NotificationsRepository."""
+    return NotificationsRepository(state.db_pool)
