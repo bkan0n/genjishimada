@@ -267,7 +267,7 @@ class NotificationsController(Controller):
         event_type: Annotated[NOTIFICATION_EVENT_TYPE, Parameter()],
         channel: Annotated[NOTIFICATION_CHANNEL, Parameter()],
         notifications_service: NotificationsService,
-        enabled: bool = True,
+        enabled: bool,
     ) -> None:
         """Update a single preference.
 
