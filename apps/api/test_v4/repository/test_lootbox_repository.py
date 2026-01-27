@@ -1,5 +1,7 @@
 """Tests for LootboxRepository."""
 
+from collections.abc import AsyncGenerator
+
 import asyncpg
 import pytest
 from pytest_databases.docker.postgres import PostgresService
@@ -8,7 +10,7 @@ from repository.lootbox_repository import LootboxRepository
 
 
 @pytest.fixture
-async def db_pool(postgres_service: PostgresService):
+async def db_pool(postgres_service: PostgresService) -> AsyncGenerator[asyncpg.Pool]:
     """Create asyncpg pool for tests."""
     pool = await asyncpg.create_pool(
         user=postgres_service.user,

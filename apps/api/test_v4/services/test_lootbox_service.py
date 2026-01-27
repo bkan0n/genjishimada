@@ -17,9 +17,9 @@ def mock_repo():
 
 
 @pytest.fixture
-def mock_state(test_client):
+def mock_state():
     """Create mock state."""
-    return test_client.app.state
+    return Mock()
 
 
 @pytest.fixture
