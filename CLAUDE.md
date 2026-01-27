@@ -289,7 +289,7 @@ Use explicit try/except blocks only where specific error handling is needed. Not
 
 ```python
 from repository.exceptions import ForeignKeyViolationError
-from litestar import HTTPException
+from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_404_NOT_FOUND
 
 
