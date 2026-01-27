@@ -14,13 +14,19 @@ from .auth import (  # noqa: I001
     UserNotFoundError,
     UsernameValidationError,
 )
+from .lootbox import (
+    InsufficientKeysError,
+    LootboxError,
+)
 
 __all__ = [
     "AuthError",
     "EmailAlreadyExistsError",
     "EmailAlreadyVerifiedError",
     "EmailValidationError",
+    "InsufficientKeysError",
     "InvalidCredentialsError",
+    "LootboxError",
     "PasswordValidationError",
     "RateLimitExceededError",
     "TokenAlreadyUsedError",
