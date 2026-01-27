@@ -237,20 +237,18 @@ class UsersController(litestar.Controller):
             "Uses verified, latest-per-user runs and Global maps only."
         ),
     )
-    async def get_user_rank_data(
-        self, svc: UsersService, user_id: int, db_conn: Connection
-    ) -> list[RankDetailResponse]:
+    async def get_user_rank_data(self, svc: UsersService, user_id: int, conn: Connection) -> list[RankDetailResponse]:
         """Get rank details for a user.
 
         Args:
             svc: The user service.
             user_id: The user ID.
-            db_conn: Database connection.
+            conn: Database connection.
 
         Returns:
             A list of rank detail rows by difficulty.
         """
-        return await svc.get_user_rank_data(user_id, db_conn)
+        return await svc.get_user_rank_data(user_id, conn)
 
     @litestar.post(
         "/fake",
@@ -279,7 +277,7 @@ class UsersController(litestar.Controller):
         svc: UsersService,
         fake_user_id: int,
         real_user_id: int,
-        db_conn: Connection,
+        conn: Connection,
     ) -> None:
         """Link a fake member to a real user and remove the fake user.
 
@@ -287,6 +285,6 @@ class UsersController(litestar.Controller):
             svc: User service dependency.
             fake_user_id: The placeholder user ID to migrate from and delete.
             real_user_id: The real user ID to migrate references to.
-            db_conn: Database connection.
+            conn: Database connection.
         """
-        return await svc.link_fake_member_id_to_real_user_id(fake_user_id, real_user_id, db_conn)
+        return await svc.link_fake_member_id_to_real_user_id(fake_user_id, real_user_id, conn)
