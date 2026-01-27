@@ -51,7 +51,7 @@ from repository.exceptions import (
 from utilities.errors import CustomHTTPException
 
 from .base import BaseService
-from .users import UserService
+from .users_service import UsersService
 
 if TYPE_CHECKING:
     from di.notifications import NotificationService
@@ -93,7 +93,7 @@ class CompletionsService(BaseService):
         self,
         request: Request,
         autocomplete: AutocompleteService,
-        users: UserService,
+        users: UsersService,
         completion_id: int,
         data: CompletionCreateRequest,
     ) -> bool:

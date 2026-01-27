@@ -5,7 +5,7 @@ from __future__ import annotations
 from logging import getLogger
 from typing import Literal
 
-from apps.api.repository.autocomplete_repository import AutocompleteRepository
+from repository.autocomplete_repository import AutocompleteRepository
 from genjishimada_sdk.completions import (
     CompletionCreateRequest,
     CompletionModerateRequest,
