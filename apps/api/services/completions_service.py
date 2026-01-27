@@ -2,19 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
 from collections.abc import Awaitable, Callable
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, cast
 
+import aiohttp
 import msgspec
+import rapidfuzz
+import sentry_sdk
 from asyncpg import Connection, Pool
 from genjishimada_sdk.completions import (
+    CompletionCreatedEvent,
     CompletionCreateRequest,
     CompletionModerateRequest,
     CompletionPatchRequest,
     CompletionResponse,
+    CompletionSubmissionJobResponse,
     CompletionSubmissionResponse,
     CompletionVerificationUpdateRequest,
+    FailedAutoverifyEvent,
+    OcrResponse,
     PendingVerificationResponse,
     SuspiciousCompletionCreateRequest,
     SuspiciousCompletionResponse,
@@ -32,6 +41,7 @@ from litestar import Request
 from litestar.datastructures import Headers, State
 from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
+from repository.autocomplete_repository import AutocompleteRepository
 from repository.completions_repository import CompletionsRepository
 from repository.exceptions import (
     CheckConstraintViolationError,
@@ -41,6 +51,7 @@ from repository.exceptions import (
 from utilities.errors import CustomHTTPException
 
 from .base import BaseService
+from .users import UserService
 
 if TYPE_CHECKING:
     from di.notifications import NotificationService
@@ -78,7 +89,130 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
-    async def submit_completion(self, data: CompletionCreateRequest, request: Request) -> int:
+    async def _attempt_auto_verify(
+        self,
+        request: Request,
+        autocomplete: AutocompleteService,
+        users: UserService,
+        completion_id: int,
+        data: CompletionCreateRequest,
+    ) -> bool:
+        """Attempt to auto-verify a completion using OCR.
+
+        Returns:
+            True if auto-verification succeeded, False otherwise.
+        """
+        idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
+
+        try:
+            hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
+            try:
+                async with (
+                    aiohttp.ClientSession() as session,
+                    session.post(f"http://{hostname}:8000/extract", json={"image_url": data.screenshot}) as resp,
+                ):
+                    resp.raise_for_status()
+                    raw_ocr_data = await resp.read()
+                    ocr_data = msgspec.json.decode(raw_ocr_data, type=OcrResponse)
+
+                extracted = ocr_data.extracted
+
+                user_name_response = await users.fetch_all_user_names(data.user_id)
+                user_names = [x.upper() for x in user_name_response]
+                name_match = False
+                if extracted.name and user_names:
+                    best_match = rapidfuzz.process.extractOne(
+                        extracted.name,
+                        user_names,
+                        scorer=rapidfuzz.fuzz.ratio,
+                        score_cutoff=60,
+                    )
+
+                    if best_match:
+                        matched_name, score, _ = best_match
+                        log.debug(f"Name fuzzy match: '{extracted.name}' → '{matched_name}' (score: {score})")
+                        name_match = True
+                    else:
+                        log.debug(f"No name match found for '{extracted.name}' against {user_names}")
+
+                extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "")
+                if extracted_code_cleaned:
+                    extracted_code_cleaned = extracted_code_cleaned.replace('"', "")
+
+                code_match = data.code == extracted_code_cleaned
+                time_match = data.time == extracted.time
+                user_match = name_match
+
+                log.debug(f"extracted: {extracted}")
+                log.debug(f"data: {data}")
+                log.debug(f"extracted_code_cleaned: {extracted_code_cleaned}")
+                log.debug(f"code_match: {code_match} ({data.code=} vs {extracted_code_cleaned=})")
+                log.debug(f"time_match: {time_match} ({data.time=} vs {extracted.time=})")
+                log.debug(f"user_match: {user_match} ({name_match=})")
+
+                if code_match and time_match and user_match:
+                    verification_data = CompletionVerificationUpdateRequest(
+                        verified_by=969632729643753482,
+                        verified=True,
+                        reason="Auto Verified by Genji Shimada.",
+                    )
+                    await self.verify_completion_with_pool(request, completion_id, verification_data)
+                    return True
+            except aiohttp.ClientConnectorDNSError:
+                log.warning("OCR service DNS error, falling back to manual verification")
+                await self.publish_message(
+                    routing_key="api.completion.submission",
+                    data=CompletionCreatedEvent(completion_id),
+                    headers=request.headers,
+                    idempotency_key=idempotency_key,
+                )
+                return False
+
+            # Autoverification failed validation, send failure details and fall back to manual
+            await self.publish_message(
+                routing_key="api.completion.autoverification.failed",
+                data=FailedAutoverifyEvent(
+                    submitted_code=data.code,
+                    submitted_time=data.time,
+                    user_id=data.user_id,
+                    extracted=extracted,
+                    code_match=code_match,
+                    time_match=time_match,
+                    user_match=user_match,
+                    extracted_code_cleaned=extracted_code_cleaned,
+                    extracted_time=extracted.time,
+                    usernames=user_names,
+                ),
+                headers=request.headers,
+                idempotency_key=None,
+            )
+            await self.publish_message(
+                routing_key="api.completion.submission",
+                data=CompletionCreatedEvent(completion_id),
+                headers=request.headers,
+                idempotency_key=idempotency_key,
+            )
+            return False
+
+        except Exception as e:
+            log.exception(
+                "[!] Autoverification failed with unexpected error for completion_id=%s: %s",
+                completion_id,
+                e,
+            )
+            sentry_sdk.capture_exception(e)
+
+            await self.publish_message(
+                routing_key="api.completion.submission",
+                data=CompletionCreatedEvent(completion_id),
+                headers=request.headers,
+                idempotency_key=idempotency_key,
+            )
+            return False
+
+    async def submit_completion(
+        self, data: CompletionCreateRequest, request: Request, autocomplete: AutocompleteRepository
+    ) -> CompletionSubmissionJobResponse:
         """Submit a new completion record and publish an event."""
         map_exists = await self._completions_repo.check_map_exists(data.code)
         if not map_exists:
@@ -120,7 +254,36 @@ class CompletionsService(BaseService):
                 idempotency_key=None,
             )
 
-        return completion_id
+        if not completion_id:
+            raise ValueError("Some how completion ID is null?")
+
+        suspicious_flags = await self.get_suspicious_flags(data.user_id)
+
+        if not (data.video or suspicious_flags):
+            try:
+                auto_verified = await asyncio.wait_for(
+                    self._attempt_auto_verify(
+                        request=request,
+                        autocomplete=autocomplete,
+                        users=users,
+                        completion_id=completion_id,
+                        data=data,
+                    ),
+                    timeout=5.0,
+                )
+                if auto_verified:
+                    return CompletionSubmissionJobResponse(None, completion_id)
+            except asyncio.TimeoutError:
+                log.warning(f"Auto-verification timed out for completion {completion_id}, falling back to manual")
+
+        idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
+        job_status = await self.publish_message(
+            routing_key="api.completion.submission",
+            data=CompletionCreatedEvent(completion_id),
+            headers=request.headers,
+            idempotency_key=idempotency_key,
+        )
+        return CompletionSubmissionJobResponse(job_status, completion_id)
 
     def _build_patch_dict(self, patch: CompletionPatchRequest) -> dict[str, Any]:
         """Build patch dict excluding UNSET fields."""
