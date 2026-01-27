@@ -336,3 +336,66 @@ class UsersRepository(BaseRepository):
             ON CONFLICT (user_id) DO UPDATE SET flags = $2;
         """
         await _conn.execute(query, user_id, flags)
+
+    async def create_fake_member(
+        self,
+        name: str,
+        *,
+        conn: Connection | None = None,
+    ) -> int:
+        """Create a fake member and return the new ID.
+
+        Args:
+            name: Display name for the fake user.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The newly created fake user ID.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            WITH next_id AS (
+              SELECT COALESCE(MAX(id) + 1, 1) AS id
+              FROM core.users
+              WHERE id < 100000000
+            )
+            INSERT INTO core.users (id, nickname, global_name)
+            SELECT id, $1, $1
+            FROM next_id
+            RETURNING id;
+        """
+        return await _conn.fetchval(query, name)
+
+    async def update_maps_creators_for_fake_member(
+        self,
+        fake_user_id: int,
+        real_user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Update maps.creators references from fake to real user.
+
+        Args:
+            fake_user_id: The placeholder user ID.
+            real_user_id: The real user ID.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = "UPDATE maps.creators SET user_id=$2 WHERE user_id=$1"
+        await _conn.execute(query, fake_user_id, real_user_id)
+
+    async def delete_user(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Delete a user.
+
+        Args:
+            user_id: The user ID to delete.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = "DELETE FROM core.users WHERE id=$1"
+        await _conn.execute(query, user_id)
