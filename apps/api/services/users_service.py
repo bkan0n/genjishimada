@@ -6,6 +6,8 @@ import logging
 
 import msgspec
 from genjishimada_sdk.users import (
+    OverwatchUsernameItem,
+    OverwatchUsernamesResponse,
     UserCreateRequest,
     UserResponse,
     UserUpdateRequest,
@@ -153,4 +155,64 @@ class UsersService(BaseService):
             coins=0,
             overwatch_usernames=[],
             coalesced_name=data.nickname,
+        )
+
+    async def set_overwatch_usernames(self, user_id: int, new_usernames: list[OverwatchUsernameItem]) -> None:
+        """Replace all Overwatch usernames for a user.
+
+        Args:
+            user_id: The user ID.
+            new_usernames: List of new usernames to set.
+        """
+        await self._users_repo.delete_overwatch_usernames(user_id)
+
+        for item in new_usernames:
+            await self._users_repo.insert_overwatch_username(
+                user_id=user_id,
+                username=item.username,
+                is_primary=item.is_primary,
+            )
+
+    async def fetch_overwatch_usernames(self, user_id: int) -> list[OverwatchUsernameItem]:
+        """Fetch Overwatch usernames for a user.
+
+        Args:
+            user_id: The user ID.
+
+        Returns:
+            List of Overwatch username items.
+        """
+        rows = await self._users_repo.fetch_overwatch_usernames(user_id)
+        return msgspec.convert(rows, list[OverwatchUsernameItem])
+
+    async def fetch_all_user_names(self, user_id: int) -> list[str]:
+        """Fetch all display names for a user.
+
+        Args:
+            user_id: The user ID.
+
+        Returns:
+            List of display names.
+        """
+        return await self._users_repo.fetch_all_user_names(user_id)
+
+    async def get_overwatch_usernames_response(self, user_id: int) -> OverwatchUsernamesResponse:
+        """Build Overwatch usernames response for a user.
+
+        Args:
+            user_id: The user ID.
+
+        Returns:
+            Response with primary, secondary, tertiary usernames.
+        """
+        usernames = await self.fetch_overwatch_usernames(user_id)
+        primary = usernames[0].username if usernames else None
+        secondary = usernames[1].username if len(usernames) > 1 else None
+        tertiary = usernames[2].username if len(usernames) > 2 else None  # noqa: PLR2004
+
+        return OverwatchUsernamesResponse(
+            user_id=user_id,
+            primary=primary,
+            secondary=secondary,
+            tertiary=tertiary,
         )
