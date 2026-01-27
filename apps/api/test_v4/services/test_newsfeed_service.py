@@ -13,7 +13,14 @@ def mock_repo():
     """Create mock repository."""
     repo = Mock()
     repo.insert_event = AsyncMock(return_value=42)
-    repo.fetch_event_by_id = AsyncMock(return_value={"id": 1, "timestamp": dt.datetime.now(dt.timezone.utc)})
+    repo.fetch_event_by_id = AsyncMock(
+        return_value={
+            "id": 1,
+            "timestamp": dt.datetime.now(dt.timezone.utc),
+            "payload": {"type": "guide", "code": "TEST1", "guide_url": "https://example.com", "name": "Tester"},
+            "event_type": "guide",
+        }
+    )
     repo.fetch_events = AsyncMock(return_value=[])
     return repo
 
@@ -50,9 +57,9 @@ class TestServiceLayer:
             payload=NewsfeedGuide(code="TEST1", guide_url="https://example.com", name="Tester"),
             event_type="guide",
         )
-        headers = Headers({})
+        headers = Headers({"X-PYTEST-ENABLED": "1"})
 
-        result = await newsfeed_service.create_and_publish(event, headers)
+        result = await newsfeed_service.create_and_publish(event=event, headers=headers)
 
         mock_repo.insert_event.assert_called_once()
         assert result.newsfeed_id == 42
