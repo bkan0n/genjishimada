@@ -927,45 +927,6 @@ class APIService:
         params = {"search": search, "limit": limit, "fake_users_only": fake_users_only}
         return self._request(r, params=params, response_model=list[tuple[int, str]] | None)
 
-    async def get_notification_flags(self, user_id: int, *, to_bitmask: bool = True) -> Notification:
-        """Retrieve notification settings for a user.
-
-        Args:
-            user_id (int): The ID of the user.
-            to_bitmask (bool, optional): Whether to return as a bitmask. Defaults to True.
-
-        Returns:
-            Notification: The parsed notification flags.
-        """
-        r = Route("GET", "/users/{user_id}/notifications", user_id=user_id)
-        data = await self._request(r, params={"to_bitmask": str(to_bitmask)})
-        decoded = msgspec.json.decode(data)
-        if to_bitmask:
-            bitmask = decoded.get("bitmask")
-            return Notification(bitmask or 0)
-        notifications = decoded.get("notifications")
-        flags = sum((Notification[name] for name in notifications), Notification(0))
-        return flags
-
-    def update_notification(self, user_id: int, notification_type: NOTIFICATION_TYPES, data: bool) -> Response[None]:
-        """Update a user's notification preference.
-
-        Args:
-            user_id: ID of the user whose notification preference is being updated.
-            notification_type: The type of notification to update.
-            data: Whether the notification should be enabled (True) or disabled (False).
-
-        Returns:
-            Response[None]: API response object.
-        """
-        r = Route(
-            "PATCH",
-            "/users/{user_id}/notifications/{notification_type}",
-            user_id=user_id,
-            notification_type=notification_type,
-        )
-        return self._request(r, data=data)  # type: ignore
-
     def check_user_is_creator(self, user_id: int) -> Response[bool]:
         """Check if user is a creator.
 
