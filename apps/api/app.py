@@ -136,7 +136,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         title="Genji Shimada API",
         description="REST API for Genji Shimada project.",
         version="0.0.1",
-        render_plugins=[ScalarRenderPlugin(version="1.39.0")],
+        render_plugins=[ScalarRenderPlugin()],
         path="/docs",
         servers=[
             Server(
