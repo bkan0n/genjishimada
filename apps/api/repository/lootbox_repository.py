@@ -298,4 +298,4 @@ async def provide_lootbox_repository(state: State) -> LootboxRepository:
     Returns:
         LootboxRepository: New repository instance.
     """
-    return LootboxRepository(state.pool)
+    return LootboxRepository(state.db_pool)
