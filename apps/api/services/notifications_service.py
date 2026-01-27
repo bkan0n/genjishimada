@@ -64,7 +64,7 @@ NOTIFICATIONS_FK_CONSTRAINTS = {
 class NotificationsService(BaseService):
     """Service for notifications business logic."""
 
-    def __init__(self, pool: Pool, state: State, notifications_repo: NotificationsRepository):
+    def __init__(self, pool: Pool, state: State, notifications_repo: NotificationsRepository) -> None:
         """Initialize service.
 
         Args:
@@ -106,6 +106,8 @@ class NotificationsService(BaseService):
 
         # Fetch the created event to return
         event_row = await self._notifications_repo.fetch_event_by_id(event_id)
+        if not event_row:
+            raise RuntimeError(f"Failed to fetch newly created notification event {event_id}")
         event = self._row_to_event_response(event_row)
 
         # 2. Determine which channels should receive this notification
@@ -399,3 +401,18 @@ class NotificationsService(BaseService):
             read_at=row["read_at"].isoformat() if row["read_at"] else None,
             dismissed_at=row["dismissed_at"].isoformat() if row["dismissed_at"] else None,
         )
+
+
+async def provide_notifications_service(state: State) -> NotificationsService:
+    """Provide NotificationsService DI.
+
+    Args:
+        state: Application state.
+
+    Returns:
+        NotificationsService instance.
+    """
+    from repository.notifications_repository import NotificationsRepository  # noqa: PLC0415
+
+    notifications_repo = NotificationsRepository(state.db_pool)
+    return NotificationsService(state.db_pool, state, notifications_repo)
