@@ -1,5 +1,6 @@
 """Tests for NotificationsService."""
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -15,6 +16,19 @@ def mock_repo() -> Mock:
     """Create mock repository."""
     repo = Mock()
     repo.insert_event = AsyncMock(return_value=42)
+    repo.fetch_event_by_id = AsyncMock(
+        return_value={
+            "id": 42,
+            "user_id": 300,
+            "event_type": "xp_gain",
+            "title": "XP Gained",
+            "body": "You gained 100 XP",
+            "metadata": {"xp_amount": 100},
+            "created_at": datetime(2024, 1, 1, tzinfo=timezone.utc),
+            "read_at": None,
+            "dismissed_at": None,
+        }
+    )
     repo.fetch_user_events = AsyncMock(return_value=[])
     repo.fetch_unread_count = AsyncMock(return_value=0)
     repo.mark_event_read = AsyncMock()
