@@ -118,6 +118,7 @@ async def test_update_user_names(users_service: UsersService) -> None:
 
     # Verify update
     user = await users_service.get_user(data.id)
+    assert user is not None
     assert user.nickname == "NewNickname"
     assert user.global_name == "Update Global"  # Unchanged
 

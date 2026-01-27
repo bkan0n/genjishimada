@@ -5,7 +5,6 @@ from __future__ import annotations
 from logging import getLogger
 from typing import Literal
 
-from repository.autocomplete_repository import AutocompleteRepository
 from genjishimada_sdk.completions import (
     CompletionCreateRequest,
     CompletionModerateRequest,
@@ -31,13 +30,13 @@ from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from di import (  # TODO: These need the new service classes!!!!!
     NotificationService,
-    UserService,
     provide_notification_service,
     provide_user_service,
 )
-from repository.autocomplete_repository import provide_autocomplete_repository
+from repository.autocomplete_repository import AutocompleteRepository, provide_autocomplete_repository
 from repository.completions_repository import provide_completions_repository
 from services.completions_service import CompletionsService, provide_completions_service
+from services.users_service import UsersService
 from utilities.errors import CustomHTTPException
 
 log = getLogger(__name__)
@@ -95,7 +94,7 @@ class CompletionsController(Controller):
         request: Request,
         data: CompletionCreateRequest,
         autocomplete: AutocompleteRepository,
-        users: UserService,
+        users: UsersService,
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion."""
         resp = await svc.submit_completion(data, request, autocomplete, users)

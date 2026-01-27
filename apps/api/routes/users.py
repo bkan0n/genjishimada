@@ -5,11 +5,9 @@ from typing import Annotated
 
 import litestar
 from genjishimada_sdk.users import (
-    NOTIFICATION_TYPES,
     OverwatchUsernamesResponse,
     OverwatchUsernamesUpdateRequest,
     RankDetailResponse,
-    SettingsUpdateRequest,
     UserCreateRequest,
     UserResponse,
     UserUpdateRequest,

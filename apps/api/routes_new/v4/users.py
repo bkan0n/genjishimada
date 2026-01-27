@@ -59,8 +59,8 @@ class UsersController(litestar.Controller):
     tags = ["Users"]
     path = "/users"
     dependencies = {
-        "users_repo": Provide(provide_users_repository),
-        "svc": Provide(provide_users_service),
+        "users_repo": Provide(provide_users_repository, sync_to_thread=False),
+        "svc": Provide(provide_users_service, sync_to_thread=False),
     }
 
     @litestar.get(

@@ -92,7 +92,7 @@ class CompletionsService(BaseService):
     async def _attempt_auto_verify(
         self,
         request: Request,
-        autocomplete: AutocompleteService,
+        autocomplete: AutocompleteRepository,
         users: UsersService,
         completion_id: int,
         data: CompletionCreateRequest,
@@ -211,7 +211,7 @@ class CompletionsService(BaseService):
             return False
 
     async def submit_completion(
-        self, data: CompletionCreateRequest, request: Request, autocomplete: AutocompleteRepository
+        self, data: CompletionCreateRequest, request: Request, autocomplete: AutocompleteRepository, users: UsersService
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion record and publish an event."""
         map_exists = await self._completions_repo.check_map_exists(data.code)
