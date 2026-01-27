@@ -101,17 +101,29 @@ class TestWriteMethods:
         await lootbox_service.grant_key_to_user(user_id=1, key_type="Classic")
         mock_repo.insert_user_key.assert_called_once_with(1, "Classic", conn=None)
 
-    async def test_grant_xp_calls_repo_and_returns_event(self, lootbox_service, mock_repo):
-        """Test grant_user_xp returns response and event."""
+    async def test_grant_xp_calls_repo_and_publishes_event(self, lootbox_service, mock_repo, mock_state):
+        """Test grant_user_xp publishes event to RabbitMQ."""
+        from litestar.datastructures.headers import Headers
+
         mock_repo.fetch_xp_multiplier.return_value = 1.0
         mock_repo.upsert_user_xp.return_value = {"previous_amount": 0, "new_amount": 50}
 
+        # Mock publish_message
+        lootbox_service.publish_message = AsyncMock()
+
+        headers = Headers({})
         request = XpGrantRequest(amount=50, type="Completion")
-        resp, event = await lootbox_service.grant_user_xp(user_id=1, data=request)
+        resp = await lootbox_service.grant_user_xp(headers, user_id=1, data=request)
 
         assert resp.new_amount == 50
-        assert event.user_id == 1
-        assert event.amount == 50
+        assert resp.previous_amount == 0
+
+        # Verify RabbitMQ publishing was called
+        lootbox_service.publish_message.assert_called_once()
+        call_args = lootbox_service.publish_message.call_args
+        assert call_args.kwargs["routing_key"] == "api.xp.grant"
+        assert call_args.kwargs["data"].user_id == 1
+        assert call_args.kwargs["data"].amount == 50
 
 
 class TestValidation:

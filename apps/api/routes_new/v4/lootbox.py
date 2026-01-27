@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Annotated
 
 import litestar
@@ -25,8 +24,6 @@ from repository.lootbox_repository import LootboxRepository
 from services.exceptions.lootbox import InsufficientKeysError
 from services.lootbox_service import LootboxService
 from utilities.errors import CustomHTTPException
-
-log = logging.getLogger(__name__)
 
 
 def provide_lootbox_repository(state: State) -> LootboxRepository:
@@ -192,7 +189,9 @@ class LootboxController(litestar.Controller):
         """
         test_mode = bool(request.headers.get("x-test-mode"))
         try:
-            return await lootbox_service.get_random_items(user_id=user_id, key_type=key_type, amount=amount, test_mode=test_mode)
+            return await lootbox_service.get_random_items(
+                user_id=user_id, key_type=key_type, amount=amount, test_mode=test_mode
+            )
         except InsufficientKeysError as e:
             raise CustomHTTPException(detail=str(e), status_code=HTTP_400_BAD_REQUEST) from e
 
@@ -202,7 +201,7 @@ class LootboxController(litestar.Controller):
         description="Grant a specific reward to a user.",
         status_code=HTTP_200_OK,
     )
-    async def grant_reward_to_user(
+    async def grant_reward_to_user(  # noqa: PLR0913
         self,
         lootbox_service: LootboxService,
         request: litestar.Request,
@@ -397,15 +396,8 @@ class LootboxController(litestar.Controller):
         Returns:
             XpGrantResponse with previous and new amounts.
         """
-        response, event = await lootbox_service.grant_user_xp(user_id=user_id, data=data)
-
-        # Emit event (best effort)
-        try:
-            request.app.emit("lootbox.xp.grant", event)
-        except Exception as e:
-            log.warning(f"Failed to emit XP grant event: {e}")
-
-        return response
+        # Service handles RabbitMQ publishing internally
+        return await lootbox_service.grant_user_xp(request.headers, user_id, data)
 
     @litestar.get(
         path="/xp/tier",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+from typing import TYPE_CHECKING
 
 import msgspec
 from asyncpg import Pool
@@ -16,10 +17,13 @@ from genjishimada_sdk.lootbox import (
 )
 from genjishimada_sdk.xp import TierChangeResponse, XpGrantEvent, XpGrantRequest, XpGrantResponse
 from litestar.datastructures import State
+from litestar.datastructures.headers import Headers
 
-from repository.lootbox_repository import LootboxRepository
 from services.base import BaseService
 from services.exceptions.lootbox import InsufficientKeysError
+
+if TYPE_CHECKING:
+    from repository.lootbox_repository import LootboxRepository
 
 log = logging.getLogger(__name__)
 
@@ -363,19 +367,19 @@ class LootboxService(BaseService):
 
     async def grant_user_xp(
         self,
+        headers: Headers,
         user_id: int,
         data: XpGrantRequest,
-    ) -> tuple[XpGrantResponse, XpGrantEvent]:
-        """Grant XP to a user.
-
-        Returns both response and event for controller to emit.
+    ) -> XpGrantResponse:
+        """Grant XP to a user and publish event to RabbitMQ.
 
         Args:
+            headers: Request headers for idempotency.
             user_id: Target user ID.
             data: XP grant request.
 
         Returns:
-            Tuple of (XpGrantResponse, XpGrantEvent).
+            XP grant response.
         """
         # Get multiplier
         multiplier = await self._lootbox_repo.fetch_xp_multiplier()
@@ -392,6 +396,7 @@ class LootboxService(BaseService):
             new_amount=result["new_amount"],
         )
 
+        # Create event
         event = XpGrantEvent(
             user_id=user_id,
             amount=data.amount,
@@ -400,7 +405,14 @@ class LootboxService(BaseService):
             new_amount=result["new_amount"],
         )
 
-        return response, event
+        # Publish to RabbitMQ (like v3)
+        await self.publish_message(
+            routing_key="api.xp.grant",
+            data=event,
+            headers=headers,
+        )
+
+        return response
 
     async def update_xp_multiplier(self, multiplier: float) -> None:
         """Update the global XP multiplier.
@@ -472,7 +484,7 @@ async def provide_lootbox_service(state: State) -> LootboxService:
     Returns:
         LootboxService instance.
     """
-    from repository.lootbox_repository import LootboxRepository
+    from repository.lootbox_repository import LootboxRepository  # noqa: PLC0415
 
     lootbox_repo = LootboxRepository(state.db_pool)
     return LootboxService(state.db_pool, state, lootbox_repo)
