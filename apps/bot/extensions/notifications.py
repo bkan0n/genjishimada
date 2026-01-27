@@ -34,18 +34,6 @@ logger = logging.getLogger(__name__)
 
 DISCORD_USER_ID_LOWER_LIMIT = 1_000_000_000_000_000
 
-# Mapping from legacy Notification enum to new system
-LEGACY_TO_NEW_MAPPING: dict[Notification, tuple[NotificationEventType, NotificationChannel]] = {
-    Notification.DM_ON_VERIFICATION: (NotificationEventType.VERIFICATION_APPROVED, NotificationChannel.DISCORD_DM),
-    Notification.DM_ON_SKILL_ROLE_UPDATE: (NotificationEventType.SKILL_ROLE_UPDATE, NotificationChannel.DISCORD_DM),
-    Notification.DM_ON_LOOTBOX_GAIN: (NotificationEventType.LOOTBOX_EARNED, NotificationChannel.DISCORD_DM),
-    Notification.DM_ON_RECORDS_REMOVAL: (NotificationEventType.RECORD_REMOVED, NotificationChannel.DISCORD_DM),
-    Notification.DM_ON_PLAYTEST_ALERTS: (NotificationEventType.PLAYTEST_UPDATE, NotificationChannel.DISCORD_DM),
-    Notification.PING_ON_XP_GAIN: (NotificationEventType.XP_GAIN, NotificationChannel.DISCORD_PING),
-    Notification.PING_ON_MASTERY: (NotificationEventType.MASTERY_EARNED, NotificationChannel.DISCORD_PING),
-    Notification.PING_ON_COMMUNITY_RANK_UPDATE: (NotificationEventType.RANK_UP, NotificationChannel.DISCORD_PING),
-}
-
 
 class NotificationHandler(BaseHandler):
     """Service for processing and delivering notifications.
@@ -231,88 +219,6 @@ class NotificationHandler(BaseHandler):
             discord_message=discord_message,
             metadata=metadata,
         )
-
-    async def _get_notification_flags(self, user_id: int) -> Notification:
-        """Get notification flags using the legacy API endpoint."""
-        return await self.bot.api.get_notification_flags(user_id)
-
-    async def should_notify(self, user_id: int, notification: Notification) -> bool:
-        """Check if a user has allowed notifications for this particular process.
-
-        Legacy method - uses the old bitmask-based preferences.
-        """
-        flags = await self.bot.api.get_notification_flags(user_id)
-        result = bool(flags & notification)
-        logger.debug("User %s: Checking %s: %s", user_id, notification.name, result)
-        return result
-
-    async def notify_dm(self, user_id: int, notification: Notification, message: str) -> bool:
-        """Send a DM to the user if the given notification type is enabled.
-
-        Legacy method - prefer notify_dm_only() for new code.
-        """
-        if user_id < DISCORD_USER_ID_LOWER_LIMIT:
-            return False
-        if await self.should_notify(user_id, notification):
-            try:
-                user = self.bot.get_user(user_id)
-                if not user:
-                    user = await self.bot.fetch_user(user_id)
-                if not user:
-                    return False
-                with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
-                    await user.send(message)
-                    logger.debug("Sent DM to user %s for %s", user_id, notification.name)
-                return True
-            except Exception as e:
-                logger.error("Failed to send DM to user %s: %s", user_id, e)
-        else:
-            logger.debug("User %s does not have %s enabled; DM not sent.", user_id, notification.name)
-        return False
-
-    async def notify_channel(
-        self,
-        channel: discord.TextChannel | discord.Thread,
-        user_id: int,
-        notification: Notification,
-        message: str,
-        **kwargs,
-    ) -> bool:
-        """Send a message in the channel that pings the user if the notification is enabled.
-
-        Legacy method - prefer notify_with_channel_ping() for new code.
-        """
-        if user_id < DISCORD_USER_ID_LOWER_LIMIT:
-            return False
-        if await self.should_notify(user_id, notification):
-            try:
-                await channel.send(f"<@{user_id}> {message}", **kwargs)
-                logger.debug("Sent channel notification to user %s for %s", user_id, notification.name)
-                return True
-            except Exception as e:
-                logger.error("Failed to send channel notification for user %s: %s", user_id, e)
-        else:
-            logger.debug("User %s does not have %s enabled; channel notification not sent.", user_id, notification.name)
-        return False
-
-    async def notify_channel_default_to_no_ping(
-        self,
-        channel: discord.TextChannel | discord.Thread,
-        user_id: int,
-        notification: Notification,
-        message: str,
-        **kwargs,
-    ) -> None:
-        """Send a message in the channel that pings the user, or sends message without a ping.
-
-        Legacy method - prefer notify_with_channel_ping() for new code.
-        """
-        if user_id < DISCORD_USER_ID_LOWER_LIMIT:
-            await channel.send(message, **kwargs)
-            return
-        success = await self.notify_channel(channel, user_id, notification, message, **kwargs)
-        if not success and channel:
-            await channel.send(message, **kwargs)
 
 
 async def setup(bot: core.Genji) -> None:
