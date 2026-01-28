@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
+from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import (
     ArchivalStatusPatchRequest,
     GuideFullResponse,
@@ -24,14 +25,12 @@ from genjishimada_sdk.maps import (
     TrendingMapResponse,
     UnlinkMapsCreateRequest,
 )
-from genjishimada_sdk.internal import JobStatusResponse
 from litestar import Controller, delete, get, patch, post
 from litestar.connection import Request
 from litestar.di import Provide
 from litestar.params import Body
 from litestar.response import Response
 from litestar.status_codes import (
-    HTTP_200_OK,
     HTTP_201_CREATED,
     HTTP_204_NO_CONTENT,
     HTTP_400_BAD_REQUEST,
@@ -39,8 +38,6 @@ from litestar.status_codes import (
 )
 
 from repository.maps_repository import provide_maps_repository
-from services.maps_service import MapsService, provide_maps_service
-from services.newsfeed_service import provide_newsfeed_service
 from services.exceptions.maps import (
     AlreadyInPlaytestError,
     CreatorNotFoundError,
@@ -53,6 +50,8 @@ from services.exceptions.maps import (
     MapCodeExistsError,
     MapNotFoundError,
 )
+from services.maps_service import MapsService, provide_maps_service
+from services.newsfeed_service import NewsfeedService, provide_newsfeed_service
 from utilities.errors import CustomHTTPException
 
 log = logging.getLogger(__name__)
@@ -143,7 +142,7 @@ class MapsController(Controller):
         self,
         data: Annotated[MapCreateRequest, Body(title="Map creation request")],
         maps_service: MapsService,
-        newsfeed_service,
+        newsfeed_service: NewsfeedService,
         request: Request,
     ) -> Response[MapCreationJobResponse]:
         """Create a new map.
@@ -580,7 +579,7 @@ class MapsController(Controller):
         self,
         data: Annotated[ArchivalStatusPatchRequest, Body(title="Archive request")],
         maps_service: MapsService,
-        newsfeed_service,
+        newsfeed_service: NewsfeedService,
         request: Request,
     ) -> None:
         """Set archive status for one or more maps.
@@ -702,7 +701,7 @@ class MapsController(Controller):
         self,
         data: Annotated[LinkMapsCreateRequest, Body(title="Link request")],
         maps_service: MapsService,
-        newsfeed_service,
+        newsfeed_service: NewsfeedService,
         request: Request,
     ) -> None:
         """Link official and unofficial map codes.
@@ -740,7 +739,7 @@ class MapsController(Controller):
         self,
         data: Annotated[UnlinkMapsCreateRequest, Body(title="Unlink request")],
         maps_service: MapsService,
-        newsfeed_service,
+        newsfeed_service: NewsfeedService,
         request: Request,
     ) -> None:
         """Unlink map codes (POST method).
@@ -773,7 +772,7 @@ class MapsController(Controller):
         self,
         code: OverwatchCode,
         maps_service: MapsService,
-        newsfeed_service,
+        newsfeed_service: NewsfeedService,
         request: Request,
     ) -> Response[None]:
         """Unlink map codes (DELETE method).
@@ -791,8 +790,6 @@ class MapsController(Controller):
             CustomHTTPException: If map not found.
         """
         try:
-            from genjishimada_sdk.maps import UnlinkMapsCreateRequest
-
             data = UnlinkMapsCreateRequest(code=code)
             await maps_service.unlink_map_codes(data, request.headers, newsfeed_service)
             return Response(None, status_code=HTTP_204_NO_CONTENT)

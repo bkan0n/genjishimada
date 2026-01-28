@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import datetime as dt
 from typing import Any
 
 import asyncpg
-import msgspec
 from asyncpg import Connection
 from litestar.datastructures import State
 
 from .base import BaseRepository
 from .exceptions import (
-    UniqueConstraintViolationError,
     ForeignKeyViolationError,
+    UniqueConstraintViolationError,
     extract_constraint_name,
 )
 
@@ -888,7 +886,6 @@ class MapsRepository(BaseRepository):
         # Implementation would set a fixed quality value
         # This might involve updating a specific table or column
         # For now, placeholder
-        pass
 
     # Trending maps
 

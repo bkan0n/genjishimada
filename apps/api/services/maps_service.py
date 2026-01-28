@@ -5,7 +5,9 @@ from __future__ import annotations
 import datetime as dt
 from typing import TYPE_CHECKING
 
+import msgspec
 from asyncpg import Pool
+from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import (
     ArchivalStatusPatchRequest,
     GuideFullResponse,
@@ -21,7 +23,6 @@ from genjishimada_sdk.maps import (
     MapResponse,
     OverwatchCode,
     PlaytestCreatedEvent,
-    PlaytestCreatePartialRequest,
     QualityValueRequest,
     SendToPlaytestRequest,
     TrendingMapResponse,
@@ -35,16 +36,13 @@ from genjishimada_sdk.newsfeed import (
     NewsfeedNewMap,
     NewsfeedUnlinkedMap,
 )
-from genjishimada_sdk.internal import JobStatusResponse
 from litestar.datastructures import Headers, State
-from litestar.status_codes import HTTP_400_BAD_REQUEST
-import msgspec
 
-from repository.maps_repository import MapsRepository
 from repository.exceptions import (
-    UniqueConstraintViolationError,
     ForeignKeyViolationError,
+    UniqueConstraintViolationError,
 )
+from repository.maps_repository import MapsRepository
 from services.exceptions.maps import (
     AlreadyInPlaytestError,
     CreatorNotFoundError,
@@ -57,6 +55,7 @@ from services.exceptions.maps import (
     MapCodeExistsError,
     MapNotFoundError,
 )
+
 from .base import BaseService
 
 if TYPE_CHECKING:
@@ -71,14 +70,14 @@ class MapsService(BaseService):
         pool: Pool,
         state: State,
         maps_repo: MapsRepository,
-    ):
+    ) -> None:
         """Initialize service."""
         super().__init__(pool, state)
         self._maps_repo = maps_repo
 
     # Core CRUD operations
 
-    async def create_map(
+    async def create_map(  # noqa: PLR0912
         self,
         data: MapCreateRequest,
         headers: Headers,
@@ -257,7 +256,7 @@ class MapsService(BaseService):
 
         return MapCreationJobResponse(job_status, map_response)
 
-    async def update_map(
+    async def update_map(  # noqa: PLR0912, PLR0915
         self,
         code: OverwatchCode,
         data: MapPatchRequest,
@@ -707,7 +706,7 @@ class MapsService(BaseService):
     async def _convert_to_legacy_internal(
         self,
         code: OverwatchCode,
-        conn,
+        conn,  # noqa: ANN001
     ) -> int:
         """Internal helper to convert map to legacy (used in transaction).
 
