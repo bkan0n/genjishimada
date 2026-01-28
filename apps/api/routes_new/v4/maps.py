@@ -183,7 +183,7 @@ class MapsController(Controller):
             ) from e
 
     @get(
-        "/partial",
+        "/{code:str}/partial",
         summary="Get Partial Map",
         opt={"required_scopes": {"maps:read"}},
     )
@@ -464,7 +464,7 @@ class MapsController(Controller):
             ) from e
 
     @patch(
-        "/{code:str}/guides",
+        "/{code:str}/guides/{user_id:int}",
         summary="Update Guide",
         opt={"required_scopes": {"maps:write"}},
     )
@@ -505,7 +505,7 @@ class MapsController(Controller):
             ) from e
 
     @delete(
-        "/{code:str}/guides",
+        "/{code:str}/guides/{user_id:int}",
         summary="Delete Guide",
         status_code=HTTP_204_NO_CONTENT,
         opt={"required_scopes": {"maps:write"}},
@@ -733,7 +733,7 @@ class MapsController(Controller):
         return await maps_service.get_trending_maps()
 
     @post(
-        "/playtest",
+        "/{code:str}/playtest",
         summary="Send to Playtest",
         opt={"required_scopes": {"maps:write"}},
     )
