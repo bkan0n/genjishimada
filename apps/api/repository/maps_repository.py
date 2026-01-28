@@ -8,6 +8,8 @@ import asyncpg
 from asyncpg import Connection
 from litestar.datastructures import State
 
+from utilities.map_search import MapSearchFilters, MapSearchSQLSpecBuilder
+
 from .base import BaseRepository
 from .exceptions import (
     ForeignKeyViolationError,
@@ -26,19 +28,18 @@ class MapsRepository(BaseRepository):
         *,
         single: bool = False,
         code: str | None = None,
-        filters: dict[str, Any] | None = None,
+        filters: MapSearchFilters | None = None,
         conn: Connection | None = None,
     ) -> dict | list[dict]:
         """Fetch maps with optional filters.
 
-        This is a complex query that supports various filters.
-        For Phase 1, we'll implement a simplified version.
-        Full implementation with MapSearchSQLSpecBuilder will come later.
+        When filters are provided, uses MapSearchSQLSpecBuilder to generate
+        the full query. Otherwise falls back to a simple code-based lookup.
 
         Args:
             single: If True, return single dict; if False, return list.
             code: Optional code filter for single map lookup.
-            filters: Optional dict of filter criteria.
+            filters: Optional MapSearchFilters criteria.
             conn: Optional connection.
 
         Returns:
@@ -46,67 +47,17 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Simplified query for Phase 1
-        # TODO: Integrate MapSearchSQLSpecBuilder for full filtering
-        base_query = """
-            SELECT
-                m.id,
-                m.code,
-                m.map_name,
-                m.category,
-                m.checkpoints,
-                m.official,
-                m.playtesting,
-                m.hidden,
-                m.archived,
-                m.difficulty,
-                m.raw_difficulty,
-                m.description,
-                m.custom_banner,
-                m.title,
-                m.created_at,
-                m.updated_at,
-                m.linked_code,
-                -- Aggregate related data
-                COALESCE(
-                    json_agg(
-                        DISTINCT jsonb_build_object(
-                            'user_id', c.user_id,
-                            'is_primary', c.is_primary
-                        )
-                    ) FILTER (WHERE c.user_id IS NOT NULL),
-                    '[]'
-                ) as creators,
-                COALESCE(
-                    array_agg(DISTINCT mech.name) FILTER (WHERE mech.name IS NOT NULL),
-                    '{}'
-                ) as mechanics,
-                COALESCE(
-                    array_agg(DISTINCT res.name) FILTER (WHERE res.name IS NOT NULL),
-                    '{}'
-                ) as restrictions,
-                COALESCE(
-                    array_agg(DISTINCT tag.name) FILTER (WHERE tag.name IS NOT NULL),
-                    '{}'
-                ) as tags,
-                row_to_json(med.*) as medals
-            FROM core.maps m
-            LEFT JOIN maps.creators c ON c.map_id = m.id
-            LEFT JOIN maps.mechanic_links ml ON ml.map_id = m.id
-            LEFT JOIN maps.mechanics mech ON mech.id = ml.mechanic_id
-            LEFT JOIN maps.restriction_links rl ON rl.map_id = m.id
-            LEFT JOIN maps.restrictions res ON res.id = rl.restriction_id
-            LEFT JOIN maps.tag_links tl ON tl.map_id = m.id
-            LEFT JOIN maps.tags tag ON tag.id = tl.tag_id
-            LEFT JOIN maps.medals med ON med.map_id = m.id
-        """
-
-        if code:
-            query = base_query + " WHERE m.code = $1 GROUP BY m.id, med.map_id"
-            rows = await _conn.fetch(query, code)
+        if filters:
+            query_with_args = MapSearchSQLSpecBuilder(filters).build()
+            rows = await _conn.fetch(query_with_args.query, *query_with_args.args)
+        elif code:
+            query_with_args = MapSearchSQLSpecBuilder(
+                MapSearchFilters(code=code)
+            ).build()
+            rows = await _conn.fetch(query_with_args.query, *query_with_args.args)
         else:
-            query = base_query + " GROUP BY m.id, med.map_id ORDER BY m.created_at DESC"
-            rows = await _conn.fetch(query)
+            query_with_args = MapSearchSQLSpecBuilder(MapSearchFilters()).build()
+            rows = await _conn.fetch(query_with_args.query, *query_with_args.args)
 
         result = [dict(row) for row in rows]
 
