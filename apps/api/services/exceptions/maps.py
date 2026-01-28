@@ -115,3 +115,34 @@ class MasteryUpdateFailedError(MapsError):
 
     def __init__(self, reason: str) -> None:
         super().__init__(f"Mastery update failed: {reason}")
+
+
+# Edit request errors
+
+
+class PendingEditRequestExistsError(MapsError):
+    """Map already has a pending edit request."""
+
+    def __init__(self, code: str, existing_edit_id: int) -> None:
+        super().__init__(
+            f"There is already a pending edit request for map {code}",
+            code=code,
+            existing_edit_id=existing_edit_id,
+        )
+
+
+class EditRequestNotFoundError(MapsError):
+    """Edit request not found."""
+
+    def __init__(self, edit_id: int) -> None:
+        super().__init__(
+            f"Edit request {edit_id} not found",
+            edit_id=edit_id,
+        )
+
+
+class InvalidEditResolutionError(MapsError):
+    """Invalid edit request resolution."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
