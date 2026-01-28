@@ -33,6 +33,14 @@ from .maps import (
     MapValidationError,
     MasteryUpdateFailedError,
 )
+from .playtest import (
+    InvalidPatchError,
+    PlaytestError,
+    PlaytestNotFoundError,
+    PlaytestStateError,
+    VoteConstraintError,
+    VoteNotFoundError,
+)
 
 __all__ = [
     "AlreadyInPlaytestError",
@@ -48,6 +56,7 @@ __all__ = [
     "GuideNotFoundError",
     "InsufficientKeysError",
     "InvalidCredentialsError",
+    "InvalidPatchError",
     "LinkedMapError",
     "LootboxError",
     "MapCodeExistsError",
@@ -56,10 +65,15 @@ __all__ = [
     "MapValidationError",
     "MasteryUpdateFailedError",
     "PasswordValidationError",
+    "PlaytestError",
+    "PlaytestNotFoundError",
+    "PlaytestStateError",
     "RateLimitExceededError",
     "TokenAlreadyUsedError",
     "TokenExpiredError",
     "TokenInvalidError",
     "UserNotFoundError",
     "UsernameValidationError",
+    "VoteConstraintError",
+    "VoteNotFoundError",
 ]
