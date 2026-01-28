@@ -777,34 +777,46 @@ class MapsRepository(BaseRepository):
 
     async def fetch_map_mastery(
         self,
-        code: str,
         user_id: int,
+        map_name: str | None = None,
         *,
         conn: Connection | None = None,
-    ) -> dict | None:
+    ) -> list[dict]:
         """Fetch map mastery data for a user.
 
         Args:
-            code: Map code.
             user_id: User ID.
+            map_name: Optional map name filter. If None, returns all maps.
             conn: Optional connection.
 
         Returns:
-            Mastery dict or None if not found.
+            List of mastery records (all maps if map_name is None).
         """
         _conn = self._get_connection(conn)
 
-        row = await _conn.fetchrow(
-            """
-            SELECT mm.user_id, mm.map_id, mm.rank, mm.percentile
-            FROM maps.mastery mm
-            JOIN core.maps m ON m.id = mm.map_id
-            WHERE m.code = $1 AND mm.user_id = $2
-            """,
-            code,
-            user_id,
-        )
-        return dict(row) if row else None
+        if map_name is None:
+            # Return all maps for user
+            rows = await _conn.fetch(
+                """
+                SELECT mm.map_name, mm.medal, mm.rank, mm.percentile
+                FROM maps.mastery mm
+                WHERE mm.user_id = $1
+                """,
+                user_id,
+            )
+        else:
+            # Return specific map
+            rows = await _conn.fetch(
+                """
+                SELECT mm.map_name, mm.medal, mm.rank, mm.percentile
+                FROM maps.mastery mm
+                WHERE mm.user_id = $1 AND mm.map_name = $2
+                """,
+                user_id,
+                map_name,
+            )
+
+        return [dict(row) for row in rows]
 
     async def upsert_map_mastery(
         self,

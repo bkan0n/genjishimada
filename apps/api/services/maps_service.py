@@ -32,6 +32,7 @@ from genjishimada_sdk.maps import (
     MapResponse,
     MedalsResponse,
     OverwatchCode,
+    OverwatchMap,
     PendingMapEditResponse,
     PlaytestCreatedEvent,
     QualityValueRequest,
@@ -642,23 +643,19 @@ class MapsService(BaseService):
     async def get_map_mastery_data(
         self,
         user_id: int,
-        code: OverwatchCode | None = None,
+        map_name: OverwatchMap | None = None,
     ) -> list[MapMasteryResponse]:
         """Get mastery data for a user, optionally scoped to a map.
 
         Args:
             user_id: Target user ID.
-            code: Optional map code filter.
+            map_name: Optional map name filter. If None, returns all maps.
 
         Returns:
             List of mastery records for the user.
         """
-        if code is None:
-            return []
-        row = await self._maps_repo.fetch_map_mastery(code, user_id)
-        if row is None:
-            return []
-        return msgspec.convert([row], list[MapMasteryResponse], from_attributes=True)
+        rows = await self._maps_repo.fetch_map_mastery(user_id, map_name)
+        return msgspec.convert(rows, list[MapMasteryResponse], from_attributes=True)
 
     async def update_mastery(
         self,

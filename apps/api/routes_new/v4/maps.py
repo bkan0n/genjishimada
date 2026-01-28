@@ -577,7 +577,7 @@ class MapsController(Controller):
             ) from e
 
     @get(
-        "/{code:str}/mastery",
+        "/mastery",
         summary="Get Mastery Data",
         opt={"required_scopes": {"maps:read"}},
     )
@@ -585,22 +585,22 @@ class MapsController(Controller):
         self,
         maps_service: MapsService,
         user_id: int,
-        code: OverwatchCode | None = None,
+        map_name: OverwatchMap | None = None,
     ) -> list[MapMasteryResponse]:
         """Get mastery data for a user.
 
         Args:
             user_id: Target user ID.
-            code: Optional map code filter.
+            map_name: Optional map name filter.
             maps_service: Maps service.
 
         Returns:
             List of mastery records.
         """
-        return await maps_service.get_map_mastery_data(user_id, code)
+        return await maps_service.get_map_mastery_data(user_id, map_name)
 
     @post(
-        "/{code:str}/mastery",
+        "/mastery",
         summary="Update Mastery",
         opt={"required_scopes": {"maps:write"}},
     )
