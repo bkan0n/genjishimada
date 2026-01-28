@@ -33,6 +33,7 @@ from genjishimada_sdk.maps import (
     TrendingMapResponse,
     UnlinkMapsCreateRequest,
 )
+from genjishimada_sdk.xp import XpGrantRequest
 from litestar import Controller, delete, get, patch, post
 from litestar.connection import Request
 from litestar.di import Provide
@@ -58,6 +59,7 @@ from services.exceptions.maps import (
     MapCodeExistsError,
     MapNotFoundError,
 )
+from services.lootbox_service import LootboxService, provide_lootbox_service
 from services.maps_service import MapsService, provide_maps_service
 from services.newsfeed_service import NewsfeedService, provide_newsfeed_service
 from utilities.errors import CustomHTTPException
@@ -75,6 +77,7 @@ class MapsController(Controller):
         "maps_repo": Provide(provide_maps_repository),
         "maps_service": Provide(provide_maps_service),
         "newsfeed_service": Provide(provide_newsfeed_service),
+        "lootbox_service": Provide(provide_lootbox_service),
     }
 
     @get(
@@ -434,14 +437,18 @@ class MapsController(Controller):
         self,
         code: OverwatchCode,
         data: Annotated[GuideResponse, Body(title="Guide data")],
+        request: Request,
         maps_service: MapsService,
+        lootbox_service: LootboxService,
     ) -> Response[GuideResponse]:
         """Create a guide for a map.
 
         Args:
             code: Map code.
             data: Guide data with user_id and url.
+            request: Request object.
             maps_service: Maps service.
+            lootbox_service: Lootbox service.
 
         Returns:
             Created guide.
@@ -450,8 +457,18 @@ class MapsController(Controller):
             CustomHTTPException: On error.
         """
         try:
-            guide, _context = await maps_service.create_guide(code, data)
-            # TODO (Task 2.2): Add XP grant here
+            guide, context = await maps_service.create_guide(code, data)
+
+            # Grant XP if map is official
+            map_data = context["map_data"]
+            if map_data.official:
+                xp_amount = 100  # XP_AMOUNTS["Guide"] from v3
+                await lootbox_service.grant_user_xp(
+                    request.headers,
+                    data.user_id,
+                    XpGrantRequest(amount=xp_amount, type="Guide"),
+                )
+
             # TODO (Task 2.3): Add newsfeed event publishing here
             return Response(guide, status_code=HTTP_201_CREATED)
 
