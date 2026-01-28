@@ -31,10 +31,11 @@ from services.exceptions.maps import (
 from services.maps_service import MapsService, provide_maps_service
 from services.newsfeed_service import NewsfeedService, provide_newsfeed_service
 from services.notifications_service import (
-    NotificationService,
+    NotificationsService,
     provide_notifications_service,
 )
-from services.users_service import UserService, provide_users_service
+from services.users_service import UsersService
+from routes_new.v4.users import provide_users_service
 from utilities.errors import CustomHTTPException
 
 if TYPE_CHECKING:
@@ -50,7 +51,7 @@ class MapEditsController(Controller):
         "maps_repo": Provide(provide_maps_repository),
         "maps_service": Provide(provide_maps_service),
         "newsfeed_service": Provide(provide_newsfeed_service),
-        "users_service": Provide(provide_users_service),
+        "users_service": Provide(provide_users_service, sync_to_thread=False),
         "notifications_service": Provide(provide_notifications_service),
     }
 
@@ -152,7 +153,7 @@ class MapEditsController(Controller):
         self,
         edit_id: int,
         maps_service: MapsService,
-        users_service: UserService,
+        users_service: UsersService,
     ) -> MapEditSubmissionResponse:
         """Get enriched edit submission data.
 
@@ -232,8 +233,8 @@ class MapEditsController(Controller):
         data: Annotated[MapEditResolveRequest, Body(title="Resolve data")],
         maps_service: MapsService,
         newsfeed_service: NewsfeedService,
-        notifications_service: NotificationService,
-        users_service: UserService,
+        notifications_service: NotificationsService,
+        users_service: UsersService,
     ) -> Response:
         """Resolve an edit request.
 
