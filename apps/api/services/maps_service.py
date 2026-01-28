@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Literal, overload
+from uuid import UUID
 
 import msgspec
 from asyncpg import Pool
@@ -72,6 +74,7 @@ from services.exceptions.maps import (
     MapNotFoundError,
     PendingEditRequestExistsError,
 )
+from utilities.jobs import wait_for_job_completion
 from utilities.map_search import MapSearchFilters
 
 from .base import BaseService
@@ -956,49 +959,142 @@ class MapsService(BaseService):
             log.error(f"Unexpected error sending {code} to playtest: {e}", exc_info=True)
             raise
 
+    def _create_cloned_map_data_payload(
+        self,
+        *,
+        map_data: MapResponse,
+        code: OverwatchCode,
+        is_official: bool,
+    ) -> MapCreateRequest:
+        """Create a map creation payload by cloning an existing map.
+
+        Generates a MapCreateRequest from an existing MapResponse, preserving all
+        core fields such as creators, category, mechanics, and medals, while assigning
+        a new map code. The clone is marked as hidden, unofficial, and playtesting-approved.
+
+        Args:
+            map_data: The source map data to clone.
+            code: The new map code to assign to the cloned map.
+            is_official: Whether the cloned map should be official (affects hidden and playtesting).
+
+        Returns:
+            MapCreateRequest: The fully prepared request for creating the cloned map.
+        """
+        creators = [Creator(c.id, c.is_primary) for c in map_data.creators]
+        guide_url = map_data.guides[0] if map_data.guides else ""
+        return MapCreateRequest(
+            code=code,
+            map_name=map_data.map_name,
+            category=map_data.category,
+            creators=creators,
+            checkpoints=map_data.checkpoints,
+            difficulty=map_data.difficulty,
+            official=is_official,
+            hidden=is_official,
+            playtesting="In Progress" if is_official else "Approved",
+            archived=False,
+            mechanics=map_data.mechanics,
+            restrictions=map_data.restrictions,
+            description=map_data.description,
+            medals=map_data.medals,
+            guide_url=guide_url,
+            title=map_data.title,
+            custom_banner=map_data.map_banner,
+        )
+
     async def link_map_codes(
         self,
         data: LinkMapsCreateRequest,
         headers: Headers,
         newsfeed_service: NewsfeedService,
-    ) -> None:
-        """Link official and unofficial map codes.
+    ) -> JobStatusResponse | None:
+        """Link official and unofficial map codes, cloning as needed.
+
+        Determines which maps exist and performs the appropriate operation:
+        - Clone the official map if only it exists.
+        - Clone the unofficial map and initiate playtesting if only it exists.
+        - Link both directly if both exist.
+
+        If a playtest is created, spawns a background task to wait for the job
+        to complete before publishing the newsfeed event. Otherwise, publishes
+        immediately.
 
         Args:
             data: Link request with official and unofficial codes.
             headers: Request headers for idempotency.
             newsfeed_service: Newsfeed service for event publishing.
 
+        Returns:
+            Job status if a clone operation was performed, None otherwise.
+
         Raises:
-            MapNotFoundError: If either map doesn't exist.
-            LinkedMapError: If maps cannot be linked.
+            LinkedMapError: If neither map exists or if maps are already linked.
         """
         try:
-            # Validate both maps exist
-            official_map_id = await self._maps_repo.lookup_map_id(data.official_code)
-            if official_map_id is None:
-                raise MapNotFoundError(data.official_code)
+            # Fetch both maps (may be None)
+            official_map_dict = await self._maps_repo.fetch_maps(single=True, code=data.official_code)
+            unofficial_map_dict = await self._maps_repo.fetch_maps(single=True, code=data.unofficial_code)
 
-            unofficial_map_id = await self._maps_repo.lookup_map_id(data.unofficial_code)
-            if unofficial_map_id is None:
-                raise MapNotFoundError(data.unofficial_code)
+            official_map = (
+                msgspec.convert(official_map_dict, MapResponse, from_attributes=True) if official_map_dict else None
+            )
+            unofficial_map = (
+                msgspec.convert(unofficial_map_dict, MapResponse, from_attributes=True) if unofficial_map_dict else None
+            )
 
-            # Validate not same code
-            if data.official_code == data.unofficial_code:
-                raise LinkedMapError("Cannot link a map to itself")
-
-            # Fetch official map to check current state
-            official_map = await self._maps_repo.fetch_maps(single=True, code=data.official_code)
-            official_response = msgspec.convert(official_map, MapResponse, from_attributes=True)
+            # Validate at least one map exists
+            if not official_map and not unofficial_map:
+                raise LinkedMapError("At least one of official_code or unofficial_code must refer to an existing map.")
 
             # Check if already linked
-            if hasattr(official_response, "linked_code") and official_response.linked_code == data.unofficial_code:
-                raise LinkedMapError("Maps are already linked")
+            if official_map and official_map.linked_code:
+                raise LinkedMapError(
+                    f"Official map {data.official_code} is already linked to {official_map.linked_code}"
+                )
+            if unofficial_map and unofficial_map.linked_code:
+                raise LinkedMapError(
+                    f"Unofficial map {data.unofficial_code} is already linked to {unofficial_map.linked_code}"
+                )
 
-            # Link the codes
-            await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
+            # Determine operation type
+            needs_clone_only = official_map and not unofficial_map
+            needs_clone_and_playtest = not official_map and unofficial_map
+            needs_link_only = official_map and unofficial_map
 
-            # Publish newsfeed event
+            job_status: JobStatusResponse | None = None
+            in_playtest = False
+
+            if needs_clone_only:
+                log.debug("Cloning official map to create unofficial")
+                payload = self._create_cloned_map_data_payload(
+                    map_data=official_map,  # type: ignore[arg-type]
+                    code=data.unofficial_code,
+                    is_official=False,
+                )
+                creation_response = await self.create_map(payload, headers, newsfeed_service)
+                await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
+                job_status = creation_response.job_status
+                in_playtest = False
+
+            elif needs_clone_and_playtest:
+                log.debug("Cloning unofficial map to create official + playtest")
+                payload = self._create_cloned_map_data_payload(
+                    map_data=unofficial_map,  # type: ignore[arg-type]
+                    code=data.official_code,
+                    is_official=True,
+                )
+                creation_response = await self.create_map(payload, headers, newsfeed_service)
+                await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
+                job_status = creation_response.job_status
+                in_playtest = True
+
+            elif needs_link_only:
+                log.debug("Linking existing maps")
+                await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
+                job_status = None
+                in_playtest = False
+
+            # Create newsfeed event
             event_payload = NewsfeedLinkedMap(
                 official_code=data.official_code,
                 unofficial_code=data.unofficial_code,
@@ -1009,12 +1105,104 @@ class MapsService(BaseService):
                 payload=event_payload,
                 event_type="linked_map",
             )
-            await newsfeed_service.create_and_publish(event=event, headers=headers)
-        except (MapNotFoundError, LinkedMapError):
+
+            # Handle newsfeed publishing
+            if in_playtest and job_status:
+                # Spawn background task to wait for job completion before publishing
+                task = asyncio.create_task(
+                    self._wait_and_publish_linked_map_newsfeed(
+                        job_status=job_status,
+                        event=event,
+                        headers=headers,
+                        newsfeed_service=newsfeed_service,
+                        official_code=data.official_code,
+                    )
+                )
+                # Store reference to prevent premature garbage collection
+                task.add_done_callback(lambda t: None)
+            else:
+                # Publish immediately
+                await newsfeed_service.create_and_publish(event=event, headers=headers)
+
+            return job_status
+
+        except LinkedMapError:
             raise
         except Exception as e:
             log.error(f"Unexpected error linking maps: {e}", exc_info=True)
             raise
+
+    async def _wait_and_publish_linked_map_newsfeed(
+        self,
+        *,
+        job_status: JobStatusResponse,
+        event: NewsfeedEvent,
+        headers: Headers,
+        newsfeed_service: NewsfeedService,
+        official_code: OverwatchCode,
+    ) -> None:
+        """Wait for a job to complete, then publish a linked map newsfeed event.
+
+        Args:
+            job_status: The initial job status from map creation.
+            event: The newsfeed event to publish.
+            headers: HTTP headers for idempotency.
+            newsfeed_service: Newsfeed service for publishing.
+            official_code: The official map code (to fetch playtest info).
+        """
+        try:
+            # Wait for job completion
+            final_status = await wait_for_job_completion(
+                job_id=job_status.id,
+                fetch_status=self._get_job_status_using_pool,
+                timeout=90.0,
+            )
+
+            if final_status.status == "succeeded":
+                # Fetch map to get playtest ID (using connection pool)
+                async with self._pool.acquire() as conn:
+                    map_data_dict = await self._maps_repo.fetch_maps(single=True, code=official_code, conn=conn)  # type: ignore[arg-type]
+                    map_data = msgspec.convert(map_data_dict, MapResponse, from_attributes=True)
+
+                    # Add playtest ID to event if available
+                    if map_data.playtest:
+                        assert isinstance(event.payload, NewsfeedLinkedMap)
+                        event.payload.playtest_id = map_data.playtest.thread_id
+
+                    # Publish newsfeed event
+                    await newsfeed_service.create_and_publish(event=event, headers=headers)
+            else:
+                log.warning(
+                    "Skipping newsfeed publish for job %s (status=%s)",
+                    final_status.id,
+                    final_status.status,
+                )
+
+        except Exception:
+            log.exception("Error while waiting for job completion for linked map newsfeed")
+            # Don't re-raise - this is a background task
+
+    async def _get_job_status_using_pool(self, job_id: UUID) -> JobStatusResponse | None:
+        """Fetch job status using the connection pool.
+
+        Args:
+            job_id: The UUID of the job.
+
+        Returns:
+            Job status response or None if not found.
+        """
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, status, error_code, error_msg, created_at, updated_at
+                FROM public.jobs
+                WHERE id = $1
+                """,
+                job_id,
+            )
+            if row:
+                return msgspec.convert(dict(row), JobStatusResponse, from_attributes=True)
+            return None
 
     async def unlink_map_codes(
         self,

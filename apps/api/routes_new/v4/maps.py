@@ -875,8 +875,11 @@ class MapsController(Controller):
         maps_service: MapsService,
         newsfeed_service: NewsfeedService,
         request: Request,
-    ) -> None:
+    ) -> JobStatusResponse | None:
         """Link official and unofficial map codes.
+
+        If a map needs to be cloned, returns the job status for tracking.
+        If both maps already exist, returns None.
 
         Args:
             data: Link request.
@@ -884,11 +887,14 @@ class MapsController(Controller):
             newsfeed_service: Newsfeed service.
             request: Request object.
 
+        Returns:
+            Job status if a clone operation was performed, None otherwise.
+
         Raises:
             CustomHTTPException: On error.
         """
         try:
-            await maps_service.link_map_codes(data, request.headers, newsfeed_service)
+            return await maps_service.link_map_codes(data, request.headers, newsfeed_service)
 
         except MapNotFoundError as e:
             raise CustomHTTPException(
