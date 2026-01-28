@@ -41,7 +41,7 @@ from litestar import Controller, delete, get, patch, post
 from litestar.connection import Request
 from litestar.di import Provide
 from litestar.params import Body, Parameter
-from litestar.response import Response
+from litestar.response import Response, Stream
 from litestar.status_codes import (
     HTTP_201_CREATED,
     HTTP_204_NO_CONTENT,
@@ -411,8 +411,8 @@ class MapsController(Controller):
         self,
         code: OverwatchCode,
         maps_service: MapsService,
-    ) -> object:
-        """Get playtest plot data for a map.
+    ) -> Stream:
+        """Get playtest plot image for a map.
 
         Args:
             code: Map code.

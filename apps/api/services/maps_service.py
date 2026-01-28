@@ -12,6 +12,7 @@ from uuid import UUID
 
 import msgspec
 from asyncpg import Pool
+from genjishimada_sdk.difficulties import DifficultyAll, convert_raw_difficulty_to_difficulty_all
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import (
     ArchivalStatusPatchRequest,
@@ -54,6 +55,7 @@ from genjishimada_sdk.newsfeed import (
 )
 from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
 from litestar.datastructures import Headers, State
+from litestar.response import Stream
 
 from repository.exceptions import (
     ForeignKeyViolationError,
@@ -76,6 +78,7 @@ from services.exceptions.maps import (
 )
 from utilities.jobs import wait_for_job_completion
 from utilities.map_search import MapSearchFilters
+from utilities.playtest_plot import build_playtest_plot
 
 from .base import BaseService
 
@@ -1294,37 +1297,82 @@ class MapsService(BaseService):
         *,
         thread_id: int | None = None,
         code: OverwatchCode | None = None,
-    ) -> object:
-        """Get playtest plot data.
+    ) -> Stream:
+        """Get playtest plot as image stream.
 
-        Accepts either thread_id (direct lookup) or code (resolves thread_id via map).
+        When code is provided (and thread_id is omitted), the initial difficulty may be
+        the only datapoint—intended for early initialization before votes exist.
 
         Args:
             thread_id: Playtest thread ID.
             code: Map code (alternative).
 
         Returns:
-            Plot data object.
+            Stream with PNG image and headers.
 
         Raises:
-            MapNotFoundError: If map doesn't exist or no plot data found.
+            MapNotFoundError: If map doesn't exist.
             ValueError: If neither thread_id nor code provided.
         """
         try:
-            if thread_id is not None:
-                return await self._maps_repo.fetch_playtest_plot_data(thread_id)
+            # Fetch difficulty data based on input
+            async with self._pool.acquire() as conn:
+                if code and not thread_id:
+                    # Fetch initial difficulty for new playtest
+                    rows = await conn.fetch(
+                        """
+                        WITH target_map AS (
+                            SELECT id FROM core.maps WHERE code = $1
+                        )
+                        SELECT initial_difficulty AS difficulty, 1 AS amount
+                        FROM playtests.meta
+                        WHERE map_id = (SELECT id FROM target_map) AND completed=FALSE
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """,
+                        code,
+                    )
+                elif thread_id:
+                    # Fetch votes + initial difficulty
+                    rows = await conn.fetch(
+                        """
+                        SELECT difficulty, count(*) AS amount
+                        FROM playtests.votes
+                        WHERE playtest_thread_id = $1
+                        GROUP BY difficulty
+                        UNION ALL
+                        SELECT initial_difficulty AS difficulty, 1 AS amount
+                        FROM playtests.meta
+                        WHERE thread_id = $1
+                          AND NOT EXISTS (
+                            SELECT 1 FROM playtests.votes WHERE playtest_thread_id = $1
+                        )
+                        """,
+                        thread_id,
+                    )
+                else:
+                    raise ValueError("At least one of code or thread_id is required")
 
-            if code is None:
-                return None
+                if not rows:
+                    raise MapNotFoundError(code or str(thread_id))
 
-            map_data = await self._maps_repo.fetch_maps(single=True, code=code)
-            if not map_data:
-                raise MapNotFoundError(code)
+                # Convert to difficulty dict
+                data: dict[DifficultyAll, int] = {
+                    convert_raw_difficulty_to_difficulty_all(row["difficulty"]): row["amount"] for row in rows
+                }
 
-            map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
-            if map_response.playtest and map_response.playtest.thread_id:
-                return await self._maps_repo.fetch_playtest_plot_data(map_response.playtest.thread_id)
-            return None
+                # Build plot image
+                buffer = await build_playtest_plot(data)
+
+                # Return Stream with headers
+                return Stream(
+                    buffer,
+                    headers={
+                        "content-type": "image/png",
+                        "content-disposition": 'attachment; filename="playtest.png"',
+                    },
+                )
+
         except (MapNotFoundError, ValueError):
             raise
         except Exception as e:
