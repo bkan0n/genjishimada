@@ -3,25 +3,36 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import TYPE_CHECKING
+import inspect
+import logging
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 import msgspec
 from asyncpg import Pool
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import (
     ArchivalStatusPatchRequest,
+    Creator,
     GuideFullResponse,
     GuideResponse,
     LinkMapsCreateRequest,
     MapCreateRequest,
     MapCreationJobResponse,
+    MapEditCreatedEvent,
+    MapEditFieldChange,
+    MapEditResolvedEvent,
+    MapEditResponse,
+    MapEditSubmissionResponse,
     MapMasteryCreateRequest,
     MapMasteryCreateResponse,
     MapMasteryResponse,
     MapPartialResponse,
     MapPatchRequest,
     MapResponse,
+    MedalsResponse,
     OverwatchCode,
+    PendingMapEditResponse,
     PlaytestCreatedEvent,
     QualityValueRequest,
     SendToPlaytestRequest,
@@ -34,8 +45,10 @@ from genjishimada_sdk.newsfeed import (
     NewsfeedEvent,
     NewsfeedLinkedMap,
     NewsfeedNewMap,
+    NewsfeedUnarchive,
     NewsfeedUnlinkedMap,
 )
+from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
 from litestar.datastructures import Headers, State
 
 from repository.exceptions import (
@@ -50,16 +63,24 @@ from services.exceptions.maps import (
     DuplicateGuideError,
     DuplicateMechanicError,
     DuplicateRestrictionError,
+    EditRequestNotFoundError,
     GuideNotFoundError,
     LinkedMapError,
     MapCodeExistsError,
     MapNotFoundError,
+    PendingEditRequestExistsError,
 )
 
 from .base import BaseService
 
 if TYPE_CHECKING:
     from services.newsfeed_service import NewsfeedService
+    from services.notifications_service import NotificationService
+    from services.users_service import UserService
+
+# Module-level constants and logging
+_PREVIEW_MAX_LENGTH = 50
+log = logging.getLogger(__name__)
 
 
 class MapsService(BaseService):
@@ -942,6 +963,563 @@ class MapsService(BaseService):
             raise MapNotFoundError(code)
 
         return await self._maps_repo.fetch_playtest_plot_data(code)
+
+    # Edit request operations
+
+    async def create_edit_request(
+        self,
+        code: str,
+        proposed_changes: dict[str, Any],
+        reason: str,
+        created_by: int,
+        headers: Headers,
+    ) -> MapEditResponse:
+        """Create a new map edit request.
+
+        Args:
+            code: Map code.
+            proposed_changes: Dict of field -> new_value.
+            reason: Reason for the edit.
+            created_by: User ID of submitter.
+            headers: Request headers for RabbitMQ idempotency.
+
+        Returns:
+            Created edit request.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+            PendingEditRequestExistsError: If map already has pending request.
+        """
+        # Validate map exists
+        map_id = await self._maps_repo.lookup_map_id(code)
+        if map_id is None:
+            raise MapNotFoundError(code)
+
+        # Check for existing pending request
+        existing_id = await self._maps_repo.check_pending_edit_request(map_id)
+        if existing_id is not None:
+            raise PendingEditRequestExistsError(code, existing_id)
+
+        # Create edit request
+        try:
+            row = await self._maps_repo.create_edit_request(
+                map_id=map_id,
+                code=code,
+                proposed_changes=proposed_changes,
+                reason=reason,
+                created_by=created_by,
+            )
+        except ForeignKeyViolationError as e:
+            # Should not happen since we validated map_id, but handle gracefully
+            if "created_by" in e.constraint_name:
+                raise CreatorNotFoundError() from e
+            raise
+
+        # Convert to response
+        edit_response = self._row_to_edit_response(row)
+
+        # Publish RabbitMQ event for bot
+        await self.publish_message(
+            routing_key="api.map_edit.created",
+            data=MapEditCreatedEvent(edit_request_id=edit_response.id),
+            headers=headers,
+            idempotency_key=f"map_edit:created:{edit_response.id}",
+        )
+
+        return edit_response
+
+    async def get_edit_request(self, edit_id: int) -> MapEditResponse:
+        """Get a specific edit request.
+
+        Args:
+            edit_id: Edit request ID.
+
+        Returns:
+            Edit request.
+
+        Raises:
+            EditRequestNotFoundError: If not found.
+        """
+        row = await self._maps_repo.fetch_edit_request(edit_id)
+        if row is None:
+            raise EditRequestNotFoundError(edit_id)
+
+        return self._row_to_edit_response(row)
+
+    async def get_pending_requests(self) -> list[PendingMapEditResponse]:
+        """Get all pending edit requests.
+
+        Returns:
+            List of pending requests.
+        """
+        rows = await self._maps_repo.fetch_pending_edit_requests()
+        return [
+            PendingMapEditResponse(
+                id=row["id"],
+                code=row["code"],
+                message_id=row["message_id"],
+            )
+            for row in rows
+        ]
+
+    async def get_edit_submission(
+        self,
+        edit_id: int,
+        get_creator_name: Callable[[int], str | Awaitable[str]] | None = None,
+    ) -> MapEditSubmissionResponse:
+        """Get enriched edit submission data for verification queue.
+
+        Args:
+            edit_id: Edit request ID.
+            get_creator_name: Function to resolve creator names.
+
+        Returns:
+            Enriched submission data.
+
+        Raises:
+            EditRequestNotFoundError: If not found.
+        """
+        data = await self._maps_repo.fetch_edit_submission(edit_id)
+        if data is None:
+            raise EditRequestNotFoundError(edit_id)
+
+        edit_req = data["edit_request"]
+        current_map = data["current_map"]
+        current_creators = data["current_creators"]
+        current_medals = data["current_medals"]
+        submitter_name = data["submitter_name"]
+
+        # Parse proposed changes
+        proposed_changes = edit_req["proposed_changes"]
+        if isinstance(proposed_changes, str):
+            proposed_changes = msgspec.json.decode(proposed_changes)
+
+        # Build current map data dict for comparison
+        map_data = dict(current_map)
+        map_data["creators"] = [{"id": c["user_id"], "is_primary": c["is_primary"]} for c in current_creators]
+
+        # Build human-readable changes
+        changes = await self._build_field_changes(
+            map_data,
+            current_medals,
+            proposed_changes,
+            get_creator_name=get_creator_name,
+        )
+
+        return MapEditSubmissionResponse(
+            id=edit_req["id"],
+            code=edit_req["code"],
+            map_name=edit_req["map_name"],
+            difficulty=edit_req["difficulty"],
+            changes=changes,
+            reason=edit_req["reason"],
+            submitter_name=submitter_name,
+            submitter_id=edit_req["created_by"],
+            created_at=edit_req["created_at"],
+            message_id=edit_req["message_id"],
+        )
+
+    async def set_edit_message_id(self, edit_id: int, message_id: int) -> None:
+        """Set Discord message ID for edit request.
+
+        Args:
+            edit_id: Edit request ID.
+            message_id: Discord message ID.
+
+        Raises:
+            EditRequestNotFoundError: If edit request doesn't exist.
+        """
+        # Validate exists
+        row = await self._maps_repo.fetch_edit_request(edit_id)
+        if row is None:
+            raise EditRequestNotFoundError(edit_id)
+
+        await self._maps_repo.set_edit_request_message_id(edit_id, message_id)
+
+    async def resolve_edit_request(  # noqa: PLR0913
+        self,
+        edit_id: int,
+        accepted: bool,
+        resolved_by: int,
+        rejection_reason: str | None,
+        send_to_playtest: bool,
+        headers: Headers,
+        newsfeed_service: NewsfeedService,
+        notification_service: NotificationService,
+        user_service: UserService,
+    ) -> None:
+        """Resolve an edit request (accept or reject).
+
+        If accepted:
+        - Applies proposed changes to map
+        - Handles archive separately (special newsfeed)
+        - Generates newsfeed for non-archive changes
+        - Optionally sends to playtest
+        - Sends notification to submitter
+        - Publishes RabbitMQ cleanup event
+
+        Args:
+            edit_id: Edit request ID.
+            accepted: Whether accepted or rejected.
+            resolved_by: User ID of resolver.
+            rejection_reason: Reason for rejection (if rejected).
+            send_to_playtest: Whether to send map to playtest after accepting.
+            headers: Request headers for RabbitMQ idempotency.
+            newsfeed_service: Newsfeed service.
+            notification_service: Notification service.
+            user_service: User service.
+
+        Raises:
+            EditRequestNotFoundError: If edit request doesn't exist.
+            MapNotFoundError: If map doesn't exist.
+        """
+        # Get edit request
+        edit_request = await self.get_edit_request(edit_id)
+
+        if accepted:
+            # Get original map for newsfeed comparison
+            original_map = await self.fetch_maps(single=True, code=edit_request.code)
+
+            # Handle archive change separately
+            has_archive_change = "archived" in edit_request.proposed_changes
+            remaining_changes: dict = {}
+
+            if has_archive_change:
+                archived_value = edit_request.proposed_changes["archived"]
+
+                # Perform archive/unarchive
+                if archived_value:
+                    await self.archive_map(edit_request.code)
+                    # Newsfeed for archive
+                    payload = NewsfeedArchive(
+                        code=edit_request.code,
+                        map_name=original_map.map_name,
+                        creators=[c.name for c in original_map.creators],
+                        difficulty=original_map.difficulty,
+                        reason=edit_request.reason,
+                    )
+                    event_type = "archive"
+                else:
+                    await self.unarchive_map(edit_request.code)
+                    # Newsfeed for unarchive
+                    payload = NewsfeedUnarchive(
+                        code=edit_request.code,
+                        map_name=original_map.map_name,
+                        creators=[c.name for c in original_map.creators],
+                        difficulty=original_map.difficulty,
+                        reason=edit_request.reason,
+                    )
+                    event_type = "unarchive"
+
+                # Publish newsfeed
+                event = NewsfeedEvent(
+                    id=None,
+                    timestamp=dt.datetime.now(dt.timezone.utc),
+                    payload=payload,
+                    event_type=event_type,
+                )
+                await newsfeed_service.create_and_publish(event, headers=headers)
+
+                # Remaining changes (without archived)
+                remaining_changes = {k: v for k, v in edit_request.proposed_changes.items() if k != "archived"}
+
+                # Apply remaining changes if any
+                if remaining_changes:
+                    patch_data = self.convert_changes_to_patch(remaining_changes)
+                    await self.update_map(edit_request.code, patch_data)
+            else:
+                # No archive change, apply all changes
+                patch_data = self.convert_changes_to_patch(edit_request.proposed_changes)
+                await self.update_map(edit_request.code, patch_data)
+                remaining_changes = edit_request.proposed_changes
+
+            # Generate newsfeed for non-archive changes
+            if remaining_changes:
+
+                async def _get_user_coalesced_name(user_id: int) -> str:
+                    user = await user_service.get_user(user_id)
+                    if user:
+                        return user.coalesced_name or "Unknown User"
+                    return "Unknown User"
+
+                newsfeed_patch = self.convert_changes_to_patch(remaining_changes)
+                await newsfeed_service.generate_map_edit_newsfeed(
+                    original_map,
+                    newsfeed_patch,
+                    edit_request.reason,
+                    headers,
+                    get_creator_name=_get_user_coalesced_name,
+                )
+
+        # Mark as resolved
+        await self._maps_repo.resolve_edit_request(
+            edit_id=edit_id,
+            accepted=accepted,
+            resolved_by=resolved_by,
+            rejection_reason=rejection_reason,
+        )
+
+        # Send to playtest if requested and accepted
+        if accepted and send_to_playtest:
+            try:
+                # Get difficulty from proposed changes or use original
+                playtest_difficulty = edit_request.proposed_changes.get("difficulty")
+                if not playtest_difficulty:
+                    original_map = await self.fetch_maps(single=True, code=edit_request.code)
+                    playtest_difficulty = original_map.difficulty
+
+                await self.send_to_playtest(
+                    code=edit_request.code,
+                    data=SendToPlaytestRequest(initial_difficulty=playtest_difficulty),
+                    headers=headers,
+                )
+            except Exception as e:
+                # Log but don't fail resolution
+                log.error(
+                    f"Failed to send map {edit_request.code} to playtest after edit: {e}",
+                    exc_info=True,
+                )
+
+        # Send notification to submitter
+        await self._send_edit_resolution_notification(
+            notification_service,
+            edit_request,
+            accepted,
+            rejection_reason,
+            headers,
+        )
+
+        # Publish RabbitMQ cleanup event
+        await self.publish_message(
+            routing_key="api.map_edit.resolved",
+            data=MapEditResolvedEvent(
+                edit_request_id=edit_id,
+                accepted=accepted,
+                resolved_by=resolved_by,
+                rejection_reason=rejection_reason,
+            ),
+            headers=headers,
+            idempotency_key=f"map_edit:resolved:{edit_id}",
+        )
+
+    async def get_user_edit_requests(
+        self,
+        user_id: int,
+        include_resolved: bool = False,
+    ) -> list[MapEditResponse]:
+        """Get edit requests submitted by a user.
+
+        Args:
+            user_id: User ID.
+            include_resolved: Whether to include resolved requests.
+
+        Returns:
+            List of edit requests.
+        """
+        rows = await self._maps_repo.fetch_user_edit_requests(
+            user_id,
+            include_resolved,
+        )
+        return [self._row_to_edit_response(row) for row in rows]
+
+    # Edit request helper methods
+
+    @staticmethod
+    def _row_to_edit_response(row: dict) -> MapEditResponse:
+        """Convert database row to MapEditResponse."""
+        proposed_changes = row["proposed_changes"]
+        if isinstance(proposed_changes, str):
+            proposed_changes = msgspec.json.decode(proposed_changes)
+
+        return MapEditResponse(
+            id=row["id"],
+            map_id=row["map_id"],
+            code=row["code"],
+            proposed_changes=proposed_changes,
+            reason=row["reason"],
+            created_by=row["created_by"],
+            created_at=row["created_at"],
+            message_id=row["message_id"],
+            resolved_at=row["resolved_at"],
+            accepted=row["accepted"],
+            resolved_by=row["resolved_by"],
+            rejection_reason=row["rejection_reason"],
+        )
+
+    async def _build_field_changes(
+        self,
+        current_map: dict[str, Any],
+        current_medals: dict[str, Any] | None,
+        proposed: dict[str, Any],
+        get_creator_name: Callable[[int], str | Awaitable[str]] | None = None,
+    ) -> list[MapEditFieldChange]:
+        """Build human-readable field change list."""
+        changes = []
+
+        for field_name, new_value in proposed.items():
+            if field_name == "medals":
+                old_value = (
+                    {
+                        "gold": current_medals["gold"],
+                        "silver": current_medals["silver"],
+                        "bronze": current_medals["bronze"],
+                    }
+                    if current_medals
+                    else None
+                )
+            else:
+                old_value = current_map.get(field_name)
+
+            # Format for display
+            if field_name == "creators":
+                old_display = await self._format_creators_for_display(
+                    old_value,
+                    get_creator_name,
+                )
+                new_display = await self._format_creators_for_display(
+                    new_value,
+                    get_creator_name,
+                )
+            else:
+                old_display = self._format_value_for_display(field_name, old_value)
+                new_display = self._format_value_for_display(field_name, new_value)
+
+            # Convert field name to display name
+            display_name = field_name.replace("_", " ").title()
+
+            changes.append(
+                MapEditFieldChange(
+                    field=display_name,
+                    old_value=old_display,
+                    new_value=new_display,
+                )
+            )
+
+        return changes
+
+    @staticmethod
+    async def _format_creators_for_display(
+        value: Any,
+        get_creator_name: Callable[[int], str | Awaitable[str]] | None = None,
+    ) -> str:
+        """Format creator values for display."""
+        if value is None:
+            return "Not set"
+
+        if not value:
+            return "None"
+
+        if isinstance(value, dict):
+            value = [value]
+
+        if not isinstance(value, list):
+            return str(value)
+
+        rendered = []
+        for creator in value:
+            if isinstance(creator, dict):
+                creator_id = creator.get("id")
+                is_primary = creator.get("is_primary")
+                name = creator.get("name")
+            else:
+                creator_id = getattr(creator, "id", None)
+                is_primary = getattr(creator, "is_primary", None)
+                name = getattr(creator, "name", None)
+
+            if not name and creator_id and get_creator_name:
+                resolved = get_creator_name(int(creator_id))
+                name = await resolved if inspect.isawaitable(resolved) else resolved
+            if not name:
+                name = "Unknown User"
+
+            primary_suffix = "primary, " if is_primary else ""
+            if creator_id:
+                rendered.append(f"{name} ({primary_suffix}{creator_id})")
+            else:
+                rendered.append(name)
+
+        return ", ".join(rendered)
+
+    @staticmethod
+    def _format_value_for_display(
+        field: str,
+        value: str | float | bool | list | dict | None,
+    ) -> str:
+        """Format field value for display."""
+        if value is None:
+            return "Not set"
+
+        # Boolean fields
+        if field in ("hidden", "archived", "official"):
+            return "Yes" if value else "No"
+
+        # Medal fields
+        if field == "medals" and isinstance(value, dict):
+            return f"🥇 {value.get('gold')} | 🥈 {value.get('silver')} | 🥉 {value.get('bronze')}"
+
+        # List fields
+        if isinstance(value, list):
+            return ", ".join(str(v) for v in value) if value else "None"
+
+        return str(value)
+
+    @staticmethod
+    def convert_changes_to_patch(proposed_changes: dict[str, Any]) -> MapPatchRequest:
+        """Convert proposed_changes dict to MapPatchRequest."""
+        kwargs: dict[str, Any] = {}
+
+        for field, field_value in proposed_changes.items():
+            if field == "medals" and field_value is not None:
+                kwargs[field] = MedalsResponse(**field_value)
+            elif field == "creators" and field_value is not None:
+                creators = [creator if isinstance(creator, Creator) else Creator(**creator) for creator in field_value]
+                kwargs[field] = creators
+            else:
+                kwargs[field] = field_value
+
+        return MapPatchRequest(**kwargs)
+
+    async def _send_edit_resolution_notification(
+        self,
+        notification_service: NotificationService,
+        edit_request: MapEditResponse,
+        accepted: bool,
+        rejection_reason: str | None,
+        headers: Headers,
+    ) -> None:
+        """Send notification to edit request submitter."""
+        if accepted:
+            event_type = NotificationEventType.MAP_EDIT_APPROVED.value
+            title = "Map Edit Approved"
+            body = f"Your edit request for {edit_request.code} has been approved and your changes have been applied."
+            discord_message = (
+                f"✅ Your edit request for **{edit_request.code}** has been **approved**!\n"
+                "Your changes have been applied to the map."
+            )
+        else:
+            event_type = NotificationEventType.MAP_EDIT_REJECTED.value
+            title = "Map Edit Rejected"
+            body = f"Your edit request for {edit_request.code} was rejected."
+            if rejection_reason:
+                body += f" Reason: {rejection_reason}"
+            discord_message = f"❌ Your edit request for **{edit_request.code}** has been **rejected**."
+            if rejection_reason:
+                discord_message += f"\n**Reason:** {rejection_reason}"
+
+        notification_data = NotificationCreateRequest(
+            user_id=edit_request.created_by,
+            event_type=event_type,
+            title=title,
+            body=body,
+            discord_message=discord_message,
+            metadata={
+                "map_code": edit_request.code,
+                "edit_id": edit_request.id,
+                "rejection_reason": rejection_reason,
+            },
+        )
+
+        await notification_service.create_and_dispatch(notification_data, headers)
 
 
 async def provide_maps_service(
