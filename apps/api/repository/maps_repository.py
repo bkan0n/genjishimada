@@ -281,7 +281,7 @@ class MapsRepository(BaseRepository):
 
         query = f"""
             UPDATE core.maps
-            SET {', '.join(set_clauses)}
+            SET {", ".join(set_clauses)}
             WHERE code = {where_param}
         """
 
@@ -294,7 +294,6 @@ class MapsRepository(BaseRepository):
                 table="core.maps",
                 detail=str(e),
             ) from e
-
 
     # Related data operations - Creators
 
@@ -768,7 +767,6 @@ class MapsRepository(BaseRepository):
             code,
         )
         return [dict(row) for row in rows]
-
 
     # Archive operations
 
