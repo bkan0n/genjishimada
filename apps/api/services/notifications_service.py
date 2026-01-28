@@ -33,18 +33,6 @@ if TYPE_CHECKING:
 
 DISCORD_USER_ID_LOWER_LIMIT = 1_000_000_000_000_000
 
-# Mapping from legacy Notification enum to new system
-LEGACY_TO_NEW_MAPPING: dict[Notification, tuple[NotificationEventType, NotificationChannel]] = {
-    Notification.DM_ON_VERIFICATION: (NotificationEventType.VERIFICATION_APPROVED, NotificationChannel.DISCORD_DM),
-    Notification.DM_ON_SKILL_ROLE_UPDATE: (NotificationEventType.SKILL_ROLE_UPDATE, NotificationChannel.DISCORD_DM),
-    Notification.DM_ON_LOOTBOX_GAIN: (NotificationEventType.LOOTBOX_EARNED, NotificationChannel.DISCORD_DM),
-    Notification.DM_ON_RECORDS_REMOVAL: (NotificationEventType.RECORD_REMOVED, NotificationChannel.DISCORD_DM),
-    Notification.DM_ON_PLAYTEST_ALERTS: (NotificationEventType.PLAYTEST_UPDATE, NotificationChannel.DISCORD_DM),
-    Notification.PING_ON_XP_GAIN: (NotificationEventType.XP_GAIN, NotificationChannel.DISCORD_PING),
-    Notification.PING_ON_MASTERY: (NotificationEventType.MASTERY_EARNED, NotificationChannel.DISCORD_PING),
-    Notification.PING_ON_COMMUNITY_RANK_UPDATE: (NotificationEventType.RANK_UP, NotificationChannel.DISCORD_PING),
-}
-
 
 class NotificationsService(BaseService):
     """Service for notifications business logic."""
@@ -324,23 +312,6 @@ class NotificationsService(BaseService):
         """
         enabled_channels = await self._get_enabled_channels(user_id, event_type)
         return channel in enabled_channels
-
-    async def get_legacy_bitmask(self, user_id: int) -> int:
-        """Convert new preferences to legacy bitmask for bot compatibility.
-
-        Args:
-            user_id: Target user ID.
-
-        Returns:
-            Legacy bitmask value.
-        """
-        bitmask = 0
-
-        for legacy_flag, (event_type, channel) in LEGACY_TO_NEW_MAPPING.items():
-            if await self.should_deliver(user_id, event_type.value, channel.value):
-                bitmask |= legacy_flag.value
-
-        return bitmask
 
     async def _get_enabled_channels(self, user_id: int, event_type: NOTIFICATION_EVENT_TYPE) -> list[str]:
         """Get list of enabled channels for a user and event type.

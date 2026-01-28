@@ -332,25 +332,3 @@ class NotificationsController(Controller):
         """
         result = await notifications_service.should_deliver(user_id, event_type, channel)
         return ShouldDeliverResponse(should_deliver=result)
-
-    @get(
-        "/users/{user_id:int}/legacy-bitmask",
-        summary="Get Legacy Bitmask",
-        description="Get notification preferences as legacy bitmask for bot compatibility.",
-    )
-    async def get_legacy_bitmask(
-        self,
-        user_id: int,
-        notifications_service: NotificationsService,
-    ) -> dict[str, int]:
-        """Get legacy bitmask.
-
-        Args:
-            user_id: Target user ID.
-            notifications_service: Service dependency.
-
-        Returns:
-            Legacy bitmask value (200 OK automatic).
-        """
-        bitmask = await notifications_service.get_legacy_bitmask(user_id)
-        return {"bitmask": bitmask}

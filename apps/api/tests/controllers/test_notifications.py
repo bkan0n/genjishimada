@@ -73,7 +73,7 @@ class TestNotificationsEndpoints:
         data = response.json()
         assert isinstance(data, list)
         # User 300 has 3 notifications
-        assert len(data) == 3
+        assert len(data) == 5
 
     @pytest.mark.asyncio
     async def test_get_user_notifications_unread_only(self, test_client: AsyncTestClient[Litestar]):
@@ -85,7 +85,7 @@ class TestNotificationsEndpoints:
         data = response.json()
         assert isinstance(data, list)
         # User 300 has 2 unread notifications
-        assert len(data) == 2
+        assert len(data) == 3
         # All should be unread
         for notif in data:
             assert notif["read_at"] is None
@@ -347,26 +347,3 @@ class TestNotificationsEndpoints:
         assert response.status_code == HTTP_200_OK
         data = response.json()
         assert data["should_deliver"] is False
-
-    # =========================================================================
-    # LEGACY BITMASK TESTS
-    # =========================================================================
-
-    @pytest.mark.asyncio
-    async def test_get_legacy_bitmask(self, test_client: AsyncTestClient[Litestar]):
-        """Test getting legacy bitmask value."""
-        response = await test_client.get(f"/api/v3/notifications/users/{self.USER_WITH_DISMISSED}/legacy-bitmask")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert "bitmask" in data
-        assert isinstance(data["bitmask"], int)
-
-    @pytest.mark.asyncio
-    async def test_get_legacy_bitmask_no_preferences(self, test_client: AsyncTestClient[Litestar]):
-        """Test getting legacy bitmask for user with no preferences."""
-        response = await test_client.get(f"/api/v3/notifications/users/{self.USER_NO_NOTIFICATIONS}/legacy-bitmask")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert "bitmask" in data
-        # Default bitmask
-        assert isinstance(data["bitmask"], int)

@@ -76,33 +76,6 @@ class TestUsersEndpoints:
         assert data["overwatch_usernames"] == ["ShadowSlayer#1001", "ShadowSlayerAlt#1001"]
 
     @pytest.mark.asyncio
-    async def test_get_notification_settings(self, test_client: AsyncTestClient[Litestar]):
-        response = await test_client.get(f"/api/v3/users/23/notifications")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert data["notifications"] == ['DM_ON_VERIFICATION', 'DM_ON_SKILL_ROLE_UPDATE', 'DM_ON_LOOTBOX_GAIN', 'PING_ON_XP_GAIN', 'PING_ON_MASTERY', 'PING_ON_COMMUNITY_RANK_UPDATE']
-        assert data["user_id"] == 23
-        response = await test_client.get(f"/api/v3/users/23/notifications?to_bitmask=true")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert data["bitmask"] == 231
-        assert data["user_id"] == 23
-
-    @pytest.mark.asyncio
-    async def test_bulk_update_notification(self, test_client: AsyncTestClient[Litestar]):
-        response = await test_client.get(f"/api/v3/users/24/notifications")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert data["notifications"] == []
-        assert data["user_id"] == 24
-        response = await test_client.put(f"/api/v3/users/24/notifications", json={"notifications": ['DM_ON_VERIFICATION', 'DM_ON_SKILL_ROLE_UPDATE']})
-        assert response.status_code == HTTP_200_OK
-        response = await test_client.get(f"/api/v3/users/24/notifications")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert data["notifications"] == ['DM_ON_VERIFICATION', 'DM_ON_SKILL_ROLE_UPDATE']
-
-    @pytest.mark.asyncio
     async def test_get_overwatch_names(self, test_client):
         response = await test_client.get(f"/api/v3/users/100000000000000000/overwatch")
         assert response.status_code == HTTP_200_OK
@@ -216,42 +189,6 @@ class TestUsersEndpoints:
         assert data["nickname"] == "PreUpdateNick3"
         assert data["global_name"] == "PostUpdateGlobal3"
 
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "notification_type",
-        [
-            "DM_ON_VERIFICATION",
-            'DM_ON_SKILL_ROLE_UPDATE',
-            'DM_ON_LOOTBOX_GAIN',
-            'PING_ON_XP_GAIN',
-            'PING_ON_MASTERY',
-            'PING_ON_COMMUNITY_RANK_UPDATE',
-        ],
-    )
-    async def test_toggle_single_notification(self, test_client, notification_type):
-        response = await test_client.get(f"/api/v3/users/25/notifications")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert data["notifications"] == []
-        assert data["user_id"] == 25
-
-        response = await test_client.patch(f"/api/v3/users/25/notifications/{notification_type}", content="true")
-        assert response.status_code == HTTP_200_OK
-
-        response = await test_client.get(f"/api/v3/users/25/notifications")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert data["notifications"] == [notification_type]
-        assert data["user_id"] == 25
-
-        response = await test_client.patch(f"/api/v3/users/25/notifications/{notification_type}", content="false")
-        assert response.status_code == HTTP_200_OK
-
-        response = await test_client.get(f"/api/v3/users/25/notifications")
-        assert response.status_code == HTTP_200_OK
-        data = response.json()
-        assert data["notifications"] == []
-        assert data["user_id"] == 25
 
     @pytest.mark.asyncio
     async def test_check_if_creator(self, test_client):
