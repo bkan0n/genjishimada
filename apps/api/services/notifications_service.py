@@ -17,7 +17,6 @@ from genjishimada_sdk.notifications import (
     NotificationPreference,
     NotificationPreferencesResponse,
 )
-from genjishimada_sdk.users import Notification  # Legacy enum
 from litestar.datastructures import Headers
 from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_404_NOT_FOUND
