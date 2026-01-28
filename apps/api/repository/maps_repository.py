@@ -818,39 +818,61 @@ class MapsRepository(BaseRepository):
 
         return [dict(row) for row in rows]
 
-    async def upsert_map_mastery(
+    async def upsert_map_mastery(  # noqa: PLR0913
         self,
         map_id: int,
         user_id: int,
+        medal: str,
         rank: int,
         percentile: float,
         *,
         conn: Connection | None = None,
-    ) -> None:
+    ) -> dict | None:
         """Insert or update map mastery record.
 
         Args:
             map_id: Map ID.
             user_id: User ID.
+            medal: Medal value (e.g., "Gold", "Silver", "Bronze", "none").
             rank: User's rank on this map.
             percentile: User's percentile.
             conn: Optional connection.
+
+        Returns:
+            Dict with medal and operation_status ('inserted' or 'updated'), or None if no change.
         """
         _conn = self._get_connection(conn)
 
-        await _conn.execute(
+        row = await _conn.fetchrow(
             """
-            INSERT INTO maps.mastery (user_id, map_id, rank, percentile)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (user_id, map_id) DO UPDATE
-            SET rank = EXCLUDED.rank,
+            INSERT INTO maps.mastery (user_id, map_id, medal, rank, percentile)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (user_id, map_id)
+            DO UPDATE
+            SET medal = EXCLUDED.medal,
+                rank = EXCLUDED.rank,
                 percentile = EXCLUDED.percentile
+            WHERE maps.mastery.medal IS DISTINCT FROM EXCLUDED.medal
+                OR maps.mastery.rank IS DISTINCT FROM EXCLUDED.rank
+                OR maps.mastery.percentile IS DISTINCT FROM EXCLUDED.percentile
+            RETURNING
+                medal,
+                CASE
+                    WHEN xmax::text::int = 0 THEN 'inserted'
+                    ELSE 'updated'
+                END AS operation_status
             """,
             user_id,
             map_id,
+            medal,
             rank,
             percentile,
         )
+
+        if row is None:
+            return None
+
+        return dict(row)
 
     # Quality operations
 

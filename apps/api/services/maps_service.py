@@ -698,9 +698,31 @@ class MapsService(BaseService):
         if map_id is None:
             raise MapNotFoundError(data.map_name)
 
-        # TODO: derive rank and percentile from level in Phase 3
-        await self._maps_repo.upsert_map_mastery(map_id, data.user_id, 1, 0.0)
-        return MapMasteryCreateResponse(map_name=data.map_name, medal="none", operation_status="inserted")
+        # Convert level to medal enum value (data.level is the actual medal)
+        medal = data.level
+
+        # TODO: Calculate rank and percentile from level in Phase 3
+        # For now, use placeholder values (as noted in v3 comment)
+        rank = 1
+        percentile = 0.0
+
+        # Upsert with actual values
+        result = await self._maps_repo.upsert_map_mastery(
+            map_id=map_id,
+            user_id=data.user_id,
+            medal=medal,
+            rank=rank,
+            percentile=percentile,
+        )
+
+        if result is None:
+            return None
+
+        return MapMasteryCreateResponse(
+            map_name=data.map_name,
+            medal=result["medal"],
+            operation_status=result["operation_status"],
+        )
 
     async def set_archive_status(
         self,
