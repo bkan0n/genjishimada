@@ -6,7 +6,7 @@ import datetime as dt
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import msgspec
 from asyncpg import Pool
@@ -77,8 +77,8 @@ from .base import BaseService
 
 if TYPE_CHECKING:
     from services.newsfeed_service import NewsfeedService
-    from services.notifications_service import NotificationService
-    from services.users_service import UserService
+    from services.notifications_service import NotificationsService
+    from services.users_service import UsersService
 
 # Module-level constants and logging
 _PREVIEW_MAX_LENGTH = 50
@@ -413,6 +413,12 @@ class MapsService(BaseService):
         map_data_result = await self._maps_repo.fetch_maps(single=True, code=final_code)
         return msgspec.convert(map_data_result, MapResponse, from_attributes=True)
 
+    @overload
+    async def fetch_maps(self, *, single: Literal[True], filters: MapSearchFilters) -> MapResponse: ...
+
+    @overload
+    async def fetch_maps(self, *, single: Literal[False], filters: MapSearchFilters) -> list[MapResponse]: ...
+
     async def fetch_maps(
         self,
         *,
@@ -424,8 +430,8 @@ class MapsService(BaseService):
 
         Args:
             single: If True, return single map; if False, return list.
-            code: Optional code filter for single map lookup.
-            filters: Optional filter criteria.
+            code: Optional code filter for single map lookup (legacy).
+            filters: Optional MapSearchFilters struct with all criteria.
 
         Returns:
             Single MapResponse if single=True, otherwise list of MapResponse.
@@ -973,10 +979,18 @@ class MapsService(BaseService):
         )
         await newsfeed_service.create_and_publish(event=event, headers=headers)
 
-    async def get_playtest_plot(self, code: OverwatchCode) -> object:
-        """Get playtest plot data (Phase 3 minimal implementation).
+    async def get_playtest_plot(
+        self,
+        *,
+        thread_id: int | None = None,
+        code: OverwatchCode | None = None,
+    ) -> object:
+        """Get playtest plot data.
+
+        Accepts either thread_id (direct lookup) or code (resolves thread_id via map).
 
         Args:
+            thread_id: Playtest thread ID.
             code: Map code.
 
         Returns:
@@ -985,9 +999,14 @@ class MapsService(BaseService):
         Raises:
             MapNotFoundError: If map doesn't exist.
         """
-        # Validate map exists and get playtest thread_id
+        if thread_id is not None:
+            return await self._maps_repo.fetch_playtest_plot_data(thread_id)
+
+        if code is None:
+            return None
+
         map_data = await self._maps_repo.fetch_maps(single=True, code=code)
-        if map_data is None:
+        if not map_data:
             raise MapNotFoundError(code)
 
         map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
@@ -1176,8 +1195,8 @@ class MapsService(BaseService):
         send_to_playtest: bool,
         headers: Headers,
         newsfeed_service: NewsfeedService,
-        notification_service: NotificationService,
-        user_service: UserService,
+        notification_service: NotificationsService,
+        user_service: UsersService,
     ) -> None:
         """Resolve an edit request (accept or reject).
 
@@ -1209,7 +1228,11 @@ class MapsService(BaseService):
 
         if accepted:
             # Get original map for newsfeed comparison
-            original_map = await self.fetch_maps(single=True, code=edit_request.code)
+            original_map = msgspec.convert(
+                await self._maps_repo.fetch_maps(single=True, code=edit_request.code),
+                MapResponse,
+                from_attributes=True,
+            )
 
             # Handle archive change separately
             has_archive_change = "archived" in edit_request.proposed_changes
@@ -1218,10 +1241,10 @@ class MapsService(BaseService):
             if has_archive_change:
                 archived_value = edit_request.proposed_changes["archived"]
 
-                # Perform archive/unarchive
+                # Perform archive/unarchive via repository
+                await self._maps_repo.set_archive_status([edit_request.code], bool(archived_value))
+
                 if archived_value:
-                    await self.archive_map(edit_request.code)
-                    # Newsfeed for archive
                     payload = NewsfeedArchive(
                         code=edit_request.code,
                         map_name=original_map.map_name,
@@ -1231,9 +1254,7 @@ class MapsService(BaseService):
                     )
                     event_type = "archive"
                 else:
-                    await self.unarchive_map(edit_request.code)
-                    # Newsfeed for unarchive
-                    payload = NewsfeedUnarchive(
+                    payload = NewsfeedUnarchive(  # type: ignore[assignment]
                         code=edit_request.code,
                         map_name=original_map.map_name,
                         creators=[c.name for c in original_map.creators],
@@ -1249,7 +1270,7 @@ class MapsService(BaseService):
                     payload=payload,
                     event_type=event_type,
                 )
-                await newsfeed_service.create_and_publish(event, headers=headers)
+                await newsfeed_service.create_and_publish(event=event, headers=headers)
 
                 # Remaining changes (without archived)
                 remaining_changes = {k: v for k, v in edit_request.proposed_changes.items() if k != "archived"}
@@ -1296,7 +1317,11 @@ class MapsService(BaseService):
                 # Get difficulty from proposed changes or use original
                 playtest_difficulty = edit_request.proposed_changes.get("difficulty")
                 if not playtest_difficulty:
-                    original_map = await self.fetch_maps(single=True, code=edit_request.code)
+                    original_map = msgspec.convert(
+                        await self._maps_repo.fetch_maps(single=True, code=edit_request.code),
+                        MapResponse,
+                        from_attributes=True,
+                    )
                     playtest_difficulty = original_map.difficulty
 
                 await self.send_to_playtest(
@@ -1430,7 +1455,7 @@ class MapsService(BaseService):
 
     @staticmethod
     async def _format_creators_for_display(
-        value: Any,
+        value: Any,  # noqa: ANN401
         get_creator_name: Callable[[int], str | Awaitable[str]] | None = None,
     ) -> str:
         """Format creator values for display."""
@@ -1512,7 +1537,7 @@ class MapsService(BaseService):
 
     async def _send_edit_resolution_notification(
         self,
-        notification_service: NotificationService,
+        notification_service: NotificationsService,
         edit_request: MapEditResponse,
         accepted: bool,
         rejection_reason: str | None,

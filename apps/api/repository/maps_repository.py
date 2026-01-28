@@ -33,15 +33,12 @@ class MapsRepository(BaseRepository):
         filters: MapSearchFilters | None = None,
         conn: Connection | None = None,
     ) -> dict | list[dict]:
-        """Fetch maps with optional filters.
-
-        When filters are provided, uses MapSearchSQLSpecBuilder to generate
-        the full query. Otherwise falls back to a simple code-based lookup.
+        """Fetch maps with full filtering support using MapSearchSQLSpecBuilder.
 
         Args:
             single: If True, return single dict; if False, return list.
-            code: Optional code filter for single map lookup.
-            filters: Optional MapSearchFilters criteria.
+            code: Optional code filter for single map lookup (legacy, prefer filters).
+            filters: MapSearchFilters struct with all filter criteria.
             conn: Optional connection.
 
         Returns:
@@ -49,18 +46,20 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        if filters:
-            query_with_args = MapSearchSQLSpecBuilder(filters).build()
-            rows = await _conn.fetch(query_with_args.query, *query_with_args.args)
-        elif code:
-            query_with_args = MapSearchSQLSpecBuilder(
-                MapSearchFilters(code=code)
-            ).build()
-            rows = await _conn.fetch(query_with_args.query, *query_with_args.args)
-        else:
-            query_with_args = MapSearchSQLSpecBuilder(MapSearchFilters()).build()
-            rows = await _conn.fetch(query_with_args.query, *query_with_args.args)
+        # Build filters struct
+        if code and not filters:
+            filters = MapSearchFilters(code=code, return_all=True)
+        elif not filters:
+            filters = MapSearchFilters(return_all=True)
 
+        # Use MapSearchSQLSpecBuilder to generate query
+        builder = MapSearchSQLSpecBuilder(filters)
+        query_with_args = builder.build()
+
+        # Execute query
+        rows = await _conn.fetch(query_with_args.query, *query_with_args.args)
+
+        # Convert to dicts
         result = [dict(row) for row in rows]
 
         if single:
@@ -1125,7 +1124,7 @@ class MapsRepository(BaseRepository):
 
     # Edit request operations
 
-    async def create_edit_request(
+    async def create_edit_request(  # noqa: PLR0913
         self,
         map_id: int,
         code: str,

@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
+from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import (
     ArchivalStatusPatchRequest,
     GuideFullResponse,
     GuideResponse,
     LinkMapsCreateRequest,
+    MapCategory,
     MapCreateRequest,
     MapCreationJobResponse,
     MapMasteryCreateRequest,
@@ -19,16 +21,22 @@ from genjishimada_sdk.maps import (
     MapPartialResponse,
     MapPatchRequest,
     MapResponse,
+    Mechanics,
     OverwatchCode,
+    OverwatchMap,
+    PlaytestStatus,
     QualityValueRequest,
+    Restrictions,
     SendToPlaytestRequest,
+    SortKey,
+    Tags,
     TrendingMapResponse,
     UnlinkMapsCreateRequest,
 )
 from litestar import Controller, delete, get, patch, post
 from litestar.connection import Request
 from litestar.di import Provide
-from litestar.params import Body
+from litestar.params import Body, Parameter
 from litestar.response import Response
 from litestar.status_codes import (
     HTTP_201_CREATED,
@@ -53,6 +61,7 @@ from services.exceptions.maps import (
 from services.maps_service import MapsService, provide_maps_service
 from services.newsfeed_service import NewsfeedService, provide_newsfeed_service
 from utilities.errors import CustomHTTPException
+from utilities.map_search import CompletionFilter, MapSearchFilters, MedalFilter, PlaytestFilter
 
 log = logging.getLogger(__name__)
 
@@ -71,33 +80,105 @@ class MapsController(Controller):
     @get(
         "/",
         summary="Search Maps",
+        description="Search and filter maps with comprehensive filtering options.",
         opt={"required_scopes": {"maps:read"}},
     )
-    async def get_maps_endpoint(
+    async def get_maps_endpoint(  # noqa: PLR0913
         self,
         maps_service: MapsService,
-        # TODO: Add all filter parameters from v3
+        # Core filters
+        code: Annotated[OverwatchCode | None, Parameter(description="Filter by map code")] = None,
+        playtesting: Annotated[PlaytestStatus | None, Parameter(description="Filter by playtest status")] = None,
+        archived: Annotated[bool | None, Parameter(description="Filter by archived status")] = None,
+        hidden: Annotated[bool | None, Parameter(description="Filter by hidden status")] = None,
+        official: Annotated[bool | None, Parameter(description="Filter by official status")] = None,
+        playtest_thread_id: Annotated[int | None, Parameter(description="Filter by playtest thread ID")] = None,
+        # Map attributes
+        category: Annotated[list[MapCategory] | None, Parameter(description="Filter by category list")] = None,
+        map_name: Annotated[list[OverwatchMap] | None, Parameter(description="Filter by map name list")] = None,
+        difficulty_exact: Annotated[
+            DifficultyTop | None, Parameter(description="Filter by exact difficulty tier")
+        ] = None,
+        difficulty_range_min: Annotated[
+            DifficultyTop | None, Parameter(description="Filter by minimum difficulty")
+        ] = None,
+        difficulty_range_max: Annotated[
+            DifficultyTop | None, Parameter(description="Filter by maximum difficulty")
+        ] = None,
+        # Related data (AND semantics)
+        mechanics: Annotated[
+            list[Mechanics] | None, Parameter(description="Filter by mechanics (AND semantics)")
+        ] = None,
+        restrictions: Annotated[
+            list[Restrictions] | None, Parameter(description="Filter by restrictions (AND semantics)")
+        ] = None,
+        tags: Annotated[list[Tags] | None, Parameter(description="Filter by tags (AND semantics)")] = None,
+        # Creator filters
+        creator_ids: Annotated[list[int] | None, Parameter(description="Filter by creator user IDs")] = None,
+        creator_names: Annotated[list[str] | None, Parameter(description="Filter by creator names")] = None,
+        # User context
+        user_id: Annotated[int | None, Parameter(description="User ID for completion/medal filtering")] = None,
+        medal_filter: Annotated[MedalFilter, Parameter(description="Medal filter (All/With/Without)")] = "All",
+        completion_filter: Annotated[
+            CompletionFilter, Parameter(description="Completion filter (All/With/Without)")
+        ] = "All",
+        playtest_filter: Annotated[PlaytestFilter, Parameter(description="Playtest filter (All/Only/None)")] = "All",
+        # Quality
+        minimum_quality: Annotated[int | None, Parameter(description="Minimum average quality rating")] = None,
+        # Pagination
+        page_size: Annotated[Literal[10, 20, 25, 50, 12], Parameter(description="Results per page")] = 10,
+        page_number: Annotated[int, Parameter(description="Page number (1-indexed)")] = 1,
+        # Sorting
+        sort: Annotated[list[SortKey] | None, Parameter(description="List of 'field:direction' sort keys")] = None,
+        # Special
+        finalized_playtests: Annotated[bool | None, Parameter(description="Filter finalized playtests")] = None,
+        return_all: Annotated[bool, Parameter(description="Return all results without pagination")] = False,
+        force_filters: Annotated[bool, Parameter(description="Force filters even with code param")] = False,
     ) -> list[MapResponse]:
-        """Get maps with optional filters.
-
-        Args:
-            maps_service: Maps service.
+        """Search maps with full filtering support.
 
         Returns:
-            List of maps.
+            List of maps matching filters.
 
         Raises:
-            CustomHTTPException: On error.
+            CustomHTTPException: On validation errors.
         """
         try:
-            # TODO: Build filters dict from query params
-            filters = {}
-            return await maps_service.fetch_maps(filters=filters)
+            filters = MapSearchFilters(
+                code=code,
+                playtesting=playtesting,
+                archived=archived,
+                hidden=hidden,
+                official=official,
+                playtest_thread_id=playtest_thread_id,
+                category=category,
+                map_name=map_name,
+                difficulty_exact=difficulty_exact,
+                difficulty_range_min=difficulty_range_min,
+                difficulty_range_max=difficulty_range_max,
+                mechanics=mechanics,
+                restrictions=restrictions,
+                tags=tags,
+                creator_ids=creator_ids,
+                creator_names=creator_names,
+                user_id=user_id,
+                medal_filter=medal_filter,
+                completion_filter=completion_filter,
+                playtest_filter=playtest_filter,
+                minimum_quality=minimum_quality,
+                page_size=page_size,
+                page_number=page_number,
+                sort=sort,
+                finalized_playtests=finalized_playtests,
+                return_all=return_all,
+                force_filters=force_filters,
+            )
 
-        except Exception as e:
-            log.error("Error fetching maps: %s", e)
+            return await maps_service.fetch_maps(filters=filters, single=False)
+
+        except ValueError as e:
             raise CustomHTTPException(
-                detail="Error fetching maps",
+                detail=f"Invalid filter parameters: {e}",
                 status_code=HTTP_400_BAD_REQUEST,
             ) from e
 
@@ -300,7 +381,7 @@ class MapsController(Controller):
             CustomHTTPException: If map not found.
         """
         try:
-            return await maps_service.get_playtest_plot(code)
+            return await maps_service.get_playtest_plot(code=code)
 
         except MapNotFoundError as e:
             raise CustomHTTPException(
@@ -315,9 +396,9 @@ class MapsController(Controller):
     )
     async def get_guides_endpoint(
         self,
+        maps_service: MapsService,
         code: OverwatchCode,
         include_records: bool = False,
-        maps_service: MapsService = None,
     ) -> list[GuideFullResponse]:
         """Get guides for a map.
 
@@ -502,9 +583,9 @@ class MapsController(Controller):
     )
     async def get_mastery_endpoint(
         self,
+        maps_service: MapsService,
         user_id: int,
         code: OverwatchCode | None = None,
-        maps_service: MapsService = None,
     ) -> list[MapMasteryResponse]:
         """Get mastery data for a user.
 
@@ -770,7 +851,7 @@ class MapsController(Controller):
     )
     async def unlink_map_codes_delete_endpoint(
         self,
-        code: OverwatchCode,
+        data: Annotated[UnlinkMapsCreateRequest, Body(title="Unlink request")],
         maps_service: MapsService,
         newsfeed_service: NewsfeedService,
         request: Request,
@@ -778,7 +859,7 @@ class MapsController(Controller):
         """Unlink map codes (DELETE method).
 
         Args:
-            code: Map code to unlink.
+            data: Unlink request with official_code, unofficial_code, and reason.
             maps_service: Maps service.
             newsfeed_service: Newsfeed service.
             request: Request object.
@@ -790,7 +871,6 @@ class MapsController(Controller):
             CustomHTTPException: If map not found.
         """
         try:
-            data = UnlinkMapsCreateRequest(code=code)
             await maps_service.unlink_map_codes(data, request.headers, newsfeed_service)
             return Response(None, status_code=HTTP_204_NO_CONTENT)
 

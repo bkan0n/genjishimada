@@ -284,6 +284,11 @@ class PlaytestService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
 
+        if code is None:
+            raise PlaytestStateError("Map code not found for playtest.")
+        if primary_creator_id is None:
+            raise PlaytestStateError("Primary creator not found for map.")
+
         # Publish approval event
         payload = PlaytestApprovedEvent(
             code=code,
@@ -406,7 +411,7 @@ class PlaytestService(BaseService):
             idempotency_key=idempotency_key,
         )
 
-    async def reset(
+    async def reset(  # noqa: PLR0913
         self,
         thread_id: int,
         verifier_id: int,

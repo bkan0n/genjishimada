@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Annotated
 
 from genjishimada_sdk.maps import (
     MapEditCreateRequest,
-    MapEditResponse,
     MapEditResolveRequest,
+    MapEditResponse,
     MapEditSetMessageIdRequest,
     MapEditSubmissionResponse,
     PendingMapEditResponse,
@@ -23,6 +23,7 @@ from litestar.status_codes import (
 )
 
 from repository.maps_repository import provide_maps_repository
+from routes_new.v4.users import provide_users_service
 from services.exceptions.maps import (
     EditRequestNotFoundError,
     MapNotFoundError,
@@ -35,7 +36,6 @@ from services.notifications_service import (
     provide_notifications_service,
 )
 from services.users_service import UsersService
-from routes_new.v4.users import provide_users_service
 from utilities.errors import CustomHTTPException
 
 if TYPE_CHECKING:
@@ -226,7 +226,7 @@ class MapEditsController(Controller):
         summary="Resolve Edit Request",
         description="Accept or reject a map edit request.",
     )
-    async def resolve_edit_request_endpoint(
+    async def resolve_edit_request_endpoint(  # noqa: PLR0913
         self,
         request: Request,
         edit_id: int,

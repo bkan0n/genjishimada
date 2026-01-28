@@ -24,7 +24,7 @@ class NotificationsRepository(BaseRepository):
         """
         super().__init__(pool)
 
-    async def insert_event(
+    async def insert_event(  # noqa: PLR0913
         self,
         *,
         user_id: int,

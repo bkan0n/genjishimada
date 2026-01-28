@@ -19,7 +19,6 @@ from genjishimada_sdk.maps import (
 from litestar import Controller, Request, delete, get, patch, post
 from litestar.di import Provide
 from litestar.params import Body
-from litestar.response import Stream
 from litestar.status_codes import (
     HTTP_202_ACCEPTED,
     HTTP_204_NO_CONTENT,
@@ -92,15 +91,15 @@ class PlaytestController(Controller):
         self,
         thread_id: int,
         maps_service: MapsService,
-    ) -> Stream:
-        """Get playtest plot image.
+    ) -> object:
+        """Get playtest plot data.
 
         Args:
             thread_id: Playtest thread ID.
             maps_service: Maps service.
 
         Returns:
-            Stream of plot image.
+            Plot data object.
         """
         return await maps_service.get_playtest_plot(thread_id=thread_id)
 
