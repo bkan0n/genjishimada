@@ -19,7 +19,7 @@ from genjishimada_sdk.maps import (
 from litestar import Controller, Request, delete, get, patch, post
 from litestar.di import Provide
 from litestar.params import Body
-from litestar.response import Response, Stream
+from litestar.response import Stream
 from litestar.status_codes import (
     HTTP_202_ACCEPTED,
     HTTP_204_NO_CONTENT,
@@ -191,12 +191,13 @@ class PlaytestController(Controller):
         "/{thread_id:int}/vote",
         summary="Delete All Playtest Votes",
         description="Remove all votes associated with a specific playtest thread.",
+        status_code=HTTP_204_NO_CONTENT,
     )
     async def delete_all_votes_endpoint(
         self,
         thread_id: int,
         playtest_service: PlaytestService,
-    ) -> Response:
+    ) -> None:
         """Delete all votes for playtest.
 
         Args:
@@ -204,10 +205,9 @@ class PlaytestController(Controller):
             playtest_service: Playtest service.
 
         Returns:
-            Empty 204 response.
+            None.
         """
         await playtest_service.delete_all_votes(thread_id)
-        return Response(None, status_code=HTTP_204_NO_CONTENT)
 
     @get(
         "/{thread_id:int}/votes",
@@ -235,13 +235,14 @@ class PlaytestController(Controller):
         summary="Edit Playtest Metadata",
         description="Update playtest metadata such as verification ID or message references.",
         include_in_schema=False,
+        status_code=HTTP_204_NO_CONTENT,
     )
     async def edit_playtest_meta_endpoint(
         self,
         thread_id: int,
         data: Annotated[PlaytestPatchRequest, Body(title="Patch data")],
         playtest_service: PlaytestService,
-    ) -> Response:
+    ) -> None:
         """Update playtest metadata.
 
         Args:
@@ -250,14 +251,13 @@ class PlaytestController(Controller):
             playtest_service: Playtest service.
 
         Returns:
-            Empty 204 response.
+            None.
 
         Raises:
             CustomHTTPException: On validation errors.
         """
         try:
             await playtest_service.edit_playtest_meta(thread_id, data)
-            return Response(None, status_code=HTTP_204_NO_CONTENT)
 
         except InvalidPatchError as e:
             raise CustomHTTPException(
