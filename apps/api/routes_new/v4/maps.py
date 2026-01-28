@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 from typing import Annotated, Literal
 
 from genjishimada_sdk.difficulties import DifficultyTop
@@ -376,18 +377,29 @@ class MapsController(Controller):
     )
     async def check_code_exists_endpoint(
         self,
-        code: OverwatchCode,
+        code: str,
         maps_service: MapsService,
     ) -> bool:
-        """Check if a map code exists.
+        """Check if a map code exists with format validation.
 
         Args:
-            code: Map code.
+            code: Map code to check.
             maps_service: Maps service.
 
         Returns:
             True if code exists, False otherwise.
+
+        Raises:
+            CustomHTTPException: 400 if code format invalid.
         """
+        # Validate code format
+        if not re.match(r"^[A-Z0-9]{4,6}$", code):
+            raise CustomHTTPException(
+                detail="Provided code is not valid. Must follow regex ^[A-Z0-9]{4,6}$",
+                status_code=HTTP_400_BAD_REQUEST,
+                extra={"code": code},
+            )
+
         return await maps_service.check_code_exists(code)
 
     @get(
