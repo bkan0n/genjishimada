@@ -935,16 +935,28 @@ class MapsRepository(BaseRepository):
     ) -> None:
         """Override quality votes with a fixed value (admin operation).
 
+        Updates all quality ratings for the map to the specified value.
+
         Args:
             code: Map code.
-            quality_value: Quality value to set.
+            quality_value: Quality value to set (1-6).
             conn: Optional connection.
         """
         _conn = self._get_connection(conn)
 
-        # Implementation would set a fixed quality value
-        # This might involve updating a specific table or column
-        # For now, placeholder
+        # Look up map ID
+        map_id = await self.lookup_map_id(code, conn=conn)
+        if map_id is None:
+            return
+
+        # Update all quality ratings for this map
+        await _conn.execute(
+            """
+            UPDATE maps.ratings SET quality = $2 WHERE map_id = $1
+            """,
+            map_id,
+            quality_value,
+        )
 
     # Trending maps
 

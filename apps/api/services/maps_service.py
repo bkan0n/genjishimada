@@ -881,7 +881,7 @@ class MapsService(BaseService):
         code: OverwatchCode,
         data: QualityValueRequest,
     ) -> None:
-        """Override quality votes for a map (admin only).
+        """Override quality votes for a map with validation (admin only).
 
         Args:
             code: Map code.
@@ -891,6 +891,12 @@ class MapsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             ValueError: If quality value is out of range (1-6).
         """
+        # Validate quality value range
+        min_quality = 1
+        max_quality = 6
+        if not min_quality <= data.value <= max_quality:
+            raise ValueError(f"Quality must be between {min_quality} and {max_quality} (inclusive).")
+
         # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
@@ -898,8 +904,6 @@ class MapsService(BaseService):
 
         try:
             await self._maps_repo.override_quality_votes(code, data.value)
-        except ValueError:
-            raise
         except Exception as e:
             log.error(f"Unexpected error overriding quality for {code}: {e}", exc_info=True)
             raise
