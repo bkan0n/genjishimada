@@ -626,6 +626,31 @@ class MapsRepository(BaseRepository):
                 detail=str(e),
             ) from e
 
+    async def check_guide_exists(
+        self,
+        map_id: int,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Check if a guide exists for a user on a map.
+
+        Args:
+            map_id: Map ID.
+            user_id: User ID.
+            conn: Optional connection.
+
+        Returns:
+            True if guide exists, False otherwise.
+        """
+        _conn = self._get_connection(conn)
+
+        return await _conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM maps.guides WHERE map_id = $1 AND user_id = $2)",
+            map_id,
+            user_id,
+        )
+
     async def delete_guide(
         self,
         map_id: int,
