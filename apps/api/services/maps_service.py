@@ -904,13 +904,24 @@ class MapsService(BaseService):
             log.error(f"Unexpected error overriding quality for {code}: {e}", exc_info=True)
             raise
 
-    async def get_trending_maps(self) -> list[TrendingMapResponse]:
-        """Get trending maps by clicks/ratings.
+    async def get_trending_maps(
+        self,
+        limit: Literal[1, 3, 5, 10, 15, 20, 25] = 10,
+        window_days: int = 14,
+    ) -> list[TrendingMapResponse]:
+        """Get trending maps with full calculation.
+
+        Args:
+            limit: Maximum number of trending maps to return.
+            window_days: Time window for trending calculation (default 14 days).
 
         Returns:
-            List of trending maps.
+            List of trending maps with scores.
         """
-        rows = await self._maps_repo.fetch_trending_maps()
+        rows = await self._maps_repo.fetch_trending_maps(
+            limit=limit,
+            window_days=window_days,
+        )
         return msgspec.convert(rows, list[TrendingMapResponse], from_attributes=True)
 
     async def send_to_playtest(

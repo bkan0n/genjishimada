@@ -812,16 +812,18 @@ class MapsController(Controller):
     async def get_trending_maps_endpoint(
         self,
         maps_service: MapsService,
+        limit: Literal[1, 3, 5, 10, 15, 20, 25] = 10,
     ) -> list[TrendingMapResponse]:
         """Get trending maps by clicks/ratings.
 
         Args:
             maps_service: Maps service.
+            limit: Maximum number of trending maps to return.
 
         Returns:
             List of trending maps.
         """
-        return await maps_service.get_trending_maps()
+        return await maps_service.get_trending_maps(limit=limit)
 
     @post(
         "/{code:str}/playtest",

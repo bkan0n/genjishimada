@@ -900,48 +900,125 @@ class MapsRepository(BaseRepository):
 
     async def fetch_trending_maps(
         self,
-        category: str | None = None,
         limit: int = 10,
+        window_days: int = 14,
         *,
         conn: Connection | None = None,
     ) -> list[dict]:
-        """Fetch trending maps based on recent clicks/ratings.
+        """Fetch trending maps with complete scoring algorithm.
+
+        Scoring factors:
+        - Clicks: 0.2x weight
+        - Completions: 1.0x weight
+        - Upvotes: 1.5x weight
+        - Average rating: 0.75x weight
 
         Args:
-            category: Optional category filter.
             limit: Maximum number of maps to return.
+            window_days: Time window for trending calculation.
             conn: Optional connection.
 
         Returns:
-            List of trending map dicts.
+            List of trending maps with scores.
         """
         _conn = self._get_connection(conn)
 
-        # Simplified trending query - in reality would be more complex
+        # Calculate window start timestamp
+        window_start = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=window_days)
+
         query = """
-            SELECT m.code, m.map_name, m.difficulty,
-                   COUNT(c.id) as click_count
-            FROM core.maps m
-            LEFT JOIN maps.clicks c ON c.map_id = m.id
-                AND c.inserted_at > NOW() - INTERVAL '7 days'
-            WHERE m.archived = FALSE
-                AND m.hidden = FALSE
-                AND m.playtesting = 'Approved'
+        WITH base AS (
+            SELECT id, code, map_name
+            FROM core.maps
+            WHERE hidden IS NOT TRUE
+              AND archived IS NOT TRUE
+        ),
+
+        clicks AS (
+            SELECT
+                c.map_id,
+                COUNT(DISTINCT c.ip_hash) AS clicks
+            FROM maps.clicks c
+            WHERE c.inserted_at >= $1
+            GROUP BY c.map_id
+        ),
+
+        completions AS (
+            SELECT
+                c.map_id,
+                COUNT(*) AS completions
+            FROM core.completions c
+            WHERE c.inserted_at >= $1
+              AND c.verified = TRUE
+              AND COALESCE(c.legacy, FALSE) = FALSE
+            GROUP BY c.map_id
+        ),
+
+        upvotes AS (
+            SELECT
+                c.map_id,
+                COUNT(*) AS upvotes
+            FROM completions.upvotes u
+            JOIN core.completions c ON c.message_id = u.message_id
+            WHERE u.inserted_at >= $1
+            GROUP BY c.map_id
+        ),
+
+        metrics AS (
+            SELECT
+                b.id,
+                b.code,
+                b.map_name,
+                COALESCE(cl.clicks, 0)       AS clicks,
+                COALESCE(co.completions, 0)  AS completions,
+                COALESCE(u.upvotes, 0)       AS upvotes
+            FROM base b
+            LEFT JOIN clicks      cl ON cl.map_id = b.id
+            LEFT JOIN completions co ON co.map_id = b.id
+            LEFT JOIN upvotes     u  ON u.map_id  = b.id
+        ),
+
+        ratings AS (
+            SELECT
+                mr.map_id,
+                AVG(mr.quality) AS avg_rating,
+                COUNT(*)        AS rating_count
+            FROM maps.ratings mr
+            WHERE mr.verified = TRUE
+            GROUP BY mr.map_id
+        ),
+
+        metrics_scored AS (
+            SELECT
+                m.*,
+                (
+                    0.2 * m.clicks +
+                    1.0 * m.completions +
+                    1.5 * m.upvotes +
+                    0.75 * COALESCE(r.avg_rating, 0)
+                ) AS trend_score
+            FROM metrics m
+            LEFT JOIN ratings r ON r.map_id = m.id
+            WHERE (m.clicks + m.completions + m.upvotes) > 0
+        )
+
+        SELECT
+            ms.id,
+            ms.code,
+            ms.map_name,
+            ms.clicks,
+            ms.completions,
+            ms.upvotes,
+            ms.trend_score,
+            r.avg_rating,
+            r.rating_count
+        FROM metrics_scored ms
+        LEFT JOIN ratings r ON r.map_id = ms.id
+        ORDER BY ms.trend_score DESC
+        LIMIT $2
         """
 
-        if category:
-            query += " AND m.category = $1"
-            rows = await _conn.fetch(
-                query + " GROUP BY m.id ORDER BY click_count DESC LIMIT $2",
-                category,
-                limit,
-            )
-        else:
-            rows = await _conn.fetch(
-                query + " GROUP BY m.id ORDER BY click_count DESC LIMIT $1",
-                limit,
-            )
-
+        rows = await _conn.fetch(query, window_start, limit)
         return [dict(row) for row in rows]
 
     # Legacy conversion
