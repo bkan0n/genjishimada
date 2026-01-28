@@ -546,7 +546,7 @@ class MapsController(Controller):
             ) from e
 
     @get(
-        "/{code:str}/affected-users",
+        "/{code:str}/affected",
         summary="Get Affected Users",
         opt={"required_scopes": {"maps:read"}},
     )
@@ -774,7 +774,7 @@ class MapsController(Controller):
             ) from e
 
     @post(
-        "/link",
+        "/link-codes",
         summary="Link Map Codes",
         opt={"required_scopes": {"maps:write"}},
     )
@@ -811,52 +811,20 @@ class MapsController(Controller):
                 status_code=HTTP_400_BAD_REQUEST,
             ) from e
 
-    @post(
-        "/unlink",
-        summary="Unlink Map Codes (POST)",
-        opt={"required_scopes": {"maps:write"}},
-    )
-    async def unlink_map_codes_post_endpoint(
-        self,
-        data: Annotated[UnlinkMapsCreateRequest, Body(title="Unlink request")],
-        maps_service: MapsService,
-        newsfeed_service: NewsfeedService,
-        request: Request,
-    ) -> None:
-        """Unlink map codes (POST method).
-
-        Args:
-            data: Unlink request.
-            maps_service: Maps service.
-            newsfeed_service: Newsfeed service.
-            request: Request object.
-
-        Raises:
-            CustomHTTPException: If map not found.
-        """
-        try:
-            await maps_service.unlink_map_codes(data, request.headers, newsfeed_service)
-
-        except MapNotFoundError as e:
-            raise CustomHTTPException(
-                detail=str(e),
-                status_code=HTTP_404_NOT_FOUND,
-            ) from e
-
     @delete(
-        "/unlink",
-        summary="Unlink Map Codes (DELETE)",
+        "/link-codes",
+        summary="Unlink Map Codes",
         status_code=HTTP_204_NO_CONTENT,
         opt={"required_scopes": {"maps:write"}},
     )
-    async def unlink_map_codes_delete_endpoint(
+    async def unlink_map_codes_endpoint(
         self,
         data: Annotated[UnlinkMapsCreateRequest, Body(title="Unlink request")],
         maps_service: MapsService,
         newsfeed_service: NewsfeedService,
         request: Request,
     ) -> Response[None]:
-        """Unlink map codes (DELETE method).
+        """Unlink map codes.
 
         Args:
             data: Unlink request with official_code, unofficial_code, and reason.
