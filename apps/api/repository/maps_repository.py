@@ -72,26 +72,38 @@ class MapsRepository(BaseRepository):
         *,
         conn: Connection | None = None,
     ) -> dict | None:
-        """Fetch partial map data (used for playtest).
+        """Fetch partial map data with playtest info.
+
+        Useful when initializing a playtest where a subset of fields is sufficient.
 
         Args:
             code: Map code.
             conn: Optional connection.
 
         Returns:
-            Partial map dict or None if not found.
+            Dict with map data including initial_difficulty from playtest, or None if not found.
         """
         _conn = self._get_connection(conn)
 
         row = await _conn.fetchrow(
             """
             SELECT
+                m.id AS map_id,
                 m.code,
                 m.map_name,
-                m.difficulty,
-                m.playtesting
-            FROM core.maps m
+                m.checkpoints,
+                pm.initial_difficulty AS difficulty,
+                array_agg(DISTINCT u.nickname) AS creator_names
+            FROM core.maps AS m
+            LEFT JOIN maps.creators AS c ON c.map_id = m.id AND c.is_primary
+            LEFT JOIN core.users AS u ON c.user_id = u.id
+            LEFT JOIN playtests.meta AS pm ON m.id = pm.map_id
             WHERE m.code = $1
+            GROUP BY m.id,
+                m.code,
+                m.map_name,
+                m.checkpoints,
+                pm.initial_difficulty
             """,
             code,
         )
