@@ -7,18 +7,34 @@ from typing import TYPE_CHECKING
 
 from asyncpg import Pool
 from genjishimada_sdk.maps import (
+    ArchivalStatusPatchRequest,
     GuideFullResponse,
     GuideResponse,
+    LinkMapsCreateRequest,
     MapCreateRequest,
     MapCreationJobResponse,
+    MapMasteryCreateRequest,
+    MapMasteryCreateResponse,
+    MapMasteryResponse,
     MapPartialResponse,
     MapPatchRequest,
     MapResponse,
     OverwatchCode,
     PlaytestCreatedEvent,
     PlaytestCreatePartialRequest,
+    QualityValueRequest,
+    SendToPlaytestRequest,
+    TrendingMapResponse,
+    UnlinkMapsCreateRequest,
 )
-from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedNewMap
+from genjishimada_sdk.newsfeed import (
+    NewsfeedArchive,
+    NewsfeedBulkArchive,
+    NewsfeedEvent,
+    NewsfeedLinkedMap,
+    NewsfeedNewMap,
+    NewsfeedUnlinkedMap,
+)
 from genjishimada_sdk.internal import JobStatusResponse
 from litestar.datastructures import Headers, State
 from litestar.status_codes import HTTP_400_BAD_REQUEST
@@ -30,12 +46,14 @@ from repository.exceptions import (
     ForeignKeyViolationError,
 )
 from services.exceptions.maps import (
+    AlreadyInPlaytestError,
     CreatorNotFoundError,
     DuplicateCreatorError,
     DuplicateGuideError,
     DuplicateMechanicError,
     DuplicateRestrictionError,
     GuideNotFoundError,
+    LinkedMapError,
     MapCodeExistsError,
     MapNotFoundError,
 )
@@ -557,6 +575,383 @@ class MapsService(BaseService):
         rows_deleted = await self._maps_repo.delete_guide(map_id, user_id)
         if rows_deleted == 0:
             raise GuideNotFoundError(code, user_id)
+
+    # Additional operations
+
+    async def get_affected_users(self, code: OverwatchCode) -> list[int]:
+        """Get IDs of users affected by a map change.
+
+        Args:
+            code: Map code.
+
+        Returns:
+            List of affected user IDs.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+        """
+        # Validate map exists
+        map_id = await self._maps_repo.lookup_map_id(code)
+        if map_id is None:
+            raise MapNotFoundError(code)
+
+        return await self._maps_repo.fetch_affected_users(code)
+
+    async def get_map_mastery_data(
+        self,
+        user_id: int,
+        code: OverwatchCode | None = None,
+    ) -> list[MapMasteryResponse]:
+        """Get mastery data for a user, optionally scoped to a map.
+
+        Args:
+            user_id: Target user ID.
+            code: Optional map code filter.
+
+        Returns:
+            List of mastery records for the user.
+        """
+        return await self._maps_repo.fetch_map_mastery(user_id, code)
+
+    async def update_mastery(
+        self,
+        data: MapMasteryCreateRequest,
+    ) -> MapMasteryCreateResponse | None:
+        """Create or update mastery data.
+
+        Args:
+            data: Mastery payload with user_id, map_name, and level.
+
+        Returns:
+            Result of the mastery operation, or None if no change.
+        """
+        return await self._maps_repo.upsert_map_mastery(data)
+
+    async def set_archive_status(
+        self,
+        data: ArchivalStatusPatchRequest,
+        headers: Headers,
+        newsfeed_service: NewsfeedService,
+    ) -> None:
+        """Set archive status for one or more maps.
+
+        Args:
+            data: Archive request with codes and archived status.
+            headers: Request headers for idempotency.
+            newsfeed_service: Newsfeed service for event publishing.
+
+        Raises:
+            MapNotFoundError: If any map code doesn't exist.
+        """
+        # Validate all codes exist
+        for code in data.codes:
+            map_id = await self._maps_repo.lookup_map_id(code)
+            if map_id is None:
+                raise MapNotFoundError(code)
+
+        # Update archive status
+        await self._maps_repo.set_archive_status(data.codes, data.archived)
+
+        # Publish newsfeed event
+        if len(data.codes) == 1:
+            # Single map archive
+            map_data = await self._maps_repo.fetch_maps(single=True, code=data.codes[0])
+            map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
+
+            event_payload = NewsfeedArchive(
+                code=map_response.code,
+                map_name=map_response.map_name,
+                difficulty=map_response.difficulty,
+                creators=[c.name for c in map_response.creators] if map_response.creators else [],
+                banner_url=map_response.map_banner if hasattr(map_response, "map_banner") else None,
+                archived=data.archived,
+            )
+        else:
+            # Bulk archive
+            event_payload = NewsfeedBulkArchive(
+                codes=data.codes,
+                archived=data.archived,
+            )
+
+        event = NewsfeedEvent(
+            id=None,
+            timestamp=dt.datetime.now(dt.timezone.utc),
+            payload=event_payload,
+            event_type="archive" if len(data.codes) == 1 else "bulk_archive",
+        )
+        await newsfeed_service.create_and_publish(event, headers=headers, use_pool=True)
+
+    async def convert_to_legacy(
+        self,
+        code: OverwatchCode,
+    ) -> int:
+        """Convert map to legacy status (public endpoint).
+
+        Args:
+            code: Map code.
+
+        Returns:
+            Number of completions converted.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+        """
+        # Validate map exists
+        map_id = await self._maps_repo.lookup_map_id(code)
+        if map_id is None:
+            raise MapNotFoundError(code)
+
+        async with self._pool.acquire() as conn, conn.transaction():
+            return await self._convert_to_legacy_internal(code, conn)  # type: ignore[arg-type]
+
+    async def _convert_to_legacy_internal(
+        self,
+        code: OverwatchCode,
+        conn,
+    ) -> int:
+        """Internal helper to convert map to legacy (used in transaction).
+
+        Args:
+            code: Map code.
+            conn: Database connection (transaction).
+
+        Returns:
+            Number of completions converted.
+        """
+        # Check for pending verifications
+        has_pending = await self._maps_repo.check_pending_verifications(
+            code,
+            conn=conn,  # type: ignore[arg-type]
+        )
+        if has_pending:
+            # Allow but log warning (v3 behavior)
+            pass
+
+        # Remove medal entries
+        await self._maps_repo.remove_map_medal_entries(
+            code,
+            conn=conn,  # type: ignore[arg-type]
+        )
+
+        # Convert completions to legacy
+        return await self._maps_repo.convert_completions_to_legacy(
+            code,
+            conn=conn,  # type: ignore[arg-type]
+        )
+
+    async def override_quality_votes(
+        self,
+        code: OverwatchCode,
+        data: QualityValueRequest,
+    ) -> None:
+        """Override quality votes for a map (admin only).
+
+        Args:
+            code: Map code.
+            data: Quality value to set.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+        """
+        # Validate map exists
+        map_id = await self._maps_repo.lookup_map_id(code)
+        if map_id is None:
+            raise MapNotFoundError(code)
+
+        await self._maps_repo.override_quality_votes(code, data.quality)
+
+    async def get_trending_maps(self) -> list[TrendingMapResponse]:
+        """Get trending maps by clicks/ratings.
+
+        Returns:
+            List of trending maps.
+        """
+        return await self._maps_repo.fetch_trending_maps()
+
+    async def send_to_playtest(
+        self,
+        code: OverwatchCode,
+        data: SendToPlaytestRequest,
+        headers: Headers,
+    ) -> JobStatusResponse:
+        """Send a map back to playtest.
+
+        Converts map to legacy status, creates playtest metadata, and publishes
+        RabbitMQ message to bot.
+
+        Args:
+            code: Map code.
+            data: Playtest request with initial difficulty.
+            headers: Request headers for idempotency.
+
+        Returns:
+            Job status response.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+            AlreadyInPlaytestError: If map is already in playtest.
+        """
+        # Validate map exists and get current state
+        map_id = await self._maps_repo.lookup_map_id(code)
+        if map_id is None:
+            raise MapNotFoundError(code)
+
+        current_map = await self._maps_repo.fetch_maps(single=True, code=code)
+        current_map_response = msgspec.convert(current_map, MapResponse, from_attributes=True)
+        if current_map_response.playtesting == "In Progress":
+            raise AlreadyInPlaytestError(code)
+
+        # Transaction for multi-step operation
+        async with self._pool.acquire() as conn, conn.transaction():
+            # Convert to legacy
+            await self._convert_to_legacy_internal(code, conn)
+
+            # Update playtesting status
+            await self._maps_repo.update_core_map(
+                code,
+                {"playtesting": "In Progress"},
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            # Create playtest metadata
+            playtest_id = await self._maps_repo.create_playtest_meta_partial(
+                code,
+                data.initial_difficulty,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        # Publish RabbitMQ message
+        message_data = PlaytestCreatedEvent(code, playtest_id)
+        idempotency_key = f"map:send-to-playtest:{map_id}:{playtest_id}"
+        return await self.publish_message(
+            routing_key="api.playtest.create",
+            data=message_data,
+            headers=headers,
+            idempotency_key=idempotency_key,
+        )
+
+    async def link_map_codes(
+        self,
+        data: LinkMapsCreateRequest,
+        headers: Headers,
+        newsfeed_service: NewsfeedService,
+    ) -> None:
+        """Link official and unofficial map codes.
+
+        Args:
+            data: Link request with official and unofficial codes.
+            headers: Request headers for idempotency.
+            newsfeed_service: Newsfeed service for event publishing.
+
+        Raises:
+            MapNotFoundError: If either map doesn't exist.
+            LinkedMapError: If maps are already linked or same code.
+        """
+        # Validate both maps exist
+        official_map_id = await self._maps_repo.lookup_map_id(data.official_code)
+        if official_map_id is None:
+            raise MapNotFoundError(data.official_code)
+
+        unofficial_map_id = await self._maps_repo.lookup_map_id(data.unofficial_code)
+        if unofficial_map_id is None:
+            raise MapNotFoundError(data.unofficial_code)
+
+        # Validate not same code
+        if data.official_code == data.unofficial_code:
+            raise LinkedMapError("Cannot link a map to itself")
+
+        # Fetch both maps to check current state
+        official_map = await self._maps_repo.fetch_maps(single=True, code=data.official_code)
+        unofficial_map = await self._maps_repo.fetch_maps(single=True, code=data.unofficial_code)
+
+        official_response = msgspec.convert(official_map, MapResponse, from_attributes=True)
+        unofficial_response = msgspec.convert(unofficial_map, MapResponse, from_attributes=True)
+
+        # Check if already linked
+        if (
+            hasattr(official_response, "linked_code")
+            and official_response.linked_code == data.unofficial_code
+        ):
+            raise LinkedMapError("Maps are already linked")
+
+        # Link the codes
+        await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
+
+        # Publish newsfeed event
+        event_payload = NewsfeedLinkedMap(
+            official_code=data.official_code,
+            unofficial_code=data.unofficial_code,
+            official_map_name=official_response.map_name,
+            unofficial_map_name=unofficial_response.map_name,
+        )
+        event = NewsfeedEvent(
+            id=None,
+            timestamp=dt.datetime.now(dt.timezone.utc),
+            payload=event_payload,
+            event_type="linked_map",
+        )
+        await newsfeed_service.create_and_publish(event, headers=headers, use_pool=True)
+
+    async def unlink_map_codes(
+        self,
+        data: UnlinkMapsCreateRequest,
+        headers: Headers,
+        newsfeed_service: NewsfeedService,
+    ) -> None:
+        """Unlink map codes.
+
+        Args:
+            data: Unlink request with code to unlink.
+            headers: Request headers for idempotency.
+            newsfeed_service: Newsfeed service for event publishing.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+        """
+        # Validate map exists
+        map_id = await self._maps_repo.lookup_map_id(data.code)
+        if map_id is None:
+            raise MapNotFoundError(data.code)
+
+        # Fetch map to get current linked code (for newsfeed event)
+        map_data = await self._maps_repo.fetch_maps(single=True, code=data.code)
+        map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
+
+        # Unlink the codes
+        await self._maps_repo.unlink_map_codes(data.code)
+
+        # Publish newsfeed event (if there was a linked code)
+        if hasattr(map_response, "linked_code") and map_response.linked_code:
+            event_payload = NewsfeedUnlinkedMap(
+                code=data.code,
+                previously_linked_code=map_response.linked_code,
+            )
+            event = NewsfeedEvent(
+                id=None,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+                payload=event_payload,
+                event_type="unlinked_map",
+            )
+            await newsfeed_service.create_and_publish(event, headers=headers, use_pool=True)
+
+    async def get_playtest_plot(self, code: OverwatchCode) -> object:
+        """Get playtest plot data (Phase 3 minimal implementation).
+
+        Args:
+            code: Map code.
+
+        Returns:
+            Plot data object.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+        """
+        # Validate map exists
+        map_id = await self._maps_repo.lookup_map_id(code)
+        if map_id is None:
+            raise MapNotFoundError(code)
+
+        return await self._maps_repo.fetch_playtest_plot_data(code)
 
 
 async def provide_maps_service(
