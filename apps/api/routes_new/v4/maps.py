@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 from typing import Annotated, Literal
 
@@ -33,6 +34,7 @@ from genjishimada_sdk.maps import (
     TrendingMapResponse,
     UnlinkMapsCreateRequest,
 )
+from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedGuide, NewsfeedLegacyRecord
 from genjishimada_sdk.xp import XpGrantRequest
 from litestar import Controller, delete, get, patch, post
 from litestar.connection import Request
@@ -47,6 +49,7 @@ from litestar.status_codes import (
 )
 
 from repository.maps_repository import provide_maps_repository
+from routes_new.v4.users import provide_users_service
 from services.exceptions.maps import (
     AlreadyInPlaytestError,
     CreatorNotFoundError,
@@ -62,6 +65,7 @@ from services.exceptions.maps import (
 from services.lootbox_service import LootboxService, provide_lootbox_service
 from services.maps_service import MapsService, provide_maps_service
 from services.newsfeed_service import NewsfeedService, provide_newsfeed_service
+from services.users_service import UsersService
 from utilities.errors import CustomHTTPException
 from utilities.map_search import CompletionFilter, MapSearchFilters, MedalFilter, PlaytestFilter
 
@@ -78,6 +82,7 @@ class MapsController(Controller):
         "maps_service": Provide(provide_maps_service),
         "newsfeed_service": Provide(provide_newsfeed_service),
         "lootbox_service": Provide(provide_lootbox_service),
+        "users_service": Provide(provide_users_service, sync_to_thread=False),
     }
 
     @get(
@@ -282,18 +287,24 @@ class MapsController(Controller):
         summary="Update Map",
         opt={"required_scopes": {"maps:write"}},
     )
-    async def update_map_endpoint(
+    async def update_map_endpoint(  # noqa: PLR0913
         self,
         code: OverwatchCode,
         data: Annotated[MapPatchRequest, Body(title="Map update request")],
+        request: Request,
         maps_service: MapsService,
+        newsfeed_service: NewsfeedService,
+        users_service: UsersService,
     ) -> MapResponse:
         """Update a map.
 
         Args:
             code: Map code to update.
             data: Partial update request.
+            request: Request object.
             maps_service: Maps service.
+            newsfeed_service: Newsfeed service.
+            users_service: Users service.
 
         Returns:
             Updated map response.
@@ -302,8 +313,24 @@ class MapsController(Controller):
             CustomHTTPException: On validation or business rule errors.
         """
         try:
-            updated_map, _original_map = await maps_service.update_map(code, data)
-            # TODO (Task 2.3): Add newsfeed event publishing here
+            updated_map, original_map = await maps_service.update_map(code, data)
+
+            # Helper to get user name
+            async def _get_user_coalesced_name(user_id: int) -> str:
+                user = await users_service.get_user(user_id)
+                if user:
+                    return user.coalesced_name or "Unknown User"
+                return "Unknown User"
+
+            # Generate and publish newsfeed event
+            await newsfeed_service.generate_map_edit_newsfeed(
+                original_map,
+                data,
+                "",
+                request.headers,
+                get_creator_name=_get_user_coalesced_name,
+            )
+
             return updated_map
 
         except MapNotFoundError as e:
@@ -433,13 +460,15 @@ class MapsController(Controller):
         status_code=HTTP_201_CREATED,
         opt={"required_scopes": {"maps:write"}},
     )
-    async def create_guide_endpoint(
+    async def create_guide_endpoint(  # noqa: PLR0913
         self,
         code: OverwatchCode,
         data: Annotated[GuideResponse, Body(title="Guide data")],
         request: Request,
         maps_service: MapsService,
         lootbox_service: LootboxService,
+        newsfeed_service: NewsfeedService,
+        users_service: UsersService,
     ) -> Response[GuideResponse]:
         """Create a guide for a map.
 
@@ -449,6 +478,8 @@ class MapsController(Controller):
             request: Request object.
             maps_service: Maps service.
             lootbox_service: Lootbox service.
+            newsfeed_service: Newsfeed service.
+            users_service: Users service.
 
         Returns:
             Created guide.
@@ -469,7 +500,24 @@ class MapsController(Controller):
                     XpGrantRequest(amount=xp_amount, type="Guide"),
                 )
 
-            # TODO (Task 2.3): Add newsfeed event publishing here
+            # Get user name for newsfeed
+            user = await users_service.get_user(user_id=data.user_id)
+            user_name = (user.coalesced_name or "Unknown User") if user else "Unknown User"
+
+            # Create and publish newsfeed event
+            event_payload = NewsfeedGuide(
+                code=code,
+                guide_url=data.url,
+                name=user_name,
+            )
+            event = NewsfeedEvent(
+                id=None,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+                payload=event_payload,
+                event_type="guide",
+            )
+            await newsfeed_service.create_and_publish(event=event, headers=request.headers)
+
             return Response(guide, status_code=HTTP_201_CREATED)
 
         except MapNotFoundError as e:
@@ -649,26 +697,44 @@ class MapsController(Controller):
     async def convert_to_legacy_endpoint(
         self,
         code: OverwatchCode,
+        request: Request,
         maps_service: MapsService,
+        newsfeed_service: NewsfeedService,
         reason: str = "",
-    ) -> int:
+    ) -> Response[None]:
         """Convert map to legacy status.
 
         Args:
             code: Map code.
+            request: Request object.
             maps_service: Maps service.
+            newsfeed_service: Newsfeed service.
             reason: Reason for legacy conversion.
 
         Returns:
-            Number of completions converted.
+            Empty response with 204 status.
 
         Raises:
             CustomHTTPException: If map not found.
         """
         try:
             affected_count, _context = await maps_service.convert_to_legacy(code, reason)
-            # TODO (Task 2.3): Add newsfeed event publishing here and change return to 204
-            return affected_count
+
+            # Create and publish newsfeed event
+            event_payload = NewsfeedLegacyRecord(
+                code=code,
+                affected_count=affected_count,
+                reason=reason,
+            )
+            event = NewsfeedEvent(
+                id=None,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+                payload=event_payload,
+                event_type="legacy_record",
+            )
+            await newsfeed_service.create_and_publish(event=event, headers=request.headers)
+
+            return Response(None, status_code=HTTP_204_NO_CONTENT)
 
         except MapNotFoundError as e:
             raise CustomHTTPException(
