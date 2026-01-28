@@ -279,7 +279,7 @@ class MapsService(BaseService):
         self,
         code: OverwatchCode,
         data: MapPatchRequest,
-    ) -> MapResponse:
+    ) -> tuple[MapResponse, MapResponse]:
         """Update a map.
 
         Looks up map by code, updates core row and replaces related data.
@@ -289,7 +289,7 @@ class MapsService(BaseService):
             data: Partial update request.
 
         Returns:
-            Updated map response.
+            Tuple of (updated map, original map) for newsfeed event generation.
 
         Raises:
             MapNotFoundError: If map doesn't exist.
@@ -299,6 +299,10 @@ class MapsService(BaseService):
             DuplicateCreatorError: If duplicate creator ID in request.
             CreatorNotFoundError: If creator user doesn't exist.
         """
+        # Fetch original map for newsfeed comparison
+        original_map_result = await self._maps_repo.fetch_maps(single=True, code=code)
+        original_map = msgspec.convert(original_map_result, MapResponse, from_attributes=True)
+
         # Lookup map ID
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
@@ -409,10 +413,11 @@ class MapsService(BaseService):
                     raise CreatorNotFoundError() from e
                 raise
 
-        # Fetch and return updated map
+        # Fetch and return updated map with original for comparison
         final_code = data.code if data.code is not msgspec.UNSET else code
         map_data_result = await self._maps_repo.fetch_maps(single=True, code=final_code)
-        return msgspec.convert(map_data_result, MapResponse, from_attributes=True)
+        updated_map = msgspec.convert(map_data_result, MapResponse, from_attributes=True)
+        return (updated_map, original_map)
 
     @overload
     async def fetch_maps(self, *, single: Literal[True], filters: MapSearchFilters) -> MapResponse: ...
@@ -511,7 +516,7 @@ class MapsService(BaseService):
         self,
         code: OverwatchCode,
         data: GuideResponse,
-    ) -> GuideResponse:
+    ) -> tuple[GuideResponse, dict]:
         """Create a guide for a map.
 
         Args:
@@ -519,7 +524,7 @@ class MapsService(BaseService):
             data: Guide data with user_id and url.
 
         Returns:
-            Created guide.
+            Tuple of (created guide, context dict with map_data for newsfeed/XP).
 
         Raises:
             MapNotFoundError: If map doesn't exist.
@@ -541,7 +546,20 @@ class MapsService(BaseService):
                 raise DuplicateGuideError(code, data.user_id) from e
             raise
 
-        return data
+        # Fetch map to check if official (needed for XP grant)
+        map_data_result = await self._maps_repo.fetch_maps(single=True, code=code)
+        map_data = msgspec.convert(map_data_result, MapResponse, from_attributes=True)
+
+        # Return guide + context for controller
+        return (
+            data,
+            {
+                "map_data": map_data,
+                "code": code,
+                "url": data.url,
+                "user_id": data.user_id,
+            },
+        )
 
     async def update_guide(
         self,
@@ -762,14 +780,16 @@ class MapsService(BaseService):
     async def convert_to_legacy(
         self,
         code: OverwatchCode,
-    ) -> int:
+        reason: str = "",
+    ) -> tuple[int, dict]:
         """Convert map to legacy status (public endpoint).
 
         Args:
             code: Map code.
+            reason: Reason for legacy conversion.
 
         Returns:
-            Number of completions converted.
+            Tuple of (affected_count, context dict for newsfeed).
 
         Raises:
             MapNotFoundError: If map doesn't exist.
@@ -781,7 +801,15 @@ class MapsService(BaseService):
 
         try:
             async with self._pool.acquire() as conn, conn.transaction():
-                return await self._convert_to_legacy_internal(code, conn)  # type: ignore[arg-type]
+                affected_count = await self._convert_to_legacy_internal(code, conn)  # type: ignore[arg-type]
+                return (
+                    affected_count,
+                    {
+                        "code": code,
+                        "affected_count": affected_count,
+                        "reason": reason,
+                    },
+                )
         except MapNotFoundError:
             raise
         except Exception as e:

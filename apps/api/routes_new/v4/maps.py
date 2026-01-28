@@ -299,7 +299,9 @@ class MapsController(Controller):
             CustomHTTPException: On validation or business rule errors.
         """
         try:
-            return await maps_service.update_map(code, data)
+            updated_map, _original_map = await maps_service.update_map(code, data)
+            # TODO (Task 2.3): Add newsfeed event publishing here
+            return updated_map
 
         except MapNotFoundError as e:
             raise CustomHTTPException(
@@ -448,8 +450,10 @@ class MapsController(Controller):
             CustomHTTPException: On error.
         """
         try:
-            result = await maps_service.create_guide(code, data)
-            return Response(result, status_code=HTTP_201_CREATED)
+            guide, _context = await maps_service.create_guide(code, data)
+            # TODO (Task 2.2): Add XP grant here
+            # TODO (Task 2.3): Add newsfeed event publishing here
+            return Response(guide, status_code=HTTP_201_CREATED)
 
         except MapNotFoundError as e:
             raise CustomHTTPException(
@@ -629,12 +633,14 @@ class MapsController(Controller):
         self,
         code: OverwatchCode,
         maps_service: MapsService,
+        reason: str = "",
     ) -> int:
         """Convert map to legacy status.
 
         Args:
             code: Map code.
             maps_service: Maps service.
+            reason: Reason for legacy conversion.
 
         Returns:
             Number of completions converted.
@@ -643,7 +649,9 @@ class MapsController(Controller):
             CustomHTTPException: If map not found.
         """
         try:
-            return await maps_service.convert_to_legacy(code)
+            affected_count, _context = await maps_service.convert_to_legacy(code, reason)
+            # TODO (Task 2.3): Add newsfeed event publishing here and change return to 204
+            return affected_count
 
         except MapNotFoundError as e:
             raise CustomHTTPException(
