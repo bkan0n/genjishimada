@@ -74,6 +74,7 @@ from services.exceptions.maps import (
     LinkedMapError,
     MapCodeExistsError,
     MapNotFoundError,
+    MapValidationError,
     PendingEditRequestExistsError,
 )
 from utilities.jobs import wait_for_job_completion
@@ -821,6 +822,7 @@ class MapsService(BaseService):
 
         Raises:
             MapNotFoundError: If map doesn't exist.
+            MapValidationError: If pending verifications exist.
         """
         # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
@@ -864,8 +866,8 @@ class MapsService(BaseService):
             conn=conn,  # type: ignore[arg-type]
         )
         if has_pending:
-            # Allow but log warning (v3 behavior)
-            pass
+            # V3 raises exception (strict behavior)
+            raise MapValidationError("Pending verifications exist for this map code.", field="code")
 
         # Remove medal entries
         await self._maps_repo.remove_map_medal_entries(
