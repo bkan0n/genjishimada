@@ -135,10 +135,7 @@ class MapsService(BaseService):
                 )
 
                 # Insert related data
-                creators_data = [
-                    {"user_id": c.user_id, "is_primary": c.is_primary}
-                    for c in (data.creators or [])
-                ]
+                creators_data = [{"user_id": c.user_id, "is_primary": c.is_primary} for c in (data.creators or [])]
                 await self._maps_repo.insert_creators(
                     map_id,
                     creators_data,
@@ -327,10 +324,7 @@ class MapsService(BaseService):
                 if data.creators is not msgspec.UNSET:
                     await self._maps_repo.delete_creators(map_id, conn=conn)  # type: ignore[arg-type]
                     if data.creators:
-                        creators_data = [
-                            {"user_id": c.user_id, "is_primary": c.is_primary}
-                            for c in data.creators
-                        ]
+                        creators_data = [{"user_id": c.user_id, "is_primary": c.is_primary} for c in data.creators]
                         await self._maps_repo.insert_creators(
                             map_id,
                             creators_data,
@@ -867,10 +861,7 @@ class MapsService(BaseService):
         unofficial_response = msgspec.convert(unofficial_map, MapResponse, from_attributes=True)
 
         # Check if already linked
-        if (
-            hasattr(official_response, "linked_code")
-            and official_response.linked_code == data.unofficial_code
-        ):
+        if hasattr(official_response, "linked_code") and official_response.linked_code == data.unofficial_code:
             raise LinkedMapError("Maps are already linked")
 
         # Link the codes

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 import asyncpg
+import msgspec
 from asyncpg import Connection
 from litestar.datastructures import State
 
@@ -281,7 +283,7 @@ class MapsRepository(BaseRepository):
 
         query = f"""
             UPDATE core.maps
-            SET {', '.join(set_clauses)}
+            SET {", ".join(set_clauses)}
             WHERE code = {where_param}
         """
 
@@ -294,7 +296,6 @@ class MapsRepository(BaseRepository):
                 table="core.maps",
                 detail=str(e),
             ) from e
-
 
     # Related data operations - Creators
 
@@ -769,7 +770,6 @@ class MapsRepository(BaseRepository):
         )
         return [dict(row) for row in rows]
 
-
     # Archive operations
 
     async def set_archive_status(
@@ -1171,6 +1171,361 @@ class MapsRepository(BaseRepository):
 
         # Placeholder - actual implementation in Phase 3
         return None
+
+    # Edit request operations
+
+    async def create_edit_request(
+        self,
+        map_id: int,
+        code: str,
+        proposed_changes: dict[str, Any],
+        reason: str,
+        created_by: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Create a new edit request.
+
+        Args:
+            map_id: Map ID.
+            code: Map code (denormalized).
+            proposed_changes: Dict of field -> new_value.
+            reason: Reason for the edit.
+            created_by: User ID of submitter.
+            conn: Optional connection for transaction.
+
+        Returns:
+            Created edit request row as dict.
+
+        Raises:
+            ForeignKeyViolationError: If map_id or created_by doesn't exist.
+        """
+        _conn = self._get_connection(conn)
+
+        try:
+            row = await _conn.fetchrow(
+                """
+                INSERT INTO maps.edit_requests (
+                    map_id, code, proposed_changes, reason, created_by
+                )
+                VALUES ($1, $2, $3::jsonb, $4, $5)
+                RETURNING
+                    id, map_id, code, proposed_changes, reason, created_by,
+                    created_at, message_id, resolved_at, accepted,
+                    resolved_by, rejection_reason
+                """,
+                map_id,
+                code,
+                msgspec.json.encode(proposed_changes).decode(),
+                reason,
+                created_by,
+            )
+            return dict(row) if row else {}
+
+        except asyncpg.ForeignKeyViolationError as e:
+            constraint = extract_constraint_name(e)
+            raise ForeignKeyViolationError(
+                constraint_name=constraint or "unknown",
+                table="maps.edit_requests",
+                detail=str(e),
+            ) from e
+
+    async def check_pending_edit_request(
+        self,
+        map_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int | None:
+        """Check if map has a pending edit request.
+
+        Args:
+            map_id: Map ID.
+            conn: Optional connection.
+
+        Returns:
+            Edit request ID if pending, else None.
+        """
+        _conn = self._get_connection(conn)
+
+        return await _conn.fetchval(
+            """
+            SELECT id
+            FROM maps.edit_requests
+            WHERE map_id = $1 AND accepted IS NULL
+            """,
+            map_id,
+        )
+
+    async def fetch_edit_request(
+        self,
+        edit_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch a specific edit request.
+
+        Args:
+            edit_id: Edit request ID.
+            conn: Optional connection.
+
+        Returns:
+            Edit request row as dict, or None if not found.
+        """
+        _conn = self._get_connection(conn)
+
+        row = await _conn.fetchrow(
+            """
+            SELECT
+                id, map_id, code, proposed_changes, reason, created_by,
+                created_at, message_id, resolved_at, accepted,
+                resolved_by, rejection_reason
+            FROM maps.edit_requests
+            WHERE id = $1
+            """,
+            edit_id,
+        )
+        return dict(row) if row else None
+
+    async def fetch_pending_edit_requests(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch all pending edit requests.
+
+        Args:
+            conn: Optional connection.
+
+        Returns:
+            List of pending edit request dicts.
+        """
+        _conn = self._get_connection(conn)
+
+        rows = await _conn.fetch(
+            """
+            SELECT id, code, message_id
+            FROM maps.edit_requests
+            WHERE accepted IS NULL
+            ORDER BY created_at
+            """
+        )
+        return [dict(row) for row in rows]
+
+    async def fetch_edit_submission(
+        self,
+        edit_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch enriched edit request with map data for verification queue.
+
+        Args:
+            edit_id: Edit request ID.
+            conn: Optional connection.
+
+        Returns:
+            Enriched edit request dict with map info, or None if not found.
+        """
+        _conn = self._get_connection(conn)
+
+        # Get edit request with map info
+        edit_row = await _conn.fetchrow(
+            """
+            SELECT
+                e.id, e.code, e.proposed_changes, e.reason,
+                e.created_by, e.created_at, e.message_id,
+                m.id AS map_id, m.map_name, m.difficulty
+            FROM maps.edit_requests e
+            JOIN core.maps m ON m.id = e.map_id
+            WHERE e.id = $1
+            """,
+            edit_id,
+        )
+        if not edit_row:
+            return None
+
+        # Get submitter name
+        user_row = await _conn.fetchrow(
+            """
+            SELECT COALESCE(nickname, global_name, 'Unknown User') as name
+            FROM core.users
+            WHERE id = $1
+            """,
+            edit_row["created_by"],
+        )
+
+        # Get current map data (for comparison)
+        map_row = await _conn.fetchrow(
+            """
+            WITH target_map AS (
+                SELECT
+                    id, code, map_name, category, checkpoints, difficulty,
+                    description, title, custom_banner, hidden, archived, official
+                FROM core.maps
+                WHERE code = $1
+            ),
+            mechanics AS (
+                SELECT ml.map_id, array_agg(mech.name ORDER BY mech.position) AS mechanics
+                FROM maps.mechanic_links ml
+                JOIN maps.mechanics mech ON mech.id = ml.mechanic_id
+                WHERE ml.map_id = (SELECT id FROM target_map)
+                GROUP BY ml.map_id
+            ),
+            restrictions AS (
+                SELECT rl.map_id, array_agg(res.name ORDER BY res.name) AS restrictions
+                FROM maps.restriction_links rl
+                JOIN maps.restrictions res ON res.id = rl.restriction_id
+                WHERE rl.map_id = (SELECT id FROM target_map)
+                GROUP BY rl.map_id
+            ),
+            tags AS (
+                SELECT tl.map_id, array_agg(tag.name ORDER BY tag.position) AS tags
+                FROM maps.tag_links tl
+                JOIN maps.tags tag ON tag.id = tl.tag_id
+                WHERE tl.map_id = (SELECT id FROM target_map)
+                GROUP BY tl.map_id
+            )
+            SELECT
+                tm.code, tm.map_name, tm.category, tm.checkpoints, tm.difficulty,
+                tm.description, tm.title, tm.custom_banner, tm.hidden,
+                tm.archived, tm.official,
+                mech.mechanics, res.restrictions, tag.tags
+            FROM target_map tm
+            LEFT JOIN mechanics mech ON mech.map_id = tm.id
+            LEFT JOIN restrictions res ON res.map_id = tm.id
+            LEFT JOIN tags tag ON tag.map_id = tm.id
+            """,
+            edit_row["code"],
+        )
+
+        # Get creators
+        creator_rows = await _conn.fetch(
+            """
+            SELECT user_id, is_primary
+            FROM maps.creators
+            WHERE map_id = $1
+            ORDER BY is_primary DESC, user_id
+            """,
+            edit_row["map_id"],
+        )
+
+        # Get medals
+        medals_row = await _conn.fetchrow(
+            """
+            SELECT gold, silver, bronze
+            FROM maps.medals md
+            JOIN core.maps m ON m.id = md.map_id
+            WHERE m.code = $1
+            """,
+            edit_row["code"],
+        )
+
+        # Assemble enriched response
+        return {
+            "edit_request": dict(edit_row),
+            "submitter_name": user_row["name"] if user_row else "Unknown User",
+            "current_map": dict(map_row) if map_row else {},
+            "current_creators": [dict(row) for row in creator_rows],
+            "current_medals": dict(medals_row) if medals_row else None,
+        }
+
+    async def set_edit_request_message_id(
+        self,
+        edit_id: int,
+        message_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Set Discord message ID for edit request.
+
+        Args:
+            edit_id: Edit request ID.
+            message_id: Discord message ID.
+            conn: Optional connection.
+        """
+        _conn = self._get_connection(conn)
+
+        await _conn.execute(
+            """
+            UPDATE maps.edit_requests
+            SET message_id = $2
+            WHERE id = $1
+            """,
+            edit_id,
+            message_id,
+        )
+
+    async def resolve_edit_request(
+        self,
+        edit_id: int,
+        accepted: bool,
+        resolved_by: int,
+        rejection_reason: str | None = None,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Mark edit request as resolved.
+
+        Args:
+            edit_id: Edit request ID.
+            accepted: Whether accepted or rejected.
+            resolved_by: User ID of resolver.
+            rejection_reason: Reason for rejection (if rejected).
+            conn: Optional connection.
+        """
+        _conn = self._get_connection(conn)
+
+        await _conn.execute(
+            """
+            UPDATE maps.edit_requests
+            SET
+                resolved_at = $2,
+                accepted = $3,
+                resolved_by = $4,
+                rejection_reason = $5
+            WHERE id = $1
+            """,
+            edit_id,
+            dt.datetime.now(dt.timezone.utc),
+            accepted,
+            resolved_by,
+            rejection_reason,
+        )
+
+    async def fetch_user_edit_requests(
+        self,
+        user_id: int,
+        include_resolved: bool = False,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch edit requests submitted by a user.
+
+        Args:
+            user_id: User ID.
+            include_resolved: Whether to include resolved requests.
+            conn: Optional connection.
+
+        Returns:
+            List of edit request dicts.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            SELECT
+                id, map_id, code, proposed_changes, reason, created_by,
+                created_at, message_id, resolved_at, accepted,
+                resolved_by, rejection_reason
+            FROM maps.edit_requests
+            WHERE created_by = $1
+        """
+        if not include_resolved:
+            query += " AND accepted IS NULL"
+
+        query += " ORDER BY created_at DESC"
+
+        rows = await _conn.fetch(query, user_id)
+        return [dict(row) for row in rows]
 
 
 async def provide_maps_repository(state: State) -> MapsRepository:
