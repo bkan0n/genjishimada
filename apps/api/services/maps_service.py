@@ -489,7 +489,7 @@ class MapsService(BaseService):
             include_records: Whether to include completion records.
 
         Returns:
-            List of guides.
+            List of guides with resolved usernames.
 
         Raises:
             MapNotFoundError: If map doesn't exist.
@@ -499,8 +499,12 @@ class MapsService(BaseService):
         if map_id is None:
             raise MapNotFoundError(code)
 
-        rows = await self._maps_repo.fetch_guides(code, include_records)
-        return msgspec.convert(rows, list[GuideFullResponse], from_attributes=True)
+        try:
+            rows = await self._maps_repo.fetch_guides(code, include_records)
+            return msgspec.convert(rows, list[GuideFullResponse], from_attributes=True)
+        except Exception as e:
+            log.error(f"Unexpected error fetching guides for {code}: {e}", exc_info=True)
+            raise
 
     async def create_guide(
         self,
@@ -556,19 +560,26 @@ class MapsService(BaseService):
 
         Raises:
             MapNotFoundError: If map doesn't exist.
-            GuideNotFoundError: If guide doesn't exist.
+            GuideNotFoundError: If guide doesn't exist for this user.
         """
         # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
 
-        # Update guide
-        rows_updated = await self._maps_repo.update_guide(map_id, user_id, url)
-        if rows_updated == 0:
-            raise GuideNotFoundError(code, user_id)
+        # Check guide exists
+        try:
+            guide_exists = await self._maps_repo.check_guide_exists(map_id, user_id)
+            if not guide_exists:
+                raise GuideNotFoundError(code, user_id)
 
-        return GuideResponse(user_id=user_id, url=url)
+            await self._maps_repo.update_guide(map_id, user_id, url)
+            return GuideResponse(user_id=user_id, url=url)
+        except GuideNotFoundError:
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error updating guide for {code}: {e}", exc_info=True)
+            raise
 
     async def delete_guide(
         self,
@@ -583,17 +594,25 @@ class MapsService(BaseService):
 
         Raises:
             MapNotFoundError: If map doesn't exist.
-            GuideNotFoundError: If guide doesn't exist.
+            GuideNotFoundError: If guide doesn't exist for this user.
         """
         # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
 
-        # Delete guide
-        rows_deleted = await self._maps_repo.delete_guide(map_id, user_id)
-        if rows_deleted == 0:
-            raise GuideNotFoundError(code, user_id)
+        # Check guide exists
+        try:
+            guide_exists = await self._maps_repo.check_guide_exists(map_id, user_id)
+            if not guide_exists:
+                raise GuideNotFoundError(code, user_id)
+
+            await self._maps_repo.delete_guide(map_id, user_id)
+        except GuideNotFoundError:
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error deleting guide for {code}: {e}", exc_info=True)
+            raise
 
     # Additional operations
 
@@ -614,7 +633,11 @@ class MapsService(BaseService):
         if map_id is None:
             raise MapNotFoundError(code)
 
-        return await self._maps_repo.fetch_affected_users(code)
+        try:
+            return await self._maps_repo.fetch_affected_users(code)
+        except Exception as e:
+            log.error(f"Unexpected error fetching affected users for {code}: {e}", exc_info=True)
+            raise
 
     async def get_map_mastery_data(
         self,
@@ -677,61 +700,67 @@ class MapsService(BaseService):
         Raises:
             MapNotFoundError: If any map code doesn't exist.
         """
-        # Validate all codes exist
-        for code in data.codes:
-            map_id = await self._maps_repo.lookup_map_id(code)
-            if map_id is None:
-                raise MapNotFoundError(code)
+        try:
+            # Validate all codes exist
+            for code in data.codes:
+                map_id = await self._maps_repo.lookup_map_id(code)
+                if map_id is None:
+                    raise MapNotFoundError(code)
 
-        # Update archive status
-        is_archiving = data.status == "Archive"
-        await self._maps_repo.set_archive_status(data.codes, is_archiving)
+            # Update archive status
+            is_archiving = data.status == "Archive"
+            await self._maps_repo.set_archive_status(data.codes, is_archiving)
 
-        # Publish newsfeed event
-        if len(data.codes) == 1:
-            # Single map archive/unarchive
-            map_data = await self._maps_repo.fetch_maps(single=True, code=data.codes[0])
-            map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
+            # Publish newsfeed event
+            if len(data.codes) == 1:
+                # Single map archive/unarchive
+                map_data = await self._maps_repo.fetch_maps(single=True, code=data.codes[0])
+                map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
 
-            event_payload: NewsfeedArchive | NewsfeedBulkArchive
-            if is_archiving:
-                event_payload = NewsfeedArchive(
-                    code=map_response.code,
-                    map_name=map_response.map_name,
-                    difficulty=map_response.difficulty,
-                    creators=[c.name for c in map_response.creators] if map_response.creators else [],
+                event_payload: NewsfeedArchive | NewsfeedBulkArchive
+                if is_archiving:
+                    event_payload = NewsfeedArchive(
+                        code=map_response.code,
+                        map_name=map_response.map_name,
+                        difficulty=map_response.difficulty,
+                        creators=[c.name for c in map_response.creators] if map_response.creators else [],
+                        reason="",
+                    )
+                else:
+                    event_payload = NewsfeedUnarchive(  # type: ignore[assignment]
+                        code=map_response.code,
+                        map_name=map_response.map_name,
+                        difficulty=map_response.difficulty,
+                        creators=[c.name for c in map_response.creators] if map_response.creators else [],
+                        reason="",
+                    )
+            elif is_archiving:
+                event_payload = NewsfeedBulkArchive(
+                    codes=data.codes,
                     reason="",
                 )
             else:
-                event_payload = NewsfeedUnarchive(  # type: ignore[assignment]
-                    code=map_response.code,
-                    map_name=map_response.map_name,
-                    difficulty=map_response.difficulty,
-                    creators=[c.name for c in map_response.creators] if map_response.creators else [],
+                event_payload = NewsfeedBulkUnarchive(  # type: ignore[assignment]
+                    codes=data.codes,
                     reason="",
                 )
-        elif is_archiving:
-            event_payload = NewsfeedBulkArchive(
-                codes=data.codes,
-                reason="",
-            )
-        else:
-            event_payload = NewsfeedBulkUnarchive(  # type: ignore[assignment]
-                codes=data.codes,
-                reason="",
-            )
 
-        if len(data.codes) == 1:
-            event_type = "archive" if is_archiving else "unarchive"
-        else:
-            event_type = "bulk_archive" if is_archiving else "bulk_unarchive"
-        event = NewsfeedEvent(
-            id=None,
-            timestamp=dt.datetime.now(dt.timezone.utc),
-            payload=event_payload,
-            event_type=event_type,
-        )
-        await newsfeed_service.create_and_publish(event=event, headers=headers)
+            if len(data.codes) == 1:
+                event_type = "archive" if is_archiving else "unarchive"
+            else:
+                event_type = "bulk_archive" if is_archiving else "bulk_unarchive"
+            event = NewsfeedEvent(
+                id=None,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+                payload=event_payload,
+                event_type=event_type,
+            )
+            await newsfeed_service.create_and_publish(event=event, headers=headers)
+        except MapNotFoundError:
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error setting archive status: {e}", exc_info=True)
+            raise
 
     async def convert_to_legacy(
         self,
@@ -753,8 +782,14 @@ class MapsService(BaseService):
         if map_id is None:
             raise MapNotFoundError(code)
 
-        async with self._pool.acquire() as conn, conn.transaction():
-            return await self._convert_to_legacy_internal(code, conn)  # type: ignore[arg-type]
+        try:
+            async with self._pool.acquire() as conn, conn.transaction():
+                return await self._convert_to_legacy_internal(code, conn)  # type: ignore[arg-type]
+        except MapNotFoundError:
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error converting {code} to legacy: {e}", exc_info=True)
+            raise
 
     async def _convert_to_legacy_internal(
         self,
@@ -800,17 +835,24 @@ class MapsService(BaseService):
 
         Args:
             code: Map code.
-            data: Quality value to set.
+            data: Quality value request.
 
         Raises:
             MapNotFoundError: If map doesn't exist.
+            ValueError: If quality value is out of range (1-6).
         """
         # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
 
-        await self._maps_repo.override_quality_votes(code, data.value)
+        try:
+            await self._maps_repo.override_quality_votes(code, data.value)
+        except ValueError:
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error overriding quality for {code}: {e}", exc_info=True)
+            raise
 
     async def get_trending_maps(self) -> list[TrendingMapResponse]:
         """Get trending maps by clicks/ratings.
@@ -849,39 +891,45 @@ class MapsService(BaseService):
         if map_id is None:
             raise MapNotFoundError(code)
 
-        current_map = await self._maps_repo.fetch_maps(single=True, code=code)
-        current_map_response = msgspec.convert(current_map, MapResponse, from_attributes=True)
-        if current_map_response.playtesting == "In Progress":
-            raise AlreadyInPlaytestError(code)
+        try:
+            current_map = await self._maps_repo.fetch_maps(single=True, code=code)
+            current_map_response = msgspec.convert(current_map, MapResponse, from_attributes=True)
+            if current_map_response.playtesting == "In Progress":
+                raise AlreadyInPlaytestError(code)
 
-        # Transaction for multi-step operation
-        async with self._pool.acquire() as conn, conn.transaction():
-            # Convert to legacy
-            await self._convert_to_legacy_internal(code, conn)
+            # Transaction for multi-step operation
+            async with self._pool.acquire() as conn, conn.transaction():
+                # Convert to legacy
+                await self._convert_to_legacy_internal(code, conn)
 
-            # Update playtesting status
-            await self._maps_repo.update_core_map(
-                code,
-                {"playtesting": "In Progress"},
-                conn=conn,  # type: ignore[arg-type]
+                # Update playtesting status
+                await self._maps_repo.update_core_map(
+                    code,
+                    {"playtesting": "In Progress"},
+                    conn=conn,  # type: ignore[arg-type]
+                )
+
+                # Create playtest metadata
+                playtest_id = await self._maps_repo.create_playtest_meta_partial(
+                    code,
+                    data.initial_difficulty,  # type: ignore[arg-type]
+                    conn=conn,  # type: ignore[arg-type]
+                )
+
+            # Publish RabbitMQ message
+            message_data = PlaytestCreatedEvent(code, playtest_id)
+            idempotency_key = f"map:send-to-playtest:{map_id}:{playtest_id}"
+            return await self.publish_message(
+                routing_key="api.playtest.create",
+                data=message_data,
+                headers=headers,
+                idempotency_key=idempotency_key,
             )
-
-            # Create playtest metadata
-            playtest_id = await self._maps_repo.create_playtest_meta_partial(
-                code,
-                data.initial_difficulty,  # type: ignore[arg-type]
-                conn=conn,  # type: ignore[arg-type]
-            )
-
-        # Publish RabbitMQ message
-        message_data = PlaytestCreatedEvent(code, playtest_id)
-        idempotency_key = f"map:send-to-playtest:{map_id}:{playtest_id}"
-        return await self.publish_message(
-            routing_key="api.playtest.create",
-            data=message_data,
-            headers=headers,
-            idempotency_key=idempotency_key,
-        )
+        except (MapNotFoundError, AlreadyInPlaytestError):
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error sending {code} to playtest: {e}", exc_info=True)
+            raise
 
     async def link_map_codes(
         self,
@@ -898,44 +946,50 @@ class MapsService(BaseService):
 
         Raises:
             MapNotFoundError: If either map doesn't exist.
-            LinkedMapError: If maps are already linked or same code.
+            LinkedMapError: If maps cannot be linked.
         """
-        # Validate both maps exist
-        official_map_id = await self._maps_repo.lookup_map_id(data.official_code)
-        if official_map_id is None:
-            raise MapNotFoundError(data.official_code)
+        try:
+            # Validate both maps exist
+            official_map_id = await self._maps_repo.lookup_map_id(data.official_code)
+            if official_map_id is None:
+                raise MapNotFoundError(data.official_code)
 
-        unofficial_map_id = await self._maps_repo.lookup_map_id(data.unofficial_code)
-        if unofficial_map_id is None:
-            raise MapNotFoundError(data.unofficial_code)
+            unofficial_map_id = await self._maps_repo.lookup_map_id(data.unofficial_code)
+            if unofficial_map_id is None:
+                raise MapNotFoundError(data.unofficial_code)
 
-        # Validate not same code
-        if data.official_code == data.unofficial_code:
-            raise LinkedMapError("Cannot link a map to itself")
+            # Validate not same code
+            if data.official_code == data.unofficial_code:
+                raise LinkedMapError("Cannot link a map to itself")
 
-        # Fetch official map to check current state
-        official_map = await self._maps_repo.fetch_maps(single=True, code=data.official_code)
-        official_response = msgspec.convert(official_map, MapResponse, from_attributes=True)
+            # Fetch official map to check current state
+            official_map = await self._maps_repo.fetch_maps(single=True, code=data.official_code)
+            official_response = msgspec.convert(official_map, MapResponse, from_attributes=True)
 
-        # Check if already linked
-        if hasattr(official_response, "linked_code") and official_response.linked_code == data.unofficial_code:
-            raise LinkedMapError("Maps are already linked")
+            # Check if already linked
+            if hasattr(official_response, "linked_code") and official_response.linked_code == data.unofficial_code:
+                raise LinkedMapError("Maps are already linked")
 
-        # Link the codes
-        await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
+            # Link the codes
+            await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
 
-        # Publish newsfeed event
-        event_payload = NewsfeedLinkedMap(
-            official_code=data.official_code,
-            unofficial_code=data.unofficial_code,
-        )
-        event = NewsfeedEvent(
-            id=None,
-            timestamp=dt.datetime.now(dt.timezone.utc),
-            payload=event_payload,
-            event_type="linked_map",
-        )
-        await newsfeed_service.create_and_publish(event=event, headers=headers)
+            # Publish newsfeed event
+            event_payload = NewsfeedLinkedMap(
+                official_code=data.official_code,
+                unofficial_code=data.unofficial_code,
+            )
+            event = NewsfeedEvent(
+                id=None,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+                payload=event_payload,
+                event_type="linked_map",
+            )
+            await newsfeed_service.create_and_publish(event=event, headers=headers)
+        except (MapNotFoundError, LinkedMapError):
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error linking maps: {e}", exc_info=True)
+            raise
 
     async def unlink_map_codes(
         self,
@@ -953,31 +1007,37 @@ class MapsService(BaseService):
         Raises:
             MapNotFoundError: If either map doesn't exist.
         """
-        # Validate both maps exist
-        official_id = await self._maps_repo.lookup_map_id(data.official_code)
-        if official_id is None:
-            raise MapNotFoundError(data.official_code)
+        try:
+            # Validate both maps exist
+            official_id = await self._maps_repo.lookup_map_id(data.official_code)
+            if official_id is None:
+                raise MapNotFoundError(data.official_code)
 
-        unofficial_id = await self._maps_repo.lookup_map_id(data.unofficial_code)
-        if unofficial_id is None:
-            raise MapNotFoundError(data.unofficial_code)
+            unofficial_id = await self._maps_repo.lookup_map_id(data.unofficial_code)
+            if unofficial_id is None:
+                raise MapNotFoundError(data.unofficial_code)
 
-        # Unlink the codes (uses official_code to find and remove link)
-        await self._maps_repo.unlink_map_codes(data.official_code)
+            # Unlink the codes (uses official_code to find and remove link)
+            await self._maps_repo.unlink_map_codes(data.official_code)
 
-        # Publish newsfeed event
-        event_payload = NewsfeedUnlinkedMap(
-            official_code=data.official_code,
-            unofficial_code=data.unofficial_code,
-            reason=data.reason,
-        )
-        event = NewsfeedEvent(
-            id=None,
-            timestamp=dt.datetime.now(dt.timezone.utc),
-            payload=event_payload,
-            event_type="unlinked_map",
-        )
-        await newsfeed_service.create_and_publish(event=event, headers=headers)
+            # Publish newsfeed event
+            event_payload = NewsfeedUnlinkedMap(
+                official_code=data.official_code,
+                unofficial_code=data.unofficial_code,
+                reason=data.reason,
+            )
+            event = NewsfeedEvent(
+                id=None,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+                payload=event_payload,
+                event_type="unlinked_map",
+            )
+            await newsfeed_service.create_and_publish(event=event, headers=headers)
+        except MapNotFoundError:
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error unlinking {data.official_code}: {e}", exc_info=True)
+            raise
 
     async def get_playtest_plot(
         self,
@@ -991,28 +1051,35 @@ class MapsService(BaseService):
 
         Args:
             thread_id: Playtest thread ID.
-            code: Map code.
+            code: Map code (alternative).
 
         Returns:
             Plot data object.
 
         Raises:
-            MapNotFoundError: If map doesn't exist.
+            MapNotFoundError: If map doesn't exist or no plot data found.
+            ValueError: If neither thread_id nor code provided.
         """
-        if thread_id is not None:
-            return await self._maps_repo.fetch_playtest_plot_data(thread_id)
+        try:
+            if thread_id is not None:
+                return await self._maps_repo.fetch_playtest_plot_data(thread_id)
 
-        if code is None:
+            if code is None:
+                return None
+
+            map_data = await self._maps_repo.fetch_maps(single=True, code=code)
+            if not map_data:
+                raise MapNotFoundError(code)
+
+            map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
+            if map_response.playtest and map_response.playtest.thread_id:
+                return await self._maps_repo.fetch_playtest_plot_data(map_response.playtest.thread_id)
             return None
-
-        map_data = await self._maps_repo.fetch_maps(single=True, code=code)
-        if not map_data:
-            raise MapNotFoundError(code)
-
-        map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
-        if map_response.playtest and map_response.playtest.thread_id:
-            return await self._maps_repo.fetch_playtest_plot_data(map_response.playtest.thread_id)
-        return None
+        except (MapNotFoundError, ValueError):
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error fetching playtest plot: {e}", exc_info=True)
+            raise
 
     # Edit request operations
 
