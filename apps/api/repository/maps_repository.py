@@ -730,31 +730,69 @@ class MapsRepository(BaseRepository):
         *,
         conn: Connection | None = None,
     ) -> list[dict]:
-        """Fetch guides for a map.
+        """Fetch guides with optional record videos.
 
         Args:
             code: Map code.
-            include_records: Whether to include completion records (not implemented yet).
+            include_records: If True, includes completion record videos.
             conn: Optional connection.
 
         Returns:
-            List of guide dicts.
+            List of guides (and records if include_records=True).
         """
         _conn = self._get_connection(conn)
 
-        # Basic query without records for now
-        rows = await _conn.fetch(
-            """
-            SELECT g.id, g.url, g.user_id,
-                   COALESCE(u.nickname, u.global_name, 'Unknown User') as user_name
-            FROM maps.guides g
-            JOIN core.maps m ON m.id = g.map_id
-            LEFT JOIN core.users u ON u.id = g.user_id
-            WHERE m.code = $1
-            ORDER BY g.id
-            """,
-            code,
+        # Query from v3 with UNION ALL for records when include_records=True
+        query = """
+        WITH m AS (
+            SELECT id
+            FROM core.maps
+            WHERE code = $1
         )
+        SELECT
+            g.user_id,
+            g.url,
+            ARRAY_REMOVE(
+                ARRAY[u.nickname, u.global_name]::text[]
+                    || ARRAY(
+                        SELECT owu.username::text
+                        FROM users.overwatch_usernames owu
+                        WHERE owu.user_id = g.user_id
+                       ),
+                NULL
+            ) AS usernames
+        FROM m
+        JOIN maps.guides g ON g.map_id = m.id
+        LEFT JOIN core.users u ON u.id = g.user_id
+        UNION ALL
+        SELECT
+            c.user_id,
+            c.video AS url,
+            ARRAY_REMOVE(
+                ARRAY[u.nickname, u.global_name]::text[]
+                    || ARRAY(
+                        SELECT owu.username::text
+                        FROM users.overwatch_usernames owu
+                        WHERE owu.user_id = c.user_id
+                       ),
+                NULL
+            ) AS usernames
+        FROM m
+        JOIN LATERAL (
+            SELECT DISTINCT ON (c.user_id)
+                c.user_id, c.video, c.inserted_at, c.id
+            FROM core.completions c
+            WHERE c.map_id = m.id
+              AND c.verified = TRUE
+              AND c.completion = FALSE
+              AND c.video IS NOT NULL
+            ORDER BY c.user_id, c.inserted_at DESC, c.id DESC
+            ) c ON TRUE
+        LEFT JOIN core.users u ON u.id = c.user_id
+        WHERE $2::bool IS TRUE
+        """
+
+        rows = await _conn.fetch(query, code, include_records)
         return [dict(row) for row in rows]
 
     # Archive operations
