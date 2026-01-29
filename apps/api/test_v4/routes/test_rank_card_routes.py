@@ -13,3 +13,11 @@ class TestRankCardEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert "name" in data
+
+    @pytest.mark.asyncio
+    async def test_get_background_returns_background(self, test_client):
+        """Test get background endpoint."""
+        response = await test_client.get("/api/v4/users/1/rank-card/background")
+        assert response.status_code == 200
+        data = response.json()
+        assert "name" in data
