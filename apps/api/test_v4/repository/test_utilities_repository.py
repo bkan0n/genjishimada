@@ -49,11 +49,11 @@ class TestUtilitiesQueries:
             map_id = await conn.fetchval(
                 "INSERT INTO core.maps (code, map_name, category, checkpoints, difficulty, raw_difficulty) "
                 "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-                "TEST123", "Test Map", "Parkour", 10, "Easy", 1.0
+                "TEST12", "Test Map", "Parkour", 10, "Easy", 1.0
             )
 
         await utilities_repo.log_map_click(
-            code="TEST123",
+            code="TEST12",
             user_id=None,
             source="web",
             ip_hash="test_hash",
