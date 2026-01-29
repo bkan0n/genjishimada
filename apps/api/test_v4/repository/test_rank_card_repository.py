@@ -34,3 +34,15 @@ class TestRankCardQueries:
         """Test that query returns expected type."""
         result = await rank_card_repo.fetch_background(user_id=1)
         assert isinstance(result, dict) or result is None
+
+    async def test_fetch_background_with_user(self, rank_card_repo: RankCardRepository, db_pool: asyncpg.Pool):
+        """Test fetching background for existing user."""
+        # Insert test data
+        async with db_pool.acquire() as conn:
+            user_id = 12345
+            await conn.execute("INSERT INTO core.users (id, nickname) VALUES ($1, $2)", user_id, "testuser")
+            await conn.execute("INSERT INTO rank_card.background (user_id, name) VALUES ($1, $2)", user_id, "test_bg")
+
+        result = await rank_card_repo.fetch_background(user_id=user_id)
+        assert result is not None
+        assert result["name"] == "test_bg"
