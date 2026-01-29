@@ -41,3 +41,25 @@ class TestUtilitiesQueries:
             namespace={"test": "data"},
         )
         # No assertion needed - just verify no exception
+
+    async def test_log_map_click_inserts_record(self, utilities_repo: UtilitiesRepository, db_pool: asyncpg.Pool):
+        """Test map click logging."""
+        # Create test map
+        async with db_pool.acquire() as conn:
+            map_id = await conn.fetchval(
+                "INSERT INTO core.maps (code, map_name, category, checkpoints, difficulty, raw_difficulty) "
+                "VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+                "TEST123", "Test Map", "Parkour", 10, "Easy", 1.0
+            )
+
+        await utilities_repo.log_map_click(
+            code="TEST123",
+            user_id=None,
+            source="web",
+            ip_hash="test_hash",
+        )
+
+        # Verify insertion
+        async with db_pool.acquire() as conn:
+            count = await conn.fetchval("SELECT COUNT(*) FROM maps.clicks WHERE map_id = $1", map_id)
+        assert count == 1
