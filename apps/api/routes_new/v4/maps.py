@@ -13,6 +13,7 @@ from genjishimada_sdk.maps import (
     ArchivalStatusPatchRequest,
     GuideFullResponse,
     GuideResponse,
+    GuideURL,
     LinkMapsCreateRequest,
     MapCategory,
     MapCreateRequest,
@@ -36,7 +37,7 @@ from genjishimada_sdk.maps import (
     UnlinkMapsCreateRequest,
 )
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedGuide, NewsfeedLegacyRecord
-from genjishimada_sdk.xp import XpGrantRequest
+from genjishimada_sdk.xp import XP_AMOUNTS, XpGrantRequest
 from litestar import Controller, delete, get, patch, post
 from litestar.connection import Request
 from litestar.di import Provide
@@ -97,7 +98,7 @@ class MapsController(Controller):
         maps_service: MapsService,
         # Core filters
         code: Annotated[OverwatchCode | None, Parameter(description="Filter by map code")] = None,
-        playtesting: Annotated[PlaytestStatus | None, Parameter(description="Filter by playtest status")] = None,
+        playtest_status: Annotated[PlaytestStatus | None, Parameter(description="Filter by playtest status")] = None,
         archived: Annotated[bool | None, Parameter(description="Filter by archived status")] = None,
         hidden: Annotated[bool | None, Parameter(description="Filter by hidden status")] = None,
         official: Annotated[bool | None, Parameter(description="Filter by official status")] = None,
@@ -155,7 +156,7 @@ class MapsController(Controller):
         try:
             filters = MapSearchFilters(
                 code=code,
-                playtesting=playtesting,
+                playtesting=playtest_status,
                 archived=archived,
                 hidden=hidden,
                 official=official,
@@ -234,7 +235,7 @@ class MapsController(Controller):
         maps_service: MapsService,
         newsfeed_service: NewsfeedService,
         request: Request,
-    ) -> Response[MapCreationJobResponse]:
+    ) -> MapCreationJobResponse:
         """Create a new map.
 
         Args:
@@ -250,8 +251,7 @@ class MapsController(Controller):
             CustomHTTPException: On validation or business rule errors.
         """
         try:
-            result = await maps_service.create_map(data, request.headers, newsfeed_service)
-            return Response(result, status_code=HTTP_201_CREATED)
+            return await maps_service.create_map(data, request.headers, newsfeed_service)
 
         except MapCodeExistsError as e:
             raise CustomHTTPException(
@@ -505,7 +505,7 @@ class MapsController(Controller):
             # Grant XP if map is official
             map_data = context["map_data"]
             if map_data.official:
-                xp_amount = 100  # XP_AMOUNTS["Guide"] from v3
+                xp_amount = XP_AMOUNTS["Guide"]
                 await lootbox_service.grant_user_xp(
                     request.headers,
                     data.user_id,
@@ -553,7 +553,7 @@ class MapsController(Controller):
         self,
         code: OverwatchCode,
         user_id: int,
-        url: str,
+        url: GuideURL,
         maps_service: MapsService,
     ) -> GuideResponse:
         """Update a guide.

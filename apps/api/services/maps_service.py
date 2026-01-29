@@ -12,7 +12,7 @@ from uuid import UUID
 
 import msgspec
 from asyncpg import Pool
-from genjishimada_sdk.difficulties import DifficultyAll, convert_raw_difficulty_to_difficulty_all
+from genjishimada_sdk.difficulties import DIFFICULTY_MIDPOINTS, DifficultyAll, convert_raw_difficulty_to_difficulty_all
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import (
     ArchivalStatusPatchRequest,
@@ -150,6 +150,7 @@ class MapsService(BaseService):
             "hidden": data.hidden,
             "archived": False,
             "difficulty": data.difficulty,
+            "raw_difficulty": DIFFICULTY_MIDPOINTS[data.difficulty],
             "description": data.description,
             "custom_banner": data.custom_banner,
             "title": data.title,
@@ -327,6 +328,7 @@ class MapsService(BaseService):
             core_updates["checkpoints"] = data.checkpoints
         if data.difficulty is not msgspec.UNSET:
             core_updates["difficulty"] = data.difficulty
+            core_updates["raw_difficulty"] = DIFFICULTY_MIDPOINTS[data.difficulty]
         if data.description is not msgspec.UNSET:
             core_updates["description"] = data.description
         if data.custom_banner is not msgspec.UNSET:

@@ -1111,7 +1111,7 @@ class MapsRepository(BaseRepository):
                 JOIN core.maps m ON m.id = c.map_id
                 WHERE m.code = $1
                     AND c.verified = FALSE
-                    AND c.playtest_thread_id IS NOT NULL
+                    AND c.verified_by IS NOT NULL
             )
             """,
             code,

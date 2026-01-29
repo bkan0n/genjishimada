@@ -489,7 +489,7 @@ class MapService(BaseService):
         *,
         remove_existing: bool,
     ) -> None:
-        """Insert or replace creators linked to a map.
+        """Insert or replace creators ed to a map.
 
         Args:
             map_id (int): Target map ID.
