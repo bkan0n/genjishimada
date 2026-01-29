@@ -17,7 +17,7 @@ dev-common = [
 ]
 
 [tool.ruff]
-exclude = ["tests"]
+exclude = ["test_v4", "tests"]
 line-length = 120
 target-version = "py313"
 
@@ -57,3 +57,12 @@ lint.ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+
+[tool.basedpyright]
+exclude = [
+    "**/tests",
+    "**/test_*.py",
+    "**/test_v4",
+    "**/test_*.py"
+]
