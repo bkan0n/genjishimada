@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import msgspec
 from asyncpg import Pool
 from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, Rank
 from genjishimada_sdk.helpers import sanitize_string
