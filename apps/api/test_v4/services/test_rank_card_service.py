@@ -39,4 +39,13 @@ class TestServiceLayer:
     async def test_get_background_calls_repo(self, rank_card_service, mock_repo):
         """Test that service calls repository."""
         await rank_card_service.get_background(user_id=1)
-        mock_repo.fetch_background.assert_called_once_with(user_id=1)
+        mock_repo.fetch_background.assert_called_once_with(1)
+
+    async def test_get_background_returns_response(self, rank_card_service, mock_repo):
+        """Test that service converts dict to response."""
+        mock_repo.fetch_background.return_value = {"name": "test_bg"}
+
+        result = await rank_card_service.get_background(user_id=1)
+
+        assert result.name == "test_bg"
+        mock_repo.fetch_background.assert_called_once_with(1)
