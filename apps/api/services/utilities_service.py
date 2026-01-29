@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import hmac
 import os
@@ -25,7 +26,7 @@ class LogClicksDebug(msgspec.Struct):
     source: str | None
     user_agent: str | None
     ip_hash: str | None
-    inserted_at: str  # datetime as string
+    inserted_at: dt.datetime
     day_bucket: int
 
 
