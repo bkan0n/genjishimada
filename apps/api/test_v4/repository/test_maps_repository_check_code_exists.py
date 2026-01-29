@@ -17,6 +17,7 @@ Test Coverage:
 
 import asyncio
 from typing import Any, get_args
+from uuid import uuid4
 
 import asyncpg
 from genjishimada_sdk.maps import MapCategory, OverwatchMap, PlaytestStatus
@@ -27,6 +28,10 @@ from pytest_databases.docker.postgres import PostgresService
 from repository.maps_repository import MapsRepository
 from genjishimada_sdk import difficulties
 fake = Faker()
+
+pytestmark = [
+    pytest.mark.domain_maps,
+]
 
 
 # ==============================================================================

@@ -15,6 +15,7 @@ Test Coverage:
 """
 
 from typing import Any, get_args
+from uuid import uuid4
 
 import asyncpg
 import pytest
@@ -27,6 +28,10 @@ from repository.exceptions import UniqueConstraintViolationError
 from repository.maps_repository import MapsRepository
 
 fake = Faker()
+
+pytestmark = [
+    pytest.mark.domain_maps,
+]
 
 
 # ==============================================================================
@@ -340,10 +345,12 @@ class TestCreateCoreMapDuplicateCode:
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
         minimal_map_data: dict[str, Any],
+        global_code_tracker: set[str],
     ) -> None:
         """Test that uppercase and lowercase codes are treated as different (case-sensitive)."""
-        # Create map with uppercase code
-        uppercase_code = "ABCD"
+        # Create map with uppercase code - use unique code
+        uppercase_code = f"T{uuid4().hex[:5].upper()}"
+        global_code_tracker.add(uppercase_code)
         minimal_map_data["code"] = uppercase_code
         await maps_repo.create_core_map(minimal_map_data)
 
@@ -697,16 +704,16 @@ class TestCreateCoreMapPerformance:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
-        used_codes: set[str],
+        global_code_tracker: set[str],
     ) -> None:
         """Test creating multiple maps in sequence."""
         num_maps = 10
         map_ids = []
 
         for i in range(num_maps):
-            # Generate unique code
-            code = f"SEQ{i:03d}"
-            used_codes.add(code)
+            # Generate unique code using UUID
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
 
             data = {
                 "code": code,

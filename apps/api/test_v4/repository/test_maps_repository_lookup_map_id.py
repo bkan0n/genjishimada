@@ -18,6 +18,7 @@ Test Coverage:
 
 import asyncio
 from typing import Any, get_args
+from uuid import uuid4
 
 import asyncpg
 import pytest
@@ -29,6 +30,10 @@ from pytest_databases.docker.postgres import PostgresService
 from repository.maps_repository import MapsRepository
 
 fake = Faker()
+
+pytestmark = [
+    pytest.mark.domain_maps,
+]
 
 
 # ==============================================================================
@@ -60,7 +65,7 @@ async def maps_repo(db_pool: asyncpg.Pool) -> MapsRepository:
 def valid_map_code() -> str:
     """Generate a valid Overwatch map code (4-6 uppercase alphanumeric chars)."""
     length = fake.random_int(min=4, max=6)
-    return "".join(fake.random_choices(elements="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", length=length))
+    return "".join(fake.unique.random_choices(elements="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", length=length))
 
 
 @pytest.fixture
@@ -514,9 +519,11 @@ class TestLookupMapIdArchivedHidden:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test that archived maps still return their ID."""
-        code = "ARCH01"
+        code = f"T{uuid4().hex[:5].upper()}"
+        global_code_tracker.add(code)
 
         async with db_pool.acquire() as conn:
             inserted_id = await conn.fetchval(
@@ -548,9 +555,11 @@ class TestLookupMapIdArchivedHidden:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test that hidden maps still return their ID."""
-        code = "HIDE01"
+        code = f"T{uuid4().hex[:5].upper()}"
+        global_code_tracker.add(code)
 
         async with db_pool.acquire() as conn:
             inserted_id = await conn.fetchval(
@@ -582,9 +591,11 @@ class TestLookupMapIdArchivedHidden:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test that archived AND hidden maps still return their ID."""
-        code = "BOTH01"
+        code = f"T{uuid4().hex[:5].upper()}"
+        global_code_tracker.add(code)
 
         async with db_pool.acquire() as conn:
             inserted_id = await conn.fetchval(
@@ -626,9 +637,11 @@ class TestLookupMapIdTransaction:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test that ID can be looked up within transaction before commit."""
-        code = "TRANS1"
+        code = f"T{uuid4().hex[:5].upper()}"
+        global_code_tracker.add(code)
 
         async with db_pool.acquire() as conn:
             async with conn.transaction():
@@ -712,9 +725,12 @@ class TestLookupMapIdPerformance:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test looking up multiple IDs sequentially."""
-        codes = ["SEQ001", "SEQ002", "SEQ003", "SEQ004", "SEQ005"]
+        codes = [f"T{uuid4().hex[:5].upper()}" for _ in range(5)]
+        for code in codes:
+            global_code_tracker.add(code)
         expected_ids = {}
 
         # Insert maps and store their IDs
@@ -745,21 +761,24 @@ class TestLookupMapIdPerformance:
         for code in codes:
             results[code] = await maps_repo.lookup_map_id(code)
 
-        # Verify results
-        assert results["SEQ001"] == expected_ids["SEQ001"]
-        assert results["SEQ002"] == expected_ids["SEQ002"]
-        assert results["SEQ003"] == expected_ids["SEQ003"]
-        assert results["SEQ004"] is None
-        assert results["SEQ005"] is None
+        # Verify results (first 3 exist, last 2 don't)
+        assert results[codes[0]] == expected_ids[codes[0]]
+        assert results[codes[1]] == expected_ids[codes[1]]
+        assert results[codes[2]] == expected_ids[codes[2]]
+        assert results[codes[3]] is None
+        assert results[codes[4]] is None
 
     @pytest.mark.asyncio
     async def test_lookup_multiple_ids_concurrently(
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test looking up multiple IDs concurrently."""
-        codes = ["PAR001", "PAR002", "PAR003", "PAR004", "PAR005"]
+        codes = [f"T{uuid4().hex[:5].upper()}" for _ in range(5)]
+        for code in codes:
+            global_code_tracker.add(code)
         expected_ids = {}
 
         # Insert maps
@@ -789,10 +808,10 @@ class TestLookupMapIdPerformance:
         tasks = [maps_repo.lookup_map_id(code) for code in codes]
         results = await asyncio.gather(*tasks)
 
-        # Verify results
-        assert results[0] == expected_ids["PAR001"]
-        assert results[1] == expected_ids["PAR002"]
-        assert results[2] == expected_ids["PAR003"]
+        # Verify results (first 3 exist, last 2 don't)
+        assert results[0] == expected_ids[codes[0]]
+        assert results[1] == expected_ids[codes[1]]
+        assert results[2] == expected_ids[codes[2]]
         assert results[3] is None
         assert results[4] is None
 
@@ -810,9 +829,12 @@ class TestLookupMapIdNumeric:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test that all-numeric codes work."""
-        code = "12345"
+        # Generate numeric-only code (5 digits)
+        code = "".join(str(fake.random_int(min=0, max=9)) for _ in range(5))
+        global_code_tracker.add(code)
 
         async with db_pool.acquire() as conn:
             inserted_id = await conn.fetchval(
@@ -843,9 +865,12 @@ class TestLookupMapIdNumeric:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test that all-alphabetic codes work."""
-        code = "ABCDE"
+        # Generate alpha-only code (5 letters)
+        code = "".join(fake.random_choices(elements="ABCDEFGHIJKLMNOPQRSTUVWXYZ", length=5))
+        global_code_tracker.add(code)
 
         async with db_pool.acquire() as conn:
             inserted_id = await conn.fetchval(
@@ -876,9 +901,12 @@ class TestLookupMapIdNumeric:
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
+        global_code_tracker: set[str],
     ) -> None:
         """Test that mixed alphanumeric codes work."""
-        code = "A1B2C"
+        # Use UUID-based code (already mixed alphanumeric)
+        code = f"T{uuid4().hex[:4].upper()}"
+        global_code_tracker.add(code)
 
         async with db_pool.acquire() as conn:
             inserted_id = await conn.fetchval(

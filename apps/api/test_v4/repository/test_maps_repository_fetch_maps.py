@@ -34,6 +34,10 @@ from utilities.map_search import MapSearchFilters
 
 fake = Faker()
 
+pytestmark = [
+    pytest.mark.domain_maps,
+]
+
 
 # ==============================================================================
 # FIXTURES

@@ -16,6 +16,7 @@ Test Coverage:
 """
 
 from typing import Any, get_args
+from uuid import uuid4
 
 import asyncpg
 import pytest
@@ -28,6 +29,10 @@ from repository.exceptions import UniqueConstraintViolationError
 from repository.maps_repository import MapsRepository
 
 fake = Faker()
+
+pytestmark = [
+    pytest.mark.domain_maps,
+]
 
 
 # ==============================================================================

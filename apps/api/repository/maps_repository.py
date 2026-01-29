@@ -1227,14 +1227,13 @@ class MapsRepository(BaseRepository):
         )
 
         if linked_code:
-            # Remove link from both maps
+            # Remove link from both maps (split into two statements to avoid trigger conflicts)
             await _conn.execute(
-                """
-                UPDATE core.maps
-                SET linked_code = NULL
-                WHERE code = $1 OR code = $2
-                """,
+                "UPDATE core.maps SET linked_code = NULL WHERE code = $1",
                 code,
+            )
+            await _conn.execute(
+                "UPDATE core.maps SET linked_code = NULL WHERE code = $1",
                 linked_code,
             )
 

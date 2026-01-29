@@ -28,6 +28,10 @@ from repository.maps_repository import MapsRepository
 
 fake = Faker()
 
+pytestmark = [
+    pytest.mark.domain_maps,
+]
+
 
 # ==============================================================================
 # FIXTURES
