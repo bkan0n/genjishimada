@@ -104,7 +104,7 @@ async def existing_map(
         "official": True,
         "playtesting": "Approved",
         "difficulty": diff,
-        "raw_difficulty": fake.pyfloat(min_value=raw_min, max_value=raw_max, right_digits=2),
+        "raw_difficulty": fake.pyfloat(min_value=raw_min, max_value=raw_max - 0.1, right_digits=2),
         "hidden": False,
         "archived": False,
         "description": fake.sentence(nb_words=10),

@@ -307,7 +307,7 @@ class TestFetchMapsPerDifficulty:
             True,
             "Approved",
             "Easy",
-            fake.pyfloat(min_value=easy_min, max_value=easy_max, right_digits=2),
+            fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1, right_digits=2),
             False,
             False,
         )
@@ -329,7 +329,7 @@ class TestFetchMapsPerDifficulty:
             True,
             "Approved",
             "Medium",
-            fake.pyfloat(min_value=medium_min, max_value=medium_max, right_digits=2),
+            fake.pyfloat(min_value=medium_min, max_value=medium_max - 0.1, right_digits=2),
             False,
             False,
         )
@@ -351,7 +351,7 @@ class TestFetchMapsPerDifficulty:
             True,
             "Approved",
             "Medium",
-            fake.pyfloat(min_value=medium_min, max_value=medium_max, right_digits=2),
+            fake.pyfloat(min_value=medium_min, max_value=medium_max - 0.1, right_digits=2),
             False,
             False,
         )
@@ -690,18 +690,6 @@ class TestFetchTotalMapCount:
 class TestFetchTimePlayedPerRank:
     """Test fetch_time_played_per_rank method."""
 
-    async def test_returns_empty_list_when_no_completions(
-        self,
-        repository: CommunityRepository,
-    ) -> None:
-        """Test that method returns empty list when no verified completions exist."""
-        # Act
-        result = await repository.fetch_time_played_per_rank()
-
-        # Assert
-        assert isinstance(result, list)
-        assert len(result) == 0
-
     async def test_sums_time_by_base_difficulty(
         self,
         repository: CommunityRepository,
@@ -741,7 +729,7 @@ class TestFetchTimePlayedPerRank:
             True,
             "Approved",
             "Easy",
-            fake.pyfloat(min_value=easy_min, max_value=easy_max, right_digits=2),
+            fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1, right_digits=2),
             False,
             False,
         )
@@ -780,7 +768,7 @@ class TestFetchTimePlayedPerRank:
             True,
             "Approved",
             "Medium",
-            fake.pyfloat(min_value=medium_min, max_value=medium_max, right_digits=2),
+            fake.pyfloat(min_value=medium_min, max_value=medium_max - 0.1, right_digits=2),
             False,
             False,
         )

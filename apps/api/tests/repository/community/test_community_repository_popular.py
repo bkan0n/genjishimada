@@ -79,7 +79,7 @@ class TestFetchPopularMaps:
             True,
             "Approved",
             "Easy",
-            fake.pyfloat(min_value=easy_min, max_value=easy_max, right_digits=2),
+            fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1 - 0.1, right_digits=2),
             False,
             False,
         )
@@ -112,7 +112,7 @@ class TestFetchPopularMaps:
             True,
             "Approved",
             "Easy",
-            fake.pyfloat(min_value=easy_min, max_value=easy_max, right_digits=2),
+            fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1, right_digits=2),
             False,
             False,
         )
@@ -175,7 +175,7 @@ class TestFetchPopularMaps:
                 True,
                 "Approved",
                 "Easy",
-                fake.pyfloat(min_value=easy_min, max_value=easy_max, right_digits=2),
+                fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1, right_digits=2),
                 False,
                 False,
             )
@@ -300,7 +300,7 @@ class TestFetchPopularMaps:
             True,
             "Approved",
             "Easy",
-            fake.pyfloat(min_value=easy_min, max_value=easy_max, right_digits=2),
+            fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1, right_digits=2),
             False,
             False,
         )
@@ -342,7 +342,7 @@ class TestFetchPopularMaps:
             True,
             "Approved",
             "Easy",
-            fake.pyfloat(min_value=easy_min, max_value=easy_max, right_digits=2),
+            fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1, right_digits=2),
             False,
             False,
         )

@@ -103,7 +103,7 @@ def minimal_map_data(unique_map_code: str) -> dict[str, Any]:
         "official": fake.boolean(),
         "playtesting": fake.random_element(elements=get_args(PlaytestStatus)),
         "difficulty": diff,
-        "raw_difficulty": fake.pyfloat(min_value=raw_min, max_value=raw_max, right_digits=2),
+        "raw_difficulty": fake.pyfloat(min_value=raw_min, max_value=raw_max - 0.1, right_digits=2),
         # Optional fields defaults
         "hidden": fake.boolean(),
         "archived": fake.boolean(),
@@ -127,7 +127,7 @@ def complete_map_data(unique_map_code: str) -> dict[str, Any]:
         "official": fake.boolean(),
         "playtesting": fake.random_element(elements=get_args(PlaytestStatus)),
         "difficulty": diff,
-        "raw_difficulty": fake.pyfloat(min_value=raw_min, max_value=raw_max, right_digits=2),
+        "raw_difficulty": fake.pyfloat(min_value=raw_min, max_value=raw_max - 0.1, right_digits=2),
         "hidden": fake.boolean(),
         "archived": fake.boolean(),
         "description": fake.sentence(nb_words=15),
@@ -387,7 +387,7 @@ class TestCreateCoreMapDifficultyValidation:
         """Test that all valid difficulty values work."""
         raw_min, raw_max = difficulties.DIFFICULTY_RANGES_ALL[difficulty]  # type: ignore
         minimal_map_data["difficulty"] = difficulty
-        minimal_map_data["raw_difficulty"] = fake.pyfloat(min_value=raw_min, max_value=raw_max, right_digits=2)
+        minimal_map_data["raw_difficulty"] = fake.pyfloat(min_value=raw_min, max_value=raw_max - 0.1, right_digits=2)
 
         map_id = await maps_repo.create_core_map(minimal_map_data)
 

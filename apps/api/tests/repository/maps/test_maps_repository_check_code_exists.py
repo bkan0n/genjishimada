@@ -81,7 +81,7 @@ async def minimal_map_data(valid_map_code: str) -> dict[str, Any]:
         "hidden": False,
         "archived": False,
         "difficulty": diff,
-        "raw_difficulty": fake.pyfloat(min_value=raw_min, max_value=raw_max, right_digits=2),
+        "raw_difficulty": fake.pyfloat(min_value=raw_min, max_value=raw_max - 0.1, right_digits=2),
         "description": fake.sentence(nb_words=10),
         "custom_banner": None,
         "title": fake.sentence(nb_words=3),
