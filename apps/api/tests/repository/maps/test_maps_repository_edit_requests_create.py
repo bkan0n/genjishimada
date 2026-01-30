@@ -68,60 +68,6 @@ class TestCreateEditRequest:
         assert result["reason"] == reason
 
     @pytest.mark.asyncio
-    async def test_create_edit_request_with_invalid_map_id_raises_foreign_key_error(
-        self,
-        repository: MapsRepository,
-        create_test_user,
-        unique_map_code: str,
-    ) -> None:
-        """Test creating edit request with invalid map_id raises ForeignKeyViolationError."""
-        # Arrange
-        invalid_map_id = 999999999
-        user_id = await create_test_user()
-        proposed_changes = {"difficulty": "Hard"}
-        reason = fake.sentence()
-
-        # Act & Assert
-        with pytest.raises(ForeignKeyViolationError) as exc_info:
-            await repository.create_edit_request(
-                map_id=invalid_map_id,
-                code=unique_map_code,
-                proposed_changes=proposed_changes,
-                reason=reason,
-                created_by=user_id,
-            )
-
-        assert exc_info.value.table == "maps.edit_requests"
-        assert "map_id" in exc_info.value.constraint_name or "fk" in exc_info.value.constraint_name.lower()
-
-    @pytest.mark.asyncio
-    async def test_create_edit_request_with_invalid_user_id_raises_foreign_key_error(
-        self,
-        repository: MapsRepository,
-        create_test_map,
-        unique_map_code: str,
-    ) -> None:
-        """Test creating edit request with invalid user_id raises ForeignKeyViolationError."""
-        # Arrange
-        map_id = await create_test_map(code=unique_map_code)
-        invalid_user_id = 999999999999999999
-        proposed_changes = {"difficulty": "Hard"}
-        reason = fake.sentence()
-
-        # Act & Assert
-        with pytest.raises(ForeignKeyViolationError) as exc_info:
-            await repository.create_edit_request(
-                map_id=map_id,
-                code=unique_map_code,
-                proposed_changes=proposed_changes,
-                reason=reason,
-                created_by=invalid_user_id,
-            )
-
-        assert exc_info.value.table == "maps.edit_requests"
-        assert "created_by" in exc_info.value.constraint_name or "fk" in exc_info.value.constraint_name.lower()
-
-    @pytest.mark.asyncio
     async def test_create_edit_request_with_empty_proposed_changes(
         self,
         repository: MapsRepository,

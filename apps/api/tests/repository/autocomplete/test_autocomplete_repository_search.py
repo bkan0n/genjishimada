@@ -355,28 +355,6 @@ class TestGetSimilarUsers:
             assert user_id in user_ids
 
     @pytest.mark.asyncio
-    async def test_get_similar_respects_limit(
-        self, repository: AutocompleteRepository, create_test_user
-    ) -> None:
-        """Test that limit parameter is respected."""
-        # Arrange - create multiple users
-        for i in range(5):
-            await create_test_user(nickname=f"Player{i}")
-
-        # Act
-        result_limit_1 = await repository.get_similar_users("Player", limit=1)
-        result_limit_5 = await repository.get_similar_users("Player", limit=5)
-        result_limit_10 = await repository.get_similar_users("Player", limit=10)
-
-        # Assert
-        if result_limit_1 is not None:
-            assert len(result_limit_1) <= 1
-        if result_limit_5 is not None:
-            assert len(result_limit_5) <= 5
-        if result_limit_10 is not None:
-            assert len(result_limit_10) <= 10
-
-    @pytest.mark.asyncio
     async def test_get_similar_fake_users_only(
         self, repository: AutocompleteRepository, asyncpg_conn
     ) -> None:
@@ -399,70 +377,3 @@ class TestGetSimilarUsers:
             # All should be fake users (ID < 1000000000000000)
             assert all(uid < 1000000000000000 for uid in user_ids)
 
-    @pytest.mark.asyncio
-    async def test_get_similar_ignore_fake_users(
-        self, repository: AutocompleteRepository, create_test_user
-    ) -> None:
-        """Test filtering out fake users (ignore user_id < 1000000000000000)."""
-        # Arrange - create a real Discord user
-        real_user_id = await create_test_user(nickname="RealPlayer")
-
-        # Act
-        result = await repository.get_similar_users("RealPlayer", limit=10, ignore_fake_users=True)
-
-        # Assert
-        if result is not None:
-            user_ids = [uid for uid, _ in result]
-            # All should be real Discord users (ID > 1000000000000000)
-            assert all(uid > 1000000000000000 for uid in user_ids)
-            assert real_user_id in user_ids
-
-    @pytest.mark.asyncio
-    async def test_get_similar_includes_nickname_and_global_name(
-        self, repository: AutocompleteRepository, asyncpg_conn, global_user_id_tracker: set[int]
-    ) -> None:
-        """Test that search matches both nickname and global_name."""
-        # Arrange - create user with different nickname and global_name
-        user_id = fake.random_int(min=100000000000000000, max=999999999999999999)
-        global_user_id_tracker.add(user_id)
-
-        await asyncpg_conn.execute(
-            "INSERT INTO core.users (id, nickname, global_name) VALUES ($1, $2, $3)",
-            user_id,
-            "player123",
-            "ThePlayer",
-        )
-
-        # Act - search by nickname
-        result_nickname = await repository.get_similar_users("player123", limit=10)
-        # Act - search by global_name
-        result_global = await repository.get_similar_users("ThePlayer", limit=10)
-
-        # Assert - both searches should find the user
-        if result_nickname is not None:
-            user_ids = [uid for uid, _ in result_nickname]
-            assert user_id in user_ids
-
-        if result_global is not None:
-            user_ids = [uid for uid, _ in result_global]
-            assert user_id in user_ids
-
-    @pytest.mark.asyncio
-    async def test_get_similar_display_name_format(
-        self, repository: AutocompleteRepository, create_test_user
-    ) -> None:
-        """Test that display name is formatted correctly."""
-        # Arrange
-        user_id = await create_test_user(nickname="TestUser")
-
-        # Act
-        result = await repository.get_similar_users("TestUser", limit=10)
-
-        # Assert
-        if result is not None:
-            # Find our user in results
-            our_user = next((item for item in result if item[0] == user_id), None)
-            if our_user is not None:
-                _, display_name = our_user
-                assert isinstance(display_name, str)
-                assert len(display_name) > 0

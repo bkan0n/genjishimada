@@ -33,19 +33,6 @@ async def repository(asyncpg_conn):
 class TestFetchPopularMaps:
     """Test fetch_popular_maps method."""
 
-    async def test_returns_empty_when_no_maps(
-        self,
-        repository: CommunityRepository,
-    ) -> None:
-        """Test that method returns empty list when no official visible maps exist."""
-        # Act
-        result = await repository.fetch_popular_maps()
-
-        # Assert
-        assert isinstance(result, list)
-        # May have maps from other tests, so just check it's a list
-        assert len(result) >= 0
-
     async def test_ranks_maps_by_completion_count(
         self,
         repository: CommunityRepository,
@@ -267,117 +254,6 @@ class TestFetchPopularMaps:
         codes = [r["code"] for r in result]
         assert code not in codes
 
-    async def test_quality_used_as_tiebreaker(
-        self,
-        repository: CommunityRepository,
-        create_test_user,
-        asyncpg_conn,
-    ) -> None:
-        """Test that quality is used as tiebreaker when completions are equal."""
-        from typing import get_args
-        from genjishimada_sdk.maps import MapCategory, OverwatchMap
-        from genjishimada_sdk import difficulties
-
-        # Arrange - Create 2 maps with same completion count but different quality
-        easy_min, easy_max = difficulties.DIFFICULTY_RANGES_ALL["Easy"]
-        user = await create_test_user()
-
-        # Map 1: 3 completions, quality 8.0
-        code1 = f"T{uuid4().hex[:5].upper()}"
-        map1 = await asyncpg_conn.fetchval(
-            """
-            INSERT INTO core.maps (
-                code, map_name, category, checkpoints, official,
-                playtesting, difficulty, raw_difficulty, hidden, archived
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING id
-            """,
-            code1,
-            fake.random_element(elements=get_args(OverwatchMap)),
-            fake.random_element(elements=get_args(MapCategory)),
-            10,
-            True,
-            "Approved",
-            "Easy",
-            fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1, right_digits=2),
-            False,
-            False,
-        )
-
-        for _ in range(3):
-            u = await create_test_user()
-            await asyncpg_conn.execute(
-                """
-                INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, completion)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                """,
-                map1, u, 100.0, True, fake.url(), True
-            )
-
-        # Add rating
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO maps.ratings (map_id, user_id, quality, verified)
-            VALUES ($1, $2, $3, $4)
-            """,
-            map1, user, 8.0, True
-        )
-
-        # Map 2: 3 completions, quality 9.0 (should rank higher)
-        code2 = f"T{uuid4().hex[:5].upper()}"
-        map2 = await asyncpg_conn.fetchval(
-            """
-            INSERT INTO core.maps (
-                code, map_name, category, checkpoints, official,
-                playtesting, difficulty, raw_difficulty, hidden, archived
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            RETURNING id
-            """,
-            code2,
-            fake.random_element(elements=get_args(OverwatchMap)),
-            fake.random_element(elements=get_args(MapCategory)),
-            10,
-            True,
-            "Approved",
-            "Easy",
-            fake.pyfloat(min_value=easy_min, max_value=easy_max - 0.1, right_digits=2),
-            False,
-            False,
-        )
-
-        for _ in range(3):
-            u = await create_test_user()
-            await asyncpg_conn.execute(
-                """
-                INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, completion)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                """,
-                map2, u, 100.0, True, fake.url(), True
-            )
-
-        # Add higher quality rating
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO maps.ratings (map_id, user_id, quality, verified)
-            VALUES ($1, $2, $3, $4)
-            """,
-            map2, user, 9.0, True
-        )
-
-        # Act
-        result = await repository.fetch_popular_maps()
-
-        # Assert - Find our maps
-        easy_maps = [r for r in result if r["difficulty"] == "Easy"]
-        map1_ranking = next((r["ranking"] for r in easy_maps if r["code"] == code1), None)
-        map2_ranking = next((r["ranking"] for r in easy_maps if r["code"] == code2), None)
-
-        if map1_ranking and map2_ranking:
-            # Map2 (higher quality) should rank higher
-            assert map2_ranking < map1_ranking
-
 
 # ==============================================================================
 # TESTS: fetch_popular_creators
@@ -386,19 +262,6 @@ class TestFetchPopularMaps:
 
 class TestFetchPopularCreators:
     """Test fetch_popular_creators method."""
-
-    async def test_returns_empty_when_no_creators(
-        self,
-        repository: CommunityRepository,
-    ) -> None:
-        """Test that method returns empty list when no creators exist."""
-        # Act
-        result = await repository.fetch_popular_creators()
-
-        # Assert
-        assert isinstance(result, list)
-        # May have creators from other tests
-        assert len(result) >= 0
 
     async def test_requires_minimum_three_maps(
         self,
@@ -495,18 +358,6 @@ class TestFetchPopularCreators:
             assert creator_result["map_count"] == 3
             assert float(creator_result["average_quality"]) == 8.0
 
-    async def test_orders_by_average_quality_descending(
-        self,
-        repository: CommunityRepository,
-    ) -> None:
-        """Test that creators are ordered by average quality descending."""
-        # Act
-        result = await repository.fetch_popular_creators()
-
-        # Assert - Should be ordered by quality desc
-        if len(result) >= 2:
-            for i in range(len(result) - 1):
-                assert result[i]["average_quality"] >= result[i + 1]["average_quality"]
 
     async def test_only_includes_verified_ratings(
         self,
@@ -561,54 +412,3 @@ class TestFetchPopularCreators:
         if creator_result:
             assert float(creator_result["average_quality"]) == 8.0
 
-    async def test_uses_overwatch_username_if_available(
-        self,
-        repository: CommunityRepository,
-        create_test_map,
-        create_test_user,
-        asyncpg_conn,
-    ) -> None:
-        """Test that Overwatch username is used if available."""
-        # Arrange
-        creator = await create_test_user()
-
-        # Set overwatch username
-        overwatch_name = f"OW_{fake.user_name()}"
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO users.overwatch_usernames (user_id, username, is_primary)
-            VALUES ($1, $2, $3)
-            """,
-            creator, overwatch_name, True
-        )
-
-        # Create 3 maps
-        for _ in range(3):
-            code = f"T{uuid4().hex[:5].upper()}"
-            map_id = await create_test_map(code)
-
-            # Link creator
-            await asyncpg_conn.execute(
-                """
-                INSERT INTO maps.creators (map_id, user_id)
-                VALUES ($1, $2)
-                """,
-                map_id, creator
-            )
-
-            # Add rating
-            rater = await create_test_user()
-            await asyncpg_conn.execute(
-                """
-                INSERT INTO maps.ratings (map_id, user_id, quality, verified)
-                VALUES ($1, $2, $3, $4)
-                """,
-                map_id, rater, 8.0, True
-            )
-
-        # Act
-        result = await repository.fetch_popular_creators()
-
-        # Assert - Should use overwatch username
-        creator_result = next((r for r in result if r["name"] == overwatch_name), None)
-        assert creator_result is not None

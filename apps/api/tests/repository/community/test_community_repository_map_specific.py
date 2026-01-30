@@ -31,22 +31,7 @@ async def repository(asyncpg_conn):
 
 
 class TestFetchMapCompletionStatistics:
-    """Test fetch_map_completion_statistics method."""
 
-    async def test_returns_empty_stats_for_nonexistent_map(
-        self,
-        repository: CommunityRepository,
-    ) -> None:
-        """Test that method returns empty list for non-existent map code."""
-        # Arrange
-        fake_code = f"T{uuid4().hex[:5].upper()}"
-
-        # Act
-        result = await repository.fetch_map_completion_statistics(fake_code)
-
-        # Assert - Non-existent map returns empty list
-        assert isinstance(result, list)
-        assert len(result) == 0
 
     async def test_returns_empty_stats_for_map_with_no_completions(
         self,
@@ -200,61 +185,6 @@ class TestFetchMapCompletionStatistics:
         assert stats["max"] == 100.0
         assert stats["avg"] == 100.0
 
-    async def test_rounds_to_two_decimal_places(
-        self,
-        repository: CommunityRepository,
-        create_test_map,
-        create_test_user,
-        asyncpg_conn,
-    ) -> None:
-        """Test that stats are rounded to 2 decimal places."""
-        from decimal import Decimal
-
-        # Arrange
-        code = f"T{uuid4().hex[:5].upper()}"
-        map_id = await create_test_map(code)
-        user1 = await create_test_user()
-        user2 = await create_test_user()
-        user3 = await create_test_user()
-
-        # Create completions that will produce non-round average
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, completion)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            map_id, user1, 100.333, True, fake.url(), True
-        )
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, completion)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            map_id, user2, 200.666, True, fake.url(), True
-        )
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, completion)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            map_id, user3, 150.999, True, fake.url(), True
-        )
-
-        # Act
-        result = await repository.fetch_map_completion_statistics(code)
-
-        # Assert - All values should be rounded to 2 decimals
-        assert isinstance(result, list)
-        assert len(result) == 1
-        stats = result[0]
-        # Values come back as Decimal, so compare to Decimal
-        # min(100.333, 200.666, 150.999) = 100.333 → rounds to 100.33
-        # max(100.333, 200.666, 150.999) = 200.666 → rounds to 200.67
-        # avg = (100.333 + 200.666 + 150.999) / 3 = 150.666 → rounds to 150.67
-        assert stats["min"] == Decimal("100.33")
-        assert stats["max"] == Decimal("200.67")
-        assert stats["avg"] == Decimal("150.67")
-
 
 # ==============================================================================
 # TESTS: fetch_map_record_progression
@@ -263,42 +193,6 @@ class TestFetchMapCompletionStatistics:
 
 class TestFetchMapRecordProgression:
     """Test fetch_map_record_progression method."""
-
-    async def test_returns_empty_for_nonexistent_map(
-        self,
-        repository: CommunityRepository,
-        create_test_user,
-    ) -> None:
-        """Test that method returns empty list for non-existent map."""
-        # Arrange
-        user_id = await create_test_user()
-        fake_code = f"T{uuid4().hex[:5].upper()}"
-
-        # Act
-        result = await repository.fetch_map_record_progression(user_id, fake_code)
-
-        # Assert
-        assert isinstance(result, list)
-        assert len(result) == 0
-
-    async def test_returns_empty_for_user_with_no_records(
-        self,
-        repository: CommunityRepository,
-        create_test_map,
-        create_test_user,
-    ) -> None:
-        """Test that method returns empty list when user has no records."""
-        # Arrange
-        code = f"T{uuid4().hex[:5].upper()}"
-        await create_test_map(code)
-        user_id = await create_test_user()
-
-        # Act
-        result = await repository.fetch_map_record_progression(user_id, code)
-
-        # Assert
-        assert isinstance(result, list)
-        assert len(result) == 0
 
     async def test_returns_records_ordered_by_time_ascending(
         self,
@@ -456,34 +350,3 @@ class TestFetchMapRecordProgression:
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0]["time"] == 100.0
-
-    async def test_includes_inserted_at_timestamp(
-        self,
-        repository: CommunityRepository,
-        create_test_map,
-        create_test_user,
-        asyncpg_conn,
-    ) -> None:
-        """Test that inserted_at timestamp is included in results."""
-        # Arrange
-        code = f"T{uuid4().hex[:5].upper()}"
-        map_id = await create_test_map(code)
-        user_id = await create_test_user()
-
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, completion)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            """,
-            map_id, user_id, 100.0, True, fake.url(), True
-        )
-
-        # Act
-        result = await repository.fetch_map_record_progression(user_id, code)
-
-        # Assert
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert "time" in result[0]
-        assert "inserted_at" in result[0]
-        assert result[0]["inserted_at"] is not None

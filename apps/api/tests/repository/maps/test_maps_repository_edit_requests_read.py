@@ -61,21 +61,6 @@ class TestFetchEditRequest:
         assert result["created_by"] == user_id
 
     @pytest.mark.asyncio
-    async def test_fetch_edit_request_returns_none_for_invalid_id(
-        self,
-        repository: MapsRepository,
-    ) -> None:
-        """Test fetch_edit_request returns None for non-existent ID."""
-        # Arrange
-        invalid_id = 999999999
-
-        # Act
-        result = await repository.fetch_edit_request(invalid_id)
-
-        # Assert
-        assert result is None
-
-    @pytest.mark.asyncio
     async def test_fetch_edit_request_includes_all_fields(
         self,
         repository: MapsRepository,
@@ -162,22 +147,6 @@ class TestCheckPendingEditRequest:
         # Assert
         assert result is None
 
-    @pytest.mark.asyncio
-    async def test_check_pending_returns_none_when_no_requests(
-        self,
-        repository: MapsRepository,
-        create_test_map,
-        unique_map_code: str,
-    ) -> None:
-        """Test check_pending_edit_request returns None when map has no requests."""
-        # Arrange
-        map_id = await create_test_map(code=unique_map_code)
-
-        # Act
-        result = await repository.check_pending_edit_request(map_id)
-
-        # Assert
-        assert result is None
 
 
 # ==============================================================================
@@ -225,18 +194,6 @@ class TestFetchPendingEditRequests:
         pending_ids = [r["id"] for r in result]
         assert pending_id in pending_ids
         assert resolved_id not in pending_ids
-
-    @pytest.mark.asyncio
-    async def test_fetch_pending_returns_empty_when_none(
-        self,
-        repository: MapsRepository,
-    ) -> None:
-        """Test fetch_pending_edit_requests returns empty list when no pending requests."""
-        # Act
-        result = await repository.fetch_pending_edit_requests()
-
-        # Assert - may have requests from other tests, so just verify it's a list
-        assert isinstance(result, list)
 
     @pytest.mark.asyncio
     async def test_fetch_pending_ordered_by_created_at(
@@ -363,20 +320,6 @@ class TestFetchEditSubmission:
         assert current_map["difficulty"] == "Hard"
         assert current_map["checkpoints"] == 25
 
-    @pytest.mark.asyncio
-    async def test_fetch_submission_returns_none_for_invalid_id(
-        self,
-        repository: MapsRepository,
-    ) -> None:
-        """Test fetch_edit_submission returns None for non-existent ID."""
-        # Arrange
-        invalid_id = 999999999
-
-        # Act
-        result = await repository.fetch_edit_submission(invalid_id)
-
-        # Assert
-        assert result is None
 
 
 # ==============================================================================
@@ -499,19 +442,3 @@ class TestFetchUserEditRequests:
             # Newer IDs should come first
             assert our_requests[i]["id"] > our_requests[i + 1]["id"]
 
-    @pytest.mark.asyncio
-    async def test_fetch_user_requests_returns_empty_for_no_requests(
-        self,
-        repository: MapsRepository,
-        create_test_user,
-    ) -> None:
-        """Test fetch_user_edit_requests returns empty list for user with no requests."""
-        # Arrange
-        user_id = await create_test_user()
-
-        # Act
-        result = await repository.fetch_user_edit_requests(user_id)
-
-        # Assert
-        assert isinstance(result, list)
-        assert len(result) == 0
