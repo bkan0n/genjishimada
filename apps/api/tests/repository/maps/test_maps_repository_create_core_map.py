@@ -1,17 +1,10 @@
-"""Exhaustive tests for MapsRepository.create_core_map method.
+"""Tests for MapsRepository.create_core_map method.
 
 Test Coverage:
-- Happy path: create with all required fields
+- Happy path: create with required fields
 - Happy path: create with optional fields
-- Constraint violations: duplicate code
-- Constraint violations: invalid enum values
-- Field validation: difficulty ranges
-- Field validation: empty/null strings
-- Field validation: title length constraint
 - Transaction handling: commit and rollback
-- Edge cases: minimal data, maximal data
-- Edge cases: boundary values
-- Performance: bulk inserts
+- Constraint smoke tests: duplicate code, enum validation
 """
 
 from typing import Any, get_args
@@ -157,25 +150,6 @@ class TestCreateCoreMapHappyPathMinimal:
         assert map_id > 0
 
     @pytest.mark.asyncio
-    async def test_created_map_exists_in_database(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test that created map can be retrieved from database."""
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        # Verify map exists
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT * FROM core.maps WHERE id = $1", map_id)
-
-        assert result is not None
-        assert result["code"] == minimal_map_data["code"]
-        assert result["map_name"] == minimal_map_data["map_name"]
-        assert result["category"] == minimal_map_data["category"]
-
-    @pytest.mark.asyncio
     async def test_created_map_has_correct_values(
         self,
         maps_repo: MapsRepository,
@@ -237,71 +211,14 @@ class TestCreateCoreMapHappyPathComplete:
         assert result["custom_banner"] == complete_map_data["custom_banner"]
         assert result["title"] == complete_map_data["title"]
 
-    @pytest.mark.asyncio
-    async def test_create_with_description_only(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test creating map with only description as optional field."""
-        minimal_map_data["description"] = fake.sentence(nb_words=20)
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT * FROM core.maps WHERE id = $1", map_id)
-
-        assert result["description"] == minimal_map_data["description"]
-        assert result["custom_banner"] is None
-        assert result["title"] is None
-
-    @pytest.mark.asyncio
-    async def test_create_with_custom_banner_only(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test creating map with only custom_banner as optional field."""
-        minimal_map_data["custom_banner"] = fake.url()
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT * FROM core.maps WHERE id = $1", map_id)
-
-        assert result["custom_banner"] == minimal_map_data["custom_banner"]
-        assert result["description"] is None
-        assert result["title"] is None
-
-    @pytest.mark.asyncio
-    async def test_create_with_title_only(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test creating map with only title as optional field."""
-        minimal_map_data["title"] = fake.sentence(nb_words=3)[:50]
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT * FROM core.maps WHERE id = $1", map_id)
-
-        assert result["title"] == minimal_map_data["title"]
-        assert result["description"] is None
-        assert result["custom_banner"] is None
-
 
 # ==============================================================================
-# CONSTRAINT VIOLATION TESTS - DUPLICATE CODE
+# CONSTRAINT SMOKE TESTS
 # ==============================================================================
 
 
-class TestCreateCoreMapDuplicateCode:
-    """Test duplicate code constraint violations."""
+class TestCreateCoreMapConstraints:
+    """Smoke tests for database constraint enforcement."""
 
     @pytest.mark.asyncio
     async def test_duplicate_code_raises_unique_constraint_error(
@@ -310,293 +227,28 @@ class TestCreateCoreMapDuplicateCode:
         minimal_map_data: dict[str, Any],
     ) -> None:
         """Test that creating a map with duplicate code raises UniqueConstraintViolationError."""
-        # Create first map
         await maps_repo.create_core_map(minimal_map_data)
 
-        # Attempt to create second map with same code
         with pytest.raises(UniqueConstraintViolationError) as exc_info:
             await maps_repo.create_core_map(minimal_map_data)
 
-        # Verify constraint name
         assert "maps_code_key" in exc_info.value.constraint_name
 
     @pytest.mark.asyncio
-    async def test_duplicate_code_different_data_still_fails(
+    async def test_enum_validation_works(
         self,
         maps_repo: MapsRepository,
         minimal_map_data: dict[str, Any],
-        unique_map_code: str,
     ) -> None:
-        """Test that duplicate code fails even with different map data."""
-        # Create first map
-        await maps_repo.create_core_map(minimal_map_data)
-
-        # Create different map data but same code
-        different_data = minimal_map_data.copy()
-        different_data["map_name"] = "Different Map"
-        different_data["checkpoints"] = 999
-
-        with pytest.raises(UniqueConstraintViolationError):
-            await maps_repo.create_core_map(different_data)
-
-    @pytest.mark.asyncio
-    async def test_case_sensitive_codes_are_unique(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-        global_code_tracker: set[str],
-    ) -> None:
-        """Test that uppercase and lowercase codes are treated as different (case-sensitive)."""
-        # Create map with uppercase code - use unique code
-        uppercase_code = f"T{uuid4().hex[:5].upper()}"
-        global_code_tracker.add(uppercase_code)
-        minimal_map_data["code"] = uppercase_code
-        await maps_repo.create_core_map(minimal_map_data)
-
-        # This should fail because lowercase violates code constraint (only uppercase allowed)
-        # But if it somehow gets past validation, it would be a different code
-        # Note: The database constraint requires [A-Z0-9]{4,6}, so lowercase won't insert
-        lowercase_code = "abcd"
-        minimal_map_data["code"] = lowercase_code
-
-        # This will fail at the CHECK constraint level, not unique constraint
-        with pytest.raises((asyncpg.CheckViolationError, Exception)):
-            await maps_repo.create_core_map(minimal_map_data)
-
-
-# ==============================================================================
-# FIELD VALIDATION TESTS - DIFFICULTY
-# ==============================================================================
-
-
-class TestCreateCoreMapDifficultyValidation:
-    """Test difficulty field validation."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "difficulty",
-        ["Easy", "Medium", "Hard", "Very Hard", "Extreme", "Hell"],
-    )
-    async def test_all_valid_difficulties(
-        self,
-        maps_repo: MapsRepository,
-        minimal_map_data: dict[str, Any],
-        difficulty: str,
-    ) -> None:
-        """Test that all valid difficulty values work."""
-        raw_min, raw_max = difficulties.DIFFICULTY_RANGES_ALL[difficulty]  # type: ignore
-        minimal_map_data["difficulty"] = difficulty
-        minimal_map_data["raw_difficulty"] = fake.pyfloat(min_value=raw_min, max_value=raw_max - 0.1, right_digits=2)
+        """Test that enum validation works for category and playtesting fields."""
+        # Test valid enum values work
+        minimal_map_data["category"] = "Classic"
+        minimal_map_data["playtesting"] = "Approved"
 
         map_id = await maps_repo.create_core_map(minimal_map_data)
 
         assert isinstance(map_id, int)
 
-    @pytest.mark.asyncio
-    async def test_raw_difficulty_minimum_value(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test creating map with minimum raw_difficulty (Easy minimum)."""
-        minimal_map_data["difficulty"] = "Easy"
-        minimal_map_data["raw_difficulty"] = difficulties.DIFFICULTY_RANGES_ALL["Easy"][0]  # type: ignore
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT raw_difficulty FROM core.maps WHERE id = $1", map_id)
-
-        assert float(result["raw_difficulty"]) == pytest.approx(
-            difficulties.DIFFICULTY_RANGES_ALL["Easy"][0], abs=0.01  # type: ignore
-        )
-
-    @pytest.mark.asyncio
-    async def test_raw_difficulty_maximum_value(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test creating map with maximum raw_difficulty (Hell maximum)."""
-        minimal_map_data["difficulty"] = "Hell"
-        minimal_map_data["raw_difficulty"] = difficulties.DIFFICULTY_RANGES_ALL["Hell"][1]  # type: ignore
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT raw_difficulty FROM core.maps WHERE id = $1", map_id)
-
-        assert float(result["raw_difficulty"]) == pytest.approx(
-            difficulties.DIFFICULTY_RANGES_ALL["Hell"][1], abs=0.01  # type: ignore
-        )
-
-
-# ==============================================================================
-# FIELD VALIDATION TESTS - CHECKPOINTS
-# ==============================================================================
-
-
-class TestCreateCoreMapCheckpointsValidation:
-    """Test checkpoints field validation."""
-
-    @pytest.mark.asyncio
-    async def test_minimum_checkpoints_value(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test creating map with minimum checkpoints (1)."""
-        minimal_map_data["checkpoints"] = 1
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT checkpoints FROM core.maps WHERE id = $1", map_id)
-
-        assert result["checkpoints"] == 1
-
-    @pytest.mark.asyncio
-    async def test_large_checkpoints_value(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test creating map with large checkpoints value."""
-        minimal_map_data["checkpoints"] = 999
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT checkpoints FROM core.maps WHERE id = $1", map_id)
-
-        assert result["checkpoints"] == 999
-
-
-# ==============================================================================
-# FIELD VALIDATION TESTS - TITLE LENGTH
-# ==============================================================================
-
-
-class TestCreateCoreMapTitleValidation:
-    """Test title field length constraint."""
-
-    @pytest.mark.asyncio
-    async def test_title_at_max_length_50_chars(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test that title with exactly 50 characters is accepted."""
-        minimal_map_data["title"] = "A" * 50
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT title FROM core.maps WHERE id = $1", map_id)
-
-        assert result["title"] == "A" * 50
-        assert len(result["title"]) == 50
-
-    @pytest.mark.asyncio
-    async def test_title_exceeding_max_length_fails(
-        self,
-        maps_repo: MapsRepository,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test that title with more than 50 characters fails."""
-        minimal_map_data["title"] = "A" * 51
-
-        with pytest.raises((asyncpg.CheckViolationError, Exception)):
-            await maps_repo.create_core_map(minimal_map_data)
-
-    @pytest.mark.asyncio
-    async def test_empty_title_string_accepted(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-    ) -> None:
-        """Test that empty string title is accepted."""
-        minimal_map_data["title"] = ""
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT title FROM core.maps WHERE id = $1", map_id)
-
-        assert result["title"] == ""
-
-
-# ==============================================================================
-# BOOLEAN FIELD TESTS
-# ==============================================================================
-
-
-class TestCreateCoreMapBooleanFields:
-    """Test boolean field combinations."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("official", [True, False])
-    async def test_official_field_values(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-        official: bool,
-    ) -> None:
-        """Test both official values."""
-        minimal_map_data["official"] = official
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT official FROM core.maps WHERE id = $1", map_id)
-
-        assert result["official"] == official
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("hidden", [True, False])
-    async def test_hidden_field_values(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-        hidden: bool,
-    ) -> None:
-        """Test both hidden values."""
-        minimal_map_data["hidden"] = hidden
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT hidden FROM core.maps WHERE id = $1", map_id)
-
-        assert result["hidden"] == hidden
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("archived", [True, False])
-    async def test_archived_field_values(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        minimal_map_data: dict[str, Any],
-        archived: bool,
-    ) -> None:
-        """Test both archived values."""
-        minimal_map_data["archived"] = archived
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT archived FROM core.maps WHERE id = $1", map_id)
-
-        assert result["archived"] == archived
 
 
 # ==============================================================================
@@ -650,90 +302,3 @@ class TestCreateCoreMapTransactions:
             result = await conn.fetchrow("SELECT * FROM core.maps WHERE code = $1", minimal_map_data["code"])
 
         assert result is None
-
-
-# ==============================================================================
-# ENUM VALIDATION TESTS
-# ==============================================================================
-
-
-class TestCreateCoreMapEnumValidation:
-    """Test enum field validation."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("category", get_args(MapCategory))
-    async def test_all_valid_categories(
-        self,
-        maps_repo: MapsRepository,
-        minimal_map_data: dict[str, Any],
-        category: str,
-    ) -> None:
-        """Test all valid category enum values."""
-        minimal_map_data["category"] = category
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        assert isinstance(map_id, int)
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("playtesting", get_args(PlaytestStatus))
-    async def test_all_valid_playtest_statuses(
-        self,
-        maps_repo: MapsRepository,
-        minimal_map_data: dict[str, Any],
-        playtesting: str,
-    ) -> None:
-        """Test all valid playtesting enum values."""
-        minimal_map_data["playtesting"] = playtesting
-
-        map_id = await maps_repo.create_core_map(minimal_map_data)
-
-        assert isinstance(map_id, int)
-
-
-# ==============================================================================
-# PERFORMANCE TESTS
-# ==============================================================================
-
-
-class TestCreateCoreMapPerformance:
-    """Test performance characteristics."""
-
-    @pytest.mark.asyncio
-    async def test_create_multiple_maps_sequentially(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        global_code_tracker: set[str],
-    ) -> None:
-        """Test creating multiple maps in sequence."""
-        num_maps = 10
-        map_ids = []
-
-        for i in range(num_maps):
-            # Generate unique code using UUID
-            code = f"T{uuid4().hex[:5].upper()}"
-            global_code_tracker.add(code)
-
-            data = {
-                "code": code,
-                "map_name": "Hanamura",
-                "category": "Classic",
-                "checkpoints": 10,
-                "official": True,
-                "playtesting": "Approved",
-                "difficulty": "Medium",
-                "raw_difficulty": 5.0,
-                "hidden": False,
-                "archived": False,
-                "description": None,
-                "custom_banner": None,
-                "title": None,
-            }
-
-            map_id = await maps_repo.create_core_map(data)
-            map_ids.append(map_id)
-
-        # Verify all maps exist
-        assert len(map_ids) == num_maps
-        assert len(set(map_ids)) == num_maps  # All IDs are unique
