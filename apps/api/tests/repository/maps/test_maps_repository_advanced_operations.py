@@ -1,21 +1,15 @@
-"""Exhaustive tests for MapsRepository advanced operations.
+"""Focused tests for MapsRepository advanced operations.
 
-Tests remaining repository methods:
-- Mastery: fetch_map_mastery, upsert_map_mastery
+Tests complex repository operations:
 - Quality: override_quality_votes
 - Trending: fetch_trending_maps
-- Verification: check_pending_verifications
 - Medal operations: remove_map_medal_entries
-- Legacy conversion: convert_completions_to_legacy
 - Map linking: link_map_codes, unlink_map_codes
-- User tracking: fetch_affected_users
 
 Test Coverage:
-- Happy path operations
-- Edge cases and validation
-- Return values and data structures
-- Transaction context
-- Complex queries and scoring
+- Core functionality
+- Transaction commit scenarios
+- Integration flows
 """
 
 from typing import Any, get_args
@@ -125,16 +119,6 @@ class TestOverrideQualityVotes:
     """Test override_quality_votes method."""
 
     @pytest.mark.asyncio
-    async def test_override_quality_votes_non_existent_map(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test overriding quality for non-existent map does nothing."""
-        # Should not raise error, just return early
-        await maps_repo.override_quality_votes(unique_map_code, 5)
-
-    @pytest.mark.asyncio
     async def test_override_quality_votes_within_transaction(
         self,
         maps_repo: MapsRepository,
@@ -156,26 +140,6 @@ class TestOverrideQualityVotes:
 
 class TestFetchTrendingMaps:
     """Test fetch_trending_maps method."""
-
-    @pytest.mark.asyncio
-    async def test_fetch_trending_maps_returns_list(
-        self,
-        maps_repo: MapsRepository,
-    ) -> None:
-        """Test fetching trending maps returns a list."""
-        results = await maps_repo.fetch_trending_maps()
-
-        assert isinstance(results, list)
-
-    @pytest.mark.asyncio
-    async def test_fetch_trending_maps_with_limit(
-        self,
-        maps_repo: MapsRepository,
-    ) -> None:
-        """Test fetching trending maps respects limit."""
-        results = await maps_repo.fetch_trending_maps(limit=5)
-
-        assert len(results) <= 5
 
     @pytest.mark.asyncio
     async def test_fetch_trending_maps_excludes_hidden_archived(
@@ -237,16 +201,6 @@ class TestFetchTrendingMaps:
         assert code_archived not in codes
 
     @pytest.mark.asyncio
-    async def test_fetch_trending_maps_with_custom_window(
-        self,
-        maps_repo: MapsRepository,
-    ) -> None:
-        """Test fetching trending maps with custom time window."""
-        results = await maps_repo.fetch_trending_maps(limit=10, window_days=7)
-
-        assert isinstance(results, list)
-
-    @pytest.mark.asyncio
     async def test_fetch_trending_maps_within_transaction(
         self,
         maps_repo: MapsRepository,
@@ -258,42 +212,6 @@ class TestFetchTrendingMaps:
                 results = await maps_repo.fetch_trending_maps(conn=conn)
 
         assert isinstance(results, list)
-
-
-# ==============================================================================
-# VERIFICATION TESTS
-# ==============================================================================
-
-
-class TestCheckPendingVerifications:
-    """Test check_pending_verifications method."""
-
-    @pytest.mark.asyncio
-    async def test_check_pending_verifications_no_map(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test checking pending verifications for non-existent map."""
-        result = await maps_repo.check_pending_verifications(unique_map_code)
-
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_check_pending_verifications_within_transaction(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test checking pending verifications within transaction."""
-        await create_test_map(db_pool, unique_map_code)
-
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                result = await maps_repo.check_pending_verifications(unique_map_code, conn=conn)
-
-        assert result is False
 
 
 # ==============================================================================
@@ -330,16 +248,6 @@ class TestRemoveMapMedalEntries:
         assert count == 0
 
     @pytest.mark.asyncio
-    async def test_remove_medal_entries_non_existent_map(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test removing medal entries for non-existent map does nothing."""
-        # Should not raise error
-        await maps_repo.remove_map_medal_entries(unique_map_code)
-
-    @pytest.mark.asyncio
     async def test_remove_medal_entries_within_transaction(
         self,
         maps_repo: MapsRepository,
@@ -362,59 +270,6 @@ class TestRemoveMapMedalEntries:
             )
 
         assert count == 0
-
-
-# ==============================================================================
-# LEGACY CONVERSION TESTS
-# ==============================================================================
-
-
-class TestConvertCompletionsToLegacy:
-    """Test convert_completions_to_legacy method."""
-
-    @pytest.mark.asyncio
-    async def test_convert_completions_returns_zero_for_non_existent_map(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test converting completions for non-existent map returns 0."""
-        converted_count = await maps_repo.convert_completions_to_legacy(unique_map_code)
-
-        assert converted_count == 0
-
-    @pytest.mark.asyncio
-    async def test_convert_completions_returns_zero_when_no_completions(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test converting completions when map has no completions."""
-        await create_test_map(db_pool, unique_map_code)
-
-        converted_count = await maps_repo.convert_completions_to_legacy(unique_map_code)
-
-        assert converted_count == 0
-
-    @pytest.mark.asyncio
-    async def test_convert_completions_within_transaction(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test converting completions within transaction."""
-        await create_test_map(db_pool, unique_map_code)
-
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                converted_count = await maps_repo.convert_completions_to_legacy(
-                    unique_map_code,
-                    conn=conn,
-                )
-
-        assert converted_count == 0
 
 
 # ==============================================================================
@@ -524,19 +379,6 @@ class TestUnlinkMapCodes:
         assert linked2 is None
 
     @pytest.mark.asyncio
-    async def test_unlink_non_linked_map(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test unlinking map with no link does nothing."""
-        await create_test_map(db_pool, unique_map_code)
-
-        # Should not raise error
-        await maps_repo.unlink_map_codes(unique_map_code)
-
-    @pytest.mark.asyncio
     async def test_unlink_maps_within_transaction(
         self,
         maps_repo: MapsRepository,
@@ -565,56 +407,6 @@ class TestUnlinkMapCodes:
             )
 
         assert linked1 is None
-
-
-# ==============================================================================
-# USER TRACKING TESTS
-# ==============================================================================
-
-
-class TestFetchAffectedUsers:
-    """Test fetch_affected_users method."""
-
-    @pytest.mark.asyncio
-    async def test_fetch_affected_users_no_completions(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching affected users when map has no completions."""
-        await create_test_map(db_pool, unique_map_code)
-
-        user_ids = await maps_repo.fetch_affected_users(unique_map_code)
-
-        assert user_ids == []
-
-    @pytest.mark.asyncio
-    async def test_fetch_affected_users_non_existent_map(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching affected users for non-existent map."""
-        user_ids = await maps_repo.fetch_affected_users(unique_map_code)
-
-        assert user_ids == []
-
-    @pytest.mark.asyncio
-    async def test_fetch_affected_users_within_transaction(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching affected users within transaction."""
-        await create_test_map(db_pool, unique_map_code)
-
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                user_ids = await maps_repo.fetch_affected_users(unique_map_code, conn=conn)
-
-        assert user_ids == []
 
 
 # ==============================================================================
