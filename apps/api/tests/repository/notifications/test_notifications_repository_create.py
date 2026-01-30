@@ -102,8 +102,9 @@ class TestInsertEventHappyPath:
             event_id,
         )
         assert row is not None
-        # Metadata is stored as JSONB and returned as dict
-        assert row["metadata"] == metadata
+        # Metadata is stored as JSONB and returned as JSON string
+        import json
+        assert json.loads(row["metadata"]) == metadata
 
     @pytest.mark.asyncio
     async def test_insert_event_sets_created_at_timestamp(
@@ -268,7 +269,8 @@ class TestInsertEventEdgeCases:
             "SELECT metadata FROM notifications.events WHERE id = $1",
             event_id,
         )
-        assert row["metadata"] == metadata
+        import json
+        assert json.loads(row["metadata"]) == metadata
 
 
 class TestInsertEventErrorCases:

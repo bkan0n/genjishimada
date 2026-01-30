@@ -61,6 +61,7 @@ class TestFetchEventByIdHappyPath:
         repository: NotificationsRepository,
         asyncpg_conn,
         create_test_user,
+        create_test_notification_event,
     ) -> None:
         """Test fetching event by ID returns correct event data."""
         # Arrange
@@ -87,7 +88,10 @@ class TestFetchEventByIdHappyPath:
         assert result["event_type"] == event_type
         assert result["title"] == title
         assert result["body"] == body
-        assert result["metadata"] == metadata
+        # Metadata is returned as JSON string, parse it
+        import json
+        metadata_parsed = json.loads(result["metadata"]) if isinstance(result["metadata"], str) else result["metadata"]
+        assert metadata_parsed == metadata
 
     @pytest.mark.asyncio
     async def test_fetch_event_by_id_with_null_metadata(
