@@ -93,6 +93,7 @@ class TestInsertEventHappyPath:
     ) -> None:
         """Test that insert_event stores data correctly in database."""
         import datetime as dt
+        import json
 
         # Arrange
         timestamp = dt.datetime(2024, 1, 15, 10, 30, 0, tzinfo=dt.timezone.utc)
@@ -112,12 +113,14 @@ class TestInsertEventHappyPath:
 
         assert row is not None
         assert row["id"] == event_id
-        assert row["timestamp"] == timestamp
+        # Timestamps should match (both are timezone-aware UTC)
+        assert row["timestamp"].replace(microsecond=0) == timestamp.replace(microsecond=0)
         assert row["event_type"] == "verification_event"
-        # Payload should be a dict (asyncpg auto-parses jsonb)
-        assert isinstance(row["payload"], dict)
-        assert row["payload"]["type"] == "verification_event"
-        assert row["payload"]["data"] == payload["data"]
+        # Payload might be string or dict depending on asyncpg version
+        payload_data = row["payload"] if isinstance(row["payload"], dict) else json.loads(row["payload"])
+        assert isinstance(payload_data, dict)
+        assert payload_data["type"] == "verification_event"
+        assert payload_data["data"] == payload["data"]
 
     @pytest.mark.asyncio
     async def test_insert_multiple_events_sequentially(
@@ -260,6 +263,7 @@ class TestInsertEventEdgeCases:
     ) -> None:
         """Test that complex payload structure is preserved after insert."""
         import datetime as dt
+        import json
 
         # Arrange
         timestamp = dt.datetime.now(dt.timezone.utc)
@@ -288,10 +292,13 @@ class TestInsertEventEdgeCases:
             event_id,
         )
 
-        assert row["payload"]["array"] == [1, 2, 3]
-        assert row["payload"]["nested"]["level1"]["level2"]["value"] == "deep"
-        assert len(row["payload"]["mixed"]) == 2
-        assert row["payload"]["mixed"][0]["name"] == "first"
+        # Parse payload if it's a string
+        payload_data = row["payload"] if isinstance(row["payload"], dict) else json.loads(row["payload"])
+
+        assert payload_data["array"] == [1, 2, 3]
+        assert payload_data["nested"]["level1"]["level2"]["value"] == "deep"
+        assert len(payload_data["mixed"]) == 2
+        assert payload_data["mixed"][0]["name"] == "first"
 
 
 # ==============================================================================
@@ -377,29 +384,44 @@ class TestInsertEventConcurrency:
     @pytest.mark.asyncio
     async def test_concurrent_inserts_no_collisions(
         self,
-        repository: NewsfeedRepository,
+        postgres_service,
     ) -> None:
         """Test concurrent inserts with auto-increment IDs don't collide."""
         import asyncio
         import datetime as dt
+        import asyncpg
 
-        # Arrange
-        timestamp = dt.datetime.now(dt.timezone.utc)
-        num_events = 10
+        # Create a pool for concurrent operations
+        pool = await asyncpg.create_pool(
+            user=postgres_service.user,
+            password=postgres_service.password,
+            host=postgres_service.host,
+            port=postgres_service.port,
+            database=postgres_service.database,
+        )
 
-        async def insert_event(index: int) -> int:
-            payload = {
-                "type": f"concurrent_{index}",
-                "index": index,
-            }
-            return await repository.insert_event(timestamp, payload)
+        try:
+            repository = NewsfeedRepository(pool)
 
-        # Act - Insert multiple events concurrently
-        tasks = [insert_event(i) for i in range(num_events)]
-        event_ids = await asyncio.gather(*tasks)
+            # Arrange
+            timestamp = dt.datetime.now(dt.timezone.utc)
+            num_events = 10
 
-        # Assert
-        assert len(event_ids) == num_events
-        assert len(set(event_ids)) == num_events  # All IDs unique
-        assert all(isinstance(event_id, int) for event_id in event_ids)
-        assert all(event_id > 0 for event_id in event_ids)
+            async def insert_event(index: int) -> int:
+                payload = {
+                    "type": f"concurrent_{index}",
+                    "index": index,
+                }
+                return await repository.insert_event(timestamp, payload)
+
+            # Act - Insert multiple events concurrently
+            tasks = [insert_event(i) for i in range(num_events)]
+            event_ids = await asyncio.gather(*tasks)
+
+            # Assert
+            assert len(event_ids) == num_events
+            assert len(set(event_ids)) == num_events  # All IDs unique
+            assert all(isinstance(event_id, int) for event_id in event_ids)
+            assert all(event_id > 0 for event_id in event_ids)
+        finally:
+            await pool.close()

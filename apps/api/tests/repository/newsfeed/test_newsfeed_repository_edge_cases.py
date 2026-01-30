@@ -31,81 +31,126 @@ class TestNewsfeedConcurrentOperations:
     @pytest.mark.asyncio
     async def test_concurrent_insert_and_fetch(
         self,
-        repository: NewsfeedRepository,
+        postgres_service,
     ) -> None:
         """Test concurrent inserts and fetches work correctly."""
         import asyncio
         import datetime as dt
+        import asyncpg
 
-        # Arrange
-        async def insert_events(count: int) -> list[int]:
-            ids = []
-            for i in range(count):
-                timestamp = dt.datetime.now(dt.timezone.utc)
-                payload = {"type": "concurrent_test", "index": i}
-                event_id = await repository.insert_event(timestamp, payload)
-                ids.append(event_id)
-            return ids
+        # Create a pool for concurrent operations
+        pool = await asyncpg.create_pool(
+            user=postgres_service.user,
+            password=postgres_service.password,
+            host=postgres_service.host,
+            port=postgres_service.port,
+            database=postgres_service.database,
+        )
 
-        async def fetch_events() -> list[dict]:
-            return await repository.fetch_events(limit=10, offset=0, event_type="concurrent_test")
+        try:
+            repository = NewsfeedRepository(pool)
 
-        # Act - Run inserts and fetches concurrently
-        insert_task = asyncio.create_task(insert_events(5))
-        fetch_task = asyncio.create_task(fetch_events())
+            # Arrange
+            async def insert_events(count: int) -> list[int]:
+                ids = []
+                for i in range(count):
+                    timestamp = dt.datetime.now(dt.timezone.utc)
+                    payload = {"type": "concurrent_test", "index": i}
+                    event_id = await repository.insert_event(timestamp, payload)
+                    ids.append(event_id)
+                return ids
 
-        inserted_ids, fetched_events = await asyncio.gather(insert_task, fetch_task)
+            async def fetch_events() -> list[dict]:
+                return await repository.fetch_events(limit=10, offset=0, event_type="concurrent_test")
 
-        # Assert - All inserts succeeded
-        assert len(inserted_ids) == 5
-        assert all(isinstance(id, int) for id in inserted_ids)
+            # Act - Run inserts and fetches concurrently
+            insert_task = asyncio.create_task(insert_events(5))
+            fetch_task = asyncio.create_task(fetch_events())
+
+            inserted_ids, fetched_events = await asyncio.gather(insert_task, fetch_task)
+
+            # Assert - All inserts succeeded
+            assert len(inserted_ids) == 5
+            assert all(isinstance(id, int) for id in inserted_ids)
+        finally:
+            await pool.close()
 
     @pytest.mark.asyncio
     async def test_concurrent_fetch_by_id_same_event(
         self,
-        repository: NewsfeedRepository,
+        postgres_service,
         create_test_newsfeed_event,
     ) -> None:
         """Test concurrent fetches of same event by ID."""
         import asyncio
+        import asyncpg
 
-        # Arrange
-        event_id = await create_test_newsfeed_event()
+        # Create a pool for concurrent operations
+        pool = await asyncpg.create_pool(
+            user=postgres_service.user,
+            password=postgres_service.password,
+            host=postgres_service.host,
+            port=postgres_service.port,
+            database=postgres_service.database,
+        )
 
-        # Act - Fetch same event 10 times concurrently
-        tasks = [repository.fetch_event_by_id(event_id) for _ in range(10)]
-        results = await asyncio.gather(*tasks)
+        try:
+            repository = NewsfeedRepository(pool)
 
-        # Assert - All fetches succeeded and returned same data
-        assert len(results) == 10
-        assert all(result is not None for result in results)
-        assert all(result["id"] == event_id for result in results)
+            # Arrange
+            event_id = await create_test_newsfeed_event()
+
+            # Act - Fetch same event 10 times concurrently
+            tasks = [repository.fetch_event_by_id(event_id) for _ in range(10)]
+            results = await asyncio.gather(*tasks)
+
+            # Assert - All fetches succeeded and returned same data
+            assert len(results) == 10
+            assert all(result is not None for result in results)
+            assert all(result["id"] == event_id for result in results)
+        finally:
+            await pool.close()
 
     @pytest.mark.asyncio
     async def test_concurrent_fetch_events_with_different_filters(
         self,
-        repository: NewsfeedRepository,
+        postgres_service,
         create_test_newsfeed_event,
     ) -> None:
         """Test concurrent fetch_events with different filters."""
         import asyncio
+        import asyncpg
 
-        # Arrange
-        await create_test_newsfeed_event(payload={"type": "filter_a"})
-        await create_test_newsfeed_event(payload={"type": "filter_b"})
-        await create_test_newsfeed_event(payload={"type": "filter_c"})
+        # Create a pool for concurrent operations
+        pool = await asyncpg.create_pool(
+            user=postgres_service.user,
+            password=postgres_service.password,
+            host=postgres_service.host,
+            port=postgres_service.port,
+            database=postgres_service.database,
+        )
 
-        # Act - Fetch with different filters concurrently
-        tasks = [
-            repository.fetch_events(limit=10, offset=0, event_type="filter_a"),
-            repository.fetch_events(limit=10, offset=0, event_type="filter_b"),
-            repository.fetch_events(limit=10, offset=0, event_type="filter_c"),
-        ]
-        results = await asyncio.gather(*tasks)
+        try:
+            repository = NewsfeedRepository(pool)
 
-        # Assert
-        assert len(results) == 3
-        assert all(isinstance(result, list) for result in results)
+            # Arrange - Create events first
+            await create_test_newsfeed_event(payload={"type": "filter_a"})
+            await create_test_newsfeed_event(payload={"type": "filter_b"})
+            await create_test_newsfeed_event(payload={"type": "filter_c"})
+
+            # Act - Fetch with different filters concurrently
+            tasks = [
+                repository.fetch_events(limit=10, offset=0, event_type="filter_a"),
+                repository.fetch_events(limit=10, offset=0, event_type="filter_b"),
+                repository.fetch_events(limit=10, offset=0, event_type="filter_c"),
+            ]
+            results = await asyncio.gather(*tasks)
+
+            # Assert
+            assert len(results) == 3
+            assert all(isinstance(result, list) for result in results)
+        finally:
+            await pool.close()
 
 
 # ==============================================================================
