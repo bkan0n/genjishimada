@@ -17,12 +17,11 @@ dev-common = [
 ]
 
 [tool.ruff]
-exclude = [
-    "test_v4",
-    "tests",
-    "apps/*/tests",
-    "apps/*/test_*.py",
-    "apps/*/conftest.py",
+extend-exclude = [
+    "apps/api/conftest.py",
+    "apps/api/tests",
+    "apps/bot/conftest.py",
+    "apps/bot/tests",
 ]
 line-length = 120
 target-version = "py313"
@@ -64,11 +63,18 @@ lint.ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.per-file-ignores]
+"apps/api/conftest.py" = ["ALL"]
+"apps/api/tests/*.py" = ["ALL"]
+"apps/api/tests/**/*.py" = ["ALL"]
+"apps/bot/conftest.py" = ["ALL"]
+"apps/bot/tests/*.py" = ["ALL"]
+"apps/bot/tests/**/*.py" = ["ALL"]
 
 [tool.basedpyright]
 exclude = [
-    "apps/*/tests",
-    "apps/*/test_*.py",
-    "apps/*/test_v4",
-    "apps/*/conftest.py",
+    "apps/api/tests",
+    "apps/api/conftest.py",
+    "apps/bot/tests",
+    "apps/bot/conftest.py",
 ]

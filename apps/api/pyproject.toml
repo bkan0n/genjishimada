@@ -82,5 +82,15 @@ lint.ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.per-file-ignores]
+"conftest.py" = ["ALL"]
+"tests/**" = ["ALL"]
+
+[tool.basedpyright]
+ignore = [
+    "tests",
+    "conftest.py",
+]
+
 [tool.uv.sources]
 genjishimada-sdk = { workspace = true }

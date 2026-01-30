@@ -33,7 +33,7 @@ run-api:
 lint-api:
     -uv run ruff format apps/api
     -uv run ruff check apps/api
-    -uv run basedpyright apps/api
+    -uv run basedpyright apps/api/repository apps/api/services apps/api/routes_new apps/api/middleware apps/api/utilities
 
 # Test API (requires Docker to be running for test database)
 test-api:
@@ -53,7 +53,7 @@ run-bot:
 lint-bot:
     -uv run ruff format apps/bot
     -uv run ruff check apps/bot
-    -uv run basedpyright apps/bot
+    -uv run basedpyright apps/bot/core apps/bot/extensions apps/bot/utilities apps/bot/main.py
 
 # ----------------------------
 # SDK library (genjishimada-sdk)
