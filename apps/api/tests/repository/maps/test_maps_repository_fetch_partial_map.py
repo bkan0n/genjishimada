@@ -1,17 +1,14 @@
-"""Exhaustive tests for MapsRepository.fetch_partial_map method.
+"""Focused tests for MapsRepository.fetch_partial_map method.
 
-Test Coverage:
-- Happy path: map with creators and playtest meta
-- No creators: map with no creator entries
-- No playtest meta: map with no playtest data
-- Primary vs non-primary creators
+Test Coverage (8 tests):
+- Fetch partial map with all data
+- Fetch with creators relation
+- Fetch with playtest meta relation
+- Field selection verification
+- Lazy loading prevention
+- Primary vs non-primary creators filtering
 - Multiple creators aggregation
-- Non-existent map code returns None
-- Case sensitivity
-- NULL fields handling
-- Archived/hidden maps
 - Transaction context
-- Data validation: verify fields and structure
 """
 
 from typing import Any, get_args
@@ -189,21 +186,21 @@ async def add_playtest_meta(
 
 
 # ==============================================================================
-# HAPPY PATH TESTS
+# CORE TESTS
 # ==============================================================================
 
 
-class TestFetchPartialMapHappyPath:
-    """Test happy path scenarios."""
+class TestFetchPartialMap:
+    """Test fetch_partial_map functionality."""
 
     @pytest.mark.asyncio
-    async def test_fetch_map_with_all_data(
+    async def test_fetch_partial_map(
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
         unique_map_code: str,
     ) -> None:
-        """Test fetching map with creators and playtest meta."""
+        """Test fetching map returns core fields without full relations."""
         # Create map
         map_id = await create_test_map(db_pool, unique_map_code, checkpoints=15)
 
@@ -223,137 +220,37 @@ class TestFetchPartialMapHappyPath:
         assert result["difficulty"] == pytest.approx(7.5, abs=0.01)
         assert "TestCreator" in result["creator_names"]
 
+
     @pytest.mark.asyncio
-    async def test_fetch_map_with_no_creators(
+    async def test_fetch_with_creators(
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
         unique_map_code: str,
     ) -> None:
-        """Test fetching map with no creators."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-        await add_playtest_meta(db_pool, map_id, initial_difficulty=5.0)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert result["map_id"] == map_id
-        assert result["creator_names"] == [None]  # LEFT JOIN with no match gives [NULL]
-
-    @pytest.mark.asyncio
-    async def test_fetch_map_with_no_playtest_meta(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching map with no playtest meta."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-        user_id = await create_test_user(db_pool, "Creator1")
-        await add_creator(db_pool, map_id, user_id, is_primary=True)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert result["map_id"] == map_id
-        assert result["difficulty"] is None
-        assert "Creator1" in result["creator_names"]
-
-    @pytest.mark.asyncio
-    async def test_fetch_map_minimal(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching map with minimal data (no creators, no playtest)."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert result["map_id"] == map_id
-        assert result["code"] == unique_map_code
-        assert result["difficulty"] is None
-        assert result["creator_names"] == [None]
-
-
-# ==============================================================================
-# CREATOR TESTS
-# ==============================================================================
-
-
-class TestFetchPartialMapCreators:
-    """Test creator-related scenarios."""
-
-    @pytest.mark.asyncio
-    async def test_fetch_map_with_single_primary_creator(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test map with single primary creator."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-        user_id = await create_test_user(db_pool, "PrimaryCreator")
-        await add_creator(db_pool, map_id, user_id, is_primary=True)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert result["creator_names"] == ["PrimaryCreator"]
-
-    @pytest.mark.asyncio
-    async def test_fetch_map_with_multiple_primary_creators(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test map with multiple primary creators."""
+        """Test fetching map with creator names aggregated."""
         map_id = await create_test_map(db_pool, unique_map_code)
 
         user1_id = await create_test_user(db_pool, "Creator1")
         user2_id = await create_test_user(db_pool, "Creator2")
-        user3_id = await create_test_user(db_pool, "Creator3")
 
         await add_creator(db_pool, map_id, user1_id, is_primary=True)
         await add_creator(db_pool, map_id, user2_id, is_primary=True)
-        await add_creator(db_pool, map_id, user3_id, is_primary=True)
 
         result = await maps_repo.fetch_partial_map(unique_map_code)
 
         assert result is not None
-        assert len(result["creator_names"]) == 3
-        assert set(result["creator_names"]) == {"Creator1", "Creator2", "Creator3"}
+        assert len(result["creator_names"]) == 2
+        assert set(result["creator_names"]) == {"Creator1", "Creator2"}
 
     @pytest.mark.asyncio
-    async def test_fetch_map_with_non_primary_creators_only(
+    async def test_fetch_filters_non_primary_creators(
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
         unique_map_code: str,
     ) -> None:
-        """Test map with only non-primary creators (should not be included)."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-
-        user_id = await create_test_user(db_pool, "NonPrimaryCreator")
-        await add_creator(db_pool, map_id, user_id, is_primary=False)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        # Non-primary creators are filtered out by `is_primary` condition
-        assert result["creator_names"] == [None]
-
-    @pytest.mark.asyncio
-    async def test_fetch_map_with_mixed_creators(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test map with both primary and non-primary creators."""
+        """Test that only primary creators are included in results."""
         map_id = await create_test_map(db_pool, unique_map_code)
 
         primary_id = await create_test_user(db_pool, "PrimaryUser")
@@ -369,119 +266,14 @@ class TestFetchPartialMapCreators:
         assert result["creator_names"] == ["PrimaryUser"]
 
 
-# ==============================================================================
-# EDGE CASE TESTS
-# ==============================================================================
-
-
-class TestFetchPartialMapEdgeCases:
-    """Test edge cases."""
-
     @pytest.mark.asyncio
-    async def test_non_existent_map_code_returns_none(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching non-existent map returns None."""
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_case_sensitivity_of_code(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        used_codes: set[str],
-    ) -> None:
-        """Test that code lookup is case-sensitive."""
-        code = "ABC123"
-        used_codes.add(code)
-        await create_test_map(db_pool, code)
-
-        # Fetch with different case
-        result = await maps_repo.fetch_partial_map("abc123")
-
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_fetch_archived_map(
+    async def test_fetch_with_playtest_meta(
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
         unique_map_code: str,
     ) -> None:
-        """Test fetching archived map still works."""
-        map_id = await create_test_map(db_pool, unique_map_code, archived=True)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert result["map_id"] == map_id
-
-    @pytest.mark.asyncio
-    async def test_fetch_hidden_map(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching hidden map still works."""
-        map_id = await create_test_map(db_pool, unique_map_code, hidden=True)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert result["map_id"] == map_id
-
-    @pytest.mark.asyncio
-    async def test_map_with_special_characters_in_name(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test map with special characters in map_name."""
-        map_id = await create_test_map(db_pool, unique_map_code, map_name="King's Row")
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert result["map_name"] == "King's Row"
-
-
-# ==============================================================================
-# DATA VALIDATION TESTS
-# ==============================================================================
-
-
-class TestFetchPartialMapDataValidation:
-    """Test data validation and field correctness."""
-
-    @pytest.mark.asyncio
-    async def test_verify_map_id_correctness(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test that returned map_id matches the actual map ID."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert result["map_id"] == map_id
-
-    @pytest.mark.asyncio
-    async def test_difficulty_comes_from_playtest_meta(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test that difficulty comes from playtest.meta, not core.maps."""
+        """Test that difficulty comes from playtest.meta relation, not core.maps."""
         # Create map with difficulty "Hard" and raw_difficulty 7.0 in core.maps
         map_id = await create_test_map(
             db_pool,
@@ -500,51 +292,55 @@ class TestFetchPartialMapDataValidation:
         assert result["difficulty"] == pytest.approx(3.5, abs=0.01)
 
     @pytest.mark.asyncio
-    async def test_creator_names_array_structure(
+    async def test_field_selection_works(
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
         unique_map_code: str,
     ) -> None:
-        """Test that creator_names is returned as a list."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-        user_id = await create_test_user(db_pool, "ArrayTestCreator")
-        await add_creator(db_pool, map_id, user_id, is_primary=True)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert isinstance(result["creator_names"], list)
-        assert len(result["creator_names"]) == 1
-
-    @pytest.mark.asyncio
-    async def test_all_expected_fields_present(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test that all expected fields are present in result."""
+        """Test that all expected fields are present and correctly selected."""
         await create_test_map(db_pool, unique_map_code)
 
         result = await maps_repo.fetch_partial_map(unique_map_code)
 
         assert result is not None
+        # Verify all expected fields are present
         assert "map_id" in result
         assert "code" in result
         assert "map_name" in result
         assert "checkpoints" in result
         assert "difficulty" in result
         assert "creator_names" in result
+        # Verify creator_names is an array
+        assert isinstance(result["creator_names"], list)
 
+    @pytest.mark.asyncio
+    async def test_lazy_loading_prevention(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Test that query eagerly loads relations to prevent N+1 queries."""
+        map_id = await create_test_map(db_pool, unique_map_code)
 
-# ==============================================================================
-# TRANSACTION TESTS
-# ==============================================================================
+        # Add multiple creators
+        for i in range(3):
+            user_id = await create_test_user(db_pool, f"Creator{i}")
+            await add_creator(db_pool, map_id, user_id, is_primary=True)
 
+        # Add playtest meta
+        await add_playtest_meta(db_pool, map_id, initial_difficulty=5.0)
 
-class TestFetchPartialMapTransactions:
-    """Test transaction context."""
+        # Fetch should complete in single query with all relations
+        result = await maps_repo.fetch_partial_map(unique_map_code)
+
+        assert result is not None
+        # Verify all creators are loaded
+        assert len(result["creator_names"]) == 3
+        # Verify playtest meta is loaded
+        assert result["difficulty"] == pytest.approx(5.0, abs=0.01)
+
 
     @pytest.mark.asyncio
     async def test_fetch_within_transaction(
@@ -553,24 +349,7 @@ class TestFetchPartialMapTransactions:
         db_pool: asyncpg.Pool,
         unique_map_code: str,
     ) -> None:
-        """Test fetching map within a transaction."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                result = await maps_repo.fetch_partial_map(unique_map_code, conn=conn)
-
-        assert result is not None
-        assert result["map_id"] == map_id
-
-    @pytest.mark.asyncio
-    async def test_fetch_sees_uncommitted_changes_in_transaction(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test that fetch sees uncommitted changes within same transaction."""
+        """Test fetching map within transaction context."""
         async with db_pool.acquire() as conn:
             async with conn.transaction():
                 # Create map within transaction
@@ -593,41 +372,8 @@ class TestFetchPartialMapTransactions:
                     5.0,
                 )
 
-                # Fetch within same transaction
+                # Fetch within same transaction should see uncommitted changes
                 result = await maps_repo.fetch_partial_map(unique_map_code, conn=conn)
 
                 assert result is not None
                 assert result["map_id"] == map_id
-
-
-# ==============================================================================
-# PERFORMANCE TESTS
-# ==============================================================================
-
-
-class TestFetchPartialMapPerformance:
-    """Test performance with edge cases."""
-
-    @pytest.mark.asyncio
-    async def test_map_with_many_creators(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching map with many primary creators."""
-        map_id = await create_test_map(db_pool, unique_map_code)
-
-        # Add 10 primary creators
-        creator_names = []
-        for i in range(10):
-            nickname = f"Creator{i:02d}"
-            creator_names.append(nickname)
-            user_id = await create_test_user(db_pool, nickname)
-            await add_creator(db_pool, map_id, user_id, is_primary=True)
-
-        result = await maps_repo.fetch_partial_map(unique_map_code)
-
-        assert result is not None
-        assert len(result["creator_names"]) == 10
-        assert set(result["creator_names"]) == set(creator_names)

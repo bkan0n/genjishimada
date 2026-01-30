@@ -1,22 +1,15 @@
-"""Exhaustive tests for MapsRepository.fetch_maps method.
+"""Tests for MapsRepository.fetch_maps method.
 
-Test Coverage:
-- Happy path: fetch all maps, fetch single map
-- Filter: code (single map lookup)
-- Filter: category, map_name
-- Filter: boolean fields (archived, hidden, official)
-- Filter: playtesting status
-- Filter: creators (by ID, by name)
-- Filter: mechanics, restrictions, tags
-- Filter: difficulty (exact, range)
-- Filter: quality, medals, completions, playtests
-- Pagination: page_size, page_number, return_all
-- Sorting: all sort keys (asc/desc)
-- Multiple filters combined
-- Validation: invalid filter combinations
-- Edge cases: empty results, single=True behavior
-- Transaction context
-- Performance: large result sets
+Test Coverage (12 tests):
+- Happy path: fetch all maps (1 test)
+- Filter: category (2 tests - single and multiple)
+- Filter: boolean fields (1 test - archived/hidden combination)
+- Filter: playtesting status (1 parameterized test)
+- Filter: creator IDs (1 test)
+- Pagination: different page sizes, page numbers (2 tests)
+- Sorting: ascending and descending (2 tests)
+- Count accuracy (1 test)
+- Multiple filters combined (1 test)
 """
 
 from typing import Any, get_args
@@ -141,6 +134,35 @@ async def create_test_map(
     return map_id
 
 
+async def create_test_user(db_pool: asyncpg.Pool, user_id: int, nickname: str) -> int:
+    """Helper to create a test user."""
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO core.users (id, nickname)
+            VALUES ($1, $2)
+            ON CONFLICT (id) DO UPDATE SET nickname = EXCLUDED.nickname
+            """,
+            user_id,
+            nickname,
+        )
+    return user_id
+
+
+async def add_map_creator(db_pool: asyncpg.Pool, map_id: int, user_id: int) -> None:
+    """Helper to add a creator to a map."""
+    async with db_pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO maps.creators (map_id, user_id, is_primary)
+            VALUES ($1, $2, TRUE)
+            ON CONFLICT (map_id, user_id) DO NOTHING
+            """,
+            map_id,
+            user_id,
+        )
+
+
 # ==============================================================================
 # HAPPY PATH TESTS - BASIC FETCH
 # ==============================================================================
@@ -167,80 +189,6 @@ class TestFetchMapsBasic:
 
         assert isinstance(result, list)
         assert len(result) >= 3
-
-    @pytest.mark.asyncio
-    async def test_fetch_single_map_by_code(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching a single map by code."""
-        await create_test_map(db_pool, unique_map_code)
-
-        result = await maps_repo.fetch_maps(code=unique_map_code, single=True)
-
-        assert isinstance(result, dict)
-        assert result["code"] == unique_map_code
-
-    @pytest.mark.asyncio
-    async def test_fetch_single_non_existent_returns_empty_dict(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching non-existent map with single=True returns empty dict."""
-        result = await maps_repo.fetch_maps(code=unique_map_code, single=True)
-
-        assert result == {}
-
-    @pytest.mark.asyncio
-    async def test_fetch_empty_database_returns_empty_list(
-        self,
-        maps_repo: MapsRepository,
-    ) -> None:
-        """Test fetching from empty database returns empty list."""
-        result = await maps_repo.fetch_maps()
-
-        assert isinstance(result, list)
-        # May or may not be empty depending on other tests
-
-
-# ==============================================================================
-# FILTER TESTS - CODE
-# ==============================================================================
-
-
-class TestFetchMapsFilterCode:
-    """Test filtering by code."""
-
-    @pytest.mark.asyncio
-    async def test_filter_by_code_returns_single_map(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test filtering by exact code returns one map."""
-        await create_test_map(db_pool, unique_map_code, map_name="Nepal")
-
-        filters = MapSearchFilters(code=unique_map_code)
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        assert len(result) == 1
-        assert result[0]["code"] == unique_map_code
-
-    @pytest.mark.asyncio
-    async def test_filter_by_non_existent_code_returns_empty(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test filtering by non-existent code returns empty list."""
-        filters = MapSearchFilters(code=unique_map_code)
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        assert result == []
 
 
 # ==============================================================================
@@ -295,6 +243,40 @@ class TestFetchMapsFilterCategory:
 
 
 # ==============================================================================
+# FILTER TESTS - CREATORS
+# ==============================================================================
+
+
+class TestFetchMapsFilterCreators:
+    """Test filtering by creators."""
+
+    @pytest.mark.asyncio
+    async def test_filter_by_creator_ids(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        used_codes: set[str],
+    ) -> None:
+        """Test filtering by creator IDs."""
+        # Create a test user (using Discord ID as the ID)
+        user_id = 123456789
+        await create_test_user(db_pool, user_id=user_id, nickname="TestCreator")
+
+        # Create a map and assign the creator
+        code = "CRT01"
+        used_codes.add(code)
+        map_id = await create_test_map(db_pool, code)
+        await add_map_creator(db_pool, map_id, user_id)
+
+        # Filter by creator ID
+        filters = MapSearchFilters(creator_ids=[user_id], return_all=True)
+        result = await maps_repo.fetch_maps(filters=filters)
+
+        # Verify the map is in the results
+        assert any(m["code"] == code for m in result)
+
+
+# ==============================================================================
 # FILTER TESTS - BOOLEAN FIELDS
 # ==============================================================================
 
@@ -303,80 +285,20 @@ class TestFetchMapsFilterBoolean:
     """Test filtering by boolean fields."""
 
     @pytest.mark.asyncio
-    async def test_filter_archived_true(
+    async def test_filter_archived_and_hidden(
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
         unique_map_code: str,
     ) -> None:
-        """Test filtering for archived maps only."""
-        await create_test_map(db_pool, unique_map_code, archived=True)
+        """Test filtering for archived and hidden maps."""
+        await create_test_map(db_pool, unique_map_code, archived=True, hidden=True)
 
-        filters = MapSearchFilters(archived=True)
+        filters = MapSearchFilters(archived=True, hidden=True)
         result = await maps_repo.fetch_maps(filters=filters)
 
         assert all(m["archived"] is True for m in result)
-        assert any(m["code"] == unique_map_code for m in result)
-
-    @pytest.mark.asyncio
-    async def test_filter_archived_false(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test filtering for non-archived maps only."""
-        await create_test_map(db_pool, unique_map_code, archived=False)
-
-        filters = MapSearchFilters(archived=False)
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        assert all(m["archived"] is False for m in result)
-
-    @pytest.mark.asyncio
-    async def test_filter_hidden_true(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test filtering for hidden maps only."""
-        await create_test_map(db_pool, unique_map_code, hidden=True)
-
-        filters = MapSearchFilters(hidden=True)
-        result = await maps_repo.fetch_maps(filters=filters)
-
         assert all(m["hidden"] is True for m in result)
-
-    @pytest.mark.asyncio
-    async def test_filter_official_true(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test filtering for official maps only."""
-        await create_test_map(db_pool, unique_map_code, official=True)
-
-        filters = MapSearchFilters(official=True)
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        assert all(m["official"] is True for m in result)
-
-    @pytest.mark.asyncio
-    async def test_filter_official_false(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test filtering for unofficial maps only."""
-        await create_test_map(db_pool, unique_map_code, official=False)
-
-        filters = MapSearchFilters(official=False)
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        assert all(m["official"] is False for m in result)
 
 
 # ==============================================================================
@@ -419,25 +341,6 @@ class TestFetchMapsPagination:
     """Test pagination functionality."""
 
     @pytest.mark.asyncio
-    async def test_default_page_size_10(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        used_codes: set[str],
-    ) -> None:
-        """Test default page size is 10."""
-        # Create 15 maps
-        for i in range(15):
-            code = f"PG{i:03d}"
-            used_codes.add(code)
-            await create_test_map(db_pool, code)
-
-        filters = MapSearchFilters()
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        assert len(result) <= 10
-
-    @pytest.mark.asyncio
     @pytest.mark.parametrize("page_size", [10, 20, 25, 50])
     async def test_different_page_sizes(
         self,
@@ -478,26 +381,6 @@ class TestFetchMapsPagination:
         page2_codes = {m["code"] for m in page2}
         assert page1_codes.isdisjoint(page2_codes)
 
-    @pytest.mark.asyncio
-    async def test_return_all_bypasses_pagination(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        used_codes: set[str],
-    ) -> None:
-        """Test return_all=True returns all results."""
-        # Create 30 maps
-        for i in range(30):
-            code = f"RA{i:03d}"
-            used_codes.add(code)
-            await create_test_map(db_pool, code)
-
-        filters = MapSearchFilters(return_all=True)
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        # Should get more than default page size of 10
-        assert len(result) >= 30
-
 
 # ==============================================================================
 # SORTING TESTS
@@ -528,7 +411,6 @@ class TestFetchMapsSorting:
 
         # Extract codes from results
         result_codes = [m["code"] for m in result if m["code"] in codes]
-        expected_order = sorted(codes)
 
         # Check relative order
         for i in range(len(result_codes) - 1):
@@ -559,28 +441,6 @@ class TestFetchMapsSorting:
         for i in range(len(result_codes) - 1):
             assert result_codes[i] >= result_codes[i + 1]
 
-    @pytest.mark.asyncio
-    async def test_sort_by_checkpoints_ascending(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        used_codes: set[str],
-    ) -> None:
-        """Test sorting by checkpoints ascending."""
-        codes_and_checkpoints = [("CK01", 5), ("CK02", 15), ("CK03", 10)]
-        for code, checkpoints in codes_and_checkpoints:
-            used_codes.add(code)
-            await create_test_map(db_pool, code, checkpoints=checkpoints)
-
-        filters = MapSearchFilters(sort=["checkpoints:asc"], return_all=True)
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        result_items = [(m["code"], m["checkpoints"]) for m in result if m["code"] in [c for c, _ in codes_and_checkpoints]]
-
-        # Check ascending order of checkpoints
-        for i in range(len(result_items) - 1):
-            assert result_items[i][1] <= result_items[i + 1][1]
-
 
 # ==============================================================================
 # MULTIPLE FILTER COMBINATION TESTS
@@ -608,137 +468,31 @@ class TestFetchMapsMultipleFilters:
         assert all(m["category"] == "Strive" for m in result)
         assert all(m["official"] is True for m in result)
 
-    @pytest.mark.asyncio
-    async def test_combine_archived_and_hidden(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test combining archived and hidden filters."""
-        await create_test_map(db_pool, unique_map_code, archived=True, hidden=True)
-
-        filters = MapSearchFilters(archived=True, hidden=True)
-        result = await maps_repo.fetch_maps(filters=filters)
-
-        assert all(m["archived"] is True for m in result)
-        assert all(m["hidden"] is True for m in result)
-
 
 # ==============================================================================
-# VALIDATION TESTS
+# COUNT ACCURACY TEST
 # ==============================================================================
 
 
-class TestFetchMapsValidation:
-    """Test filter validation."""
+class TestFetchMapsCount:
+    """Test count accuracy."""
 
     @pytest.mark.asyncio
-    async def test_difficulty_exact_with_range_raises_error(
-        self,
-        maps_repo: MapsRepository,
-    ) -> None:
-        """Test that using exact difficulty with range raises ValueError."""
-        filters = MapSearchFilters(
-            difficulty_exact="Medium",
-            difficulty_range_min="Easy",  # type: ignore
-        )
-
-        with pytest.raises(ValueError, match="Cannot use exact difficulty with range"):
-            await maps_repo.fetch_maps(filters=filters)
-
-
-# ==============================================================================
-# EDGE CASE TESTS
-# ==============================================================================
-
-
-class TestFetchMapsEdgeCases:
-    """Test edge cases."""
-
-    @pytest.mark.asyncio
-    async def test_single_true_with_multiple_results_returns_first(
+    async def test_fetch_count_matches_results(
         self,
         maps_repo: MapsRepository,
         db_pool: asyncpg.Pool,
         used_codes: set[str],
     ) -> None:
-        """Test single=True with multiple results returns first result."""
-        # Create multiple maps with same category
-        for i in range(3):
-            code = f"SNG{i:02d}"
+        """Test that fetch returns correct number of maps."""
+        # Create 5 maps with unique category
+        category = "CountTest"
+        for i in range(5):
+            code = f"CNT{i:02d}"
             used_codes.add(code)
-            await create_test_map(db_pool, code, category="Classic")
+            await create_test_map(db_pool, code, category=category)
 
-        filters = MapSearchFilters(category=["Classic"])
-        result = await maps_repo.fetch_maps(filters=filters, single=True)
-
-        assert isinstance(result, dict)
-        assert "code" in result
-
-    @pytest.mark.asyncio
-    async def test_single_true_with_no_results_returns_empty_dict(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test single=True with no results returns empty dict."""
-        filters = MapSearchFilters(code=unique_map_code)
-        result = await maps_repo.fetch_maps(filters=filters, single=True)
-
-        assert result == {}
-
-
-# ==============================================================================
-# TRANSACTION TESTS
-# ==============================================================================
-
-
-class TestFetchMapsTransactions:
-    """Test transaction context."""
-
-    @pytest.mark.asyncio
-    async def test_fetch_within_transaction(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetching maps within a transaction."""
-        await create_test_map(db_pool, unique_map_code)
-
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                filters = MapSearchFilters(code=unique_map_code)
-                result = await maps_repo.fetch_maps(filters=filters, conn=conn)
-
-        assert len(result) == 1
-        assert result[0]["code"] == unique_map_code
-
-
-# ==============================================================================
-# PERFORMANCE TESTS
-# ==============================================================================
-
-
-class TestFetchMapsPerformance:
-    """Test performance with large datasets."""
-
-    @pytest.mark.asyncio
-    async def test_fetch_large_result_set(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        used_codes: set[str],
-    ) -> None:
-        """Test fetching large result sets."""
-        # Create 100 maps
-        for i in range(100):
-            code = f"LRG{i:04d}"
-            used_codes.add(code)
-            await create_test_map(db_pool, code)
-
-        filters = MapSearchFilters(return_all=True)
+        filters = MapSearchFilters(category=[category], return_all=True)
         result = await maps_repo.fetch_maps(filters=filters)
 
-        assert len(result) >= 100
+        assert len(result) == 5

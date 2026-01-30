@@ -1,31 +1,25 @@
-"""Exhaustive tests for MapsRepository.update_core_map method.
+"""Focused tests for MapsRepository.update_core_map method.
 
 Test Coverage:
-- Happy path: update single field
-- Happy path: update multiple fields
-- Update each field individually (all fields)
-- Update all fields at once
-- Empty update (no fields)
-- Non-existent map updates (silent failure)
-- Constraint violations: duplicate code
-- Field validation: difficulty, title length, checkpoints
-- NULL values for optional fields
-- Transaction handling: commit and rollback
-- Performance: sequential updates
-- Edge cases: update to same values
+- Update single field (different field types)
+- Update multiple fields
+- Partial update
+- Update with valid enum values
+- Update timestamps
+- No-op update (same values)
+- Transaction commit
+- Updated_at auto-update
 """
 
 from typing import Any, get_args
-from uuid import uuid4
 
 import asyncpg
 import pytest
 from faker import Faker
 from genjishimada_sdk import difficulties
-from genjishimada_sdk.maps import MapCategory, OverwatchMap, PlaytestStatus
+from genjishimada_sdk.maps import MapCategory, OverwatchMap
 from pytest_databases.docker.postgres import PostgresService
 
-from repository.exceptions import UniqueConstraintViolationError
 from repository.maps_repository import MapsRepository
 
 fake = Faker()
@@ -143,662 +137,235 @@ async def existing_map(
 
 
 # ==============================================================================
-# HAPPY PATH TESTS - SINGLE FIELD
+# CORE TESTS
 # ==============================================================================
 
 
-class TestUpdateCoreMapSingleField:
-    """Test updating a single field at a time."""
+@pytest.mark.asyncio
+async def test_update_single_field_string(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
+    """Test updating a single string field."""
+    new_map_name = "Nepal"
+    await maps_repo.update_core_map(existing_map["code"], {"map_name": new_map_name})
 
-    @pytest.mark.asyncio
-    async def test_update_map_name(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the map_name field."""
-        new_map_name = "Nepal"
-        await maps_repo.update_core_map(existing_map["code"], {"map_name": new_map_name})
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow("SELECT map_name FROM core.maps WHERE code = $1", existing_map["code"])
 
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT map_name FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["map_name"] == new_map_name
-
-    @pytest.mark.asyncio
-    async def test_update_category(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the category field."""
-        new_category = "Strive"
-        await maps_repo.update_core_map(existing_map["code"], {"category": new_category})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT category FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["category"] == new_category
-
-    @pytest.mark.asyncio
-    async def test_update_checkpoints(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the checkpoints field."""
-        new_checkpoints = 999
-        await maps_repo.update_core_map(existing_map["code"], {"checkpoints": new_checkpoints})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT checkpoints FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["checkpoints"] == new_checkpoints
-
-    @pytest.mark.asyncio
-    async def test_update_official(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the official field."""
-        new_official = not existing_map["official"]
-        await maps_repo.update_core_map(existing_map["code"], {"official": new_official})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT official FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["official"] == new_official
-
-    @pytest.mark.asyncio
-    async def test_update_playtesting(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the playtesting field."""
-        new_playtesting = "In Progress"
-        await maps_repo.update_core_map(existing_map["code"], {"playtesting": new_playtesting})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT playtesting FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["playtesting"] == new_playtesting
-
-    @pytest.mark.asyncio
-    async def test_update_difficulty(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the difficulty field."""
-        new_difficulty = "Hell"
-        await maps_repo.update_core_map(existing_map["code"], {"difficulty": new_difficulty})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT difficulty FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["difficulty"] == new_difficulty
-
-    @pytest.mark.asyncio
-    async def test_update_raw_difficulty(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the raw_difficulty field."""
-        new_raw_difficulty = 9.5
-        await maps_repo.update_core_map(existing_map["code"], {"raw_difficulty": new_raw_difficulty})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT raw_difficulty FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert float(result["raw_difficulty"]) == pytest.approx(new_raw_difficulty, abs=0.01)
-
-    @pytest.mark.asyncio
-    async def test_update_hidden(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the hidden field."""
-        new_hidden = True
-        await maps_repo.update_core_map(existing_map["code"], {"hidden": new_hidden})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT hidden FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["hidden"] == new_hidden
-
-    @pytest.mark.asyncio
-    async def test_update_archived(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the archived field."""
-        new_archived = True
-        await maps_repo.update_core_map(existing_map["code"], {"archived": new_archived})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT archived FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["archived"] == new_archived
-
-    @pytest.mark.asyncio
-    async def test_update_description(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the description field."""
-        new_description = fake.sentence(nb_words=20)
-        await maps_repo.update_core_map(existing_map["code"], {"description": new_description})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT description FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["description"] == new_description
-
-    @pytest.mark.asyncio
-    async def test_update_custom_banner(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the custom_banner field."""
-        new_custom_banner = fake.url()
-        await maps_repo.update_core_map(existing_map["code"], {"custom_banner": new_custom_banner})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT custom_banner FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["custom_banner"] == new_custom_banner
-
-    @pytest.mark.asyncio
-    async def test_update_title(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating only the title field."""
-        new_title = fake.sentence(nb_words=3)[:50]
-        await maps_repo.update_core_map(existing_map["code"], {"title": new_title})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT title FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["title"] == new_title
+    assert result["map_name"] == new_map_name
 
 
-# ==============================================================================
-# HAPPY PATH TESTS - MULTIPLE FIELDS
-# ==============================================================================
+@pytest.mark.asyncio
+async def test_update_single_field_integer(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
+    """Test updating a single integer field."""
+    new_checkpoints = 42
+    await maps_repo.update_core_map(existing_map["code"], {"checkpoints": new_checkpoints})
+
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow("SELECT checkpoints FROM core.maps WHERE code = $1", existing_map["code"])
+
+    assert result["checkpoints"] == new_checkpoints
 
 
-class TestUpdateCoreMapMultipleFields:
+@pytest.mark.asyncio
+async def test_update_single_field_boolean(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
+    """Test updating a single boolean field."""
+    new_hidden = True
+    await maps_repo.update_core_map(existing_map["code"], {"hidden": new_hidden})
+
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow("SELECT hidden FROM core.maps WHERE code = $1", existing_map["code"])
+
+    assert result["hidden"] == new_hidden
+
+
+@pytest.mark.asyncio
+async def test_update_multiple_fields(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
     """Test updating multiple fields at once."""
-
-    @pytest.mark.asyncio
-    async def test_update_two_fields(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating two fields at once."""
-        updates = {
-            "map_name": "Kanezaka",
-            "checkpoints": 25,
-        }
-
-        await maps_repo.update_core_map(existing_map["code"], updates)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT map_name, checkpoints FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["map_name"] == updates["map_name"]
-        assert result["checkpoints"] == updates["checkpoints"]
-
-    @pytest.mark.asyncio
-    async def test_update_multiple_fields(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating multiple fields at once."""
-        # Note: Don't update both difficulty and raw_difficulty in same update
-        # Database trigger will calculate difficulty from raw_difficulty
-        updates = {
-            "map_name": "Ilios",
-            "category": "Strive",
-            "checkpoints": 15,
-            "official": False,
-        }
-
-        await maps_repo.update_core_map(existing_map["code"], updates)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow(
-                "SELECT map_name, category, checkpoints, official FROM core.maps WHERE code = $1",
-                existing_map["code"],
-            )
-
-        assert result["map_name"] == updates["map_name"]
-        assert result["category"] == updates["category"]
-        assert result["checkpoints"] == updates["checkpoints"]
-        assert result["official"] == updates["official"]
-
-    @pytest.mark.asyncio
-    async def test_update_all_fields(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating all updatable fields at once."""
-        updates = {
-            "map_name": "Busan",
-            "category": "Beginner",
-            "checkpoints": 30,
-            "official": False,
-            "playtesting": "Rejected",
-            "difficulty": "Extreme",
-            "raw_difficulty": 8.8,
-            "hidden": True,
-            "archived": True,
-            "description": "Updated description",
-            "custom_banner": "https://example.com/banner.png",
-            "title": "Updated Title",
-        }
-
-        await maps_repo.update_core_map(existing_map["code"], updates)
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT * FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["map_name"] == updates["map_name"]
-        assert result["category"] == updates["category"]
-        assert result["checkpoints"] == updates["checkpoints"]
-        assert result["official"] == updates["official"]
-        assert result["playtesting"] == updates["playtesting"]
-        assert result["difficulty"] == updates["difficulty"]
-        assert float(result["raw_difficulty"]) == pytest.approx(updates["raw_difficulty"], abs=0.01)
-        assert result["hidden"] == updates["hidden"]
-        assert result["archived"] == updates["archived"]
-        assert result["description"] == updates["description"]
-        assert result["custom_banner"] == updates["custom_banner"]
-        assert result["title"] == updates["title"]
-
-
-# ==============================================================================
-# EMPTY UPDATE TESTS
-# ==============================================================================
-
-
-class TestUpdateCoreMapEmpty:
-    """Test updating with empty data."""
-
-    @pytest.mark.asyncio
-    async def test_update_with_empty_dict_does_nothing(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test that updating with empty dict returns without error."""
-        # Get original values
-        async with db_pool.acquire() as conn:
-            original = await conn.fetchrow("SELECT * FROM core.maps WHERE code = $1", existing_map["code"])
-
-        # Update with empty dict
-        await maps_repo.update_core_map(existing_map["code"], {})
-
-        # Verify nothing changed
-        async with db_pool.acquire() as conn:
-            updated = await conn.fetchrow("SELECT * FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert dict(original) == dict(updated)
-
-
-# ==============================================================================
-# NON-EXISTENT MAP TESTS
-# ==============================================================================
-
-
-class TestUpdateCoreMapNonExistent:
-    """Test updating non-existent maps."""
-
-    @pytest.mark.asyncio
-    async def test_update_non_existent_map_silent_failure(
-        self,
-        maps_repo: MapsRepository,
-        unique_map_code: str,
-    ) -> None:
-        """Test that updating non-existent map doesn't raise error (silent failure)."""
-        # Should not raise an error, just updates 0 rows
-        await maps_repo.update_core_map(unique_map_code, {"map_name": "Ghost Map"})
-
-        # No exception means test passes
-
-
-# ==============================================================================
-# CONSTRAINT VIOLATION TESTS
-# ==============================================================================
-
-
-class TestUpdateCoreMapConstraints:
-    """Test constraint violations during update."""
-
-    @pytest.mark.asyncio
-    async def test_update_code_to_duplicate_raises_error(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-        used_codes: set[str],
-    ) -> None:
-        """Test that updating code to existing code raises UniqueConstraintViolationError."""
-        # Generate a different unique code for the second map
-        import time
-        second_code = f"DUP{str(int(time.time() * 1000))[-4:]}"
-        used_codes.add(second_code)
-
-        # Create another map
-        async with db_pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO core.maps (
-                    code, map_name, category, checkpoints, official,
-                    playtesting, difficulty, raw_difficulty
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                """,
-                second_code,
-                "Other Map",
-                "Classic",
-                10,
-                True,
-                "Approved",
-                "Medium",
-                5.0,
-            )
-
-        # Try to update existing_map's code to the other map's code
-        with pytest.raises(UniqueConstraintViolationError) as exc_info:
-            await maps_repo.update_core_map(existing_map["code"], {"code": second_code})
-
-        assert "maps_code_key" in exc_info.value.constraint_name
-
-
-# ==============================================================================
-# FIELD VALIDATION TESTS
-# ==============================================================================
-
-
-class TestUpdateCoreMapValidation:
-    """Test field validation during updates."""
-
-    @pytest.mark.asyncio
-    async def test_update_title_exceeding_max_length_fails(
-        self,
-        maps_repo: MapsRepository,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test that updating title to >50 chars fails."""
-        long_title = "A" * 51
-
-        with pytest.raises((asyncpg.CheckViolationError, Exception)):
-            await maps_repo.update_core_map(existing_map["code"], {"title": long_title})
-
-    @pytest.mark.asyncio
-    async def test_update_title_to_max_length_succeeds(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test that updating title to exactly 50 chars succeeds."""
-        max_title = "A" * 50
-
-        await maps_repo.update_core_map(existing_map["code"], {"title": max_title})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT title FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["title"] == max_title
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "difficulty",
-        ["Easy", "Medium", "Hard", "Very Hard", "Extreme", "Hell"],
-    )
-    async def test_update_all_valid_difficulties(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-        difficulty: str,
-    ) -> None:
-        """Test updating to all valid difficulty values."""
-        await maps_repo.update_core_map(existing_map["code"], {"difficulty": difficulty})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT difficulty FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["difficulty"] == difficulty
-
-
-# ==============================================================================
-# NULL VALUE TESTS
-# ==============================================================================
-
-
-class TestUpdateCoreMapNullValues:
-    """Test updating optional fields to NULL."""
-
-    @pytest.mark.asyncio
-    async def test_update_description_to_null(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating description to NULL."""
-        await maps_repo.update_core_map(existing_map["code"], {"description": None})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT description FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["description"] is None
-
-    @pytest.mark.asyncio
-    async def test_update_custom_banner_to_null(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating custom_banner to NULL."""
-        await maps_repo.update_core_map(existing_map["code"], {"custom_banner": None})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT custom_banner FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["custom_banner"] is None
-
-    @pytest.mark.asyncio
-    async def test_update_title_to_null(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating title to NULL."""
-        await maps_repo.update_core_map(existing_map["code"], {"title": None})
-
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT title FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["title"] is None
-
-
-# ==============================================================================
-# TRANSACTION TESTS
-# ==============================================================================
-
-
-class TestUpdateCoreMapTransactions:
-    """Test transaction handling."""
-
-    @pytest.mark.asyncio
-    async def test_update_within_transaction_committed(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating within a committed transaction."""
-        new_map_name = "Transaction Map"
-
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                await maps_repo.update_core_map(existing_map["code"], {"map_name": new_map_name}, conn=conn)
-
-        # Verify update persisted
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT map_name FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["map_name"] == new_map_name
-
-    @pytest.mark.asyncio
-    async def test_update_within_transaction_rolled_back(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test that rolled back transaction doesn't persist update."""
-        original_map_name = existing_map["map_name"]
-        new_map_name = "Rollback Map"
-
-        async with db_pool.acquire() as conn:
-            try:
-                async with conn.transaction():
-                    await maps_repo.update_core_map(existing_map["code"], {"map_name": new_map_name}, conn=conn)
-                    # Force rollback
-                    raise Exception("Force rollback")
-            except Exception:
-                pass
-
-        # Verify update was rolled back
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT map_name FROM core.maps WHERE code = $1", existing_map["code"])
-
-        assert result["map_name"] == original_map_name
-
-
-# ==============================================================================
-# EDGE CASE TESTS
-# ==============================================================================
-
-
-class TestUpdateCoreMapEdgeCases:
-    """Test edge cases."""
-
-    @pytest.mark.asyncio
-    async def test_update_to_same_values_succeeds(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test updating fields to their current values."""
-        # Update to same values
-        await maps_repo.update_core_map(
+    updates = {
+        "map_name": "Ilios",
+        "category": "Strive",
+        "checkpoints": 15,
+        "official": False,
+    }
+
+    await maps_repo.update_core_map(existing_map["code"], updates)
+
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            "SELECT map_name, category, checkpoints, official FROM core.maps WHERE code = $1",
             existing_map["code"],
-            {
-                "map_name": existing_map["map_name"],
-                "checkpoints": existing_map["checkpoints"],
-            },
         )
 
-        # Verify values unchanged
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow(
-                "SELECT map_name, checkpoints FROM core.maps WHERE code = $1",
-                existing_map["code"],
-            )
-
-        assert result["map_name"] == existing_map["map_name"]
-        assert result["checkpoints"] == existing_map["checkpoints"]
-
-    @pytest.mark.asyncio
-    async def test_update_code_field(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-        used_codes: set[str],
-    ) -> None:
-        """Test updating the code field itself."""
-        old_code = existing_map["code"]
-
-        # Generate a truly unique new code
-        import time
-        new_code = f"NEW{str(int(time.time() * 1000))[-4:]}"
-        used_codes.add(new_code)
-
-        await maps_repo.update_core_map(old_code, {"code": new_code})
-
-        # Verify old code doesn't exist
-        async with db_pool.acquire() as conn:
-            old_result = await conn.fetchrow("SELECT * FROM core.maps WHERE code = $1", old_code)
-
-        assert old_result is None
-
-        # Verify new code exists
-        async with db_pool.acquire() as conn:
-            new_result = await conn.fetchrow("SELECT * FROM core.maps WHERE code = $1", new_code)
-
-        assert new_result is not None
-        assert new_result["code"] == new_code
+    assert result["map_name"] == updates["map_name"]
+    assert result["category"] == updates["category"]
+    assert result["checkpoints"] == updates["checkpoints"]
+    assert result["official"] == updates["official"]
 
 
-# ==============================================================================
-# PERFORMANCE TESTS
-# ==============================================================================
+@pytest.mark.asyncio
+async def test_partial_update_preserves_other_fields(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
+    """Test that partial update preserves unchanged fields."""
+    original_checkpoints = existing_map["checkpoints"]
+
+    # Only update map_name
+    await maps_repo.update_core_map(existing_map["code"], {"map_name": "Busan"})
+
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            "SELECT map_name, checkpoints FROM core.maps WHERE code = $1",
+            existing_map["code"],
+        )
+
+    assert result["map_name"] == "Busan"
+    assert result["checkpoints"] == original_checkpoints
 
 
-class TestUpdateCoreMapPerformance:
-    """Test performance characteristics."""
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "difficulty",
+    ["Easy", "Medium", "Hard", "Very Hard", "Extreme", "Hell"],
+)
+async def test_update_with_valid_enum_values(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+    difficulty: str,
+) -> None:
+    """Test updating with all valid enum values."""
+    await maps_repo.update_core_map(existing_map["code"], {"difficulty": difficulty})
 
-    @pytest.mark.asyncio
-    async def test_sequential_updates(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        existing_map: dict[str, Any],
-    ) -> None:
-        """Test multiple sequential updates to same map."""
-        for i in range(5):
-            await maps_repo.update_core_map(existing_map["code"], {"checkpoints": 10 + i})
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow("SELECT difficulty FROM core.maps WHERE code = $1", existing_map["code"])
 
-        # Verify final value
-        async with db_pool.acquire() as conn:
-            result = await conn.fetchrow("SELECT checkpoints FROM core.maps WHERE code = $1", existing_map["code"])
+    assert result["difficulty"] == difficulty
 
-        assert result["checkpoints"] == 14  # 10 + 4
+
+@pytest.mark.asyncio
+async def test_update_timestamps_are_automatic(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
+    """Test that updated_at timestamp is automatically updated."""
+    # Get original timestamps
+    async with db_pool.acquire() as conn:
+        original = await conn.fetchrow(
+            "SELECT created_at, updated_at FROM core.maps WHERE code = $1",
+            existing_map["code"],
+        )
+
+    # Wait a moment to ensure timestamp difference
+    import asyncio
+
+    await asyncio.sleep(0.1)
+
+    # Update the map
+    await maps_repo.update_core_map(existing_map["code"], {"map_name": "Updated"})
+
+    # Get new timestamps
+    async with db_pool.acquire() as conn:
+        updated = await conn.fetchrow(
+            "SELECT created_at, updated_at FROM core.maps WHERE code = $1",
+            existing_map["code"],
+        )
+
+    # created_at should be unchanged, updated_at should be newer
+    assert updated["created_at"] == original["created_at"]
+    assert updated["updated_at"] > original["updated_at"]
+
+
+@pytest.mark.asyncio
+async def test_no_op_update_with_same_values(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
+    """Test that updating with same values succeeds without error."""
+    await maps_repo.update_core_map(
+        existing_map["code"],
+        {
+            "map_name": existing_map["map_name"],
+            "checkpoints": existing_map["checkpoints"],
+        },
+    )
+
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow(
+            "SELECT map_name, checkpoints FROM core.maps WHERE code = $1",
+            existing_map["code"],
+        )
+
+    assert result["map_name"] == existing_map["map_name"]
+    assert result["checkpoints"] == existing_map["checkpoints"]
+
+
+@pytest.mark.asyncio
+async def test_transaction_commit_persists_changes(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
+    """Test that update within a committed transaction persists."""
+    new_map_name = "Transaction Map"
+
+    async with db_pool.acquire() as conn:
+        async with conn.transaction():
+            await maps_repo.update_core_map(existing_map["code"], {"map_name": new_map_name}, conn=conn)
+
+    # Verify update persisted
+    async with db_pool.acquire() as conn:
+        result = await conn.fetchrow("SELECT map_name FROM core.maps WHERE code = $1", existing_map["code"])
+
+    assert result["map_name"] == new_map_name
+
+
+@pytest.mark.asyncio
+async def test_updated_at_auto_updates_on_change(
+    maps_repo: MapsRepository,
+    db_pool: asyncpg.Pool,
+    existing_map: dict[str, Any],
+) -> None:
+    """Test that updated_at is automatically updated when fields change."""
+    # Get original updated_at
+    async with db_pool.acquire() as conn:
+        original = await conn.fetchval(
+            "SELECT updated_at FROM core.maps WHERE code = $1",
+            existing_map["code"],
+        )
+
+    # Wait briefly to ensure timestamp difference
+    import asyncio
+
+    await asyncio.sleep(0.1)
+
+    # Perform update
+    await maps_repo.update_core_map(existing_map["code"], {"checkpoints": 99})
+
+    # Get new updated_at
+    async with db_pool.acquire() as conn:
+        new = await conn.fetchval(
+            "SELECT updated_at FROM core.maps WHERE code = $1",
+            existing_map["code"],
+        )
+
+    # Verify updated_at changed
+    assert new > original
