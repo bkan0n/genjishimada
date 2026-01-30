@@ -148,9 +148,7 @@ class TestGetJobErrorCases:
         with pytest.raises(HTTPException) as exc_info:
             await repository.get_job(unique_job_id)
 
-        # Currently returns 500 due to bug, should be 404
         assert exc_info.value.status_code == 404
-        # Detail is "404" (first positional arg) instead of "Job not found." (second arg)
         assert str(exc_info.value.detail) == "Job not found."
 
     async def test_get_random_uuid_raises_exception(
@@ -168,7 +166,6 @@ class TestGetJobErrorCases:
         with pytest.raises(HTTPException) as exc_info:
             await repository.get_job(random_uuid)
 
-        # Currently returns 500 due to bug, should be 404
         assert exc_info.value.status_code == 404
 
 
