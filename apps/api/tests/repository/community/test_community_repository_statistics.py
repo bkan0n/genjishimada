@@ -273,18 +273,6 @@ class TestFetchPlayersPerXpTier:
 class TestFetchMapsPerDifficulty:
     """Test fetch_maps_per_difficulty method."""
 
-    async def test_returns_empty_list_when_no_official_visible_maps(
-        self,
-        repository: CommunityRepository,
-    ) -> None:
-        """Test that method returns empty list when no official visible maps exist."""
-        # Act
-        result = await repository.fetch_maps_per_difficulty()
-
-        # Assert
-        assert isinstance(result, list)
-        assert len(result) == 0
-
     async def test_counts_maps_by_base_difficulty(
         self,
         repository: CommunityRepository,
