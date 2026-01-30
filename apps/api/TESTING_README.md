@@ -75,6 +75,9 @@ pytest apps/api/tests/repository/ -m domain_lootbox
 
 # All rank_card repository tests
 pytest apps/api/tests/repository/ -m domain_rank_card
+
+# All newsfeed repository tests
+pytest apps/api/tests/repository/ -m domain_newsfeed
 ```
 
 ### By File Pattern
@@ -98,6 +101,7 @@ pytest apps/api/tests/repository/ -n auto
 # Run specific domain in parallel
 pytest apps/api/tests/repository/ -m domain_maps -n 8
 pytest apps/api/tests/repository/ -m domain_auth -n 8
+pytest apps/api/tests/repository/ -m domain_newsfeed -n 8
 ```
 
 ### Development Mode
@@ -150,11 +154,16 @@ apps/api/tests/repository/
 │   ├── test_lootbox_repository_read.py                 (10 tests)
 │   ├── test_lootbox_repository_update.py               (9 tests)
 │   └── test_lootbox_repository_delete.py               (5 tests)
-└── rank_card/
-    ├── test_rank_card_repository_upsert.py             (21 tests)
-    ├── test_rank_card_repository_read.py               (17 tests)
-    ├── test_rank_card_repository_aggregations.py       (13 tests)
-    └── test_rank_card_repository_edge_cases.py         (11 tests)
+├── rank_card/
+│   ├── test_rank_card_repository_upsert.py             (21 tests)
+│   ├── test_rank_card_repository_read.py               (17 tests)
+│   ├── test_rank_card_repository_aggregations.py       (13 tests)
+│   └── test_rank_card_repository_edge_cases.py         (11 tests)
+└── newsfeed/
+    ├── test_newsfeed_repository_create.py              (17 tests)
+    ├── test_newsfeed_repository_read.py                (17 tests)
+    ├── test_newsfeed_repository_list.py                (19 tests)
+    └── test_newsfeed_repository_edge_cases.py          (20 tests)
 ```
 
 ### File Naming Convention
@@ -292,13 +301,58 @@ The rank_card domain is organized by operation type (62 tests total):
 - Tests complex aggregations with joins across multiple domains
 - **BUG NOTED**: fetch_community_rank_xp uses assertion for missing user instead of proper exception
 
+#### Newsfeed Repository Tests
+The newsfeed domain is organized by operation type (73 tests total):
+
+**Create Operations** (`test_newsfeed_repository_create.py` - 17 tests):
+- insert_event - Insert events with various payload structures
+- Happy path: simple/complex payloads, data storage verification, sequential inserts
+- Edge cases: empty payload, special characters, null values, large payloads, structure preservation
+- Transactions: commit and rollback behavior
+- Concurrency: parallel inserts with auto-increment IDs
+
+**Read Operations** (`test_newsfeed_repository_read.py` - 17 tests):
+- fetch_event_by_id - Fetch single event by ID
+- Happy path: correct event data, all fields returned, complex payloads
+- Not found: non-existent, negative, zero IDs return None
+- Edge cases: empty payload, null values, special characters, computed event_type
+- Transactions: fetch within transaction
+
+**List Operations** (`test_newsfeed_repository_list.py` - 19 tests):
+- fetch_events - Fetch multiple events with pagination and filtering
+- Happy path: pagination, offset, no filter, all fields, payload parsing
+- Filtering: event_type filter, exclusions, non-existent type
+- Ordering: timestamp DESC, id DESC for same timestamp
+- Edge cases: zero limit, large offset, large limit, empty database, complex payloads
+- Transactions: fetch within transaction
+
+**Edge Cases** (`test_newsfeed_repository_edge_cases.py` - 20 tests):
+- Concurrent operations: insert/fetch, multiple fetch by id, different filters
+- Integration: insert then fetch by id, pagination, type filtering
+- Payload edge cases: JSON reserved chars, unicode/emoji, deep nesting (10 levels), mixed types
+- Timestamp edge cases: same timestamp ordering, microsecond precision, timezone normalization
+- Boundary values: max limit (2^31-1), max event_type length (200 chars)
+
+**Test Execution Metrics:**
+- Expected: 73 tests in ~12-15s sequential, ~7-10s parallel (4 workers)
+- Speedup: ~1.7x (based on simple schema with auto-increment IDs)
+- All tests verified for parallel safety and independence
+
+**Key Characteristics:**
+- Uses auto-increment ID (no unique constraint collisions)
+- No foreign key constraints (simple schema)
+- Generated event_type column from payload->>'type'
+- Tests JSON/JSONB payload handling extensively
+- Uses create_test_newsfeed_event factory fixture
+- No custom unique value fixtures needed (auto-increment handles uniqueness)
+
 ### Test Markers
 All repository tests should include:
 ```python
 import pytest
 
 pytestmark = [
-    pytest.mark.domain_maps,  # or domain_users, domain_auth, domain_autocomplete, domain_lootbox, domain_rank_card, etc.
+    pytest.mark.domain_maps,  # or domain_users, domain_auth, domain_autocomplete, domain_lootbox, domain_rank_card, domain_newsfeed, etc.
 ]
 ```
 
@@ -334,6 +388,7 @@ global_code_tracker.add(code)
 - `create_test_user` - Factory for creating users
 - `create_test_email_user` - Factory for creating users with email auth
 - `create_test_session` - Factory for creating sessions
+- `create_test_newsfeed_event` - Factory for creating newsfeed events
 - `global_code_tracker` - Track codes across all tests
 - `global_user_id_tracker` - Track user IDs across all tests
 - `global_email_tracker` - Track emails across all tests
