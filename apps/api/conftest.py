@@ -177,6 +177,15 @@ def global_idempotency_key_tracker() -> set[str]:
     return set()
 
 
+@pytest.fixture(scope="session")
+def global_ip_hash_tracker() -> set[str]:
+    """Session-wide tracker for all used IP hashes.
+
+    Prevents collisions across all tests in the session.
+    """
+    return set()
+
+
 # ==============================================================================
 # CODE GENERATION FIXTURES
 # ==============================================================================
@@ -296,6 +305,22 @@ def unique_idempotency_key(global_idempotency_key_tracker: set[str]) -> str:
     key = f"idem-{uuid4().hex[:16]}"
     global_idempotency_key_tracker.add(key)
     return key
+
+
+@pytest.fixture
+def unique_ip_hash(global_ip_hash_tracker: set[str]) -> str:
+    """Generate a unique IP hash guaranteed not to collide.
+
+    Uses UUID-based generation for guaranteed uniqueness across
+    parallel test execution and multiple test runs.
+
+    Format: SHA256 hex digest (64 lowercase hex chars)
+    """
+    import hashlib
+
+    ip_hash = hashlib.sha256(uuid4().bytes).hexdigest()
+    global_ip_hash_tracker.add(ip_hash)
+    return ip_hash
 
 
 # ==============================================================================
