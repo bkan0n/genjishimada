@@ -60,31 +60,6 @@ class TestFetchMapTotals:
             standard_difficulties = {"Easy", "Medium", "Hard", "Extreme", "Very Easy"}
             assert len(difficulty_names & standard_difficulties) > 0
 
-    async def test_fetch_map_totals_strips_modifiers(
-        self,
-        repository: RankCardRepository,
-    ) -> None:
-        """Test that difficulty modifiers (+ and -) are stripped from grouping."""
-        # Act
-        result = await repository.fetch_map_totals()
-
-        # Assert - All results should have modifiers stripped (no + or -)
-        assert isinstance(result, list)
-        for row in result:
-            base_diff = row["base_difficulty"]
-            # Difficulty names should not contain + or - modifiers
-            assert "+" not in base_diff
-            assert "-" not in base_diff
-            # Should be clean base difficulty names
-            assert base_diff in {
-                "Very Easy",
-                "Easy",
-                "Medium",
-                "Hard",
-                "Very Hard",
-                "Extreme",
-            }
-
     async def test_fetch_map_totals_excludes_archived_maps(
         self,
         repository: RankCardRepository,

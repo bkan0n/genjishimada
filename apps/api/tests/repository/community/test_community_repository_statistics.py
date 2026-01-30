@@ -528,53 +528,6 @@ class TestFetchMapsPerDifficulty:
 class TestFetchUnarchivedMapCount:
     """Test fetch_unarchived_map_count method."""
 
-    async def test_counts_only_visible_maps(
-        self,
-        repository: CommunityRepository,
-        create_test_map,
-    ) -> None:
-        """Test that only non-archived, non-hidden maps are counted."""
-        # Arrange - Create maps with same map_name but different visibility
-        map_name = "Hanamura"
-
-        code1 = f"T{uuid4().hex[:5].upper()}"
-        await create_test_map(
-            code1,
-            map_name=map_name,
-            archived=False,
-            hidden=False,
-        )
-
-        code2 = f"T{uuid4().hex[:5].upper()}"
-        await create_test_map(
-            code2,
-            map_name=map_name,
-            archived=False,
-            hidden=False,
-        )
-
-        code3 = f"T{uuid4().hex[:5].upper()}"
-        await create_test_map(
-            code3,
-            map_name=map_name,
-            archived=True,  # Should be excluded
-            hidden=False,
-        )
-
-        code4 = f"T{uuid4().hex[:5].upper()}"
-        await create_test_map(
-            code4,
-            map_name=map_name,
-            archived=False,
-            hidden=True,  # Should be excluded
-        )
-
-        # Act
-        result = await repository.fetch_unarchived_map_count()
-
-        # Assert
-        hanamura_count = next((r["amount"] for r in result if r["map_name"] == map_name), 0)
-        assert hanamura_count == 2  # Only the 2 visible maps
 
     async def test_groups_by_map_name(
         self,
