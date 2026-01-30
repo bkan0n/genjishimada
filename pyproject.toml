@@ -17,7 +17,13 @@ dev-common = [
 ]
 
 [tool.ruff]
-exclude = ["test_v4", "tests"]
+exclude = [
+    "test_v4",
+    "tests",
+    "apps/*/tests",
+    "apps/*/test_*.py",
+    "apps/*/conftest.py",
+]
 line-length = 120
 target-version = "py313"
 
@@ -61,8 +67,8 @@ convention = "google"
 
 [tool.basedpyright]
 exclude = [
-    "**/tests",
-    "**/test_*.py",
-    "**/test_v4",
-    "**/test_*.py"
+    "apps/*/tests",
+    "apps/*/test_*.py",
+    "apps/*/test_v4",
+    "apps/*/conftest.py",
 ]
