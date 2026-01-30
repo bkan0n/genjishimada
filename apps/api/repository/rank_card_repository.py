@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from asyncpg import Connection
+from asyncpg.exceptions import ForeignKeyViolationError as AsyncpgFKError
 from litestar.datastructures import State
 
 from .base import BaseRepository
+from .exceptions import ForeignKeyViolationError, extract_constraint_name
 
 
 class RankCardRepository(BaseRepository):
@@ -45,6 +47,9 @@ class RankCardRepository(BaseRepository):
             user_id: User ID.
             background: Background name.
             conn: Optional connection for transaction participation.
+
+        Raises:
+            ForeignKeyViolationError: If user_id does not exist.
         """
         _conn = self._get_connection(conn)
 
@@ -52,7 +57,15 @@ class RankCardRepository(BaseRepository):
             INSERT INTO rank_card.background (user_id, name) VALUES ($1, $2)
             ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name
         """
-        await _conn.execute(query, user_id, background)
+        try:
+            await _conn.execute(query, user_id, background)
+        except AsyncpgFKError as e:
+            constraint = extract_constraint_name(e) or "unknown"
+            raise ForeignKeyViolationError(
+                constraint_name=constraint,
+                table="rank_card.background",
+                detail=str(e),
+            ) from e
 
     async def fetch_avatar(
         self,
@@ -88,6 +101,9 @@ class RankCardRepository(BaseRepository):
             user_id: User ID.
             skin: Skin name.
             conn: Optional connection for transaction participation.
+
+        Raises:
+            ForeignKeyViolationError: If user_id does not exist.
         """
         _conn = self._get_connection(conn)
 
@@ -95,7 +111,15 @@ class RankCardRepository(BaseRepository):
             INSERT INTO rank_card.avatar (user_id, skin) VALUES ($1, $2)
             ON CONFLICT (user_id) DO UPDATE SET skin = EXCLUDED.skin
         """
-        await _conn.execute(query, user_id, skin)
+        try:
+            await _conn.execute(query, user_id, skin)
+        except AsyncpgFKError as e:
+            constraint = extract_constraint_name(e) or "unknown"
+            raise ForeignKeyViolationError(
+                constraint_name=constraint,
+                table="rank_card.avatar",
+                detail=str(e),
+            ) from e
 
     async def upsert_avatar_pose(
         self,
@@ -110,6 +134,9 @@ class RankCardRepository(BaseRepository):
             user_id: User ID.
             pose: Pose name.
             conn: Optional connection for transaction participation.
+
+        Raises:
+            ForeignKeyViolationError: If user_id does not exist.
         """
         _conn = self._get_connection(conn)
 
@@ -117,7 +144,15 @@ class RankCardRepository(BaseRepository):
             INSERT INTO rank_card.avatar (user_id, pose) VALUES ($1, $2)
             ON CONFLICT (user_id) DO UPDATE SET pose = EXCLUDED.pose
         """
-        await _conn.execute(query, user_id, pose)
+        try:
+            await _conn.execute(query, user_id, pose)
+        except AsyncpgFKError as e:
+            constraint = extract_constraint_name(e) or "unknown"
+            raise ForeignKeyViolationError(
+                constraint_name=constraint,
+                table="rank_card.avatar",
+                detail=str(e),
+            ) from e
 
     async def fetch_badges(
         self,
@@ -179,6 +214,9 @@ class RankCardRepository(BaseRepository):
             badge_name6: Badge 6 name.
             badge_type6: Badge 6 type.
             conn: Optional connection for transaction participation.
+
+        Raises:
+            ForeignKeyViolationError: If user_id does not exist.
         """
         _conn = self._get_connection(conn)
 
@@ -206,22 +244,30 @@ class RankCardRepository(BaseRepository):
                 badge_name6 = EXCLUDED.badge_name6,
                 badge_type6 = EXCLUDED.badge_type6
         """
-        await _conn.execute(
-            query,
-            user_id,
-            badge_name1,
-            badge_type1,
-            badge_name2,
-            badge_type2,
-            badge_name3,
-            badge_type3,
-            badge_name4,
-            badge_type4,
-            badge_name5,
-            badge_type5,
-            badge_name6,
-            badge_type6,
-        )
+        try:
+            await _conn.execute(
+                query,
+                user_id,
+                badge_name1,
+                badge_type1,
+                badge_name2,
+                badge_type2,
+                badge_name3,
+                badge_type3,
+                badge_name4,
+                badge_type4,
+                badge_name5,
+                badge_type5,
+                badge_name6,
+                badge_type6,
+            )
+        except AsyncpgFKError as e:
+            constraint = extract_constraint_name(e) or "unknown"
+            raise ForeignKeyViolationError(
+                constraint_name=constraint,
+                table="rank_card.badges",
+                detail=str(e),
+            ) from e
 
     async def fetch_nickname(
         self,
