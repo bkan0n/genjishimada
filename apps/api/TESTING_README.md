@@ -1,0 +1,386 @@
+# Testing Documentation
+
+This directory contains comprehensive guides for testing the v4 API.
+
+## Quick Start
+
+1. **Read the Repository Testing Guide** ([TESTING_GUIDE.md](TESTING_GUIDE.md))
+   - Complete guide for writing repository layer tests
+   - Covers fixtures, patterns, and best practices
+   - Explains how to organize and run tests
+
+2. **Fix Current Failures** ([TESTING_FIXES.md](TESTING_FIXES.md))
+   - Step-by-step fixes for the 11 failing tests
+   - Shows exact code changes needed
+   - Includes verification commands
+
+3. **Start Writing New Tests**
+   - Follow the patterns in the guide
+   - Use the test file template
+   - Run tests in parallel to verify uniqueness
+
+## Documents
+
+### [TESTING_GUIDE.md](TESTING_GUIDE.md)
+**Comprehensive Repository Testing Guide**
+
+Topics covered:
+- Test organization and file naming
+- Running tests (by domain, in parallel, etc.)
+- Test data management and uniqueness
+- Fixture patterns (standard and custom)
+- Writing comprehensive repository tests
+- Common testing patterns
+- Troubleshooting guide
+
+**Key takeaways:**
+- ✅ Never hardcode unique values (codes, IDs)
+- ✅ Use UUID-based generation for guaranteed uniqueness
+- ✅ Use Faker for all random data
+- ✅ Add domain markers to all tests
+- ✅ Tests must work in parallel and in any order
+
+### [TESTING_FIXES.md](TESTING_FIXES.md)
+**Fixing Current Test Failures**
+
+Shows exactly how to fix the 11 failing tests:
+- `test_case_sensitive_codes_are_unique`
+- `test_create_multiple_maps_sequentially`
+- 9 tests in `test_maps_repository_lookup_map_id.py`
+
+All failures caused by hardcoded map codes. Document shows:
+- Root cause analysis
+- File-by-file fixes with before/after code
+- Quick migration patterns
+- Verification commands
+
+## Running Tests
+
+### By Domain
+```bash
+# All maps repository tests
+pytest apps/api/tests/repository/ -m domain_maps
+
+# All users repository tests
+pytest apps/api/tests/repository/ -m domain_users
+
+# All auth repository tests
+pytest apps/api/tests/repository/ -m domain_auth
+
+# All autocomplete repository tests
+pytest apps/api/tests/repository/ -m domain_autocomplete
+```
+
+### By File Pattern
+```bash
+# All tests for maps repository
+pytest apps/api/tests/repository/ -k "maps_repository"
+
+# All tests for auth repository
+pytest apps/api/tests/repository/ -k "auth_repository"
+
+# Specific method tests
+pytest apps/api/tests/repository/maps/test_maps_repository_create_core_map.py
+pytest apps/api/tests/repository/auth/test_auth_repository_sessions.py
+```
+
+### In Parallel
+```bash
+# Run all repository tests in parallel
+pytest apps/api/tests/repository/ -n auto
+
+# Run specific domain in parallel
+pytest apps/api/tests/repository/ -m domain_maps -n 8
+pytest apps/api/tests/repository/ -m domain_auth -n 8
+```
+
+### Development Mode
+```bash
+# Run only failed tests from last run
+pytest apps/api/tests/repository/ --lf
+
+# Stop on first failure
+pytest apps/api/tests/repository/ -x
+
+# Verbose output
+pytest apps/api/tests/repository/ -v
+```
+
+## Test Organization
+
+### Current Structure
+```
+apps/api/tests/repository/
+├── maps/
+│   ├── test_maps_repository_check_code_exists.py       (29 tests)
+│   ├── test_maps_repository_lookup_map_id.py           (27 tests)
+│   ├── test_maps_repository_create_core_map.py         (39 tests)
+│   ├── test_maps_repository_update_core_map.py         (34 tests)
+│   ├── test_maps_repository_set_archive_status.py      (18 tests)
+│   ├── test_maps_repository_fetch_maps.py              (33 tests)
+│   ├── test_maps_repository_fetch_partial_map.py       (20 tests)
+│   ├── test_maps_repository_entity_operations.py       (52 tests)
+│   ├── test_maps_repository_guide_operations.py        (32 tests)
+│   └── test_maps_repository_advanced_operations.py     (25 tests)
+├── users/
+│   ├── test_users_repository_create.py
+│   ├── test_users_repository_read.py
+│   ├── test_users_repository_update.py
+│   ├── test_users_repository_delete.py
+│   └── test_users_repository_edge_cases.py
+├── auth/
+│   ├── test_auth_repository_email_auth.py              (26 tests)
+│   ├── test_auth_repository_sessions.py                (24 tests)
+│   ├── test_auth_repository_tokens.py                  (17 tests)
+│   ├── test_auth_repository_remember_tokens.py         (16 tests)
+│   ├── test_auth_repository_rate_limits.py             (16 tests)
+│   └── test_auth_repository_edge_cases.py              (16 tests)
+└── autocomplete/
+    ├── test_autocomplete_repository_search.py          (22 tests)
+    ├── test_autocomplete_repository_transform.py       (18 tests)
+    └── test_autocomplete_repository_edge_cases.py      (20 tests)
+```
+
+### File Naming Convention
+- **Comprehensive method tests**: `test_{domain}_repository_{method_name}.py`
+- **Grouped operations**: `test_{domain}_repository_{operation_group}.py`
+
+### Domain-Specific Organization
+
+#### Auth Repository Tests
+The auth domain is organized by entity type (115 tests total):
+
+**Email Auth Operations** (`test_auth_repository_email_auth.py` - 26 tests):
+- check_email_exists, create_email_auth, get_user_by_email
+- mark_email_verified, update_password, create_core_user
+- generate_next_user_id, get_auth_status
+
+**Session Operations** (`test_auth_repository_sessions.py` - 24 tests):
+- write_session (with upsert), read_session, delete_session
+- delete_expired_sessions, get_user_sessions, delete_user_sessions
+
+**Email Token Operations** (`test_auth_repository_tokens.py` - 17 tests):
+- insert_email_token, get_token_with_user
+- mark_token_used, invalidate_user_tokens
+
+**Remember Token Operations** (`test_auth_repository_remember_tokens.py` - 16 tests):
+- create_remember_token, validate_remember_token, revoke_remember_tokens
+
+**Rate Limit Operations** (`test_auth_repository_rate_limits.py` - 16 tests):
+- record_attempt, fetch_rate_limit_count, check_is_mod
+
+**Edge Cases** (`test_auth_repository_edge_cases.py` - 16 tests):
+- Concurrent operations, transaction rollback, null handling
+- Case sensitivity, boundary conditions, data cleanup
+
+**Test Execution Metrics:**
+- Sequential: 115 tests in 23.47s
+- Parallel (8 workers): 115 tests in 10.78s (2.18x speedup)
+- All tests verified for independence and parallel safety
+
+#### Autocomplete Repository Tests
+The autocomplete domain is organized by operation type (60 tests total):
+
+**Search Operations** (`test_autocomplete_repository_search.py` - 22 tests):
+- get_similar_map_names, get_similar_map_restrictions, get_similar_map_mechanics
+- get_similar_map_codes (with filters: archived, hidden, playtesting)
+- get_similar_users (with filters: fake_users_only, ignore_fake_users)
+
+**Transform Operations** (`test_autocomplete_repository_transform.py` - 18 tests):
+- transform_map_names, transform_map_restrictions, transform_map_mechanics
+- transform_map_codes (with filters and format verification)
+
+**Edge Cases** (`test_autocomplete_repository_edge_cases.py` - 20 tests):
+- Empty strings, special characters (SQL injection, wildcards, unicode)
+- Limit boundaries, filter combinations, null handling
+
+**Test Execution Metrics:**
+- Sequential: 60 tests in 5.44s
+- Parallel (4 workers): 60 tests in 3.79s (1.44x speedup)
+- All tests verified for independence and parallel safety
+
+### Test Markers
+All repository tests should include:
+```python
+import pytest
+
+pytestmark = [
+    pytest.mark.domain_maps,  # or domain_users, domain_auth, domain_autocomplete, etc.
+]
+```
+
+## Key Concepts
+
+### 1. Test Isolation
+Every test must be completely independent:
+- Generate all unique values (codes, IDs)
+- Don't rely on execution order
+- Don't share state between tests
+- Work correctly in parallel
+
+### 2. Unique Value Generation
+**Never hardcode unique values:**
+```python
+# ❌ BAD - Will collide
+code = "ABCD"
+
+# ✅ GOOD - Guaranteed unique
+from uuid import uuid4
+code = f"T{uuid4().hex[:5].upper()}"
+global_code_tracker.add(code)
+```
+
+### 3. Using Fixtures
+**Standard fixtures** (in `conftest.py`):
+- `unique_map_code` - Generate unique map code
+- `unique_user_id` - Generate unique user ID
+- `unique_email` - Generate unique email address
+- `unique_session_id` - Generate unique session ID
+- `unique_token_hash` - Generate unique token hash
+- `create_test_map` - Factory for creating maps
+- `create_test_user` - Factory for creating users
+- `create_test_email_user` - Factory for creating users with email auth
+- `create_test_session` - Factory for creating sessions
+- `global_code_tracker` - Track codes across all tests
+- `global_user_id_tracker` - Track user IDs across all tests
+- `global_email_tracker` - Track emails across all tests
+- `global_session_id_tracker` - Track session IDs across all tests
+- `global_token_hash_tracker` - Track token hashes across all tests
+
+**Per-file fixtures:**
+- `db_pool` - AsyncPG connection pool
+- `maps_repo` - MapsRepository instance
+- `minimal_map_data` - Map data with required fields
+- `complete_map_data` - Map data with all fields
+
+### 4. Test Coverage
+Document what each file tests:
+```python
+"""Exhaustive tests for MapsRepository.create_core_map method.
+
+Test Coverage:
+- Happy path: create with required fields
+- Happy path: create with optional fields
+- Constraint violations: duplicate codes
+- Field validation: boundaries and types
+- Transaction handling: commits and rollbacks
+- Edge cases: minimal/maximal data
+- Performance: bulk operations
+"""
+```
+
+## Common Mistakes to Avoid
+
+### ❌ Hardcoding Unique Values
+```python
+# Will fail when test runs twice
+code = "ABCD"
+user_id = 123456789012345678
+```
+
+### ❌ Sequential IDs
+```python
+# Will collide in parallel tests
+codes = [f"SEQ{i:03d}" for i in range(10)]
+```
+
+### ❌ Relying on Execution Order
+```python
+# Assumes another test created this data
+map_id = await conn.fetchval("SELECT id FROM core.maps LIMIT 1")
+```
+
+### ❌ Sharing Mutable State
+```python
+# Multiple tests modifying same global list
+shared_codes = []
+```
+
+### ❌ Using Test Data for Reference Lookup
+```python
+# Should use seed data
+await conn.execute("INSERT INTO core.mechanics ...")
+```
+
+## Next Steps
+
+### 1. Fix Failing Tests (URGENT)
+Follow [TESTING_FIXES.md](TESTING_FIXES.md) to fix the 11 failing tests:
+```bash
+# After making fixes, verify:
+pytest apps/api/tests/repository/ -n auto -v
+```
+
+### 2. Add Markers to Existing Tests
+Add domain markers to all test files:
+```python
+import pytest
+
+pytestmark = [
+    pytest.mark.domain_maps,
+]
+```
+
+### 3. Create Tests for Other Domains
+
+**Completed:**
+- ✅ Auth repository (115 tests across 6 files)
+
+**Follow the same patterns for:**
+- Users repository (in progress)
+- Completions repository
+- Playtests repository
+- Notifications repository
+- Community repository
+- Lootbox repository
+- Rank card repository
+
+### 4. Future: Service Layer Tests
+After repository tests are complete, create:
+- `TESTING_GUIDE_SERVICES.md` - Service layer testing guide
+- Focus on business logic, not database queries
+- Mock repository dependencies
+- Test error handling and edge cases
+
+### 5. Future: Controller/Route Tests
+After service tests are complete, create:
+- `TESTING_GUIDE_ROUTES.md` - Route/controller testing guide
+- Focus on HTTP interface
+- Test authentication/authorization
+- Test request/response formatting
+
+## Troubleshooting
+
+### Tests Pass Individually But Fail in Suite
+**Cause:** Hardcoded values colliding
+
+**Fix:** Replace all hardcoded codes with UUID generation
+
+### Tests Fail in Parallel
+**Cause:** Race conditions or non-unique values
+
+**Fix:** Use session-scoped trackers and UUID generation
+
+### Foreign Key Violations
+**Cause:** Trying to reference non-existent entities
+
+**Fix:** Create dependencies first using factory fixtures
+
+### Seed Data Not Available
+**Cause:** Seeds not applied or wrong database
+
+**Fix:** Check `conftest.py` applies seed files
+
+## Questions?
+
+If you have questions or find issues:
+1. Check the troubleshooting section in [TESTING_GUIDE.md](TESTING_GUIDE.md)
+2. Review similar tests in existing files
+3. Update this documentation with new patterns
+
+---
+
+**Remember:**
+- Repository tests = Database queries and data integrity
+- Service tests = Business logic (separate guide)
+- Route tests = HTTP interface (separate guide)
