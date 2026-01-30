@@ -69,6 +69,9 @@ pytest apps/api/tests/repository/ -m domain_auth
 
 # All autocomplete repository tests
 pytest apps/api/tests/repository/ -m domain_autocomplete
+
+# All lootbox repository tests
+pytest apps/api/tests/repository/ -m domain_lootbox
 ```
 
 ### By File Pattern
@@ -135,10 +138,15 @@ apps/api/tests/repository/
 │   ├── test_auth_repository_remember_tokens.py         (16 tests)
 │   ├── test_auth_repository_rate_limits.py             (16 tests)
 │   └── test_auth_repository_edge_cases.py              (16 tests)
-└── autocomplete/
-    ├── test_autocomplete_repository_search.py          (22 tests)
-    ├── test_autocomplete_repository_transform.py       (18 tests)
-    └── test_autocomplete_repository_edge_cases.py      (20 tests)
+├── autocomplete/
+│   ├── test_autocomplete_repository_search.py          (22 tests)
+│   ├── test_autocomplete_repository_transform.py       (18 tests)
+│   └── test_autocomplete_repository_edge_cases.py      (20 tests)
+└── lootbox/
+    ├── test_lootbox_repository_create.py               (11 tests)
+    ├── test_lootbox_repository_read.py                 (10 tests)
+    ├── test_lootbox_repository_update.py               (9 tests)
+    └── test_lootbox_repository_delete.py               (5 tests)
 ```
 
 ### File Naming Convention
@@ -199,13 +207,48 @@ The autocomplete domain is organized by operation type (60 tests total):
 - Parallel (4 workers): 60 tests in 3.79s (1.44x speedup)
 - All tests verified for independence and parallel safety
 
+#### Lootbox Repository Tests
+The lootbox domain is organized by operation type (35 tests total):
+
+**Create Operations** (`test_lootbox_repository_create.py` - 11 tests):
+- insert_user_reward - Insert rewards for users with reference data validation
+- insert_user_key - Insert keys for users, multiple keys of same/different types
+- insert_active_key - Insert currently active key, edge cases for empty active_key table
+
+**Read Operations** (`test_lootbox_repository_read.py` - 10 tests):
+- fetch_user_key_count - Count keys by type, handle zero keys
+- fetch_user_keys - Grouped counts by key type with filters
+- check_user_has_reward - Duplicate checking, rarity return
+- fetch_all_key_types - Fetch reference data with optional filters
+
+**Update Operations** (`test_lootbox_repository_update.py` - 9 tests):
+- add_user_coins - Upsert pattern, creates users if not exists, adds to existing balance
+- upsert_user_xp - Upsert with multiplier, floor rounding, adds to existing XP
+- update_xp_multiplier - Update singleton table (global XP multiplier)
+- update_active_key - Update singleton table (currently active key type)
+
+**Delete Operations** (`test_lootbox_repository_delete.py` - 5 tests):
+- delete_oldest_user_key - Remove oldest key by timestamp, type-specific deletion
+
+**Test Execution Metrics:**
+- Sequential: 35 tests in 3.79s
+- Parallel (4 workers): 35 tests in 3.30s (1.15x speedup)
+- All tests verified for independence and parallel safety
+- Note: Limited worker count due to database connection pool limits in factory fixtures
+
+**Key Characteristics:**
+- No unique constraint fields (unlike maps with codes)
+- Heavy dependency on reference data (key_types, reward_types from migrations)
+- Tests user-centric operations (rewards, keys, XP, coins)
+- Includes singleton table testing (xp_multiplier, active_key)
+
 ### Test Markers
 All repository tests should include:
 ```python
 import pytest
 
 pytestmark = [
-    pytest.mark.domain_maps,  # or domain_users, domain_auth, domain_autocomplete, etc.
+    pytest.mark.domain_maps,  # or domain_users, domain_auth, domain_autocomplete, domain_lootbox, etc.
 ]
 ```
 
