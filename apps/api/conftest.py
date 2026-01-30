@@ -281,6 +281,8 @@ async def create_test_map(postgres_service: PostgresService, global_code_tracker
             "playtesting": "Approved",
             "difficulty": "Medium",
             "raw_difficulty": 5.0,
+            "hidden": False,
+            "archived": False,
         }
 
         # Apply overrides
@@ -299,9 +301,9 @@ async def create_test_map(postgres_service: PostgresService, global_code_tracker
                     """
                     INSERT INTO core.maps (
                         code, map_name, category, checkpoints, official,
-                        playtesting, difficulty, raw_difficulty
+                        playtesting, difficulty, raw_difficulty, hidden, archived
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                     RETURNING id
                     """,
                     code,
@@ -312,6 +314,8 @@ async def create_test_map(postgres_service: PostgresService, global_code_tracker
                     data["playtesting"],
                     data["difficulty"],
                     data["raw_difficulty"],
+                    data["hidden"],
+                    data["archived"],
                 )
             return map_id
         finally:
