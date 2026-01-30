@@ -7,6 +7,7 @@ from asyncpg import Connection
 from genjishimada_sdk.internal import ClaimCreateRequest, ClaimResponse, JobStatusResponse, JobStatusUpdateRequest
 from litestar.datastructures import State
 from litestar.exceptions import HTTPException
+from litestar.status_codes import HTTP_404_NOT_FOUND
 
 from .base import BaseRepository
 
@@ -21,7 +22,7 @@ class InternalJobsRepository(BaseRepository):
             job_id,
         )
         if not row:
-            raise HTTPException(404, "Job not found.")
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Job not found.")
         return JobStatusResponse(
             id=row["id"], status=row["status"], error_code=row["error_code"], error_msg=row["error_msg"]
         )
