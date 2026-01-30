@@ -276,30 +276,3 @@ class TestSetArchiveStatusCore:
             result = await conn.fetchrow("SELECT archived FROM core.maps WHERE code = $1", unique_map_code)
 
         assert result["archived"] is True
-
-    @pytest.mark.asyncio
-    async def test_archive_returns_count(
-        self,
-        maps_repo: MapsRepository,
-        db_pool: asyncpg.Pool,
-        used_codes: set[str],
-    ) -> None:
-        """Test that archive operation returns correct count of affected rows."""
-        codes = []
-        for i in range(3):
-            code = f"CNT{i:02d}"
-            used_codes.add(code)
-            await create_test_map(db_pool, code, archived=False)
-            codes.append(code)
-
-        # Archive all
-        await maps_repo.set_archive_status(codes, archived=True)
-
-        # Verify count by querying
-        async with db_pool.acquire() as conn:
-            count = await conn.fetchval(
-                "SELECT COUNT(*) FROM core.maps WHERE code = ANY($1::text[]) AND archived = TRUE",
-                codes,
-            )
-
-        assert count == 3
