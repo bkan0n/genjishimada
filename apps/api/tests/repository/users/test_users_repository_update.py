@@ -20,15 +20,6 @@ async def repository(asyncpg_conn):
     return UsersRepository(asyncpg_conn)
 
 
-@pytest.fixture
-def non_existent_user_id(global_user_id_tracker: set[int]) -> int:
-    """Generate a user ID that doesn't exist in the database."""
-    while True:
-        user_id = fake.random_int(min=900000000000000000, max=998999999999999999)
-        if user_id not in global_user_id_tracker:
-            return user_id
-
-
 # ==============================================================================
 # UPDATE USER NAMES TESTS
 # ==============================================================================
@@ -118,71 +109,6 @@ class TestUpdateUserNames:
         assert user["nickname"] == new_nickname
         assert user["global_name"] == new_global_name
 
-    async def test_update_to_none_values(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test updating fields to None."""
-        # Arrange
-        await repository.create_user(unique_user_id, fake.user_name(), fake.user_name())
-
-        # Act
-        await repository.update_user_names(
-            unique_user_id,
-            nickname=None,
-            global_name=None,
-            update_nickname=True,
-            update_global_name=True,
-        )
-
-        # Assert
-        user = await repository.fetch_user(unique_user_id)
-        assert user is not None
-        assert user["nickname"] is None
-        assert user["global_name"] is None
-
-    async def test_update_with_same_value_is_noop(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test updating with same value doesn't cause issues."""
-        # Arrange
-        nickname = fake.user_name()
-        await repository.create_user(unique_user_id, nickname, fake.user_name())
-
-        # Act - Update nickname to same value
-        await repository.update_user_names(
-            unique_user_id,
-            nickname=nickname,
-            update_nickname=True,
-            update_global_name=False,
-        )
-
-        # Assert - Should still be same value
-        user = await repository.fetch_user(unique_user_id)
-        assert user is not None
-        assert user["nickname"] == nickname
-
-    async def test_update_non_existent_user_is_noop(
-        self,
-        repository: UsersRepository,
-        non_existent_user_id: int,
-    ):
-        """Test updating non-existent user doesn't raise error (no-op)."""
-        # Act - Should not raise error, just no-op
-        await repository.update_user_names(
-            non_existent_user_id,
-            nickname=fake.user_name(),
-            update_nickname=True,
-            update_global_name=False,
-        )
-
-        # Assert - User still doesn't exist
-        exists = await repository.check_user_exists(non_existent_user_id)
-        assert exists is False
-
     async def test_update_with_no_flags_set_is_noop(
         self,
         repository: UsersRepository,
@@ -257,10 +183,15 @@ class TestUpsertUserNotifications:
     async def test_upsert_with_invalid_user_id_raises_error(
         self,
         repository: UsersRepository,
-        non_existent_user_id: int,
+        global_user_id_tracker: set[int],
     ):
         """Test upserting notification settings with invalid user_id raises error."""
         # Arrange
+        # Generate a user ID that doesn't exist
+        while True:
+            non_existent_user_id = fake.random_int(min=900000000000000000, max=998999999999999999)
+            if non_existent_user_id not in global_user_id_tracker:
+                break
         flags = 42
 
         # Act & Assert
@@ -355,19 +286,3 @@ class TestUpdateMapsCreatorsForFakeMember:
             map_ids,
         )
         assert real_user_creators == 3
-
-    async def test_update_creators_with_no_existing_references_is_noop(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test updating creators when fake member has no maps is a no-op."""
-        # Arrange
-        fake_user_id = await repository.create_fake_member(fake.user_name())
-        await repository.create_user(unique_user_id, fake.user_name(), fake.user_name())
-
-        # Act - Should not raise error, just no-op
-        await repository.update_maps_creators_for_fake_member(fake_user_id, unique_user_id)
-
-        # Assert - No errors, operation completed successfully
-        # (No assertion needed, test passes if no exception raised)

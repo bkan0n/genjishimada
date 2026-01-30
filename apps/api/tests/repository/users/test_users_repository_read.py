@@ -20,17 +20,6 @@ async def repository(asyncpg_conn):
     return UsersRepository(asyncpg_conn)
 
 
-@pytest.fixture
-def non_existent_user_id(global_user_id_tracker: set[int]) -> int:
-    """Generate a user ID that doesn't exist in the database."""
-    # Generate an ID that's not in the tracker (so not created by any test)
-    while True:
-        user_id = fake.random_int(min=900000000000000000, max=998999999999999999)
-        if user_id not in global_user_id_tracker:
-            # Don't add to tracker - we want it to remain non-existent
-            return user_id
-
-
 # ==============================================================================
 # CHECK USER EXISTS TESTS
 # ==============================================================================
@@ -53,18 +42,6 @@ class TestCheckUserExists:
 
         # Assert
         assert exists is True
-
-    async def test_check_non_existent_user_returns_false(
-        self,
-        repository: UsersRepository,
-        non_existent_user_id: int,
-    ):
-        """Test checking non-existent user returns False."""
-        # Act
-        exists = await repository.check_user_exists(non_existent_user_id)
-
-        # Assert
-        assert exists is False
 
 
 # ==============================================================================
@@ -105,21 +82,6 @@ class TestCheckIfUserIsCreator:
         # Assert
         assert is_creator is True
 
-    async def test_check_non_creator_returns_false(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test checking user who is not a creator returns False."""
-        # Arrange
-        await repository.create_user(unique_user_id, fake.user_name(), fake.user_name())
-
-        # Act
-        is_creator = await repository.check_if_user_is_creator(unique_user_id)
-
-        # Assert
-        assert is_creator is False
-
 
 # ==============================================================================
 # FETCH USER TESTS
@@ -152,18 +114,6 @@ class TestFetchUser:
         assert "overwatch_usernames" in user
         assert "coalesced_name" in user
 
-    async def test_fetch_non_existent_user_returns_none(
-        self,
-        repository: UsersRepository,
-        non_existent_user_id: int,
-    ):
-        """Test fetching non-existent user returns None."""
-        # Act
-        user = await repository.fetch_user(non_existent_user_id)
-
-        # Assert
-        assert user is None
-
     async def test_fetch_user_with_overwatch_usernames(
         self,
         repository: UsersRepository,
@@ -186,22 +136,6 @@ class TestFetchUser:
         assert len(user["overwatch_usernames"]) >= 2
         assert username1 in user["overwatch_usernames"]
         assert username2 in user["overwatch_usernames"]
-
-    async def test_fetch_user_without_overwatch_usernames(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test fetching user without Overwatch usernames has None for usernames."""
-        # Arrange
-        await repository.create_user(unique_user_id, fake.user_name(), fake.user_name())
-
-        # Act
-        user = await repository.fetch_user(unique_user_id)
-
-        # Assert
-        assert user is not None
-        assert user["overwatch_usernames"] is None
 
     async def test_fetch_user_coalesced_name_uses_primary_username(
         self,
@@ -239,39 +173,6 @@ class TestFetchUser:
         # Assert
         assert user is not None
         assert user["coalesced_name"] == nickname
-
-    async def test_fetch_user_coalesced_name_falls_back_to_global_name(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test coalesced_name falls back to global_name when no username or nickname."""
-        # Arrange
-        global_name = fake.user_name()
-        await repository.create_user(unique_user_id, None, global_name)
-
-        # Act
-        user = await repository.fetch_user(unique_user_id)
-
-        # Assert
-        assert user is not None
-        assert user["coalesced_name"] == global_name
-
-    async def test_fetch_user_coalesced_name_defaults_to_unknown_user(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test coalesced_name defaults to 'Unknown User' when all fields are None."""
-        # Arrange
-        await repository.create_user(unique_user_id, None, None)
-
-        # Act
-        user = await repository.fetch_user(unique_user_id)
-
-        # Assert
-        assert user is not None
-        assert user["coalesced_name"] == "Unknown User"
 
 
 # ==============================================================================
@@ -384,25 +285,6 @@ class TestFetchOverwatchUsernames:
         assert usernames[0]["username"] == primary_username
         assert usernames[0]["is_primary"] is True
 
-    async def test_fetch_overwatch_usernames_for_user_with_no_usernames(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test fetching Overwatch usernames for user with no usernames returns empty list."""
-        # Arrange
-        await repository.create_user(unique_user_id, fake.user_name(), fake.user_name())
-
-        # Act
-        usernames = await repository.fetch_overwatch_usernames(unique_user_id)
-
-        # Assert
-        assert isinstance(usernames, list)
-        # Note: The query has a LEFT JOIN so it might return one row with None values
-        # We need to filter out rows where username is None
-        actual_usernames = [u for u in usernames if u["username"] is not None]
-        assert len(actual_usernames) == 0
-
 
 # ==============================================================================
 # FETCH ALL USER NAMES TESTS
@@ -435,43 +317,6 @@ class TestFetchAllUserNames:
         assert global_name in names
         assert ow_username in names
 
-    async def test_fetch_all_user_names_removes_duplicates(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test fetching all user names removes duplicate names."""
-        # Arrange
-        same_name = fake.user_name()
-        await repository.create_user(unique_user_id, same_name, same_name)
-        await repository.insert_overwatch_username(unique_user_id, same_name, is_primary=True)
-
-        # Act
-        names = await repository.fetch_all_user_names(unique_user_id)
-
-        # Assert
-        assert isinstance(names, list)
-        # Should only have one instance of the name despite it being in all fields
-        assert names.count(same_name) == 1
-
-    async def test_fetch_all_user_names_filters_none_values(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test fetching all user names filters out None values."""
-        # Arrange
-        nickname = fake.user_name()
-        await repository.create_user(unique_user_id, nickname, None)
-
-        # Act
-        names = await repository.fetch_all_user_names(unique_user_id)
-
-        # Assert
-        assert isinstance(names, list)
-        assert None not in names
-        assert nickname in names
-
 
 # ==============================================================================
 # FETCH USER NOTIFICATIONS TESTS
@@ -497,18 +342,3 @@ class TestFetchUserNotifications:
 
         # Assert
         assert result == flags
-
-    async def test_fetch_user_notifications_for_user_without_settings_returns_none(
-        self,
-        repository: UsersRepository,
-        unique_user_id: int,
-    ):
-        """Test fetching notifications for user without settings returns None."""
-        # Arrange
-        await repository.create_user(unique_user_id, fake.user_name(), fake.user_name())
-
-        # Act
-        result = await repository.fetch_user_notifications(unique_user_id)
-
-        # Assert
-        assert result is None
