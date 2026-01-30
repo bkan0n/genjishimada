@@ -132,6 +132,37 @@ class TestResolveEditRequest:
         assert result["accepted"] is False
 
     @pytest.mark.asyncio
+    async def test_resolve_sets_resolved_by(
+        self,
+        repository: MapsRepository,
+        create_test_edit_request,
+        create_test_map,
+        create_test_user,
+        unique_map_code: str,
+        asyncpg_conn,
+    ) -> None:
+        """Test resolve_edit_request sets resolved_by user ID."""
+        # Arrange
+        map_id = await create_test_map(code=unique_map_code)
+        user_id = await create_test_user()
+        resolver_id = await create_test_user()
+        edit_id = await create_test_edit_request(map_id, unique_map_code, user_id)
+
+        # Act
+        await repository.resolve_edit_request(
+            edit_id,
+            accepted=True,
+            resolved_by=resolver_id,
+        )
+
+        # Assert
+        result = await asyncpg_conn.fetchrow(
+            "SELECT resolved_by FROM maps.edit_requests WHERE id = $1",
+            edit_id,
+        )
+        assert result["resolved_by"] == resolver_id
+
+    @pytest.mark.asyncio
     async def test_resolve_reject_with_reason(
         self,
         repository: MapsRepository,

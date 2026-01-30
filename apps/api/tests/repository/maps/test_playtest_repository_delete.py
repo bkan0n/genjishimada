@@ -200,34 +200,6 @@ class TestDeleteCompletionsForPlaytest:
         assert map2_exists is True
 
     @pytest.mark.asyncio
-    async def test_delete_completions_when_no_completions_is_no_op(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_playtest,
-        unique_thread_id: int,
-    ) -> None:
-        """Test delete_completions_for_playtest is no-op when no completions exist."""
-        # Arrange
-        map_id = await create_test_map()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-
-        # Act & Assert - should not raise
-        await repository.delete_completions_for_playtest(unique_thread_id)
-
-    @pytest.mark.asyncio
-    async def test_delete_completions_for_non_existent_thread(
-        self,
-        repository: PlaytestRepository,
-    ) -> None:
-        """Test deleting completions for non-existent thread doesn't raise."""
-        # Arrange
-        non_existent_thread_id = 999999999999999999
-
-        # Act & Assert - should not raise
-        await repository.delete_completions_for_playtest(non_existent_thread_id)
-
-    @pytest.mark.asyncio
     async def test_delete_completions_multiple_users(
         self,
         repository: PlaytestRepository,

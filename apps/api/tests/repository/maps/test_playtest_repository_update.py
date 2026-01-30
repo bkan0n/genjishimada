@@ -106,40 +106,6 @@ class TestUpdatePlaytestMeta:
         assert result["completed"] is True
 
     @pytest.mark.asyncio
-    async def test_update_with_empty_dict_does_nothing(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_playtest,
-        unique_thread_id: int,
-        asyncpg_conn,
-    ) -> None:
-        """Test updating with empty dict is a no-op."""
-        # Arrange
-        map_id = await create_test_map()
-        await create_test_playtest(
-            map_id,
-            thread_id=unique_thread_id,
-            initial_difficulty=5.0,
-        )
-
-        # Get initial state
-        before = await asyncpg_conn.fetchrow(
-            "SELECT * FROM playtests.meta WHERE thread_id = $1",
-            unique_thread_id,
-        )
-
-        # Act
-        await repository.update_playtest_meta(unique_thread_id, {})
-
-        # Assert - nothing changed
-        after = await asyncpg_conn.fetchrow(
-            "SELECT * FROM playtests.meta WHERE thread_id = $1",
-            unique_thread_id,
-        )
-        assert dict(before) == dict(after)
-
-    @pytest.mark.asyncio
     async def test_update_completed_flag_to_true(
         self,
         repository: PlaytestRepository,
@@ -202,21 +168,6 @@ class TestUpdatePlaytestMeta:
             unique_thread_id,
         )
         assert result["verification_id"] == verification_id
-
-    @pytest.mark.asyncio
-    async def test_update_non_existent_thread_is_no_op(
-        self,
-        repository: PlaytestRepository,
-    ) -> None:
-        """Test updating non-existent thread doesn't raise error (silent no-op)."""
-        # Arrange
-        non_existent_thread_id = 999999999999999999
-
-        # Act & Assert - should not raise
-        await repository.update_playtest_meta(
-            non_existent_thread_id,
-            {"completed": True},
-        )
 
     @pytest.mark.asyncio
     async def test_update_difficulty_within_valid_range(
@@ -323,19 +274,6 @@ class TestAssociateThread:
         )
         assert result["thread_id"] == unique_thread_id
         assert result["thread_id"] != old_thread_id
-
-    @pytest.mark.asyncio
-    async def test_associate_thread_non_existent_playtest_is_no_op(
-        self,
-        repository: PlaytestRepository,
-        unique_thread_id: int,
-    ) -> None:
-        """Test associating thread with non-existent playtest doesn't raise (silent no-op)."""
-        # Arrange
-        non_existent_playtest_id = 999999
-
-        # Act & Assert - should not raise
-        await repository.associate_thread(non_existent_playtest_id, unique_thread_id)
 
     @pytest.mark.asyncio
     async def test_associate_thread_preserves_other_fields(

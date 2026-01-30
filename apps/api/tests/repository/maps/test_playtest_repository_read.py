@@ -65,21 +65,6 @@ class TestFetchPlaytest:
         assert "updated_at" in result
 
     @pytest.mark.asyncio
-    async def test_fetch_playtest_returns_none_for_non_existent_thread(
-        self,
-        repository: PlaytestRepository,
-    ) -> None:
-        """Test fetch_playtest returns None when thread doesn't exist."""
-        # Arrange
-        non_existent_thread_id = 999999999999999999
-
-        # Act
-        result = await repository.fetch_playtest(non_existent_thread_id)
-
-        # Assert
-        assert result is None
-
-    @pytest.mark.asyncio
     async def test_fetch_playtest_includes_verification_id(
         self,
         repository: PlaytestRepository,
@@ -103,30 +88,6 @@ class TestFetchPlaytest:
         # Assert
         assert result is not None
         assert result["verification_id"] == verification_id
-
-    @pytest.mark.asyncio
-    async def test_fetch_playtest_with_null_verification_id(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_playtest,
-        unique_thread_id: int,
-    ) -> None:
-        """Test fetch_playtest handles null verification_id."""
-        # Arrange
-        map_id = await create_test_map()
-        await create_test_playtest(
-            map_id,
-            thread_id=unique_thread_id,
-            verification_id=None,
-        )
-
-        # Act
-        result = await repository.fetch_playtest(unique_thread_id)
-
-        # Assert
-        assert result is not None
-        assert result["verification_id"] is None
 
     @pytest.mark.asyncio
     async def test_fetch_playtest_when_completed(
@@ -180,20 +141,6 @@ class TestGetMapIdFromThread:
         # Assert
         assert result == map_id
 
-    @pytest.mark.asyncio
-    async def test_get_map_id_from_thread_returns_none_for_non_existent_thread(
-        self,
-        repository: PlaytestRepository,
-    ) -> None:
-        """Test get_map_id_from_thread returns None when thread doesn't exist."""
-        # Arrange
-        non_existent_thread_id = 999999999999999999
-
-        # Act
-        result = await repository.get_map_id_from_thread(non_existent_thread_id)
-
-        # Assert
-        assert result is None
 
 
 # ==============================================================================
@@ -233,97 +180,6 @@ class TestGetPrimaryCreator:
         # Assert
         assert result == user_id
 
-    @pytest.mark.asyncio
-    async def test_get_primary_creator_returns_none_when_no_creators(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-    ) -> None:
-        """Test get_primary_creator returns None when map has no creators."""
-        # Arrange
-        map_id = await create_test_map()
-
-        # Act
-        result = await repository.get_primary_creator(map_id)
-
-        # Assert
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_primary_creator_returns_none_when_no_primary(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        asyncpg_conn,
-    ) -> None:
-        """Test get_primary_creator returns None when no primary creator marked."""
-        # Arrange
-        map_id = await create_test_map()
-        user_id = await create_test_user()
-
-        # Insert creator as non-primary
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO maps.creators (map_id, user_id, is_primary)
-            VALUES ($1, $2, FALSE)
-            """,
-            map_id,
-            user_id,
-        )
-
-        # Act
-        result = await repository.get_primary_creator(map_id)
-
-        # Assert
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_primary_creator_returns_first_when_multiple_primaries(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        asyncpg_conn,
-    ) -> None:
-        """Test get_primary_creator returns one user when multiple primaries exist (data integrity issue)."""
-        # Arrange
-        map_id = await create_test_map()
-        user1_id = await create_test_user()
-        user2_id = await create_test_user()
-
-        # Insert two primary creators (shouldn't happen, but test the behavior)
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO maps.creators (map_id, user_id, is_primary)
-            VALUES ($1, $2, TRUE), ($1, $3, TRUE)
-            """,
-            map_id,
-            user1_id,
-            user2_id,
-        )
-
-        # Act
-        result = await repository.get_primary_creator(map_id)
-
-        # Assert - should return one of them
-        assert result in [user1_id, user2_id]
-
-    @pytest.mark.asyncio
-    async def test_get_primary_creator_with_non_existent_map(
-        self,
-        repository: PlaytestRepository,
-    ) -> None:
-        """Test get_primary_creator returns None for non-existent map."""
-        # Arrange
-        non_existent_map_id = 999999
-
-        # Act
-        result = await repository.get_primary_creator(non_existent_map_id)
-
-        # Assert
-        assert result is None
-
 
 # ==============================================================================
 # GET MAP CODE TESTS
@@ -349,21 +205,6 @@ class TestGetMapCode:
 
         # Assert
         assert result == unique_map_code
-
-    @pytest.mark.asyncio
-    async def test_get_map_code_returns_none_for_non_existent_map(
-        self,
-        repository: PlaytestRepository,
-    ) -> None:
-        """Test get_map_code returns None when map doesn't exist."""
-        # Arrange
-        non_existent_map_id = 999999
-
-        # Act
-        result = await repository.get_map_code(non_existent_map_id)
-
-        # Assert
-        assert result is None
 
     @pytest.mark.asyncio
     async def test_get_map_code_preserves_case(

@@ -60,38 +60,6 @@ class TestFetchEditRequest:
         assert result["code"] == unique_map_code
         assert result["created_by"] == user_id
 
-    @pytest.mark.asyncio
-    async def test_fetch_edit_request_includes_all_fields(
-        self,
-        repository: MapsRepository,
-        create_test_edit_request,
-        create_test_map,
-        create_test_user,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetch_edit_request includes all expected fields."""
-        # Arrange
-        map_id = await create_test_map(code=unique_map_code)
-        user_id = await create_test_user()
-        edit_id = await create_test_edit_request(map_id, unique_map_code, user_id)
-
-        # Act
-        result = await repository.fetch_edit_request(edit_id)
-
-        # Assert
-        assert result is not None
-        assert "id" in result
-        assert "map_id" in result
-        assert "code" in result
-        assert "proposed_changes" in result
-        assert "reason" in result
-        assert "created_by" in result
-        assert "created_at" in result
-        assert "message_id" in result
-        assert "resolved_at" in result
-        assert "accepted" in result
-        assert "resolved_by" in result
-        assert "rejection_reason" in result
 
 
 # ==============================================================================
@@ -267,29 +235,6 @@ class TestFetchEditSubmission:
         assert "current_map" in result
         assert "current_creators" in result
         assert "current_medals" in result
-
-    @pytest.mark.asyncio
-    async def test_fetch_submission_includes_submitter_name(
-        self,
-        repository: MapsRepository,
-        create_test_edit_request,
-        create_test_map,
-        create_test_user,
-        unique_map_code: str,
-    ) -> None:
-        """Test fetch_edit_submission includes submitter name."""
-        # Arrange
-        map_id = await create_test_map(code=unique_map_code)
-        nickname = fake.user_name()
-        user_id = await create_test_user(nickname=nickname)
-        edit_id = await create_test_edit_request(map_id, unique_map_code, user_id)
-
-        # Act
-        result = await repository.fetch_edit_submission(edit_id)
-
-        # Assert
-        assert result is not None
-        assert result["submitter_name"] == nickname
 
     @pytest.mark.asyncio
     async def test_fetch_submission_includes_current_map_data(

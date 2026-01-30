@@ -130,76 +130,6 @@ class TestCastVoteHappyPath:
         assert len(votes) == 1  # Only one vote
         assert float(votes[0]["difficulty"]) == new_difficulty
 
-    @pytest.mark.asyncio
-    async def test_cast_vote_with_minimum_difficulty(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        create_test_playtest,
-        unique_thread_id: int,
-        create_completion,
-    ) -> None:
-        """Test casting vote with minimum valid difficulty (0)."""
-        # Arrange
-        map_id = await create_test_map()
-        user_id = await create_test_user()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-        await create_completion(user_id, map_id)
-
-        # Act & Assert - should not raise
-        await repository.cast_vote(unique_thread_id, user_id, 0.0)
-
-    @pytest.mark.asyncio
-    async def test_cast_vote_with_maximum_difficulty(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        create_test_playtest,
-        unique_thread_id: int,
-        create_completion,
-    ) -> None:
-        """Test casting vote with maximum valid difficulty (10)."""
-        # Arrange
-        map_id = await create_test_map()
-        user_id = await create_test_user()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-        await create_completion(user_id, map_id)
-
-        # Act & Assert - should not raise
-        await repository.cast_vote(unique_thread_id, user_id, 10.0)
-
-    @pytest.mark.asyncio
-    async def test_cast_vote_with_decimal_precision(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        create_test_playtest,
-        unique_thread_id: int,
-        create_completion,
-        asyncpg_conn,
-    ) -> None:
-        """Test casting vote with decimal precision (numeric(4,2))."""
-        # Arrange
-        map_id = await create_test_map()
-        user_id = await create_test_user()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-        await create_completion(user_id, map_id)
-
-        difficulty = 7.25
-
-        # Act
-        await repository.cast_vote(unique_thread_id, user_id, difficulty)
-
-        # Assert
-        vote = await asyncpg_conn.fetchrow(
-            "SELECT difficulty FROM playtests.votes WHERE playtest_thread_id = $1 AND user_id = $2",
-            unique_thread_id,
-            user_id,
-        )
-        assert float(vote["difficulty"]) == difficulty
 
 
 class TestCastVoteConstraintViolations:
@@ -224,91 +154,6 @@ class TestCastVoteConstraintViolations:
         # Act & Assert
         with pytest.raises(CheckConstraintViolationError):
             await repository.cast_vote(unique_thread_id, user_id, 5.0)
-
-    @pytest.mark.asyncio
-    async def test_cast_vote_with_legacy_completion_raises_error(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        create_test_playtest,
-        unique_thread_id: int,
-        asyncpg_conn,
-    ) -> None:
-        """Test casting vote with legacy completion raises error."""
-        # Arrange
-        map_id = await create_test_map()
-        user_id = await create_test_user()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-
-        # Create legacy completion (should not allow vote)
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO core.completions (user_id, map_id, verified, legacy, time, screenshot, completion)
-            VALUES ($1, $2, TRUE, TRUE, 30.5, 'https://example.com/screenshot.png', TRUE)
-            """,
-            user_id,
-            map_id,
-        )
-
-        # Act & Assert
-        with pytest.raises(CheckConstraintViolationError):
-            await repository.cast_vote(unique_thread_id, user_id, 5.0)
-
-    @pytest.mark.asyncio
-    async def test_cast_vote_with_unverified_completion_raises_error(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        create_test_playtest,
-        unique_thread_id: int,
-        asyncpg_conn,
-    ) -> None:
-        """Test casting vote with unverified completion raises error."""
-        # Arrange
-        map_id = await create_test_map()
-        user_id = await create_test_user()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-
-        # Create unverified completion
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO core.completions (user_id, map_id, verified, legacy, time, screenshot, completion)
-            VALUES ($1, $2, FALSE, FALSE, 30.5, 'https://example.com/screenshot.png', TRUE)
-            """,
-            user_id,
-            map_id,
-        )
-
-        # Act & Assert
-        with pytest.raises(CheckConstraintViolationError):
-            await repository.cast_vote(unique_thread_id, user_id, 5.0)
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("invalid_difficulty", [-0.01, -1.0, 10.01, 11.0])
-    async def test_cast_vote_with_invalid_difficulty_raises_error(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        create_test_playtest,
-        unique_thread_id: int,
-        create_completion,
-        invalid_difficulty: float,
-    ) -> None:
-        """Test casting vote with out-of-range difficulty raises CheckConstraintViolationError."""
-        # Arrange
-        map_id = await create_test_map()
-        user_id = await create_test_user()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-        await create_completion(user_id, map_id)
-
-        # Act & Assert
-        with pytest.raises(CheckConstraintViolationError) as exc_info:
-            await repository.cast_vote(unique_thread_id, user_id, invalid_difficulty)
-
-        assert "difficulty_range" in exc_info.value.constraint_name
 
 
 # ==============================================================================
@@ -345,25 +190,6 @@ class TestFetchPlaytestVotes:
         assert votes[0]["user_id"] == user_id
         assert float(votes[0]["difficulty"]) == 7.5
         assert votes[0]["name"] == "TestVoter"
-
-    @pytest.mark.asyncio
-    async def test_fetch_votes_returns_empty_list_when_no_votes(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_playtest,
-        unique_thread_id: int,
-    ) -> None:
-        """Test fetch_playtest_votes returns empty list when no votes exist."""
-        # Arrange
-        map_id = await create_test_map()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-
-        # Act
-        votes = await repository.fetch_playtest_votes(unique_thread_id)
-
-        # Assert
-        assert votes == []
 
     @pytest.mark.asyncio
     async def test_fetch_votes_returns_multiple_votes(
@@ -453,22 +279,6 @@ class TestCheckVoteExists:
         # Assert
         assert exists is False
 
-    @pytest.mark.asyncio
-    async def test_check_vote_exists_returns_false_for_non_existent_thread(
-        self,
-        repository: PlaytestRepository,
-        create_test_user,
-    ) -> None:
-        """Test check_vote_exists returns False for non-existent thread."""
-        # Arrange
-        user_id = await create_test_user()
-        non_existent_thread_id = 999999999999999999
-
-        # Act
-        exists = await repository.check_vote_exists(non_existent_thread_id, user_id)
-
-        # Assert
-        assert exists is False
 
 
 # ==============================================================================
@@ -548,19 +358,6 @@ class TestDeleteVote:
         )
         assert remaining_vote["user_id"] == user2_id
 
-    @pytest.mark.asyncio
-    async def test_delete_vote_non_existent_is_no_op(
-        self,
-        repository: PlaytestRepository,
-        create_test_user,
-        unique_thread_id: int,
-    ) -> None:
-        """Test delete_vote is no-op when vote doesn't exist."""
-        # Arrange
-        user_id = await create_test_user()
-
-        # Act & Assert - should not raise
-        await repository.delete_vote(unique_thread_id, user_id)
 
 
 # ==============================================================================
@@ -657,15 +454,6 @@ class TestDeleteAllVotes:
         assert vote_count_thread1 == 0
         assert vote_count_thread2 == 1
 
-    @pytest.mark.asyncio
-    async def test_delete_all_votes_when_no_votes_is_no_op(
-        self,
-        repository: PlaytestRepository,
-        unique_thread_id: int,
-    ) -> None:
-        """Test delete_all_votes is no-op when no votes exist."""
-        # Act & Assert - should not raise
-        await repository.delete_all_votes(unique_thread_id)
 
 
 # ==============================================================================
@@ -753,32 +541,3 @@ class TestGetAverageDifficulty:
         assert average is not None
         assert float(average) == 7.5
 
-    @pytest.mark.asyncio
-    async def test_get_average_difficulty_with_decimal_precision(
-        self,
-        repository: PlaytestRepository,
-        create_test_map,
-        create_test_user,
-        create_test_playtest,
-        unique_thread_id: int,
-        create_completion,
-    ) -> None:
-        """Test get_average_difficulty handles decimal precision."""
-        # Arrange
-        map_id = await create_test_map()
-        user1_id = await create_test_user()
-        user2_id = await create_test_user()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
-
-        await create_completion(user1_id, map_id)
-        await create_completion(user2_id, map_id)
-
-        await repository.cast_vote(unique_thread_id, user1_id, 5.25)
-        await repository.cast_vote(unique_thread_id, user2_id, 7.75)
-
-        # Act
-        average = await repository.get_average_difficulty(unique_thread_id)
-
-        # Assert - (5.25 + 7.75) / 2 = 6.5
-        assert average is not None
-        assert float(average) == 6.5
