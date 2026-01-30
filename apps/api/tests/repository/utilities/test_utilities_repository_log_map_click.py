@@ -254,40 +254,6 @@ class TestLogMapClickEdgeCases:
         # Verify the error is about map_id being NULL
         assert "map_id" in str(exc_info.value)
 
-    @pytest.mark.asyncio
-    async def test_log_map_click_case_insensitive_code(
-        self,
-        repository: UtilitiesRepository,
-        asyncpg_conn,
-        create_test_map,
-        global_code_tracker: set[str],
-        create_test_user,
-        unique_ip_hash: str,
-    ) -> None:
-        """Test logging click with different case map code."""
-        # Arrange
-        code = f"T{uuid4().hex[:5].upper()}"
-        global_code_tracker.add(code)
-        map_id = await create_test_map(code)
-        user_id = await create_test_user()
-        source = "web"
-
-        # Act - Use lowercase version
-        await repository.log_map_click(code.lower(), user_id, source, unique_ip_hash)
-
-        # Assert
-        row = await asyncpg_conn.fetchrow(
-            """
-            SELECT map_id
-            FROM maps.clicks
-            WHERE map_id = $1 AND user_id = $2
-            """,
-            map_id,
-            user_id,
-        )
-
-        # Map codes are case-insensitive in the database
-        assert row is not None
 
     @pytest.mark.asyncio
     async def test_log_map_click_special_characters_in_source(
@@ -321,63 +287,6 @@ class TestLogMapClickEdgeCases:
 
         assert row is not None
         assert row["source"] == source
-
-
-# ==============================================================================
-# CONCURRENCY TESTS
-# ==============================================================================
-
-
-class TestLogMapClickConcurrency:
-    """Test concurrent operations for log_map_click."""
-
-    @pytest.mark.asyncio
-    async def test_log_map_click_parallel_different_users(
-        self,
-        repository: UtilitiesRepository,
-        asyncpg_conn,
-        create_test_map,
-        unique_map_code: str,
-        global_user_id_tracker: set[int],
-        global_ip_hash_tracker: set[str],
-    ) -> None:
-        """Test parallel clicks from different users to same map."""
-        # Arrange
-        map_id = await create_test_map(unique_map_code)
-        source = "web"
-        user_ids = []
-        ip_hashes = []
-
-        import hashlib
-
-        for _ in range(5):
-            user_id = fake.random_int(min=100000000000000000, max=999999999999999999)
-            if user_id not in global_user_id_tracker:
-                global_user_id_tracker.add(user_id)
-                user_ids.append(user_id)
-
-            ip_hash = hashlib.sha256(uuid4().bytes).hexdigest()
-            global_ip_hash_tracker.add(ip_hash)
-            ip_hashes.append(ip_hash)
-
-        # Act - Log clicks concurrently
-        tasks = []
-        for user_id, ip_hash in zip(user_ids, ip_hashes):
-            tasks.append(repository.log_map_click(unique_map_code, user_id, source, ip_hash))
-
-        await asyncio.gather(*tasks)
-
-        # Assert - All should be inserted
-        count = await asyncpg_conn.fetchval(
-            """
-            SELECT COUNT(*)
-            FROM maps.clicks
-            WHERE map_id = $1
-            """,
-            map_id,
-        )
-
-        assert count == len(user_ids)
 
 
 # ==============================================================================

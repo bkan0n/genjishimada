@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 from asyncpg import Connection
 from litestar.datastructures import State
@@ -35,9 +36,9 @@ class UtilitiesRepository(BaseRepository):
 
         query = """
             INSERT INTO public.analytics (command_name, user_id, created_at, namespace)
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, $4::jsonb)
         """
-        await _conn.execute(query, command_name, user_id, created_at, namespace)
+        await _conn.execute(query, command_name, user_id, created_at, json.dumps(namespace))
 
     async def log_map_click(
         self,
