@@ -402,7 +402,7 @@ class PlaytestService(BaseService):
         """
         async with self._conn.transaction():
             if remove_votes:
-                await self._conn.execute("DELETE FROM playtests.votes WHERE thread_id=$1", thread_id)
+                await self._conn.execute("DELETE FROM playtests.votes WHERE playtest_thread_id=$1", thread_id)
             if remove_completions:
                 await self._conn.execute("DELETE FROM core.completions WHERE playtest_thread_id=$1", thread_id)
 
