@@ -72,6 +72,9 @@ pytest apps/api/tests/repository/ -m domain_autocomplete
 
 # All lootbox repository tests
 pytest apps/api/tests/repository/ -m domain_lootbox
+
+# All rank_card repository tests
+pytest apps/api/tests/repository/ -m domain_rank_card
 ```
 
 ### By File Pattern
@@ -142,11 +145,16 @@ apps/api/tests/repository/
 │   ├── test_autocomplete_repository_search.py          (22 tests)
 │   ├── test_autocomplete_repository_transform.py       (18 tests)
 │   └── test_autocomplete_repository_edge_cases.py      (20 tests)
-└── lootbox/
-    ├── test_lootbox_repository_create.py               (11 tests)
-    ├── test_lootbox_repository_read.py                 (10 tests)
-    ├── test_lootbox_repository_update.py               (9 tests)
-    └── test_lootbox_repository_delete.py               (5 tests)
+├── lootbox/
+│   ├── test_lootbox_repository_create.py               (11 tests)
+│   ├── test_lootbox_repository_read.py                 (10 tests)
+│   ├── test_lootbox_repository_update.py               (9 tests)
+│   └── test_lootbox_repository_delete.py               (5 tests)
+└── rank_card/
+    ├── test_rank_card_repository_upsert.py             (21 tests)
+    ├── test_rank_card_repository_read.py               (17 tests)
+    ├── test_rank_card_repository_aggregations.py       (13 tests)
+    └── test_rank_card_repository_edge_cases.py         (11 tests)
 ```
 
 ### File Naming Convention
@@ -242,13 +250,55 @@ The lootbox domain is organized by operation type (35 tests total):
 - Tests user-centric operations (rewards, keys, XP, coins)
 - Includes singleton table testing (xp_multiplier, active_key)
 
+#### Rank Card Repository Tests
+The rank_card domain is organized by operation type (62 tests total):
+
+**Upsert Operations** (`test_rank_card_repository_upsert.py` - 21 tests):
+- upsert_background - Insert/update user background, foreign key validation
+- upsert_avatar_skin - Insert/update skin, preserves pose (partial updates)
+- upsert_avatar_pose - Insert/update pose, preserves skin (partial updates)
+- upsert_badges - Insert/update all 6 badges, partial updates, clearing badges
+
+**Read Operations** (`test_rank_card_repository_read.py` - 17 tests):
+- fetch_background - Returns dict when set, None when not set
+- fetch_avatar - Returns skin/pose dict, handles partial data, None when not set
+- fetch_badges - Returns dict without user_id, handles partial data, None when not set
+- fetch_nickname - Prefers primary Overwatch username, falls back to Discord nickname
+
+**Aggregation Operations** (`test_rank_card_repository_aggregations.py` - 13 tests):
+- fetch_map_totals - Groups official/approved maps by base difficulty, strips modifiers
+- fetch_world_record_count - Counts rank 1 completions with video for user
+- fetch_maps_created_count - Counts official maps created by user
+- fetch_playtests_voted_count - Counts playtest votes by user
+- fetch_community_rank_xp - Complex XP/tier lookup with prestige calculation
+
+**Edge Cases** (`test_rank_card_repository_edge_cases.py` - 11 tests):
+- Concurrent operations: multiple upserts to same user, skin/pose concurrency
+- Transaction behavior: rollback, commit
+- Null/empty values: empty strings, all None badges
+- Boundary values: very long strings, unicode, special characters
+- Integration scenarios: avatar update sequences, badge fill/clear, full customization
+
+**Test Execution Metrics:**
+- **BLOCKED**: Cannot run due to seed data foreign key violation
+- Issue: `seeds/0006-change_requests_seed.sql` references non-existent map code '1EASY'
+- Expected (based on similar domains): 62 tests in 5-8s sequential, 3-5s parallel (4 workers)
+
+**Key Characteristics:**
+- All tables use user_id as primary key (no other unique constraints)
+- Uses existing unique_user_id and create_test_user fixtures
+- Tests upsert pattern extensively (ON CONFLICT DO UPDATE)
+- Verifies partial update behavior (avatar skin/pose independence)
+- Tests complex aggregations with joins across multiple domains
+- **BUG NOTED**: fetch_community_rank_xp uses assertion for missing user instead of proper exception
+
 ### Test Markers
 All repository tests should include:
 ```python
 import pytest
 
 pytestmark = [
-    pytest.mark.domain_maps,  # or domain_users, domain_auth, domain_autocomplete, domain_lootbox, etc.
+    pytest.mark.domain_maps,  # or domain_users, domain_auth, domain_autocomplete, domain_lootbox, domain_rank_card, etc.
 ]
 ```
 
