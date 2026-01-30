@@ -40,6 +40,7 @@ def pytest_configure(config: Any) -> None:
     config.addinivalue_line("markers", "domain_rank_card: Tests for rank_card domain")
     config.addinivalue_line("markers", "domain_autocomplete: Tests for autocomplete domain")
     config.addinivalue_line("markers", "domain_change_requests: Tests for change_requests domain")
+    config.addinivalue_line("markers", "domain_jobs: Tests for jobs domain")
 
 
 MIGRATIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "migrations"))
@@ -156,6 +157,24 @@ def global_token_hash_tracker() -> set[str]:
     return set()
 
 
+@pytest.fixture(scope="session")
+def global_job_id_tracker() -> set:
+    """Session-wide tracker for all used job IDs (UUIDs).
+
+    Prevents collisions across all tests in the session.
+    """
+    return set()
+
+
+@pytest.fixture(scope="session")
+def global_idempotency_key_tracker() -> set[str]:
+    """Session-wide tracker for all used idempotency keys.
+
+    Prevents collisions across all tests in the session.
+    """
+    return set()
+
+
 # ==============================================================================
 # CODE GENERATION FIXTURES
 # ==============================================================================
@@ -245,6 +264,36 @@ def unique_token_hash(global_token_hash_tracker: set[str]) -> str:
     token_hash = hashlib.sha256(uuid4().bytes).hexdigest()
     global_token_hash_tracker.add(token_hash)
     return token_hash
+
+
+@pytest.fixture
+def unique_job_id(global_job_id_tracker: set):
+    """Generate a unique job ID (UUID) guaranteed not to collide.
+
+    Uses UUID v4 for guaranteed uniqueness across
+    parallel test execution and multiple test runs.
+
+    Format: UUID (e.g., "550e8400-e29b-41d4-a716-446655440000")
+    """
+    import uuid
+
+    job_id = uuid.uuid4()
+    global_job_id_tracker.add(job_id)
+    return job_id
+
+
+@pytest.fixture
+def unique_idempotency_key(global_idempotency_key_tracker: set[str]) -> str:
+    """Generate a unique idempotency key guaranteed not to collide.
+
+    Uses UUID-based generation for guaranteed uniqueness across
+    parallel test execution and multiple test runs.
+
+    Format: idem-{16 lowercase hex chars} (e.g., "idem-a1b2c3d4e5f6g7h8")
+    """
+    key = f"idem-{uuid4().hex[:16]}"
+    global_idempotency_key_tracker.add(key)
+    return key
 
 
 # ==============================================================================
