@@ -122,7 +122,7 @@ class TestFetchAvatar:
         repository: RankCardRepository,
         create_test_user,
     ) -> None:
-        """Test fetching avatar with only skin set returns skin and None pose."""
+        """Test fetching avatar with only skin set returns skin and default pose."""
         # Arrange
         user_id = await create_test_user()
         skin_name = fake.word()
@@ -134,14 +134,14 @@ class TestFetchAvatar:
         # Assert
         assert result is not None
         assert result["skin"] == skin_name
-        assert result["pose"] is None
+        assert result["pose"] == "Heroic"  # Default value from schema
 
     async def test_fetch_avatar_with_only_pose(
         self,
         repository: RankCardRepository,
         create_test_user,
     ) -> None:
-        """Test fetching avatar with only pose set returns pose and None skin."""
+        """Test fetching avatar with only pose set returns pose and default skin."""
         # Arrange
         user_id = await create_test_user()
         pose_name = fake.word()
@@ -152,7 +152,7 @@ class TestFetchAvatar:
 
         # Assert
         assert result is not None
-        assert result["skin"] is None
+        assert result["skin"] == "Overwatch 1"  # Default value from schema
         assert result["pose"] == pose_name
 
     async def test_fetch_avatar_when_not_set(

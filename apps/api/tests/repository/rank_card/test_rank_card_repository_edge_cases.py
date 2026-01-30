@@ -342,7 +342,7 @@ class TestIntegrationScenarios:
         result4 = await repository.fetch_avatar(user_id)
 
         # Assert - Verify each step
-        assert result1["skin"] == "skin1" and result1["pose"] is None
+        assert result1["skin"] == "skin1" and result1["pose"] == "Heroic"  # Default value
         assert result2["skin"] == "skin1" and result2["pose"] == "pose1"
         assert result3["skin"] == "skin2" and result3["pose"] == "pose1"
         assert result4["skin"] == "skin2" and result4["pose"] == "pose2"

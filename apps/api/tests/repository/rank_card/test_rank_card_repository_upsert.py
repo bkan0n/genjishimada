@@ -150,7 +150,7 @@ class TestUpsertAvatarSkin:
         result = await repository.fetch_avatar(user_id)
         assert result is not None
         assert result["skin"] == skin_name
-        assert result["pose"] is None
+        assert result["pose"] == "Heroic"  # Default value from schema
 
     async def test_update_skin_when_exists(
         self,
@@ -236,7 +236,7 @@ class TestUpsertAvatarPose:
         result = await repository.fetch_avatar(user_id)
         assert result is not None
         assert result["pose"] == pose_name
-        assert result["skin"] is None
+        assert result["skin"] == "Overwatch 1"  # Default value from schema
 
     async def test_update_pose_when_exists(
         self,
