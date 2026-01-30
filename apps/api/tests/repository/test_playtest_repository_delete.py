@@ -1,7 +1,7 @@
 """Tests for PlaytestRepository delete operations.
 
 Test Coverage:
-- delete_completions_for_playtest: Delete all completions for a playtest
+- delete_completions_for_playtest: Delete completions submitted during playtest period
 """
 
 import pytest
@@ -22,117 +22,182 @@ async def repository(asyncpg_conn):
     return PlaytestRepository(asyncpg_conn)
 
 
-@pytest.fixture
-async def create_completion_for_playtest(asyncpg_conn):
-    """Factory to create completions associated with a playtest thread."""
-
-    async def _create(user_id: int, map_id: int, thread_id: int) -> int:
-        completion_id = await asyncpg_conn.fetchval(
-            """
-            INSERT INTO core.completions (
-                user_id, map_id, time, screenshot, completion,
-                verified, legacy, verification_id
-            )
-            VALUES ($1, $2, 30.5, 'https://example.com/screenshot.png', TRUE, TRUE, FALSE, $3)
-            RETURNING id
-            """,
-            user_id,
-            map_id,
-            thread_id,
-        )
-        return completion_id
-
-    return _create
-
-
 # ==============================================================================
 # DELETE COMPLETIONS FOR PLAYTEST TESTS
 # ==============================================================================
 
 
 class TestDeleteCompletionsForPlaytest:
-    """Test deleting all completions for a playtest."""
+    """Test deleting completions submitted during playtest period."""
 
     @pytest.mark.asyncio
-    async def test_delete_completions_removes_all_completions(
+    async def test_delete_completions_removes_completions_after_playtest_start(
         self,
         repository: PlaytestRepository,
         create_test_map,
         create_test_user,
         create_test_playtest,
-        create_completion_for_playtest,
         unique_thread_id: int,
         asyncpg_conn,
     ) -> None:
-        """Test delete_completions_for_playtest removes all completions."""
+        """Test delete_completions_for_playtest removes completions submitted after playtest started."""
         # Arrange
         map_id = await create_test_map()
-        user1_id = await create_test_user()
-        user2_id = await create_test_user()
-        user3_id = await create_test_user()
-        await create_test_playtest(map_id, thread_id=unique_thread_id)
+        user_id = await create_test_user()
 
-        # Create multiple completions for this playtest
-        await create_completion_for_playtest(user1_id, map_id, unique_thread_id)
-        await create_completion_for_playtest(user2_id, map_id, unique_thread_id)
-        await create_completion_for_playtest(user3_id, map_id, unique_thread_id)
+        # Create playtest (this sets created_at timestamp)
+        playtest_id = await create_test_playtest(map_id, thread_id=unique_thread_id)
+
+        # Create a completion AFTER playtest started (will be deleted)
+        completion_id = await asyncpg_conn.fetchval(
+            """
+            INSERT INTO core.completions (
+                user_id, map_id, time, screenshot, completion, verified, legacy
+            )
+            VALUES ($1, $2, 30.5, 'https://example.com/screenshot.png', TRUE, TRUE, FALSE)
+            RETURNING id
+            """,
+            user_id,
+            map_id,
+        )
 
         # Act
         await repository.delete_completions_for_playtest(unique_thread_id)
 
-        # Assert - all completions for this playtest should be deleted
-        count = await asyncpg_conn.fetchval(
-            "SELECT COUNT(*) FROM core.completions WHERE playtest_thread_id = $1",
-            unique_thread_id,
+        # Assert - completion should be deleted
+        exists = await asyncpg_conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM core.completions WHERE id = $1)",
+            completion_id,
         )
-        assert count == 0
+        assert exists is False
 
     @pytest.mark.asyncio
-    async def test_delete_completions_only_affects_specific_playtest(
+    async def test_delete_completions_preserves_completions_before_playtest(
+        self,
+        repository: PlaytestRepository,
+        create_test_map,
+        create_test_user,
+        unique_thread_id: int,
+        asyncpg_conn,
+    ) -> None:
+        """Test delete_completions_for_playtest preserves completions submitted before playtest."""
+        # Arrange
+        map_id = await create_test_map()
+        user_id = await create_test_user()
+
+        # Create completion BEFORE playtest starts
+        old_completion_id = await asyncpg_conn.fetchval(
+            """
+            INSERT INTO core.completions (
+                user_id, map_id, time, screenshot, completion, verified, legacy,
+                inserted_at
+            )
+            VALUES ($1, $2, 25.0, 'https://example.com/old.png', TRUE, TRUE, FALSE,
+                    now() - interval '1 day')
+            RETURNING id
+            """,
+            user_id,
+            map_id,
+        )
+
+        # Create playtest (after the old completion)
+        await asyncpg_conn.execute("SELECT pg_sleep(0.01)")  # Small delay to ensure timestamp difference
+        playtest_id = await asyncpg_conn.fetchval(
+            """
+            INSERT INTO playtests.meta (thread_id, map_id, initial_difficulty, completed)
+            VALUES ($1, $2, 5.0, FALSE)
+            RETURNING id
+            """,
+            unique_thread_id,
+            map_id,
+        )
+
+        # Create completion AFTER playtest starts (will be deleted)
+        new_completion_id = await asyncpg_conn.fetchval(
+            """
+            INSERT INTO core.completions (
+                user_id, map_id, time, screenshot, completion, verified, legacy
+            )
+            VALUES ($1, $2, 30.5, 'https://example.com/new.png', TRUE, TRUE, FALSE)
+            RETURNING id
+            """,
+            user_id,
+            map_id,
+        )
+
+        # Act
+        await repository.delete_completions_for_playtest(unique_thread_id)
+
+        # Assert - old completion preserved, new completion deleted
+        old_exists = await asyncpg_conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM core.completions WHERE id = $1)",
+            old_completion_id,
+        )
+        new_exists = await asyncpg_conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM core.completions WHERE id = $1)",
+            new_completion_id,
+        )
+        assert old_exists is True
+        assert new_exists is False
+
+    @pytest.mark.asyncio
+    async def test_delete_completions_only_affects_playtest_map(
         self,
         repository: PlaytestRepository,
         create_test_map,
         create_test_user,
         create_test_playtest,
-        create_completion_for_playtest,
         unique_thread_id: int,
-        global_thread_id_tracker: set[int],
         asyncpg_conn,
     ) -> None:
-        """Test delete_completions_for_playtest only deletes for specific thread."""
-        # Arrange - create two playtests with completions
+        """Test delete_completions_for_playtest only deletes for the playtest's map."""
+        # Arrange
         map1_id = await create_test_map()
         map2_id = await create_test_map()
         user_id = await create_test_user()
 
-        # Generate second thread ID
-        while True:
-            thread_id_2 = fake.random_int(min=100000000000000000, max=999999999999999999)
-            if thread_id_2 not in global_thread_id_tracker:
-                global_thread_id_tracker.add(thread_id_2)
-                break
-
+        # Create playtest for map1
         await create_test_playtest(map1_id, thread_id=unique_thread_id)
-        await create_test_playtest(map2_id, thread_id=thread_id_2)
 
-        # Create completions for both playtests
-        await create_completion_for_playtest(user_id, map1_id, unique_thread_id)
-        await create_completion_for_playtest(user_id, map2_id, thread_id_2)
+        # Create completions for both maps
+        map1_completion_id = await asyncpg_conn.fetchval(
+            """
+            INSERT INTO core.completions (
+                user_id, map_id, time, screenshot, completion, verified, legacy
+            )
+            VALUES ($1, $2, 30.5, 'https://example.com/screenshot.png', TRUE, TRUE, FALSE)
+            RETURNING id
+            """,
+            user_id,
+            map1_id,
+        )
 
-        # Act - delete completions for first playtest only
+        map2_completion_id = await asyncpg_conn.fetchval(
+            """
+            INSERT INTO core.completions (
+                user_id, map_id, time, screenshot, completion, verified, legacy
+            )
+            VALUES ($1, $2, 35.0, 'https://example.com/screenshot2.png', TRUE, TRUE, FALSE)
+            RETURNING id
+            """,
+            user_id,
+            map2_id,
+        )
+
+        # Act
         await repository.delete_completions_for_playtest(unique_thread_id)
 
-        # Assert - first playtest's completions deleted, second preserved
-        count_thread1 = await asyncpg_conn.fetchval(
-            "SELECT COUNT(*) FROM core.completions WHERE playtest_thread_id = $1",
-            unique_thread_id,
+        # Assert - map1 completion deleted, map2 completion preserved
+        map1_exists = await asyncpg_conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM core.completions WHERE id = $1)",
+            map1_completion_id,
         )
-        count_thread2 = await asyncpg_conn.fetchval(
-            "SELECT COUNT(*) FROM core.completions WHERE playtest_thread_id = $1",
-            thread_id_2,
+        map2_exists = await asyncpg_conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM core.completions WHERE id = $1)",
+            map2_completion_id,
         )
-        assert count_thread1 == 0
-        assert count_thread2 == 1
+        assert map1_exists is False
+        assert map2_exists is True
 
     @pytest.mark.asyncio
     async def test_delete_completions_when_no_completions_is_no_op(
@@ -163,51 +228,44 @@ class TestDeleteCompletionsForPlaytest:
         await repository.delete_completions_for_playtest(non_existent_thread_id)
 
     @pytest.mark.asyncio
-    async def test_delete_completions_preserves_non_playtest_completions(
+    async def test_delete_completions_multiple_users(
         self,
         repository: PlaytestRepository,
         create_test_map,
         create_test_user,
         create_test_playtest,
-        create_completion_for_playtest,
         unique_thread_id: int,
         asyncpg_conn,
     ) -> None:
-        """Test delete_completions_for_playtest doesn't delete completions without playtest_thread_id."""
+        """Test delete_completions_for_playtest deletes from all users."""
         # Arrange
         map_id = await create_test_map()
         user1_id = await create_test_user()
         user2_id = await create_test_user()
+        user3_id = await create_test_user()
+
+        # Create playtest
         await create_test_playtest(map_id, thread_id=unique_thread_id)
 
-        # Create completion for playtest
-        await create_completion_for_playtest(user1_id, map_id, unique_thread_id)
-
-        # Create completion NOT for playtest (playtest_thread_id = NULL)
-        regular_completion_id = await asyncpg_conn.fetchval(
-            """
-            INSERT INTO core.completions (
-                user_id, map_id, time, screenshot, completion,
-                verified, legacy
+        # Create completions from multiple users
+        for user_id in [user1_id, user2_id, user3_id]:
+            await asyncpg_conn.execute(
+                """
+                INSERT INTO core.completions (
+                    user_id, map_id, time, screenshot, completion, verified, legacy
+                )
+                VALUES ($1, $2, 30.5, 'https://example.com/screenshot.png', TRUE, TRUE, FALSE)
+                """,
+                user_id,
+                map_id,
             )
-            VALUES ($1, $2, 25.0, 'https://example.com/screenshot2.png', TRUE, TRUE, FALSE)
-            RETURNING id
-            """,
-            user2_id,
-            map_id,
-        )
 
         # Act
         await repository.delete_completions_for_playtest(unique_thread_id)
 
-        # Assert - playtest completion deleted, regular completion preserved
-        playtest_count = await asyncpg_conn.fetchval(
-            "SELECT COUNT(*) FROM core.completions WHERE playtest_thread_id = $1",
-            unique_thread_id,
+        # Assert - all completions deleted
+        count = await asyncpg_conn.fetchval(
+            "SELECT COUNT(*) FROM core.completions WHERE map_id = $1",
+            map_id,
         )
-        regular_exists = await asyncpg_conn.fetchval(
-            "SELECT EXISTS(SELECT 1 FROM core.completions WHERE id = $1)",
-            regular_completion_id,
-        )
-        assert playtest_count == 0
-        assert regular_exists is True
+        assert count == 0

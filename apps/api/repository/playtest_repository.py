@@ -444,6 +444,8 @@ class PlaytestRepository(BaseRepository):
     ) -> None:
         """Delete all completions for a playtest.
 
+        Deletes completions for the map that were submitted after the playtest started.
+
         Args:
             thread_id: Forum thread ID.
             conn: Optional connection.
@@ -451,7 +453,11 @@ class PlaytestRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         await _conn.execute(
-            "DELETE FROM core.completions WHERE playtest_thread_id = $1",
+            """
+            DELETE FROM core.completions
+            WHERE map_id = (SELECT map_id FROM playtests.meta WHERE thread_id = $1)
+              AND inserted_at >= (SELECT created_at FROM playtests.meta WHERE thread_id = $1)
+            """,
             thread_id,
         )
 
