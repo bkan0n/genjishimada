@@ -20,6 +20,15 @@ async def repository(asyncpg_conn):
     return UsersRepository(asyncpg_conn)
 
 
+@pytest.fixture
+def non_existent_user_id(global_user_id_tracker: set[int]) -> int:
+    """Generate a user ID that doesn't exist in the database."""
+    while True:
+        user_id = fake.random_int(min=900000000000000000, max=998999999999999999)
+        if user_id not in global_user_id_tracker:
+            return user_id
+
+
 # ==============================================================================
 # DELETE USER TESTS
 # ==============================================================================
@@ -47,16 +56,14 @@ class TestDeleteUser:
     async def test_delete_non_existent_user_is_noop(
         self,
         repository: UsersRepository,
+        non_existent_user_id: int,
     ):
         """Test deleting non-existent user doesn't raise error (no-op)."""
-        # Arrange
-        fake_user_id = 999999999999999999
-
         # Act - Should not raise error
-        await repository.delete_user(fake_user_id)
+        await repository.delete_user(non_existent_user_id)
 
         # Assert - User still doesn't exist (no change)
-        exists = await repository.check_user_exists(fake_user_id)
+        exists = await repository.check_user_exists(non_existent_user_id)
         assert exists is False
 
     async def test_delete_user_cascades_to_overwatch_usernames(

@@ -21,6 +21,15 @@ async def repository(asyncpg_conn):
     return UsersRepository(asyncpg_conn)
 
 
+@pytest.fixture
+def non_existent_user_id(global_user_id_tracker: set[int]) -> int:
+    """Generate a user ID that doesn't exist in the database."""
+    while True:
+        user_id = fake.random_int(min=900000000000000000, max=998999999999999999)
+        if user_id not in global_user_id_tracker:
+            return user_id
+
+
 def test_unique_user_id_fixture(unique_user_id: int):
     """Verify unique user ID generation works."""
     assert isinstance(unique_user_id, int)
@@ -210,15 +219,15 @@ class TestInsertOverwatchUsername:
     async def test_insert_overwatch_username_with_invalid_user_id_raises_error(
         self,
         repository: UsersRepository,
+        non_existent_user_id: int,
     ):
         """Test inserting Overwatch username with non-existent user_id raises error."""
         # Arrange
-        fake_user_id = 999999999999999999
         ow_username = fake.user_name()
 
         # Act & Assert
         with pytest.raises(Exception):  # asyncpg will raise ForeignKeyViolationError or similar
-            await repository.insert_overwatch_username(fake_user_id, ow_username, is_primary=True)
+            await repository.insert_overwatch_username(non_existent_user_id, ow_username, is_primary=True)
 
     async def test_insert_multiple_overwatch_usernames_for_same_user(
         self,

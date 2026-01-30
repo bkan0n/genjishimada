@@ -20,6 +20,15 @@ async def repository(asyncpg_conn):
     return UsersRepository(asyncpg_conn)
 
 
+@pytest.fixture
+def non_existent_user_id(global_user_id_tracker: set[int]) -> int:
+    """Generate a user ID that doesn't exist in the database."""
+    while True:
+        user_id = fake.random_int(min=900000000000000000, max=998999999999999999)
+        if user_id not in global_user_id_tracker:
+            return user_id
+
+
 # ==============================================================================
 # UPDATE USER NAMES TESTS
 # ==============================================================================
@@ -159,21 +168,19 @@ class TestUpdateUserNames:
     async def test_update_non_existent_user_is_noop(
         self,
         repository: UsersRepository,
+        non_existent_user_id: int,
     ):
         """Test updating non-existent user doesn't raise error (no-op)."""
-        # Arrange
-        fake_user_id = 999999999999999999
-
         # Act - Should not raise error, just no-op
         await repository.update_user_names(
-            fake_user_id,
+            non_existent_user_id,
             nickname=fake.user_name(),
             update_nickname=True,
             update_global_name=False,
         )
 
         # Assert - User still doesn't exist
-        exists = await repository.check_user_exists(fake_user_id)
+        exists = await repository.check_user_exists(non_existent_user_id)
         assert exists is False
 
     async def test_update_with_no_flags_set_is_noop(
@@ -250,15 +257,15 @@ class TestUpsertUserNotifications:
     async def test_upsert_with_invalid_user_id_raises_error(
         self,
         repository: UsersRepository,
+        non_existent_user_id: int,
     ):
         """Test upserting notification settings with invalid user_id raises error."""
         # Arrange
-        fake_user_id = 999999999999999999
         flags = 42
 
         # Act & Assert
         with pytest.raises(Exception):  # Foreign key violation
-            await repository.upsert_user_notifications(fake_user_id, flags)
+            await repository.upsert_user_notifications(non_existent_user_id, flags)
 
 
 # ==============================================================================

@@ -20,6 +20,17 @@ async def repository(asyncpg_conn):
     return UsersRepository(asyncpg_conn)
 
 
+@pytest.fixture
+def non_existent_user_id(global_user_id_tracker: set[int]) -> int:
+    """Generate a user ID that doesn't exist in the database."""
+    # Generate an ID that's not in the tracker (so not created by any test)
+    while True:
+        user_id = fake.random_int(min=900000000000000000, max=998999999999999999)
+        if user_id not in global_user_id_tracker:
+            # Don't add to tracker - we want it to remain non-existent
+            return user_id
+
+
 # ==============================================================================
 # CHECK USER EXISTS TESTS
 # ==============================================================================
@@ -46,13 +57,11 @@ class TestCheckUserExists:
     async def test_check_non_existent_user_returns_false(
         self,
         repository: UsersRepository,
+        non_existent_user_id: int,
     ):
         """Test checking non-existent user returns False."""
-        # Arrange
-        fake_user_id = 999999999999999999
-
         # Act
-        exists = await repository.check_user_exists(fake_user_id)
+        exists = await repository.check_user_exists(non_existent_user_id)
 
         # Assert
         assert exists is False
@@ -146,13 +155,11 @@ class TestFetchUser:
     async def test_fetch_non_existent_user_returns_none(
         self,
         repository: UsersRepository,
+        non_existent_user_id: int,
     ):
         """Test fetching non-existent user returns None."""
-        # Arrange
-        fake_user_id = 999999999999999999
-
         # Act
-        user = await repository.fetch_user(fake_user_id)
+        user = await repository.fetch_user(non_existent_user_id)
 
         # Assert
         assert user is None
