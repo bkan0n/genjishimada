@@ -72,7 +72,24 @@ def mock_state(mocker):
         Mock State with mq_channel_pool configured for BaseService.publish_message.
     """
     state = mocker.Mock(spec=State)
-    state.mq_channel_pool = mocker.AsyncMock()
+
+    # Mock the channel pool with context manager support
+    channel = mocker.AsyncMock()
+    channel_pool = mocker.AsyncMock()
+
+    # Mock the context manager for acquire()
+    async def mock_acquire_aenter(self):
+        return channel
+
+    async def mock_acquire_aexit(self, exc_type, exc_val, exc_tb):
+        return None
+
+    acquire_cm = mocker.MagicMock()
+    acquire_cm.__aenter__ = mock_acquire_aenter
+    acquire_cm.__aexit__ = mock_acquire_aexit
+    channel_pool.acquire.return_value = acquire_cm
+
+    state.mq_channel_pool = channel_pool
     return state
 
 
