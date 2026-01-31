@@ -69,7 +69,7 @@ class TestApprovePlaytest:
     ) -> None:
         """Test approve_playtest sets raw_difficulty from average votes."""
         # Arrange
-        map_id = await create_test_map(raw_difficulty=0.0)
+        map_id = await create_test_map()
         await create_test_playtest(map_id, thread_id=unique_thread_id)
         average_difficulty = 8.75
 
@@ -404,7 +404,7 @@ class TestStateTransitionEdgeCases:
     ) -> None:
         """Test approving an already approved playtest."""
         # Arrange
-        map_id = await create_test_map(playtesting="Approved", raw_difficulty=5.0)
+        map_id = await create_test_map(playtesting="Approved")
         await create_test_playtest(map_id, thread_id=unique_thread_id, completed=True)
 
         # Act - approve again with different difficulty

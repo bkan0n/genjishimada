@@ -91,12 +91,12 @@ class TestGetPartialMap:
     """GET /api/v4/maps/{code}/partial"""
 
     #@pytest.mark.xfail(reason="BUG: Returns 500 (msgspec.ValidationError) - MapPartialResponse missing required fields in query result")
-    async def test_happy_path(self, test_client, create_test_map, unique_map_code):
+    async def test_happy_path(self, test_client, create_test_map, unique_map_code, create_test_playtest):
         """Get map by code returns map data."""
         code = unique_map_code
         # create_test_map fixture uses default difficulty from conftest
         map_id = await create_test_map(code=code, checkpoints=15, difficulty="Medium")
-
+        await create_test_playtest(map_id=map_id)
         response = await test_client.get(f"/api/v4/maps/{code}/partial")
 
         assert response.status_code == 200
@@ -120,7 +120,7 @@ class TestGetPartialMap:
 class TestCreateMap:
     """POST /api/v4/maps/"""
 
-    @pytest.mark.xfail(reason="BUG: create_playtest_meta_partial passes difficulty string instead of raw_difficulty numeric - asyncpg.exceptions.InvalidTextRepresentationError")
+    #@pytest.mark.xfail(reason="BUG: create_playtest_meta_partial passes difficulty string instead of raw_difficulty numeric - asyncpg.exceptions.InvalidTextRepresentationError")
     async def test_happy_path(self, test_client, unique_map_code, create_test_user):
         """Create map returns job response."""
         user_id = await create_test_user()
@@ -132,15 +132,15 @@ class TestCreateMap:
             "checkpoints": 20,
             "category": "Classic",  # Valid MapCategory
             "creators": [{"id": user_id, "is_primary": True}],  # Correct format
-            "difficulty": "Medium",  # Required field
+            "difficulty": "Medium",
         }
 
         response = await test_client.post("/api/v4/maps/", json=payload)
 
         assert response.status_code == 201
         data = response.json()
-        assert "map" in data
-        assert data["map"]["code"] == code
+        assert "data" in data
+        assert data["data"]["code"] == code
 
     async def test_duplicate_code_returns_error(self, test_client, create_test_map, unique_map_code, create_test_user):
         """Creating map with duplicate code returns error."""
@@ -338,7 +338,7 @@ class TestCreateGuide:
 
         assert response.status_code == 404
 
-    @pytest.mark.xfail(reason="BUG: Returns 400 (DI provider issue) before checking for duplicates")
+    #@pytest.mark.xfail(reason="BUG: Returns 400 (DI provider issue) before checking for duplicates")
     async def test_duplicate_guide_returns_409(self, test_client, create_test_map, unique_map_code, create_test_user):
         """Creating duplicate guide returns 409."""
         code = unique_map_code

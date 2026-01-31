@@ -48,6 +48,7 @@ from litestar.status_codes import (
     HTTP_204_NO_CONTENT,
     HTTP_400_BAD_REQUEST,
     HTTP_404_NOT_FOUND,
+    HTTP_409_CONFLICT,
 )
 
 from repository.maps_repository import provide_maps_repository
@@ -543,7 +544,7 @@ class MapsController(Controller):
         except DuplicateGuideError as e:
             raise CustomHTTPException(
                 detail=f"User {data.user_id} already has a guide for map {code}",
-                status_code=HTTP_400_BAD_REQUEST,
+                status_code=HTTP_409_CONFLICT,
             ) from e
 
     @patch(

@@ -224,7 +224,7 @@ class MapsService(BaseService):
                 if data.playtesting == "In Progress":
                     playtest_id = await self._maps_repo.create_playtest_meta_partial(
                         data.code,
-                        data.difficulty,  # type: ignore[arg-type]
+                        map_data["raw_difficulty"],
                         conn=conn,  # type: ignore[arg-type]
                     )
 

@@ -13,6 +13,7 @@ from litestar.testing import AsyncTestClient
 from pytest_databases.docker.postgres import PostgresService
 
 from app import create_app
+from genjishimada_sdk import difficulties
 
 pytest_plugins = [
     "pytest_databases.docker.postgres",
@@ -255,17 +256,40 @@ def unique_ip_hash(global_ip_hash_tracker: set[str]) -> str:
 
 
 @pytest.fixture
-async def create_test_map(postgres_service: PostgresService, global_code_tracker: set[str]):
-    """Factory fixture for creating test maps.
+async def create_test_map(
+    postgres_service: PostgresService,
+    global_code_tracker: set[str],
+    global_user_id_tracker: set[int],
+):
+    """Factory fixture for creating complete test maps with related data.
 
-    Returns a function that creates a map with the given code.
+    Creates a full map with auto-calculated raw_difficulty and at least one primary creator.
+
+    Args:
+        code: Map code (generated if not provided)
+        creator_id: User ID for primary creator (generated if not provided)
+        mechanics: List of mechanic IDs to link (optional)
+        restrictions: List of restriction IDs to link (optional)
+        tags: List of tag IDs to link (optional)
+        medals: Dict with gold/silver/bronze times (optional)
+        **overrides: Override any core.maps field
 
     Usage:
-        map_id = await create_test_map(unique_map_code)
-        map_id = await create_test_map(unique_map_code, checkpoints=25)
+        map_id = await create_test_map()
+        map_id = await create_test_map(code="ABC123", difficulty="Hard")
+        map_id = await create_test_map(creator_id=user_id, mechanics=[1, 2])
+        map_id = await create_test_map(medals={"gold": 30.0, "silver": 45.0, "bronze": 60.0})
     """
 
-    async def _create(code: str | None = None, **overrides: Any) -> int:
+    async def _create(
+        code: str | None = None,
+        creator_id: int | None = None,
+        mechanics: list[int] | None = None,
+        restrictions: list[int] | None = None,
+        tags: list[int] | None = None,
+        medals: dict[str, float] | None = None,
+        **overrides: Any,
+    ) -> int:
         from typing import get_args
 
         from genjishimada_sdk.maps import MapCategory, OverwatchMap
@@ -275,7 +299,6 @@ async def create_test_map(postgres_service: PostgresService, global_code_tracker
             code = f"T{uuid4().hex[:5].upper()}"
             global_code_tracker.add(code)
 
-
         # Default values
         data = {
             "map_name": fake.random_element(elements=get_args(OverwatchMap)),
@@ -284,13 +307,17 @@ async def create_test_map(postgres_service: PostgresService, global_code_tracker
             "official": True,
             "playtesting": "Approved",
             "difficulty": "Medium",
-            "raw_difficulty": 5.0,
             "hidden": False,
             "archived": False,
         }
 
         # Apply overrides
         data.update(overrides)
+
+        # Auto-calculate raw_difficulty from difficulty (ignores any explicit raw_difficulty)
+        difficulty = data["difficulty"]
+        raw_min, raw_max = difficulties.DIFFICULTY_RANGES_ALL[difficulty]
+        data["raw_difficulty"] = fake.pyfloat(min_value=raw_min, max_value=raw_max - 0.1, right_digits=2)
 
         pool = await asyncpg.create_pool(
             user=postgres_service.user,
@@ -301,6 +328,7 @@ async def create_test_map(postgres_service: PostgresService, global_code_tracker
         )
         try:
             async with pool.acquire() as conn:
+                # Create core map
                 map_id = await conn.fetchval(
                     """
                     INSERT INTO core.maps (
@@ -321,6 +349,87 @@ async def create_test_map(postgres_service: PostgresService, global_code_tracker
                     data["hidden"],
                     data["archived"],
                 )
+
+                # Create primary creator
+                if creator_id is None:
+                    # Generate unique user ID
+                    while True:
+                        creator_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+                        if creator_id not in global_user_id_tracker:
+                            global_user_id_tracker.add(creator_id)
+                            break
+
+                    # Create user
+                    await conn.execute(
+                        """
+                        INSERT INTO core.users (id, nickname, global_name)
+                        VALUES ($1, $2, $3)
+                        """,
+                        creator_id,
+                        fake.user_name(),
+                        fake.user_name(),
+                    )
+
+                # Link creator to map
+                await conn.execute(
+                    """
+                    INSERT INTO maps.creators (map_id, user_id, is_primary)
+                    VALUES ($1, $2, $3)
+                    """,
+                    map_id,
+                    creator_id,
+                    True,
+                )
+
+                # Link mechanics if provided
+                if mechanics:
+                    for mechanic_id in mechanics:
+                        await conn.execute(
+                            """
+                            INSERT INTO maps.mechanic_links (map_id, mechanic_id)
+                            VALUES ($1, $2)
+                            """,
+                            map_id,
+                            mechanic_id,
+                        )
+
+                # Link restrictions if provided
+                if restrictions:
+                    for restriction_id in restrictions:
+                        await conn.execute(
+                            """
+                            INSERT INTO maps.restriction_links (map_id, restriction_id)
+                            VALUES ($1, $2)
+                            """,
+                            map_id,
+                            restriction_id,
+                        )
+
+                # Link tags if provided
+                if tags:
+                    for tag_id in tags:
+                        await conn.execute(
+                            """
+                            INSERT INTO maps.tag_links (map_id, tag_id)
+                            VALUES ($1, $2)
+                            """,
+                            map_id,
+                            tag_id,
+                        )
+
+                # Create medals if provided
+                if medals:
+                    await conn.execute(
+                        """
+                        INSERT INTO maps.medals (map_id, gold, silver, bronze)
+                        VALUES ($1, $2, $3, $4)
+                        """,
+                        map_id,
+                        medals.get("gold"),
+                        medals.get("silver"),
+                        medals.get("bronze"),
+                    )
+
             return map_id
         finally:
             await pool.close()

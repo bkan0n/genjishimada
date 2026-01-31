@@ -8,6 +8,7 @@ from typing import Any
 import asyncpg
 import msgspec
 from asyncpg import Connection
+from genjishimada_sdk.difficulties import convert_raw_difficulty_to_difficulty_all
 from genjishimada_sdk.maps import OverwatchMap
 from litestar.datastructures import State
 
@@ -109,7 +110,11 @@ class MapsRepository(BaseRepository):
             """,
             code,
         )
-        return dict(row) if row else None
+        resp = dict(row) if row else None
+        if resp:
+            resp["creator_name"] = resp["creator_names"][0]
+            resp["difficulty"] = convert_raw_difficulty_to_difficulty_all(resp["difficulty"])
+        return resp
 
     async def lookup_map_id(
         self,
