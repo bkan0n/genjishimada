@@ -245,8 +245,17 @@ class NotificationsController(litestar.Controller):
             event_type: Event type string.
             channel: Channel string.
             enabled: Whether the preference is enabled.
+
+        Raises:
+            CustomHTTPException: 404 if user does not exist.
         """
-        await svc.update_preference(user_id, event_type, channel, enabled)
+        try:
+            await svc.update_preference(user_id, event_type, channel, enabled)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=e.message,
+            ) from e
 
     @litestar.put(
         path="/users/{user_id:int}/preferences/bulk",
