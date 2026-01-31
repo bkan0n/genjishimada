@@ -6,6 +6,7 @@ in the maps service layer. Simple pass-through methods are covered by integratio
 
 import datetime as dt
 
+from genjishimada_sdk.users import CreatorFull
 import pytest
 from genjishimada_sdk.maps import (
     Creator,
@@ -88,7 +89,7 @@ class TestMapsServiceErrorTranslation:
             official=False,
             playtesting="Approved",
             hidden=False,
-            mechanics=["Walljump", "Walljump"],  # Duplicate
+            mechanics=["High Edge", "Triple Jump"],  # Duplicate
         )
 
         # Mock successful core map creation
@@ -119,7 +120,7 @@ class TestMapsServiceErrorTranslation:
             official=False,
             playtesting="Approved",
             hidden=False,
-            restrictions=["No Ability 1", "No Ability 1"],  # Duplicate
+            restrictions=["Bhop", "Wall Climb"],  # Duplicate
         )
 
         mock_maps_repo.create_core_map.return_value = 1
@@ -529,17 +530,17 @@ class TestMapsServiceDataTransformation:
             total_results=None,
             linked_code=None,
             creators=[
-                Creator(id=123456789, is_primary=True),
-                Creator(id=987654321, is_primary=False),
+                CreatorFull(id=123456789, is_primary=True, name="A"),
+                CreatorFull(id=987654321, is_primary=False, name="B"),
             ],
-            mechanics=["Walljump", "Ledgegrab"],
-            restrictions=["No Ability 1"],
+            mechanics=["Bhop", "Edge Climb"],
+            restrictions=["Standing Create Bhop"],
             description="Test description",
             medals=MedalsResponse(gold=30.0, silver=45.0, bronze=60.0),
             guides=[],
             title="Original Title",
             map_banner="banner.png",
-            tags=None,
+            tags=[],
         )
 
         # Clone as unofficial
@@ -561,8 +562,8 @@ class TestMapsServiceDataTransformation:
         assert len(result.creators) == 2
         assert result.creators[0].id == 123456789
         assert result.creators[0].is_primary is True
-        assert result.mechanics == ["Walljump", "Ledgegrab"]
-        assert result.restrictions == ["No Ability 1"]
+        assert result.mechanics == ["Bhop", "Edge Climb"]
+        assert result.restrictions == ["Standing Create Bhop"]
         assert result.description == "Test description"
         assert result.medals.gold == 30.0
         assert result.title == "Original Title"
@@ -592,14 +593,14 @@ class TestMapsServiceDataTransformation:
             total_results=None,
             linked_code=None,
             guides=[],
-            mechanics=None,
-            restrictions=None,
+            mechanics=[],
+            restrictions=[],
             description=None,
             medals=None,
             title=None,
             map_banner=None,
-            tags=None,
-            creators=[Creator(id=123456789, is_primary=True)],
+            tags=[],
+            creators=[CreatorFull(id=123456789, is_primary=True, name="C")],
         )
 
         result = service._create_cloned_map_data_payload(
