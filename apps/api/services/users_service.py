@@ -7,12 +7,9 @@ import logging
 import msgspec
 from asyncpg import Connection
 from genjishimada_sdk.users import (
-    NOTIFICATION_TYPES,
-    Notification,
     OverwatchUsernameItem,
     OverwatchUsernamesResponse,
     RankDetailResponse,
-    SettingsUpdateRequest,
     UserCreateRequest,
     UserResponse,
     UserUpdateRequest,
@@ -214,127 +211,6 @@ class UsersService(BaseService):
             secondary=secondary,
             tertiary=tertiary,
         )
-
-    async def fetch_user_notifications(self, user_id: int) -> int | None:
-        """Get notification bitmask for a user.
-
-        Args:
-            user_id: The user ID.
-
-        Returns:
-            Bitmask value, or None if not set.
-        """
-        return await self._users_repo.fetch_user_notifications(user_id)
-
-    async def update_user_notifications(self, user_id: int, notifications_bitmask: int) -> bool:
-        """Update notification bitmask for a user.
-
-        Args:
-            user_id: The user ID.
-            notifications_bitmask: New bitmask value.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        log.debug(f"Updating user {user_id} settings to bitmask: {notifications_bitmask}")
-        try:
-            await self._users_repo.upsert_user_notifications(user_id, notifications_bitmask)
-            return True
-        except Exception:
-            return False
-
-    async def get_user_notifications_payload(self, user_id: int, to_bitmask: bool = False) -> dict:
-        """Get notification payload for a user.
-
-        Args:
-            user_id: The user ID.
-            to_bitmask: If True, return bitmask; if False, return notification names.
-
-        Returns:
-            Dict with user_id and either bitmask or notifications list.
-        """
-        bitmask = await self.fetch_user_notifications(user_id)
-        if bitmask is None:
-            log.debug("User %s not found.", user_id)
-            bitmask = 0
-
-        if to_bitmask:
-            return {"user_id": user_id, "bitmask": bitmask}
-
-        notifications = [notif.name for notif in Notification if bitmask & notif]
-        log.debug("User %s settings: %s", user_id, notifications)
-        return {"user_id": user_id, "notifications": notifications}
-
-    async def apply_notifications_bulk(
-        self,
-        user_id: int,
-        data: SettingsUpdateRequest,
-    ) -> tuple[bool, int | None, str | None]:
-        """Apply bulk notifications update.
-
-        Args:
-            user_id: The user ID.
-            data: Settings update request.
-
-        Returns:
-            Tuple of (success, bitmask_or_none, error_message_or_none).
-        """
-        try:
-            bitmask = data.to_bitmask()
-            log.debug(f"User {user_id} notifications bitmask: {bitmask}")
-            ok = await self.update_user_notifications(user_id, bitmask)
-            if ok:
-                return True, bitmask, None
-            return False, None, "Update failed"
-        except ValueError as ve:
-            log.error(f"Validation error: {ve}")
-            return False, None, str(ve)
-
-    async def apply_single_notification(
-        self,
-        user_id: int,
-        notification_type: NOTIFICATION_TYPES,
-        enable: bool,
-    ) -> tuple[bool, int | None, str | None]:
-        """Toggle a single notification flag.
-
-        Args:
-            user_id: The user ID.
-            notification_type: Notification name.
-            enable: True to enable, False to disable.
-
-        Returns:
-            Tuple of (success, new_bitmask_or_none, error_message_or_none).
-        """
-        valid_notification_names = {flag.name for flag in Notification}
-        if notification_type not in valid_notification_names:
-            return False, None, f"Invalid notification type: {notification_type}"
-
-        try:
-            current_bitmask = await self.fetch_user_notifications(user_id)
-            if current_bitmask is None:
-                current_bitmask = 0
-            current_flags = Notification(current_bitmask)
-            notification_flag = Notification[notification_type]
-
-            new_flags = current_flags | notification_flag if enable else current_flags & ~notification_flag
-
-            log.debug(
-                "User %s: updating %s to %s, bitmask: %s -> %s",
-                user_id,
-                notification_type,
-                "enabled" if enable else "disabled",
-                current_flags.value,
-                new_flags.value,
-            )
-
-            ok = await self.update_user_notifications(user_id=user_id, notifications_bitmask=new_flags.value)  # type: ignore[call-arg]
-            if ok:
-                return True, new_flags.value, None
-            return False, None, "Update failed"
-        except Exception as e:
-            log.error("Error updating single notification: %s", e)
-            return False, None, str(e)
 
     async def get_user_rank_data(self, user_id: int, conn: Connection) -> list[RankDetailResponse]:
         """Get rank details for a user.

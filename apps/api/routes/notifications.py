@@ -15,9 +15,11 @@ from genjishimada_sdk.notifications import (
     ShouldDeliverResponse,
 )
 from litestar.di import Provide
-from litestar.status_codes import HTTP_201_CREATED, HTTP_204_NO_CONTENT
+from litestar.status_codes import HTTP_201_CREATED, HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 
 from di.notifications import NotificationService, provide_notification_service
+from services.exceptions.users import UserNotFoundError
+from utilities.errors import CustomHTTPException
 
 log = logging.getLogger(__name__)
 
@@ -51,10 +53,19 @@ class NotificationsController(litestar.Controller):
             data: Notification creation request.
             request: Request to get the headers
 
+        Raises:
+            CustomHTTPException: 404 if user does not exist.
+
         Returns:
             The created notification event.
         """
-        return await svc.create_and_dispatch(data, request.headers)
+        try:
+            return await svc.create_and_dispatch(data, request.headers)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=e.message,
+            ) from e
 
     @litestar.get(
         path="/users/{user_id:int}/events",
