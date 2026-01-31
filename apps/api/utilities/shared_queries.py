@@ -1,7 +1,31 @@
 import msgspec
-from asyncpg import Connection
+from asyncpg import Connection, Pool
 from genjishimada_sdk.maps import MapMasteryResponse, OverwatchMap
 from genjishimada_sdk.users import RankDetailResponse
+
+
+async def get_map_mastery_data_raw(
+    conn: Connection | Pool, user_id: int, map_name: OverwatchMap | None = None
+) -> list[dict]:
+    query = """
+            WITH minimized_records AS (
+                SELECT DISTINCT ON (c.map_id, m.map_name) map_name
+                FROM core.completions c
+                LEFT JOIN core.maps m ON c.map_id = m.id
+                WHERE c.user_id = $1
+            ), map_counts AS ( \
+                SELECT map_name, count(map_name) AS amount \
+                FROM minimized_records \
+                GROUP BY map_name \
+            )
+            SELECT amn.name AS map_name, coalesce(mc.amount, 0) AS amount
+            FROM maps.names amn
+            LEFT JOIN map_counts mc ON mc.map_name = amn.name
+            WHERE ($2::text IS NULL OR amn.name = $2) AND amn.name != 'Adlersbrunn'
+            ORDER BY amn.name; \
+            """
+    rows = await conn.fetch(query, user_id, map_name)
+    return [dict(row) for row in rows]
 
 
 async def get_map_mastery_data(

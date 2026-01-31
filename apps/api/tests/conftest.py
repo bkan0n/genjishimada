@@ -275,6 +275,7 @@ async def create_test_map(postgres_service: PostgresService, global_code_tracker
             code = f"T{uuid4().hex[:5].upper()}"
             global_code_tracker.add(code)
 
+
         # Default values
         data = {
             "map_name": fake.random_element(elements=get_args(OverwatchMap)),

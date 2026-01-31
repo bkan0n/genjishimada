@@ -51,6 +51,7 @@ from litestar.status_codes import (
 )
 
 from repository.maps_repository import provide_maps_repository
+from repository.users_repository import UsersRepository, provide_users_repository
 from services.exceptions.maps import (
     AlreadyInPlaytestError,
     CreatorNotFoundError,
@@ -84,6 +85,7 @@ class MapsController(Controller):
         "newsfeed_service": Provide(provide_newsfeed_service),
         "lootbox_service": Provide(provide_lootbox_service),
         "users_service": Provide(provide_users_service),
+        "users_repo": Provide(provide_users_repository),
     }
 
     @get(
@@ -295,6 +297,7 @@ class MapsController(Controller):
         maps_service: MapsService,
         newsfeed_service: NewsfeedService,
         users_service: UsersService,
+        users_repo: UsersRepository,
     ) -> MapResponse:
         """Update a map.
 

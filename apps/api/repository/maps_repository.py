@@ -8,9 +8,11 @@ from typing import Any
 import asyncpg
 import msgspec
 from asyncpg import Connection
+from genjishimada_sdk.maps import OverwatchMap
 from litestar.datastructures import State
 
 from utilities.map_search import MapSearchFilters, MapSearchSQLSpecBuilder
+from utilities.shared_queries import get_map_mastery_data_raw
 
 from .base import BaseRepository
 from .exceptions import (
@@ -828,7 +830,7 @@ class MapsRepository(BaseRepository):
     async def fetch_map_mastery(
         self,
         user_id: int,
-        map_name: str | None = None,
+        map_name: OverwatchMap | None = None,
         *,
         conn: Connection | None = None,
     ) -> list[dict]:
@@ -844,80 +846,43 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        if map_name is None:
-            # Return all maps for user
-            rows = await _conn.fetch(
-                """
-                SELECT mm.map_name, mm.medal, mm.rank, mm.percentile
-                FROM maps.mastery mm
-                WHERE mm.user_id = $1
-                """,
-                user_id,
-            )
-        else:
-            # Return specific map
-            rows = await _conn.fetch(
-                """
-                SELECT mm.map_name, mm.medal, mm.rank, mm.percentile
-                FROM maps.mastery mm
-                WHERE mm.user_id = $1 AND mm.map_name = $2
-                """,
-                user_id,
-                map_name,
-            )
+        return await get_map_mastery_data_raw(_conn, user_id, map_name)
 
-        return [dict(row) for row in rows]
-
-    async def upsert_map_mastery(  # noqa: PLR0913
+    async def upsert_map_mastery(
         self,
-        map_id: int,
+        map_name: OverwatchMap,
         user_id: int,
-        medal: str,
-        rank: int,
-        percentile: float,
+        level: str,
         *,
         conn: Connection | None = None,
     ) -> dict | None:
         """Insert or update map mastery record.
 
         Args:
-            map_id: Map ID.
-            user_id: User ID.
-            medal: Medal value (e.g., "Gold", "Silver", "Bronze", "none").
-            rank: User's rank on this map.
-            percentile: User's percentile.
-            conn: Optional connection.
+            map_name (OverwatchMap): Map name.
+            user_id (int): User ID.
+            level (str): Mastery level.
 
         Returns:
             Dict with medal and operation_status ('inserted' or 'updated'), or None if no change.
         """
         _conn = self._get_connection(conn)
 
-        row = await _conn.fetchrow(
-            """
-            INSERT INTO maps.mastery (user_id, map_id, medal, rank, percentile)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (user_id, map_id)
-            DO UPDATE
-            SET medal = EXCLUDED.medal,
-                rank = EXCLUDED.rank,
-                percentile = EXCLUDED.percentile
-            WHERE maps.mastery.medal IS DISTINCT FROM EXCLUDED.medal
-                OR maps.mastery.rank IS DISTINCT FROM EXCLUDED.rank
-                OR maps.mastery.percentile IS DISTINCT FROM EXCLUDED.percentile
-            RETURNING
-                medal,
-                CASE
-                    WHEN xmax::text::int = 0 THEN 'inserted'
-                    ELSE 'updated'
-                END AS operation_status
-            """,
-            user_id,
-            map_id,
-            medal,
-            rank,
-            percentile,
-        )
+        query = """
+                INSERT INTO maps.mastery (
+                    user_id, map_name, medal
+                )
+                VALUES (
+                    $1, $2, $3
+                )
+                ON CONFLICT (user_id, map_name) DO UPDATE SET medal = excluded.medal
+                WHERE maps.mastery.medal IS DISTINCT FROM excluded.medal
+                RETURNING
+                    map_name,
+                    medal,
+                    CASE WHEN xmax::text::int = 0 THEN 'inserted' ELSE 'updated' END AS operation_status;
+                """
+        row = await _conn.fetchrow(query, user_id, map_name, level)
 
         if row is None:
             return None

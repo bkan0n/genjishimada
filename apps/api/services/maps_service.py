@@ -309,6 +309,8 @@ class MapsService(BaseService):
         """
         # Fetch original map for newsfeed comparison
         original_map_result = await self._maps_repo.fetch_maps(single=True, code=code)
+        if not original_map_result:
+            raise MapNotFoundError(code)
         original_map = msgspec.convert(original_map_result, MapResponse, from_attributes=True)
 
         # Lookup map ID
@@ -688,47 +690,17 @@ class MapsService(BaseService):
         self,
         data: MapMasteryCreateRequest,
     ) -> MapMasteryCreateResponse | None:
-        """Create or update mastery data.
-
-        Args:
-            data: Mastery payload with user_id, map_name, and level.
-
-        Returns:
-            Result of the mastery operation, or None if no change.
-
-        Raises:
-            MapNotFoundError: If map doesn't exist.
-        """
-        # Look up map ID from map_name
-        map_id = await self._maps_repo.lookup_map_id(data.map_name)
-        if map_id is None:
-            raise MapNotFoundError(data.map_name)
-
-        # Convert level to medal enum value (data.level is the actual medal)
-        medal = data.level
-
-        # TODO: Calculate rank and percentile from level in Phase 3
-        # For now, use placeholder values (as noted in v3 comment)
-        rank = 1
-        percentile = 0.0
-
-        # Upsert with actual values
+        """Update mastery for a user on a map."""
         result = await self._maps_repo.upsert_map_mastery(
-            map_id=map_id,
+            map_name=data.map_name,
             user_id=data.user_id,
-            medal=medal,
-            rank=rank,
-            percentile=percentile,
+            level=data.level,
         )
 
         if result is None:
             return None
 
-        return MapMasteryCreateResponse(
-            map_name=data.map_name,
-            medal=result["medal"],
-            operation_status=result["operation_status"],
-        )
+        return msgspec.convert(result, MapMasteryCreateResponse, from_attributes=True)
 
     async def set_archive_status(
         self,
@@ -1238,7 +1210,7 @@ class MapsService(BaseService):
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT id, status, error_code, error_msg, created_at, updated_at
+                SELECT id, status, error_code, error_msg, created_at
                 FROM public.jobs
                 WHERE id = $1
                 """,
