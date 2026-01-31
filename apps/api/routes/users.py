@@ -20,6 +20,7 @@ from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from msgspec import UNSET
 
 from di import UserService, provide_user_service
+from services.exceptions.users import InvalidUserIdError, UserAlreadyExistsError
 
 log = logging.getLogger(__name__)
 
@@ -134,14 +135,21 @@ class UsersController(litestar.Controller):
         """Create new user.
 
         Args:
-            svc (UserService): UserService DI.
-            data (UserCreateRequest): The user payload.
+            svc: UserService DI.
+            data: The user payload.
 
         Returns:
-            UserResponse: The created (or existing) user with default fields.
+            The created (or existing) user with default fields.
 
+        Raises:
+            HTTPException: 400 if user_id < 100000000 or user_id already exists.
         """
-        return await svc.create_user(data)
+        try:
+            return await svc.create_user(data)
+        except InvalidUserIdError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except UserAlreadyExistsError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     @litestar.put(
         path="/{user_id:int}/overwatch",

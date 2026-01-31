@@ -14,6 +14,17 @@ from .auth import (  # noqa: I001
     UserNotFoundError,
     UsernameValidationError,
 )
+from .completions import (
+    CompletionNotFoundError,
+    CompletionsError,
+    DuplicateCompletionError,
+    DuplicateFlagError,
+    DuplicateQualityVoteError,
+    DuplicateUpvoteError,
+    DuplicateVerificationError,
+    MapNotFoundError as CompletionsMapNotFoundError,
+    SlowerThanPendingError,
+)
 from .lootbox import (
     InsufficientKeysError,
     LootboxError,
@@ -44,15 +55,29 @@ from .playtest import (
     VoteConstraintError,
     VoteNotFoundError,
 )
+from .users import (
+    InvalidUserIdError,
+    UserAlreadyExistsError,
+    UserNotFoundError as UsersUserNotFoundError,
+    UsersError,
+)
 
 __all__ = [
     "AlreadyInPlaytestError",
     "AuthError",
+    "CompletionNotFoundError",
+    "CompletionsError",
+    "CompletionsMapNotFoundError",
     "CreatorNotFoundError",
+    "DuplicateCompletionError",
     "DuplicateCreatorError",
+    "DuplicateFlagError",
     "DuplicateGuideError",
     "DuplicateMechanicError",
+    "DuplicateQualityVoteError",
     "DuplicateRestrictionError",
+    "DuplicateUpvoteError",
+    "DuplicateVerificationError",
     "EditRequestNotFoundError",
     "EmailAlreadyExistsError",
     "EmailAlreadyVerifiedError",
@@ -62,6 +87,7 @@ __all__ = [
     "InvalidCredentialsError",
     "InvalidEditResolutionError",
     "InvalidPatchError",
+    "InvalidUserIdError",
     "LinkedMapError",
     "LootboxError",
     "MapCodeExistsError",
@@ -75,11 +101,15 @@ __all__ = [
     "PlaytestNotFoundError",
     "PlaytestStateError",
     "RateLimitExceededError",
+    "SlowerThanPendingError",
     "TokenAlreadyUsedError",
     "TokenExpiredError",
     "TokenInvalidError",
+    "UserAlreadyExistsError",
     "UserNotFoundError",
     "UsernameValidationError",
+    "UsersError",
+    "UsersUserNotFoundError",
     "VoteConstraintError",
     "VoteNotFoundError",
 ]

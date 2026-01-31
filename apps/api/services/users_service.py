@@ -17,12 +17,11 @@ from genjishimada_sdk.users import (
     UserResponse,
     UserUpdateRequest,
 )
-from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from repository.exceptions import UniqueConstraintViolationError
 from repository.users_repository import UsersRepository
 from services.base import BaseService
-from utilities.errors import CustomHTTPException
+from services.exceptions.users import InvalidUserIdError, UserAlreadyExistsError
 from utilities.shared_queries import get_user_rank_data
 
 log = logging.getLogger(__name__)
@@ -129,15 +128,12 @@ class UsersService(BaseService):
             The created user record.
 
         Raises:
-            CustomHTTPException: If user_id < 100000000 (use fake member endpoint).
-            CustomHTTPException: If user_id already exists (users_pkey).
+            InvalidUserIdError: If user_id < 100000000 (use fake member endpoint).
+            UserAlreadyExistsError: If user_id already exists (users_pkey).
         """
         fake_user_id_limit = 100_000_000
         if data.id < fake_user_id_limit:
-            raise CustomHTTPException(
-                detail="Please use create fake member endpoint for user ids less than 100000000.",
-                status_code=HTTP_400_BAD_REQUEST,
-            )
+            raise InvalidUserIdError(data.id)
 
         try:
             await self._users_repo.create_user(
@@ -147,11 +143,7 @@ class UsersService(BaseService):
             )
         except UniqueConstraintViolationError as e:
             if e.constraint_name == "users_pkey":
-                raise CustomHTTPException(
-                    detail="Provided user_id already exists.",
-                    status_code=HTTP_400_BAD_REQUEST,
-                    extra={"detail": e.detail},
-                ) from e
+                raise UserAlreadyExistsError(data.id) from e
             raise
 
         return UserResponse(

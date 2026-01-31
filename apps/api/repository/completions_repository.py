@@ -7,7 +7,6 @@ from typing import Any
 from asyncpg import Connection, Pool
 from asyncpg.exceptions import CheckViolationError, ForeignKeyViolationError, UniqueViolationError
 from litestar.datastructures import State
-from litestar.status_codes import HTTP_400_BAD_REQUEST
 
 from repository.base import BaseRepository
 from repository.exceptions import (
@@ -18,7 +17,6 @@ from repository.exceptions import (
 from repository.exceptions import (
     ForeignKeyViolationError as RepoFKError,
 )
-from utilities.errors import CustomHTTPException
 
 
 class CompletionsRepository(BaseRepository):
@@ -1287,38 +1285,25 @@ class CompletionsRepository(BaseRepository):
 
         return [dict(row) for row in rows]
 
-    async def submit_completion(  # noqa: PLR0913
+    async def get_pending_verification(
         self,
         user_id: int,
         code: str,
-        time: float,
-        screenshot: str,
-        video: str | None,
         *,
         conn: Connection | None = None,
-    ) -> tuple[int, int | None]:
-        """Submit a new completion record.
-
-        This includes logic to check for pending verifications and reject/supersede them.
+    ) -> dict | None:
+        """Get pending verification for user and map.
 
         Args:
-            user_id: User ID submitting the completion.
-            code: Map code.
-            time: Completion time in seconds.
-            screenshot: Screenshot URL.
-            video: Optional video URL.
+            user_id: User ID to check.
+            code: Map code to check.
             conn: Optional connection for transaction support.
 
         Returns:
-            Tuple of new completion ID and verification ID to delete (if any).
-
-        Raises:
-            CustomHTTPException: If submission is slower than pending verification.
+            Dict with 'id', 'time', 'verification_id' or None if no pending verification.
         """
         _conn = self._get_connection(conn)
-
-        # Check for existing pending verification
-        pending_query = """
+        query = """
             SELECT c.id, c.time, c.verification_id
             FROM core.completions c
             JOIN core.maps m ON m.id = c.map_id
@@ -1327,38 +1312,63 @@ class CompletionsRepository(BaseRepository):
               AND c.verified IS FALSE
               AND c.verified_by IS NULL
               AND c.legacy = FALSE
-            ORDER BY c.time ASC
+            ORDER BY c.time
             LIMIT 1;
         """
-        pending = await _conn.fetchrow(pending_query, user_id, code)
+        row = await _conn.fetchrow(query, user_id, code)
+        return dict(row) if row else None
 
-        verification_id_to_delete = None
-        if pending:
-            pending_time = pending["time"]
-            pending_verification_id = pending["verification_id"]
+    async def reject_completion(
+        self,
+        completion_id: int,
+        rejected_by: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Mark completion as rejected by a moderator/bot.
 
-            if time >= pending_time:
-                # Reject: new time is same or slower
-                raise CustomHTTPException(
-                    status_code=HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"You already have a pending verification for this map with time {pending_time}s. "
-                        f"Your new submission ({time}s) must be faster. "
-                        f"Please wait for verification or submit a faster time."
-                    ),
-                )
-            # Accept: new time is faster - mark old submission as rejected by bot
-            bot_id = 969632729643753482
-            reject_query = """
-                UPDATE core.completions
-                SET verified_by = $1
-                WHERE id = $2
-            """
-            await _conn.execute(reject_query, bot_id, pending["id"])
-            verification_id_to_delete = pending_verification_id
+        Args:
+            completion_id: The completion ID to reject.
+            rejected_by: User ID of moderator/bot rejecting.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            UPDATE core.completions
+            SET verified_by = $1
+            WHERE id = $2
+        """
+        await _conn.execute(query, rejected_by, completion_id)
 
-        # Insert new completion
-        insert_query = """
+    async def insert_completion(  # noqa: PLR0913
+        self,
+        code: str,
+        user_id: int,
+        time: float,
+        screenshot: str,
+        video: str | None,
+        *,
+        conn: Connection | None = None,
+    ) -> int:
+        """Insert a new completion record.
+
+        Args:
+            code: Map code.
+            user_id: User ID submitting.
+            time: Completion time in seconds.
+            screenshot: Screenshot URL.
+            video: Optional video URL.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The new completion ID.
+
+        Raises:
+            UniqueConstraintViolationError: If user already has completion for this map.
+            ForeignKeyViolationError: If user_id or map code invalid.
+        """
+        _conn = self._get_connection(conn)
+        query = """
         WITH target_map AS (
             SELECT
                 id AS map_id,
@@ -1376,31 +1386,22 @@ class CompletionsRepository(BaseRepository):
             FROM target_map
         )
         INSERT INTO core.completions (
-            map_id,
-            user_id,
-            time,
-            screenshot,
-            video,
-            completion
+            map_id, user_id, time, screenshot, video, completion
         )
-        SELECT
-            c.map_id, $2, $3, $4, $5, c.completion_flag
+        SELECT c.map_id, $2, $3, $4, $5, c.completion_flag
         FROM computed c
         RETURNING id;
         """
 
         try:
-            completion_id = await _conn.fetchval(insert_query, code, user_id, time, screenshot, video)
-            return completion_id, verification_id_to_delete
+            completion_id = await _conn.fetchval(query, code, user_id, time, screenshot, video)
+            return completion_id
         except UniqueViolationError as e:
             constraint_name = extract_constraint_name(e) or "unknown"
             raise UniqueConstraintViolationError(constraint_name, "core.completions", str(e)) from e
         except ForeignKeyViolationError as e:
             constraint_name = extract_constraint_name(e) or "unknown"
             raise RepoFKError(constraint_name, "core.completions", str(e)) from e
-        except CheckViolationError as e:
-            constraint_name = extract_constraint_name(e) or "unknown"
-            raise CheckConstraintViolationError(constraint_name, "core.completions", str(e)) from e
 
     async def check_map_exists(
         self,

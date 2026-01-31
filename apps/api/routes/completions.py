@@ -34,6 +34,7 @@ from genjishimada_sdk.maps import OverwatchCode
 from litestar import Controller, Request, get, patch, post, put
 from litestar.datastructures import State
 from litestar.di import Provide
+from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from di import (
@@ -47,7 +48,18 @@ from di import (
     provide_notification_service,
     provide_user_service,
 )
-from utilities.errors import CustomHTTPException
+from repository.autocomplete_repository import AutocompleteRepository
+from services.exceptions.completions import (
+    CompletionNotFoundError,
+    DuplicateCompletionError,
+    DuplicateFlagError,
+    DuplicateQualityVoteError,
+    DuplicateUpvoteError,
+    DuplicateVerificationError,
+    MapNotFoundError,
+    SlowerThanPendingError,
+)
+from services.users_service import UsersService
 
 log = getLogger(__name__)
 
@@ -166,68 +178,39 @@ class CompletionsController(Controller):
         return CompletionSubmissionJobResponse(job_status, completion_id)
 
     @post(path="/", summary="Submit Completion", description="Submit a new completion record and publish an event.")
-    async def submit_completion(  # noqa: PLR0913
+    async def submit_completion(
         self,
         svc: CompletionsService,
         request: Request,
         data: CompletionCreateRequest,
-        autocomplete: AutocompleteService,
-        users: UserService,
-        conn: Connection,
+        autocomplete: AutocompleteRepository,
+        users: UsersService,
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion.
 
         Args:
-            svc (CompletionsService): Service layer for completions.
-            request (Request): Request.
-            data (CompletionCreateDTO): DTO with completion details.
-            autocomplete (AutocompleteService): Service for autocomplete.
-            users (UserService): Service for users.
-            conn (Connection): Database connection.
+            svc: Service layer for completions.
+            request: HTTP request.
+            data: Completion submission data.
+            autocomplete: Autocomplete repository for OCR.
+            users: Users service for name fetching.
 
         Returns:
-            int: ID of the newly inserted completion.
+            Job response with completion ID.
 
+        Raises:
+            HTTPException: 404 if map not found, 400 for validation errors.
         """
-        query = """
-            SELECT EXISTS(SELECT 1 FROM core.maps WHERE code=$1 and archived=FALSE);
-        """
-        if not await conn.fetchval(query, data.code):
-            raise CustomHTTPException(
-                status_code=HTTP_404_NOT_FOUND, detail="This map code does not exist or has been archived."
-            )
-
-        completion_id = await svc.submit_completion(data, request)
-        if not completion_id:
-            raise ValueError("Some how completion ID is null?")
-
-        suspicious_flags = await svc.get_suspicious_flags(data.user_id)
-
-        if not (data.video or suspicious_flags):
-            task = asyncio.create_task(
-                _attempt_auto_verify(
-                    request=request,
-                    svc=svc,
-                    autocomplete=autocomplete,
-                    users=users,
-                    completion_id=completion_id,
-                    data=data,
-                )
-            )
-            self._tasks.add(task)
-            task.add_done_callback(lambda t: self._tasks.remove(t))
-
-            return CompletionSubmissionJobResponse(None, completion_id)
-
-        idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
-        job_status = await svc.publish_message(
-            routing_key="api.completion.submission",
-            data=CompletionCreatedEvent(completion_id),
-            headers=request.headers,
-            idempotency_key=idempotency_key,
-            use_pool=True,
-        )
-        return CompletionSubmissionJobResponse(job_status, completion_id)
+        try:
+            return await svc.submit_completion(data, request, autocomplete, users)
+        except MapNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except DuplicateCompletionError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except SlowerThanPendingError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @patch(
         path="/{record_id:int}",
@@ -313,13 +296,20 @@ class CompletionsController(Controller):
         """Verify or reject a completion.
 
         Args:
-            svc (CompletionsService): Service layer for completions.
-            request (Request): Request.
-            record_id (int): Completion record ID.
-            data (CompletionVerificationUpdateRequest): Verification details.
+            svc: Service layer for completions.
+            request: HTTP request.
+            record_id: Completion record ID.
+            data: Verification details.
 
+        Raises:
+            HTTPException: 400 if duplicate verification, 404 if completion not found.
         """
-        return await svc.verify_completion(request, record_id, data)
+        try:
+            return await svc.verify_completion(request, record_id, data)
+        except DuplicateVerificationError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @get(
         path="/{code:str}",
@@ -381,15 +371,22 @@ class CompletionsController(Controller):
         """Add a suspicious flag to a completion.
 
         Args:
-            svc (CompletionsService): Service layer for completions.
-            data (SuspiciousCompletionCreateRequest): Flag details.
+            svc: Service layer for completions.
+            data: Flag details.
 
+        Raises:
+            HTTPException: 400 if validation fails or duplicate flag, 404 if completion not found.
         """
         if not data.message_id and not data.verification_id:
-            raise CustomHTTPException(
+            raise HTTPException(
                 detail="One of message_id or verification_id must be used.", status_code=HTTP_400_BAD_REQUEST
             )
-        return await svc.set_suspicious_flags(data)
+        try:
+            return await svc.set_suspicious_flags(data)
+        except DuplicateFlagError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @post(
         path="/upvoting",
@@ -405,15 +402,22 @@ class CompletionsController(Controller):
         """Upvote a completion submission.
 
         Args:
-            svc (CompletionsService): Service layer for completions.
-            request (Request): Request.
-            data (UpvoteCreateRequest): Upvote details.
+            svc: Service layer for completions.
+            request: HTTP request.
+            data: Upvote details.
 
         Returns:
-            int: Updated upvote count.
+            Updated upvote count and job status.
 
+        Raises:
+            HTTPException: 400 if duplicate upvote, 404 if completion not found.
         """
-        return await svc.upvote_submission(request, data)
+        try:
+            return await svc.upvote_submission(request, data)
+        except DuplicateUpvoteError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @get(
         path="/all",
@@ -516,8 +520,18 @@ class CompletionsController(Controller):
             request: Request object.
             record_id: ID of the completion to moderate.
             data: Moderation request data.
+
+        Raises:
+            HTTPException: 404 if completion not found, 400 for other errors.
         """
-        return await svc.moderate_completion(record_id, data, notifications, request.headers)
+        try:
+            return await svc.moderate_completion(record_id, data, notifications, request.headers)
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except DuplicateCompletionError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except DuplicateFlagError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     @get(
         path="/{code:str}/legacy",
@@ -545,8 +559,19 @@ class CompletionsController(Controller):
         code: OverwatchCode,
         data: QualityUpdateRequest,
     ) -> None:
-        """Set the quality vote for a map code for a user."""
-        return await svc.set_quality_vote_for_map_code(code, data.user_id, data.quality)
+        """Set the quality vote for a map code for a user.
+
+        Raises:
+            HTTPException: 400 if duplicate vote, 404 if map/user not found.
+        """
+        try:
+            return await svc.set_quality_vote_for_map_code(code, data.user_id, data.quality)
+        except DuplicateQualityVoteError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except MapNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @get(path="/upvoting/{message_id:int}")
     async def get_upvotes_from_message_id(self, svc: CompletionsService, message_id: int) -> int:
