@@ -61,7 +61,7 @@ from .base import BaseService
 from .users_service import UsersService
 
 if TYPE_CHECKING:
-    from di.notifications import NotificationService
+    from .notifications_service import NotificationsService
 
 log = getLogger(__name__)
 
@@ -570,7 +570,7 @@ class CompletionsService(BaseService):
         self,
         completion_id: int,
         data: CompletionModerateRequest,
-        notification_service: NotificationService | None = None,
+        notification_service: NotificationsService | None = None,
         headers: Headers | None = None,
     ) -> None:
         """Moderate a completion record.

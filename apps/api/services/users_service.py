@@ -253,3 +253,15 @@ class UsersService(BaseService):
                 conn=conn,
             )
             await self._users_repo.delete_user(user_id=fake_user_id, conn=conn)
+
+
+async def provide_users_service(users_repo: UsersRepository) -> UsersService:
+    """Provide users service.
+
+    Args:
+        users_repo: Users repository instance.
+
+    Returns:
+        UsersService instance.
+    """
+    return UsersService(users_repo=users_repo)

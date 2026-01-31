@@ -15,7 +15,6 @@ from genjishimada_sdk.users import (
     UserResponse,
     UserUpdateRequest,
 )
-from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.exceptions import HTTPException
 from litestar.params import Body
@@ -23,34 +22,10 @@ from litestar.response import Response
 from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from msgspec import UNSET
 
-from repository.users_repository import UsersRepository
-from services.users_service import UsersService
+from repository.users_repository import provide_users_repository
+from services.users_service import UsersService, provide_users_service
 
 log = logging.getLogger(__name__)
-
-
-def provide_users_repository(state: State) -> UsersRepository:
-    """Provide users repository.
-
-    Args:
-        state: Application state.
-
-    Returns:
-        UsersRepository instance.
-    """
-    return UsersRepository(pool=state.db_pool)
-
-
-def provide_users_service(users_repo: UsersRepository) -> UsersService:
-    """Provide users service.
-
-    Args:
-        users_repo: Users repository instance.
-
-    Returns:
-        UsersService instance.
-    """
-    return UsersService(users_repo=users_repo)
 
 
 class UsersController(litestar.Controller):
@@ -59,8 +34,8 @@ class UsersController(litestar.Controller):
     tags = ["Users"]
     path = "/users"
     dependencies = {
-        "users_repo": Provide(provide_users_repository, sync_to_thread=False),
-        "svc": Provide(provide_users_service, sync_to_thread=False),
+        "users_repo": Provide(provide_users_repository),
+        "svc": Provide(provide_users_service),
     }
 
     @litestar.get(

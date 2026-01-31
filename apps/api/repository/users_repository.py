@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from asyncpg import Connection, Pool
 from asyncpg.exceptions import UniqueViolationError
+from litestar.datastructures import State
 
 from repository.base import BaseRepository
 from repository.exceptions import UniqueConstraintViolationError, extract_constraint_name
@@ -399,3 +400,15 @@ class UsersRepository(BaseRepository):
         _conn = self._get_connection(conn)
         query = "DELETE FROM core.users WHERE id=$1"
         await _conn.execute(query, user_id)
+
+
+async def provide_users_repository(state: State) -> UsersRepository:
+    """Provide users repository.
+
+    Args:
+        state: Application state.
+
+    Returns:
+        UsersRepository instance.
+    """
+    return UsersRepository(pool=state.db_pool)

@@ -13,29 +13,85 @@ pytestmark = [
 
 
 class TestGetCompletionsForUser:
-    """GET /api/v4/completions/users/{user_id}"""
+    """GET /api/v4/completions/ with user_id query param"""
 
-    async def test_happy_path(self, test_client, create_test_user):
-        """Get completions for user returns list."""
+    async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
+        """Get completions for user returns list with valid structure."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit a completion first
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+        await test_client.post("/api/v4/completions/", json=completion_payload)
+
+        response = await test_client.get("/api/v4/completions/", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate response structure if completions exist
+        if data:
+            completion = data[0]
+            assert "id" in completion
+            assert "user_id" in completion
+            assert completion["user_id"] == user_id
+            assert "code" in completion
+            assert "time" in completion
+            assert isinstance(completion["time"], (int, float))
+            assert "created_at" in completion
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Get completions without auth returns 401."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/completions/users/{user_id}")
+        response = await unauthenticated_client.get(
+            "/api/v4/completions/",
+            params={"user_id": user_id},
+        )
 
-        assert response.status_code in (200, 404, 500)
-        if response.status_code == 200:
-            assert isinstance(response.json(), list)
+        assert response.status_code == 401
 
 
 class TestGetWorldRecordsPerUser:
-    """GET /api/v4/completions/world-records/{user_id}"""
+    """GET /api/v4/completions/world-records with user_id query param"""
 
     async def test_happy_path(self, test_client, create_test_user):
-        """Get world records for user returns count."""
+        """Get world records for user returns list with valid structure."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/completions/world-records/{user_id}")
+        response = await test_client.get("/api/v4/completions/world-records", params={"user_id": user_id})
 
-        assert response.status_code in (200, 404, 500)
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate response structure (list of CompletionResponse)
+        for record in data:
+            assert "id" in record
+            assert "user_id" in record
+            assert "code" in record
+            assert "time" in record
+            assert isinstance(record["time"], (int, float))
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Get world records without auth returns 401."""
+        user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            "/api/v4/completions/world-records",
+            params={"user_id": user_id},
+        )
+
+        assert response.status_code == 401
 
 
 class TestSubmitCompletion:
@@ -49,77 +105,167 @@ class TestSubmitCompletion:
 
         payload = {
             "user_id": user_id,
-            "map_code": code,
-            "record": 45.5,
-            "video_proof": "https://youtube.com/watch?v=test",
-            "screenshot_proof": "https://example.com/screenshot.png",
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
             "message_id": 123456789,
         }
 
         response = await test_client.post("/api/v4/completions/", json=payload)
 
-        # May fail validation or succeed
-        assert response.status_code in (200, 201, 400, 404, 500)
+        assert response.status_code == 201
+        data = response.json()
+        assert "completion_id" in data
+        assert "job_status" in data
+
+    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need MapNotFoundError translation in controller")
+    async def test_map_not_found_returns_404(self, test_client, create_test_user):
+        """Submit completion for non-existent map should return 404."""
+        user_id = await create_test_user()
+
+        payload = {
+            "user_id": user_id,
+            "code": "ZZZZZZ",  # Valid length, but non-existent map
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+
+        response = await test_client.post("/api/v4/completions/", json=payload)
+
+        assert response.status_code == 404
+
+    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 409 - need DuplicateCompletionError translation in controller")
+    async def test_duplicate_completion_returns_409(
+        self, test_client, create_test_user, create_test_map, unique_map_code
+    ):
+        """Submit duplicate completion should return 409."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+
+        # First submission
+        response1 = await test_client.post("/api/v4/completions/", json=payload)
+        assert response1.status_code == 201
+
+        # Duplicate submission (same user + map, different message)
+        payload["message_id"] = 987654321
+        response2 = await test_client.post("/api/v4/completions/", json=payload)
+
+        assert response2.status_code == 409
 
 
 class TestGetPendingVerifications:
     """GET /api/v4/completions/pending"""
 
     async def test_happy_path(self, test_client):
-        """Get pending verifications returns list."""
+        """Get pending verifications returns list with valid structure."""
         response = await test_client.get("/api/v4/completions/pending")
 
-        assert response.status_code in (200, 404, 500)
-        if response.status_code == 200:
-            assert isinstance(response.json(), list)
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate pending verification entries if any exist
+        for verification in data:
+            assert "id" in verification
+            assert "user_id" in verification
+            assert "code" in verification
+            assert "time" in verification
+            assert isinstance(verification["time"], (int, float))
+            assert "message_id" in verification
+            assert "created_at" in verification
 
 
 class TestGetCompletionsLeaderboard:
-    """GET /api/v4/completions/leaderboard"""
+    """GET /api/v4/completions/{code}"""
 
-    async def test_happy_path(self, test_client):
-        """Get leaderboard returns list."""
-        response = await test_client.get("/api/v4/completions/leaderboard")
+    async def test_happy_path(self, test_client, create_test_map, unique_map_code):
+        """Get leaderboard returns list with valid structure."""
+        code = unique_map_code
+        await create_test_map(code=code)
 
-        assert response.status_code in (200, 404, 500)
-        if response.status_code == 200:
-            data = response.json()
-            assert isinstance(data, list)
+        response = await test_client.get(f"/api/v4/completions/{code}")
 
-    @pytest.mark.parametrize("limit", [10, 25, 50, 100])
-    @pytest.mark.parametrize("offset", [0, 10, 50])
-    async def test_pagination(self, test_client, limit, offset):
-        """Leaderboard pagination works."""
-        response = await test_client.get(
-            "/api/v4/completions/leaderboard",
-            params={"limit": limit, "offset": offset},
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate leaderboard entries if any exist
+        for entry in data:
+            assert "id" in entry
+            assert "user_id" in entry
+            assert "code" in entry
+            assert entry["code"] == code
+            assert "time" in entry
+            assert isinstance(entry["time"], (int, float))
+            assert "created_at" in entry
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_map, unique_map_code):
+        """Get leaderboard without auth returns 401."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await unauthenticated_client.get(
+            f"/api/v4/completions/{code}",
         )
 
-        assert response.status_code in (200, 404, 500)
+        assert response.status_code == 401
+
+    @pytest.mark.parametrize("page_size", [10, 20, 25, 50])
+    @pytest.mark.parametrize("page_number", [1, 2])
+    async def test_pagination(self, test_client, create_test_map, unique_map_code, page_size, page_number):
+        """Leaderboard pagination works."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await test_client.get(
+            f"/api/v4/completions/{code}",
+            params={"page_size": page_size, "page_number": page_number},
+        )
+
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
 
 
 class TestGetAllCompletions:
-    """GET /api/v4/completions/"""
+    """GET /api/v4/completions/all"""
 
-    async def test_happy_path(self, test_client, create_test_user):
-        """Get all completions returns list."""
-        user_id = await create_test_user()
+    async def test_happy_path(self, test_client):
+        """Get all completions returns list with valid structure."""
+        response = await test_client.get("/api/v4/completions/all")
 
-        response = await test_client.get(
-            "/api/v4/completions/",
-            params={"user_id": user_id},
-        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
 
-        assert response.status_code in (200, 400, 404, 500)
-        if response.status_code == 200:
-            assert isinstance(response.json(), list)
+        # Validate completion entries if any exist
+        for completion in data:
+            assert "id" in completion
+            assert "user_id" in completion
+            assert "code" in completion
+            assert "time" in completion
+            assert isinstance(completion["time"], (int, float))
+            assert "verified" in completion
+            assert "created_at" in completion
 
 
 class TestGetSuspiciousFlags:
     """GET /api/v4/completions/suspicious"""
 
     async def test_happy_path(self, test_client, create_test_user):
-        """Get suspicious flags returns list."""
+        """Get suspicious flags returns list with valid structure."""
         user_id = await create_test_user()
 
         response = await test_client.get(
@@ -127,6 +273,287 @@ class TestGetSuspiciousFlags:
             params={"user_id": user_id},
         )
 
-        assert response.status_code in (200, 400, 404, 500)
-        if response.status_code == 200:
-            assert isinstance(response.json(), list)
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate suspicious flag entries if any exist
+        for flag in data:
+            assert "verification_id" in flag
+            assert "message_id" in flag
+            assert "reason" in flag
+            assert "created_at" in flag
+
+
+class TestEditCompletion:
+    """PATCH /api/v4/completions/{record_id}"""
+
+    @pytest.mark.xfail(reason="BUG: Returns 500 (ValueError) instead of 404 - need CompletionNotFoundError handling")
+    async def test_not_found_returns_404(self, test_client):
+        """Edit non-existent completion should return 404."""
+        record_id = 999999999
+
+        response = await test_client.patch(
+            f"/api/v4/completions/{record_id}",
+            json={"time": 30.5},
+        )
+
+        assert response.status_code == 404
+
+
+class TestGetCompletionSubmission:
+    """GET /api/v4/completions/{record_id}/submission"""
+
+    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need CompletionNotFoundError handling")
+    async def test_not_found_returns_404(self, test_client):
+        """Get non-existent completion submission should return 404."""
+        record_id = 999999999
+
+        response = await test_client.get(f"/api/v4/completions/{record_id}/submission")
+
+        assert response.status_code == 404
+
+
+class TestVerifyCompletion:
+    """PUT /api/v4/completions/{record_id}/verification"""
+
+    @pytest.mark.xfail(reason="BUG: Returns 200 (silent success) instead of 404 for non-existent records")
+    async def test_not_found_returns_404(self, test_client):
+        """Verify non-existent completion should return 404."""
+        record_id = 999999999
+        payload = {
+            "verified": True,
+            "verified_by": 123,
+            "reason": None,
+        }
+
+        response = await test_client.put(f"/api/v4/completions/{record_id}/verification", json=payload)
+
+        assert response.status_code == 404
+
+
+class TestSetSuspiciousFlag:
+    """POST /api/v4/completions/suspicious"""
+
+    async def test_requires_message_id_or_verification_id(self, test_client):
+        """Setting suspicious flag without required fields returns 400."""
+        payload = {"reason": "Suspicious activity"}
+
+        response = await test_client.post("/api/v4/completions/suspicious", json=payload)
+
+        assert response.status_code == 400
+
+
+class TestUpvoteSubmission:
+    """POST /api/v4/completions/upvoting"""
+
+    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need CompletionNotFoundError handling")
+    async def test_non_existent_message_returns_404(self, test_client):
+        """Upvoting non-existent message should return 404."""
+        payload = {"message_id": 999999999, "user_id": 999}
+
+        response = await test_client.post("/api/v4/completions/upvoting", json=payload)
+
+        assert response.status_code == 404
+
+    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 409 - need DuplicateUpvoteError translation in controller")
+    async def test_duplicate_upvote_returns_409(
+        self, test_client, create_test_user, create_test_map, unique_map_code
+    ):
+        """Duplicate upvote should return 409."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit a completion to get a message_id
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+        await test_client.post("/api/v4/completions/", json=completion_payload)
+
+        upvote_payload = {"message_id": 123456789, "user_id": user_id}
+
+        # First upvote
+        response1 = await test_client.post("/api/v4/completions/upvoting", json=upvote_payload)
+        assert response1.status_code == 200
+
+        # Duplicate upvote
+        response2 = await test_client.post("/api/v4/completions/upvoting", json=upvote_payload)
+
+        assert response2.status_code == 409
+
+
+class TestCheckWorldRecordXp:
+    """GET /api/v4/completions/{code}/wr-xp-check"""
+
+    async def test_returns_boolean(self, test_client, create_test_map, create_test_user, unique_map_code):
+        """Check WR XP returns boolean with correct type."""
+        code = unique_map_code
+        user_id = await create_test_user()
+        await create_test_map(code=code)
+
+        response = await test_client.get(
+            f"/api/v4/completions/{code}/wr-xp-check",
+            params={"user_id": user_id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert isinstance(result, bool)
+        # Should be False for new user with no WR XP history
+        assert result is False
+
+
+class TestGetRecordsFiltered:
+    """GET /api/v4/completions/moderation/records"""
+
+    async def test_happy_path(self, test_client):
+        """Get filtered records for moderation with valid structure."""
+        response = await test_client.get("/api/v4/completions/moderation/records")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate moderation record entries if any exist
+        for record in data:
+            assert "id" in record
+            assert "user_id" in record
+            assert "code" in record
+            assert "time" in record
+            assert isinstance(record["time"], (int, float))
+            assert "verified" in record
+            assert isinstance(record["verified"], bool)
+
+    @pytest.mark.parametrize("verification_status", ["Verified", "Unverified", "All"])
+    @pytest.mark.parametrize("latest_only", [True, False])
+    async def test_filter_combinations(self, test_client, verification_status, latest_only):
+        """Test various filter combinations."""
+        response = await test_client.get(
+            "/api/v4/completions/moderation/records",
+            params={"verification_status": verification_status, "latest_only": latest_only},
+        )
+
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+
+class TestModerateCompletion:
+    """PUT /api/v4/completions/{record_id}/moderate"""
+
+    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need CompletionNotFoundError handling")
+    async def test_not_found_returns_404(self, test_client):
+        """Moderate non-existent completion should return 404."""
+        record_id = 999999999
+        payload = {
+            "moderated_by": 123,
+            "time": 45.0,
+        }
+
+        response = await test_client.put(f"/api/v4/completions/{record_id}/moderate", json=payload)
+
+        assert response.status_code == 404
+
+
+class TestGetLegacyCompletions:
+    """GET /api/v4/completions/{code}/legacy"""
+
+    async def test_happy_path(self, test_client, create_test_map, unique_map_code):
+        """Get legacy completions for a map with valid structure."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await test_client.get(f"/api/v4/completions/{code}/legacy")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate legacy completion entries if any exist
+        for completion in data:
+            assert "id" in completion
+            assert "user_id" in completion
+            assert "code" in completion
+            assert completion["code"] == code
+            assert "time" in completion
+            assert isinstance(completion["time"], (int, float))
+
+    @pytest.mark.parametrize("page_size", [10, 20, 25, 50])
+    @pytest.mark.parametrize("page_number", [1, 2])
+    async def test_pagination(self, test_client, create_test_map, unique_map_code, page_size, page_number):
+        """Test pagination parameters."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await test_client.get(
+            f"/api/v4/completions/{code}/legacy",
+            params={"page_size": page_size, "page_number": page_number},
+        )
+
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+
+class TestSetQualityVote:
+    """POST /api/v4/completions/{code}/quality"""
+
+    async def test_set_quality_vote(self, test_client, create_test_map, create_test_user, unique_map_code):
+        """Set quality vote for a map."""
+        code = unique_map_code
+        user_id = await create_test_user()
+        await create_test_map(code=code)
+
+        payload = {"user_id": user_id, "quality": 5}
+
+        response = await test_client.post(f"/api/v4/completions/{code}/quality", json=payload)
+
+        assert response.status_code == 201
+
+    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need MapNotFoundError translation in controller")
+    async def test_map_not_found_returns_404(self, test_client, create_test_user):
+        """Quality vote for non-existent map should return 404."""
+        user_id = await create_test_user()
+
+        payload = {"user_id": user_id, "quality": 5}
+
+        response = await test_client.post("/api/v4/completions/ZZZZZZ/quality", json=payload)
+
+        assert response.status_code == 404
+
+    @pytest.mark.xfail(reason="BUG: Returns 201 (allows duplicate) instead of 409 - need DuplicateQualityVoteError translation")
+    async def test_duplicate_vote_returns_409(self, test_client, create_test_user, create_test_map, unique_map_code):
+        """Duplicate quality vote should return 409."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        payload = {"user_id": user_id, "quality": 5}
+
+        # First vote
+        response1 = await test_client.post(f"/api/v4/completions/{code}/quality", json=payload)
+        assert response1.status_code == 201
+
+        # Duplicate vote
+        response2 = await test_client.post(f"/api/v4/completions/{code}/quality", json=payload)
+
+        assert response2.status_code == 409
+
+
+class TestGetUpvotesFromMessageId:
+    """GET /api/v4/completions/upvoting/{message_id}"""
+
+    async def test_returns_integer_count(self, test_client):
+        """Get upvote count returns integer with correct type and value."""
+        message_id = 123456789
+
+        response = await test_client.get(f"/api/v4/completions/upvoting/{message_id}")
+
+        assert response.status_code == 200
+        count = response.json()
+        assert isinstance(count, int)
+        assert count >= 0  # Count should never be negative

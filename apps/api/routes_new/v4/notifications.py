@@ -27,7 +27,7 @@ from services.notifications_service import NotificationsService
 from utilities.errors import CustomHTTPException
 
 
-def provide_notifications_repository(state: State) -> NotificationsRepository:
+async def provide_notifications_repository(state: State) -> NotificationsRepository:
     """Litestar DI provider for notifications repository.
 
     Args:
@@ -39,7 +39,7 @@ def provide_notifications_repository(state: State) -> NotificationsRepository:
     return NotificationsRepository(pool=state.db_pool)
 
 
-def provide_notifications_service(
+async def provide_notifications_service(
     state: State,
     notifications_repo: NotificationsRepository,
 ) -> NotificationsService:
@@ -61,8 +61,8 @@ class NotificationsController(Controller):
     tags = ["Notifications"]
     path = "/notifications"
     dependencies = {
-        "notifications_repo": Provide(provide_notifications_repository, sync_to_thread=False),
-        "notifications_service": Provide(provide_notifications_service, sync_to_thread=False),
+        "notifications_repo": Provide(provide_notifications_repository),
+        "notifications_service": Provide(provide_notifications_service),
     }
 
     @post(

@@ -23,7 +23,6 @@ from litestar.status_codes import (
 )
 
 from repository.maps_repository import provide_maps_repository
-from routes_new.v4.users import provide_users_service
 from services.exceptions.maps import (
     EditRequestNotFoundError,
     MapNotFoundError,
@@ -35,7 +34,7 @@ from services.notifications_service import (
     NotificationsService,
     provide_notifications_service,
 )
-from services.users_service import UsersService
+from services.users_service import UsersService, provide_users_service
 from utilities.errors import CustomHTTPException
 
 if TYPE_CHECKING:
@@ -51,7 +50,7 @@ class MapEditsController(Controller):
         "maps_repo": Provide(provide_maps_repository),
         "maps_service": Provide(provide_maps_service),
         "newsfeed_service": Provide(provide_newsfeed_service),
-        "users_service": Provide(provide_users_service, sync_to_thread=False),
+        "users_service": Provide(provide_users_service),
         "notifications_service": Provide(provide_notifications_service),
     }
 

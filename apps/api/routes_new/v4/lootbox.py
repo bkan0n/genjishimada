@@ -26,7 +26,7 @@ from services.lootbox_service import LootboxService
 from utilities.errors import CustomHTTPException
 
 
-def provide_lootbox_repository(state: State) -> LootboxRepository:
+async def provide_lootbox_repository(state: State) -> LootboxRepository:
     """Provide lootbox repository.
 
     Args:
@@ -38,7 +38,7 @@ def provide_lootbox_repository(state: State) -> LootboxRepository:
     return LootboxRepository(pool=state.db_pool)
 
 
-def provide_lootbox_service(state: State, lootbox_repo: LootboxRepository) -> LootboxService:
+async def provide_lootbox_service(state: State, lootbox_repo: LootboxRepository) -> LootboxService:
     """Provide lootbox service.
 
     Args:
@@ -57,8 +57,8 @@ class LootboxController(litestar.Controller):
     tags = ["Lootbox"]
     path = "/lootbox"
     dependencies = {
-        "lootbox_repo": Provide(provide_lootbox_repository, sync_to_thread=False),
-        "lootbox_service": Provide(provide_lootbox_service, sync_to_thread=False),
+        "lootbox_repo": Provide(provide_lootbox_repository),
+        "lootbox_service": Provide(provide_lootbox_service),
     }
 
     @litestar.get(

@@ -15,7 +15,7 @@ from repository.newsfeed_repository import NewsfeedRepository
 from services.newsfeed_service import NewsfeedService
 
 
-def provide_newsfeed_repository(state: State) -> NewsfeedRepository:
+async def provide_newsfeed_repository(state: State) -> NewsfeedRepository:
     """Provide newsfeed repository.
 
     Args:
@@ -27,7 +27,7 @@ def provide_newsfeed_repository(state: State) -> NewsfeedRepository:
     return NewsfeedRepository(pool=state.db_pool)
 
 
-def provide_newsfeed_service(state: State, newsfeed_repo: NewsfeedRepository) -> NewsfeedService:
+async def provide_newsfeed_service(state: State, newsfeed_repo: NewsfeedRepository) -> NewsfeedService:
     """Provide newsfeed service.
 
     Args:
@@ -46,10 +46,9 @@ class NewsfeedController(litestar.Controller):
     tags = ["Newsfeed"]
     path = "/newsfeed"
     dependencies = {
-        "newsfeed_repo": Provide(provide_newsfeed_repository, sync_to_thread=False),
-        "newsfeed_service": Provide(provide_newsfeed_service, sync_to_thread=False),
+        "newsfeed_repo": Provide(provide_newsfeed_repository),
+        "newsfeed_service": Provide(provide_newsfeed_service),
     }
-
     @litestar.post(
         path="/",
         summary="Create Newsfeed Event",

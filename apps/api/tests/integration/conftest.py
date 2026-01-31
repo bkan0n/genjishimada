@@ -4,7 +4,12 @@ The test_client fixture from root conftest.py is already configured with
 auth headers. This file provides additional fixtures for integration tests.
 """
 
+from collections.abc import AsyncIterator
+
 import pytest
+from litestar import Litestar
+from litestar.testing import AsyncTestClient
+from pytest_databases.docker.postgres import PostgresService
 
 
 @pytest.fixture
@@ -24,3 +29,20 @@ def no_auth_headers() -> dict[str, str]:
     Only includes the pytest header to skip queue publishing.
     """
     return {"x-pytest-enabled": "1"}
+
+
+@pytest.fixture
+async def unauthenticated_client(postgres_service: PostgresService) -> AsyncIterator[AsyncTestClient[Litestar]]:
+    """Create async test client WITHOUT authentication headers.
+
+    Use this to test endpoints that should reject unauthenticated requests.
+    """
+    from app import create_app
+
+    app = create_app(
+        psql_dsn=f"postgresql://{postgres_service.user}:{postgres_service.password}@{postgres_service.host}:{postgres_service.port}/{postgres_service.database}"
+    )
+    async with AsyncTestClient(app=app) as client:
+        # Only include pytest header, NO X-API-KEY
+        client.headers.update({"x-pytest-enabled": "1"})
+        yield client

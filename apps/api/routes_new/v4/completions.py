@@ -28,15 +28,12 @@ from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.status_codes import HTTP_400_BAD_REQUEST
 
-from di import (  # TODO: These need the new service classes!!!!!
-    NotificationService,
-    provide_notification_service,
-    provide_user_service,
-)
 from repository.autocomplete_repository import AutocompleteRepository, provide_autocomplete_repository
 from repository.completions_repository import provide_completions_repository
+from repository.users_repository import provide_users_repository
 from services.completions_service import CompletionsService, provide_completions_service
-from services.users_service import UsersService
+from services.notifications_service import NotificationsService, provide_notifications_service
+from services.users_service import UsersService, provide_users_service
 from utilities.errors import CustomHTTPException
 
 log = getLogger(__name__)
@@ -50,9 +47,10 @@ class CompletionsController(Controller):
     dependencies = {
         "completions_repo": Provide(provide_completions_repository),
         "svc": Provide(provide_completions_service),
-        "users": Provide(provide_user_service),
+        "users": Provide(provide_users_service),
         "autocomplete": Provide(provide_autocomplete_repository),
-        "notifications": Provide(provide_notification_service),
+        "notifications": Provide(provide_notifications_service),
+        "users_repo": Provide(provide_users_repository),
     }
 
     @get(
@@ -274,7 +272,7 @@ class CompletionsController(Controller):
     async def moderate_completion(
         self,
         svc: CompletionsService,
-        notifications: NotificationService,
+        notifications: NotificationsService,
         request: Request,
         record_id: int,
         data: CompletionModerateRequest,

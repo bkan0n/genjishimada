@@ -51,7 +51,6 @@ from litestar.status_codes import (
 )
 
 from repository.maps_repository import provide_maps_repository
-from routes_new.v4.users import provide_users_service
 from services.exceptions.maps import (
     AlreadyInPlaytestError,
     CreatorNotFoundError,
@@ -67,7 +66,7 @@ from services.exceptions.maps import (
 from services.lootbox_service import LootboxService, provide_lootbox_service
 from services.maps_service import MapsService, provide_maps_service
 from services.newsfeed_service import NewsfeedService, provide_newsfeed_service
-from services.users_service import UsersService
+from services.users_service import UsersService, provide_users_service
 from utilities.errors import CustomHTTPException
 from utilities.map_search import CompletionFilter, MapSearchFilters, MedalFilter, PlaytestFilter
 
@@ -84,7 +83,7 @@ class MapsController(Controller):
         "maps_service": Provide(provide_maps_service),
         "newsfeed_service": Provide(provide_newsfeed_service),
         "lootbox_service": Provide(provide_lootbox_service),
-        "users_service": Provide(provide_users_service, sync_to_thread=False),
+        "users_service": Provide(provide_users_service),
     }
 
     @get(
