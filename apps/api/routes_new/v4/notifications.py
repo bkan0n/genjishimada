@@ -19,10 +19,12 @@ from litestar import Controller, Request, get, patch, post, put
 from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.params import Parameter
-from litestar.status_codes import HTTP_201_CREATED, HTTP_204_NO_CONTENT
+from litestar.status_codes import HTTP_201_CREATED, HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 
 from repository.notifications_repository import NotificationsRepository
+from services.exceptions.users import UserNotFoundError
 from services.notifications_service import NotificationsService
+from utilities.errors import CustomHTTPException
 
 
 def provide_notifications_repository(state: State) -> NotificationsRepository:
@@ -87,8 +89,17 @@ class NotificationsController(Controller):
 
         Returns:
             The created notification event (201 Created from decorator).
+
+        Raises:
+            CustomHTTPException: 404 if user does not exist.
         """
-        return await notifications_service.create_and_dispatch(data, request.headers)
+        try:
+            return await notifications_service.create_and_dispatch(data, request.headers)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=e.message,
+            ) from e
 
     @get(
         "/users/{user_id:int}/events",
@@ -280,8 +291,17 @@ class NotificationsController(Controller):
 
         Returns:
             None (204 No Content from decorator).
+
+        Raises:
+            CustomHTTPException: 404 if user does not exist.
         """
-        await notifications_service.update_preference(user_id, event_type, channel, enabled)
+        try:
+            await notifications_service.update_preference(user_id, event_type, channel, enabled)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=e.message,
+            ) from e
 
     @put(
         "/users/{user_id:int}/preferences/bulk",
