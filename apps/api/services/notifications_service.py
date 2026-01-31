@@ -24,6 +24,7 @@ from litestar.status_codes import HTTP_404_NOT_FOUND
 from repository.exceptions import ForeignKeyViolationError
 from repository.notifications_repository import NotificationsRepository
 from services.base import BaseService
+from services.exceptions.users import UserNotFoundError
 
 if TYPE_CHECKING:
     from asyncpg import Pool
@@ -67,7 +68,7 @@ class NotificationsService(BaseService):
             The created notification event.
 
         Raises:
-            HTTPException: 404 if user does not exist.
+            UserNotFoundError: If user does not exist.
         """
         # 1. Store notification in database
         try:
@@ -80,10 +81,7 @@ class NotificationsService(BaseService):
             )
         except ForeignKeyViolationError as e:
             if "user_id" in e.constraint_name:
-                raise HTTPException(
-                    status_code=HTTP_404_NOT_FOUND,
-                    detail="User does not exist",
-                ) from e
+                raise UserNotFoundError(data.user_id) from e
             raise
 
         # Fetch the created event to return
