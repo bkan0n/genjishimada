@@ -18,8 +18,6 @@ from genjishimada_sdk.notifications import (
     NotificationPreferencesResponse,
 )
 from litestar.datastructures import Headers
-from litestar.exceptions import HTTPException
-from litestar.status_codes import HTTP_404_NOT_FOUND
 
 from repository.exceptions import ForeignKeyViolationError
 from repository.notifications_repository import NotificationsRepository
@@ -264,7 +262,7 @@ class NotificationsService(BaseService):
             enabled: Whether the preference is enabled.
 
         Raises:
-            HTTPException: 404 if user does not exist.
+            UserNotFoundError: If user does not exist.
         """
         try:
             await self._notifications_repo.upsert_preference(
@@ -275,10 +273,7 @@ class NotificationsService(BaseService):
             )
         except ForeignKeyViolationError as e:
             if "user_id" in e.constraint_name:
-                raise HTTPException(
-                    status_code=HTTP_404_NOT_FOUND,
-                    detail="User does not exist",
-                ) from e
+                raise UserNotFoundError(user_id) from e
             raise
 
     async def bulk_update_preferences(self, user_id: int, preferences: list[NotificationPreference]) -> None:
