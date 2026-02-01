@@ -23,6 +23,7 @@ from litestar.status_codes import (
 )
 
 from repository.maps_repository import provide_maps_repository
+from repository.users_repository import provide_users_repository
 from services.exceptions.maps import (
     EditRequestNotFoundError,
     MapNotFoundError,
@@ -50,6 +51,7 @@ class MapEditsController(Controller):
         "maps_repo": Provide(provide_maps_repository),
         "maps_service": Provide(provide_maps_service),
         "newsfeed_service": Provide(provide_newsfeed_service),
+        "users_repo": Provide(provide_users_repository),
         "users_service": Provide(provide_users_service),
         "notifications_service": Provide(provide_notifications_service),
     }

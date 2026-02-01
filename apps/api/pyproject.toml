@@ -41,6 +41,21 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: Integration tests with real database and HTTP layer",
+    "domain_auth: Auth domain tests",
+    "domain_autocomplete: Autocomplete domain tests",
+    "domain_change_requests: Change requests domain tests",
+    "domain_community: Community domain tests",
+    "domain_completions: Completions domain tests",
+    "domain_jobs: Jobs domain tests",
+    "domain_lootbox: Lootbox domain tests",
+    "domain_map_edits: Map edits domain tests",
+    "domain_maps: Maps domain tests",
+    "domain_newsfeed: Newsfeed domain tests",
+    "domain_notifications: Notifications domain tests",
+    "domain_playtests: Playtests domain tests",
+    "domain_rank_card: Rank card domain tests",
+    "domain_users: Users domain tests",
+    "domain_utilities: Utilities domain tests",
 ]
 
 [tool.ruff]
