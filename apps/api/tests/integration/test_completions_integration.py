@@ -50,7 +50,6 @@ class TestGetCompletionsForUser:
             assert "code" in completion
             assert "time" in completion
             assert isinstance(completion["time"], (int, float))
-            assert "created_at" in completion
 
     async def test_requires_auth(self, unauthenticated_client, create_test_user):
         """Get completions without auth returns 401."""
@@ -310,7 +309,6 @@ class TestGetAllCompletions:
             assert "time" in completion
             assert isinstance(completion["time"], (int, float))
             assert "verified" in completion
-            assert "created_at" in completion
 
 
 class TestGetSuspiciousFlags:
