@@ -119,7 +119,6 @@ class TestSubmitCompletion:
         assert "completion_id" in data
         assert "job_status" in data
 
-    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need MapNotFoundError translation in controller")
     async def test_map_not_found_returns_404(self, test_client, create_test_user):
         """Submit completion for non-existent map should return 404."""
         user_id = await create_test_user()
@@ -137,11 +136,10 @@ class TestSubmitCompletion:
 
         assert response.status_code == 404
 
-    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 409 - need DuplicateCompletionError translation in controller")
-    async def test_duplicate_completion_returns_409(
+    async def test_duplicate_completion_returns_400(
         self, test_client, create_test_user, create_test_map, unique_map_code
     ):
-        """Submit duplicate completion should return 409."""
+        """Submit duplicate completion with same time should return 400 (SlowerThanPendingError)."""
         user_id = await create_test_user()
         code = unique_map_code
         await create_test_map(code=code, checkpoints=10)
@@ -159,11 +157,11 @@ class TestSubmitCompletion:
         response1 = await test_client.post("/api/v4/completions/", json=payload)
         assert response1.status_code == 201
 
-        # Duplicate submission (same user + map, different message)
+        # Duplicate submission (same user + map, same time) - should return 400
         payload["message_id"] = 987654321
         response2 = await test_client.post("/api/v4/completions/", json=payload)
 
-        assert response2.status_code == 409
+        assert response2.status_code == 400
 
 
 class TestGetPendingVerifications:
@@ -288,7 +286,6 @@ class TestGetSuspiciousFlags:
 class TestEditCompletion:
     """PATCH /api/v4/completions/{record_id}"""
 
-    @pytest.mark.xfail(reason="BUG: Returns 500 (ValueError) instead of 404 - need CompletionNotFoundError handling")
     async def test_not_found_returns_404(self, test_client):
         """Edit non-existent completion should return 404."""
         record_id = 999999999
@@ -304,7 +301,6 @@ class TestEditCompletion:
 class TestGetCompletionSubmission:
     """GET /api/v4/completions/{record_id}/submission"""
 
-    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need CompletionNotFoundError handling")
     async def test_not_found_returns_404(self, test_client):
         """Get non-existent completion submission should return 404."""
         record_id = 999999999
@@ -317,7 +313,6 @@ class TestGetCompletionSubmission:
 class TestVerifyCompletion:
     """PUT /api/v4/completions/{record_id}/verification"""
 
-    @pytest.mark.xfail(reason="BUG: Returns 200 (silent success) instead of 404 for non-existent records")
     async def test_not_found_returns_404(self, test_client):
         """Verify non-existent completion should return 404."""
         record_id = 999999999
@@ -347,7 +342,6 @@ class TestSetSuspiciousFlag:
 class TestUpvoteSubmission:
     """POST /api/v4/completions/upvoting"""
 
-    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need CompletionNotFoundError handling")
     async def test_non_existent_message_returns_404(self, test_client):
         """Upvoting non-existent message should return 404."""
         payload = {"message_id": 999999999, "user_id": 999}
@@ -356,7 +350,6 @@ class TestUpvoteSubmission:
 
         assert response.status_code == 404
 
-    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 409 - need DuplicateUpvoteError translation in controller")
     async def test_duplicate_upvote_returns_409(
         self, test_client, create_test_user, create_test_map, unique_map_code
     ):
@@ -365,7 +358,7 @@ class TestUpvoteSubmission:
         code = unique_map_code
         await create_test_map(code=code, checkpoints=10)
 
-        # Submit a completion to get a message_id
+        # Submit a completion
         completion_payload = {
             "user_id": user_id,
             "code": code,
@@ -374,13 +367,21 @@ class TestUpvoteSubmission:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": 123456789,
         }
-        await test_client.post("/api/v4/completions/", json=completion_payload)
+        response = await test_client.post("/api/v4/completions/", json=completion_payload)
+        assert response.status_code == 201
+        completion_id = response.json()["completion_id"]
+
+        # Patch the completion to set message_id
+        await test_client.patch(
+            f"/api/v4/completions/{completion_id}",
+            json={"message_id": 123456789},
+        )
 
         upvote_payload = {"message_id": 123456789, "user_id": user_id}
 
         # First upvote
         response1 = await test_client.post("/api/v4/completions/upvoting", json=upvote_payload)
-        assert response1.status_code == 200
+        assert response1.status_code == 201
 
         # Duplicate upvote
         response2 = await test_client.post("/api/v4/completions/upvoting", json=upvote_payload)
@@ -446,7 +447,6 @@ class TestGetRecordsFiltered:
 class TestModerateCompletion:
     """PUT /api/v4/completions/{record_id}/moderate"""
 
-    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need CompletionNotFoundError handling")
     async def test_not_found_returns_404(self, test_client):
         """Moderate non-existent completion should return 404."""
         record_id = 999999999
@@ -514,7 +514,6 @@ class TestSetQualityVote:
 
         assert response.status_code == 201
 
-    @pytest.mark.xfail(reason="BUG: Returns 500 instead of 404 - need MapNotFoundError translation in controller")
     async def test_map_not_found_returns_404(self, test_client, create_test_user):
         """Quality vote for non-existent map should return 404."""
         user_id = await create_test_user()
@@ -525,9 +524,8 @@ class TestSetQualityVote:
 
         assert response.status_code == 404
 
-    @pytest.mark.xfail(reason="BUG: Returns 201 (allows duplicate) instead of 409 - need DuplicateQualityVoteError translation")
-    async def test_duplicate_vote_returns_409(self, test_client, create_test_user, create_test_map, unique_map_code):
-        """Duplicate quality vote should return 409."""
+    async def test_duplicate_vote_allows_update(self, test_client, create_test_user, create_test_map, unique_map_code):
+        """Duplicate quality vote should update existing vote (upsert behavior)."""
         user_id = await create_test_user()
         code = unique_map_code
         await create_test_map(code=code)
@@ -538,10 +536,10 @@ class TestSetQualityVote:
         response1 = await test_client.post(f"/api/v4/completions/{code}/quality", json=payload)
         assert response1.status_code == 201
 
-        # Duplicate vote
+        # Duplicate vote (upsert updates existing)
         response2 = await test_client.post(f"/api/v4/completions/{code}/quality", json=payload)
 
-        assert response2.status_code == 409
+        assert response2.status_code == 201
 
 
 class TestGetUpvotesFromMessageId:

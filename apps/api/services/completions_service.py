@@ -359,6 +359,11 @@ class CompletionsService(BaseService):
             CompletionNotFoundError: If completion or user not found.
         """
         _ = state
+        # Check existence first
+        exists = await self._completions_repo.check_completion_exists(record_id)
+        if not exists:
+            raise CompletionNotFoundError(record_id)
+
         patch_data = self._build_patch_dict(data)
         try:
             await self._completions_repo.edit_completion(record_id, patch_data)
@@ -372,8 +377,14 @@ class CompletionsService(BaseService):
         return await self._completions_repo.check_previous_world_record_xp(code, user_id)
 
     async def get_completion_submission(self, record_id: int) -> CompletionSubmissionResponse:
-        """Retrieve detailed submission info for a completion."""
+        """Retrieve detailed submission info for a completion.
+
+        Raises:
+            CompletionNotFoundError: If completion not found.
+        """
         row = await self._completions_repo.fetch_completion_submission(record_id)
+        if not row:
+            raise CompletionNotFoundError(record_id)
         return msgspec.convert(row, CompletionSubmissionResponse)
 
     async def get_pending_verifications(self) -> list[PendingVerificationResponse]:
@@ -395,6 +406,11 @@ class CompletionsService(BaseService):
             DuplicateVerificationError: If verification record already exists.
             CompletionNotFoundError: If completion or user not found.
         """
+        # Check existence first
+        exists = await self._completions_repo.check_completion_exists(record_id, conn=conn)
+        if not exists:
+            raise CompletionNotFoundError(record_id)
+
         try:
             await self._completions_repo.update_verification(
                 record_id,
@@ -536,6 +552,11 @@ class CompletionsService(BaseService):
             MapNotFoundError: If map not found.
             CompletionNotFoundError: If user not found.
         """
+        # Check map exists first (upsert silently succeeds with 0 rows if map doesn't exist)
+        map_exists = await self._completions_repo.check_map_exists(code)
+        if not map_exists:
+            raise MapNotFoundError(code)
+
         try:
             await self._completions_repo.upsert_quality_vote(code, user_id, quality)
         except UniqueConstraintViolationError:

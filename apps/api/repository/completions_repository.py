@@ -1077,6 +1077,25 @@ class CompletionsRepository(BaseRepository):
         """
         return await _conn.fetchval(query, code, user_id)
 
+    async def check_completion_exists(
+        self,
+        completion_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Check if a completion exists.
+
+        Args:
+            completion_id: Completion ID to check.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            True if completion exists, False otherwise.
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT EXISTS(SELECT 1 FROM core.completions WHERE id = $1)"
+        return await _conn.fetchval(query, completion_id)
+
     async def fetch_records_filtered(  # noqa: PLR0913
         self,
         code: str | None,

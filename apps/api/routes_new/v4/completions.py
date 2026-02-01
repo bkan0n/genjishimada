@@ -26,12 +26,23 @@ from genjishimada_sdk.maps import OverwatchCode
 from litestar import Controller, Request, Response, get, patch, post, put
 from litestar.datastructures import State
 from litestar.di import Provide
-from litestar.status_codes import HTTP_400_BAD_REQUEST
+from litestar.exceptions import HTTPException
+from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
 from repository.autocomplete_repository import AutocompleteRepository, provide_autocomplete_repository
 from repository.completions_repository import provide_completions_repository
 from repository.users_repository import provide_users_repository
 from services.completions_service import CompletionsService, provide_completions_service
+from services.exceptions.completions import (
+    CompletionNotFoundError,
+    DuplicateCompletionError,
+    DuplicateFlagError,
+    DuplicateQualityVoteError,
+    DuplicateUpvoteError,
+    DuplicateVerificationError,
+    MapNotFoundError,
+    SlowerThanPendingError,
+)
 from services.notifications_service import NotificationsService, provide_notifications_service
 from services.users_service import UsersService, provide_users_service
 from utilities.errors import CustomHTTPException
@@ -95,8 +106,17 @@ class CompletionsController(Controller):
         users: UsersService,
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion."""
-        resp = await svc.submit_completion(data, request, autocomplete, users)
-        return resp
+        try:
+            resp = await svc.submit_completion(data, request, autocomplete, users)
+            return resp
+        except MapNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except DuplicateCompletionError as e:
+            raise HTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
+        except SlowerThanPendingError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @patch(
         path="/{record_id:int}",
@@ -112,7 +132,12 @@ class CompletionsController(Controller):
         data: CompletionPatchRequest,
     ) -> None:
         """Patch an existing completion."""
-        return await svc.edit_completion(state, record_id, data)
+        try:
+            return await svc.edit_completion(state, record_id, data)
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except DuplicateCompletionError as e:
+            raise HTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
 
     @get(
         path="/{record_id:int}/submission",
@@ -128,7 +153,10 @@ class CompletionsController(Controller):
         record_id: int,
     ) -> CompletionSubmissionResponse:
         """Get a detailed view of a completion submission."""
-        return await svc.get_completion_submission(record_id)
+        try:
+            return await svc.get_completion_submission(record_id)
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @get(
         path="/pending",
@@ -155,7 +183,12 @@ class CompletionsController(Controller):
         data: CompletionVerificationUpdateRequest,
     ) -> JobStatusResponse:
         """Verify or reject a completion."""
-        return await svc.verify_completion(request, record_id, data)
+        try:
+            return await svc.verify_completion(request, record_id, data)
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except DuplicateVerificationError as e:
+            raise HTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
 
     @get(
         path="/{code:str}",
@@ -213,7 +246,12 @@ class CompletionsController(Controller):
         data: UpvoteCreateRequest,
     ) -> UpvoteSubmissionJobResponse:
         """Upvote a completion submission."""
-        return await svc.upvote_submission(request, data)
+        try:
+            return await svc.upvote_submission(request, data)
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except DuplicateUpvoteError as e:
+            raise HTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
 
     @get(
         path="/all",
@@ -278,7 +316,12 @@ class CompletionsController(Controller):
         data: CompletionModerateRequest,
     ) -> None:
         """Moderate a completion record."""
-        return await svc.moderate_completion(record_id, data, notifications, request.headers)
+        try:
+            return await svc.moderate_completion(record_id, data, notifications, request.headers)
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except DuplicateCompletionError as e:
+            raise HTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
 
     @get(
         path="/{code:str}/legacy",
@@ -307,7 +350,14 @@ class CompletionsController(Controller):
         data: QualityUpdateRequest,
     ) -> None:
         """Set the quality vote for a map code for a user."""
-        return await svc.set_quality_vote_for_map_code(code, data.user_id, data.quality)
+        try:
+            return await svc.set_quality_vote_for_map_code(code, data.user_id, data.quality)
+        except MapNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except DuplicateQualityVoteError as e:
+            raise HTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
+        except CompletionNotFoundError as e:
+            raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
 
     @get(path="/upvoting/{message_id:int}")
     async def get_upvotes_from_message_id(self, svc: CompletionsService, message_id: int) -> int:
