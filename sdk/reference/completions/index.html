@@ -2293,17 +2293,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#genjishimada_sdk.completions.ExtractedTextsResponse" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ExtractedTextsResponse
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#genjishimada_sdk.completions.FailedAutoverifyEvent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6986,13 +6975,13 @@
             </td>
           </tr>
           <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="texts: ExtractedTextsResponse
+            <td><code><a class="autorefs autorefs-internal" title="texts: dict
 
   
       instance-attribute
    (genjishimada_sdk.completions.ExtractedResultResponse.texts)" href="#genjishimada_sdk.completions.ExtractedResultResponse.texts">texts</a></code></td>
             <td>
-                  <code><a class="autorefs autorefs-internal" title="ExtractedTextsResponse (genjishimada_sdk.completions.ExtractedTextsResponse)" href="#genjishimada_sdk.completions.ExtractedTextsResponse">ExtractedTextsResponse</a></code>
+                  <code><span title="dict">dict</span></code>
             </td>
             <td>
               <div class="doc-md-description">
@@ -7075,8 +7064,33 @@
 
 
 
+<h4 id="genjishimada_sdk.completions.ExtractedResultResponse.sources" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">sources</span><span class="p">:</span> <span class="nb">dict</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.ExtractedResultResponse.sources" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h4 id="genjishimada_sdk.completions.ExtractedResultResponse.texts" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">texts</span><span class="p">:</span> <span class="n">ExtractedTextsResponse</span></code>
+            <code class="highlight language-python"><span class="n">texts</span><span class="p">:</span> <span class="nb">dict</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
@@ -7108,306 +7122,6 @@
   </span>
 
 <a href="#genjishimada_sdk.completions.ExtractedResultResponse.time" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-  </div>
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-class">
-
-
-
-<h3 id="genjishimada_sdk.completions.ExtractedTextsResponse" class="doc doc-heading">
-            <code>ExtractedTextsResponse</code>
-
-
-<a href="#genjishimada_sdk.completions.ExtractedTextsResponse" class="headerlink" title="Anchor link to this section">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-            <p class="doc doc-class-bases">
-              Bases: <code><a class="autorefs autorefs-internal" title="CamelConfig (genjishimada_sdk.completions.CamelConfig)" href="#genjishimada_sdk.completions.CamelConfig">CamelConfig</a></code></p>
-
-
-
-        <p>OCR text snippets extracted from a screenshot.</p>
-
-
-<p><span class="doc-section-title">Attributes:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="top_left: str | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.completions.ExtractedTextsResponse.top_left)" href="#genjishimada_sdk.completions.ExtractedTextsResponse.top_left">top_left</a></code></td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Raw text detected in the top-left area.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="top_left_white: str | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.completions.ExtractedTextsResponse.top_left_white)" href="#genjishimada_sdk.completions.ExtractedTextsResponse.top_left_white">top_left_white</a></code></td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>White-colored text detected in the top-left area.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="top_left_cyan: str | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.completions.ExtractedTextsResponse.top_left_cyan)" href="#genjishimada_sdk.completions.ExtractedTextsResponse.top_left_cyan">top_left_cyan</a></code></td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Cyan-colored text detected in the top-left area.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="banner: str | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.completions.ExtractedTextsResponse.banner)" href="#genjishimada_sdk.completions.ExtractedTextsResponse.banner">banner</a></code></td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Text detected in the banner region.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="top_right: str | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.completions.ExtractedTextsResponse.top_right)" href="#genjishimada_sdk.completions.ExtractedTextsResponse.top_right">top_right</a></code></td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Raw text detected in the top-right area.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="bottom_left: str | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.completions.ExtractedTextsResponse.bottom_left)" href="#genjishimada_sdk.completions.ExtractedTextsResponse.bottom_left">bottom_left</a></code></td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Raw text detected in the bottom-left area.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.completions.ExtractedTextsResponse.banner" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">banner</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.ExtractedTextsResponse.banner" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.completions.ExtractedTextsResponse.bottom_left" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">bottom_left</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.ExtractedTextsResponse.bottom_left" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.completions.ExtractedTextsResponse.top_left" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">top_left</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.ExtractedTextsResponse.top_left" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.completions.ExtractedTextsResponse.top_left_cyan" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">top_left_cyan</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.ExtractedTextsResponse.top_left_cyan" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.completions.ExtractedTextsResponse.top_left_white" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">top_left_white</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.ExtractedTextsResponse.top_left_white" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.completions.ExtractedTextsResponse.top_right" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">top_right</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.ExtractedTextsResponse.top_right" class="headerlink" title="Anchor link to this section">&para;</a></h4>
 
 
     <div class="doc doc-contents ">
@@ -7495,6 +7209,21 @@
             </td>
           </tr>
           <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="submitted_user_names: list[str]
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.FailedAutoverifyEvent.submitted_user_names)" href="#genjishimada_sdk.completions.FailedAutoverifyEvent.submitted_user_names">submitted_user_names</a></code></td>
+            <td>
+                  <code><span title="list">list</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Names submitted by the user.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
             <td><code><a class="autorefs autorefs-internal" title="user_id: int
 
   
@@ -7566,47 +7295,6 @@
             <td>
               <div class="doc-md-description">
                 <p>Whether the extracted user matched the submission.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="extracted_code_cleaned: str | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_code_cleaned)" href="#genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_code_cleaned">extracted_code_cleaned</a></code></td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Normalized code detected via OCR.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><a class="autorefs autorefs-internal" title="extracted_time: float | None
-
-  
-      instance-attribute
-   (genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_time)" href="#genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_time">extracted_time</a></code></td>
-            <td>
-                  <code><span title="float">float</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Time detected via OCR.</p>
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td><code><span title="genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_user_id">extracted_user_id</span></code></td>
-            <td>
-                  <code><span title="float">float</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>User identifier detected via OCR.</p>
               </div>
             </td>
           </tr>
@@ -7685,56 +7373,6 @@
 
 
 
-<h4 id="genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_code_cleaned" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">extracted_code_cleaned</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_code_cleaned" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_time" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">extracted_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.FailedAutoverifyEvent.extracted_time" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
 <h4 id="genjishimada_sdk.completions.FailedAutoverifyEvent.submitted_code" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">submitted_code</span><span class="p">:</span> <span class="n">OverwatchCode</span></code>
 
@@ -7768,6 +7406,31 @@
   </span>
 
 <a href="#genjishimada_sdk.completions.FailedAutoverifyEvent.submitted_time" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.FailedAutoverifyEvent.submitted_user_names" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">submitted_user_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.FailedAutoverifyEvent.submitted_user_names" class="headerlink" title="Anchor link to this section">&para;</a></h4>
 
 
     <div class="doc doc-contents ">
@@ -7843,31 +7506,6 @@
   </span>
 
 <a href="#genjishimada_sdk.completions.FailedAutoverifyEvent.user_match" class="headerlink" title="Anchor link to this section">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-    </div>
-
-</div>
-
-
-
-
-
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h4 id="genjishimada_sdk.completions.FailedAutoverifyEvent.usernames" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">usernames</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span></code>
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
-  </span>
-
-<a href="#genjishimada_sdk.completions.FailedAutoverifyEvent.usernames" class="headerlink" title="Anchor link to this section">&para;</a></h4>
 
 
     <div class="doc doc-contents ">
@@ -10071,7 +9709,7 @@
 
 
 <h3 id="genjishimada_sdk.completions.__all__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;CompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionCreatedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionModerateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionPatchRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionVerificationUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedResultResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedTextsResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;FailedAutoverifyEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;MapRecordProgressionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;OcrResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;PendingVerificationResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;QualityUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousFlag&#39;</span><span class="p">,</span> <span class="s1">&#39;TimePlayedPerRankResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteUpdateEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationChangedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationMessageDeleteEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;WorldRecordXPCheckResponse&#39;</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;CompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionCreatedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionModerateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionPatchRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionVerificationUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedResultResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;FailedAutoverifyEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;MapRecordProgressionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;OcrResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;PendingVerificationResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;QualityUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousFlag&#39;</span><span class="p">,</span> <span class="s1">&#39;TimePlayedPerRankResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteUpdateEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationChangedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationMessageDeleteEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;WorldRecordXPCheckResponse&#39;</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
