@@ -21,7 +21,9 @@ from litestar.datastructures import Headers
 
 from repository.exceptions import ForeignKeyViolationError
 from repository.notifications_repository import NotificationsRepository
+from repository.users_repository import UsersRepository
 from services.base import BaseService
+from services.exceptions.notifications import NotificationEventNotFoundError
 from services.exceptions.users import UserNotFoundError
 
 if TYPE_CHECKING:
@@ -35,7 +37,9 @@ DISCORD_USER_ID_LOWER_LIMIT = 1_000_000_000_000_000
 class NotificationsService(BaseService):
     """Service for notifications business logic."""
 
-    def __init__(self, pool: Pool, state: State, notifications_repo: NotificationsRepository) -> None:
+    def __init__(
+        self, pool: Pool, state: State, notifications_repo: NotificationsRepository, users_repo: UsersRepository
+    ) -> None:
         """Initialize service.
 
         Args:
@@ -45,6 +49,7 @@ class NotificationsService(BaseService):
         """
         super().__init__(pool, state)
         self._notifications_repo = notifications_repo
+        self._users_repo = users_repo
 
     async def create_and_dispatch(
         self,
@@ -198,13 +203,21 @@ class NotificationsService(BaseService):
             channel: Delivery channel.
             status: Delivery status.
             error_message: Optional error message if failed.
+
+        Raises:
+            NotificationEventNotFoundError: If event does not exist.
         """
-        await self._notifications_repo.record_delivery_result(
-            event_id=event_id,
-            channel=channel,
-            status=status,
-            error_message=error_message,
-        )
+        try:
+            await self._notifications_repo.record_delivery_result(
+                event_id=event_id,
+                channel=channel,
+                status=status,
+                error_message=error_message,
+            )
+        except ForeignKeyViolationError as e:
+            if "event_id" in e.constraint_name:
+                raise NotificationEventNotFoundError(event_id) from e
+            raise
 
     async def get_preferences(self, user_id: int) -> list[NotificationPreferencesResponse]:
         """Get all preferences for a user, returning defaults for unset ones.
@@ -264,6 +277,8 @@ class NotificationsService(BaseService):
         Raises:
             UserNotFoundError: If user does not exist.
         """
+        if not await self._users_repo.check_user_exists(user_id):
+            raise UserNotFoundError(user_id)
         try:
             await self._notifications_repo.upsert_preference(
                 user_id=user_id,
@@ -283,6 +298,8 @@ class NotificationsService(BaseService):
             user_id: Target user ID.
             preferences: List of preference updates.
         """
+        if not await self._users_repo.check_user_exists(user_id):
+            raise UserNotFoundError(user_id)
         for pref in preferences:
             await self.update_preference(user_id, pref.event_type, pref.channel, pref.enabled)
 
@@ -370,7 +387,7 @@ class NotificationsService(BaseService):
         )
 
 
-async def provide_notifications_service(state: State) -> NotificationsService:
+async def provide_notifications_service(state: State, users_repo: UsersRepository) -> NotificationsService:
     """Provide NotificationsService DI.
 
     Args:
@@ -382,4 +399,4 @@ async def provide_notifications_service(state: State) -> NotificationsService:
     from repository.notifications_repository import NotificationsRepository  # noqa: PLC0415
 
     notifications_repo = NotificationsRepository(state.db_pool)
-    return NotificationsService(state.db_pool, state, notifications_repo)
+    return NotificationsService(state.db_pool, state, notifications_repo, users_repo)

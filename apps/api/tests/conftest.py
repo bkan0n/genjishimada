@@ -505,3 +505,168 @@ async def create_test_user(postgres_service: PostgresService, global_user_id_tra
             await pool.close()
 
     return _create
+
+
+@pytest.fixture
+async def create_test_playtest(postgres_service: PostgresService, global_thread_id_tracker: set[int]):
+    """Factory fixture for creating test playtest metadata.
+
+    Returns a function that creates a playtest with the given map_id and optional thread_id.
+
+    Usage:
+        playtest_id = await create_test_playtest(map_id)
+        playtest_id = await create_test_playtest(map_id, thread_id=unique_thread_id)
+    """
+
+    async def _create(map_id: int, thread_id: int | None = None, **overrides: Any) -> int:
+        # Generate thread_id if not provided
+        if thread_id is None:
+            while True:
+                thread_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+                if thread_id not in global_thread_id_tracker:
+                    global_thread_id_tracker.add(thread_id)
+                    break
+
+        # Default values
+        data = {
+            "verification_id": None,
+            "initial_difficulty": 5.0,  # Default mid-range difficulty
+            "completed": False,
+        }
+
+        # Apply overrides
+        data.update(overrides)
+
+        pool = await asyncpg.create_pool(
+            user=postgres_service.user,
+            password=postgres_service.password,
+            host=postgres_service.host,
+            port=postgres_service.port,
+            database=postgres_service.database,
+        )
+        try:
+            async with pool.acquire() as conn:
+                playtest_id = await conn.fetchval(
+                    """
+                    INSERT INTO playtests.meta (
+                        thread_id, map_id, verification_id, initial_difficulty, completed
+                    )
+                    VALUES ($1, $2, $3, $4, $5)
+                    RETURNING id
+                    """,
+                    thread_id,
+                    map_id,
+                    data["verification_id"],
+                    data["initial_difficulty"],
+                    data["completed"],
+                )
+            return playtest_id
+        finally:
+            await pool.close()
+
+    return _create
+
+
+@pytest.fixture
+async def create_test_completion(postgres_service: PostgresService):
+    """Factory fixture for creating test completions.
+
+    Returns a function that creates a verified completion for a user and map.
+
+    Usage:
+        completion_id = await create_test_completion(user_id, map_id)
+        completion_id = await create_test_completion(user_id, map_id, verified=False)
+    """
+
+    async def _create(user_id: int, map_id: int, **overrides: Any) -> int:
+        # Default values
+        data = {
+            "verified": True,
+            "legacy": False,
+            "time": 30.5,
+            "screenshot": "https://example.com/screenshot.png",
+            "completion": True,
+        }
+
+        # Apply overrides
+        data.update(overrides)
+
+        pool = await asyncpg.create_pool(
+            user=postgres_service.user,
+            password=postgres_service.password,
+            host=postgres_service.host,
+            port=postgres_service.port,
+            database=postgres_service.database,
+        )
+        try:
+            async with pool.acquire() as conn:
+                completion_id = await conn.fetchval(
+                    """
+                    INSERT INTO core.completions (
+                        user_id, map_id, verified, legacy, time, screenshot, completion
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    RETURNING id
+                    """,
+                    user_id,
+                    map_id,
+                    data["verified"],
+                    data["legacy"],
+                    data["time"],
+                    data["screenshot"],
+                    data["completion"],
+                )
+            return completion_id
+        finally:
+            await pool.close()
+
+    return _create
+
+
+@pytest.fixture
+async def create_test_vote(postgres_service: PostgresService):
+    """Factory fixture for creating test playtest votes.
+
+    Returns a function that creates a vote for a playtest.
+
+    Usage:
+        vote_id = await create_test_vote(user_id, map_id, thread_id)
+        vote_id = await create_test_vote(user_id, map_id, thread_id, difficulty=7.5)
+    """
+
+    async def _create(user_id: int, map_id: int, thread_id: int, **overrides: Any) -> int:
+        # Default values
+        data = {
+            "difficulty": 5.0,
+        }
+
+        # Apply overrides
+        data.update(overrides)
+
+        pool = await asyncpg.create_pool(
+            user=postgres_service.user,
+            password=postgres_service.password,
+            host=postgres_service.host,
+            port=postgres_service.port,
+            database=postgres_service.database,
+        )
+        try:
+            async with pool.acquire() as conn:
+                vote_id = await conn.fetchval(
+                    """
+                    INSERT INTO playtests.votes (
+                        user_id, map_id, playtest_thread_id, difficulty
+                    )
+                    VALUES ($1, $2, $3, $4)
+                    RETURNING id
+                    """,
+                    user_id,
+                    map_id,
+                    thread_id,
+                    data["difficulty"],
+                )
+            return vote_id
+        finally:
+            await pool.close()
+
+    return _create

@@ -19,6 +19,23 @@ pytestmark = [
 class TestCreateNotification:
     """POST /api/v4/notifications/events"""
 
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Create notification without auth returns 401."""
+        user_id = await create_test_user()
+        payload = {
+            "user_id": user_id,
+            "event_type": NotificationEventType.MAP_EDIT_APPROVED.value,
+            "title": "Test",
+            "body": "Test",
+        }
+
+        response = await unauthenticated_client.post(
+            "/api/v4/notifications/events",
+            json=payload,
+        )
+
+        assert response.status_code == 401
+
     async def test_happy_path(self, test_client, create_test_user):
         """Create notification returns 201 with event data."""
         user_id = await create_test_user()
@@ -65,6 +82,7 @@ class TestCreateNotification:
 
     async def test_user_not_found_returns_404(self, test_client):
         """Non-existent user returns 404."""
+
         payload = {
             "user_id": 999999999999999999,
             "event_type": NotificationEventType.MAP_EDIT_APPROVED.value,
@@ -107,9 +125,36 @@ class TestCreateNotification:
         assert response.status_code == 201
         assert response.json()["event_type"] == event_type
 
+    async def test_invalid_event_type_returns_400(self, test_client, create_test_user):
+        """Create notification with invalid event type returns 400."""
+        user_id = await create_test_user()
+        payload = {
+            "user_id": user_id,
+            "event_type": "invalid_event_type_that_does_not_exist",
+            "title": "Test",
+            "body": "Test",
+        }
+
+        response = await test_client.post(
+            "/api/v4/notifications/events",
+            json=payload,
+        )
+
+        assert response.status_code == 400
+
 
 class TestGetUserEvents:
     """GET /api/v4/notifications/users/{user_id}/events"""
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Get user events without auth returns 401."""
+        user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            f"/api/v4/notifications/users/{user_id}/events",
+        )
+
+        assert response.status_code == 401
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get events returns 200 with list."""
@@ -123,7 +168,7 @@ class TestGetUserEvents:
         assert isinstance(response.json(), list)
 
     async def test_with_events(self, test_client, create_test_user):
-        """Get events returns created notifications."""
+        """Get events returns created notifications with full structure."""
         user_id = await create_test_user()
 
         # Create a notification
@@ -143,7 +188,22 @@ class TestGetUserEvents:
         assert response.status_code == 200
         events = response.json()
         assert len(events) >= 1
-        assert any(e["title"] == "You gained XP!" for e in events)
+
+        # Validate response structure
+        event = next((e for e in events if e["title"] == "You gained XP!"), None)
+        assert event is not None
+        assert "id" in event
+        assert isinstance(event["id"], int)
+        assert event["user_id"] == user_id
+        assert event["event_type"] == NotificationEventType.XP_GAIN.value
+        assert event["title"] == "You gained XP!"
+        assert event["body"] == "+100 XP"
+        assert "created_at" in event
+        assert isinstance(event["created_at"], str)
+        # read_at can be null
+        assert "read_at" in event
+        # dismissed_at can be null
+        assert "dismissed_at" in event
 
     @pytest.mark.parametrize("unread_only", [True, False])
     @pytest.mark.parametrize("limit", [10, 50, 100])
@@ -171,9 +231,30 @@ class TestGetUserEvents:
 class TestGetUnreadCount:
     """GET /api/v4/notifications/users/{user_id}/unread-count"""
 
-    async def test_happy_path(self, test_client, create_test_user):
-        """Get unread count returns 200 with count."""
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Get unread count without auth returns 401."""
         user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            f"/api/v4/notifications/users/{user_id}/unread-count",
+        )
+
+        assert response.status_code == 401
+
+    async def test_happy_path(self, test_client, create_test_user):
+        """Get unread count returns 200 with count structure."""
+        user_id = await create_test_user()
+
+        # Create an unread notification
+        await test_client.post(
+            "/api/v4/notifications/events",
+            json={
+                "user_id": user_id,
+                "event_type": NotificationEventType.XP_GAIN.value,
+                "title": "Test notification",
+                "body": "Test body",
+            },
+        )
 
         response = await test_client.get(
             f"/api/v4/notifications/users/{user_id}/unread-count",
@@ -183,7 +264,7 @@ class TestGetUnreadCount:
         data = response.json()
         assert "count" in data
         assert isinstance(data["count"], int)
-        assert data["count"] >= 0
+        assert data["count"] >= 1  # At least the one we just created
 
 
 class TestMarkRead:
@@ -228,6 +309,16 @@ class TestMarkAllRead:
         data = response.json()
         assert "marked_read" in data
         assert isinstance(data["marked_read"], int)
+
+    async def test_non_existent_user_succeeds_idempotently(self, test_client):
+        """Mark all read for non-existent user returns 200 with 0 count (idempotent)."""
+        response = await test_client.patch(
+            "/api/v4/notifications/users/999999999/read-all",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["marked_read"] == 0
 
 
 class TestDismissEvent:
@@ -287,6 +378,18 @@ class TestRecordDeliveryResult:
 
         assert response.status_code == 204
 
+    async def test_non_existent_event_returns_404(self, test_client):
+        """Record delivery for non-existent event returns 404."""
+        response = await test_client.post(
+            "/api/v4/notifications/events/999999999/delivery-result",
+            json={
+                "channel": "discord_dm",
+                "status": "delivered",
+            },
+        )
+
+        assert response.status_code == 404
+
     @pytest.mark.parametrize("status", ["delivered", "failed", "skipped"])
     @pytest.mark.parametrize("channel", ["discord_dm", "discord_ping", "web"])
     async def test_all_status_channel_combinations(
@@ -327,8 +430,18 @@ class TestRecordDeliveryResult:
 class TestGetPreferences:
     """GET /api/v4/notifications/users/{user_id}/preferences"""
 
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Get preferences without auth returns 401."""
+        user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            f"/api/v4/notifications/users/{user_id}/preferences",
+        )
+
+        assert response.status_code == 401
+
     async def test_happy_path(self, test_client, create_test_user):
-        """Get preferences returns 200 with list."""
+        """Get preferences returns 200 with structured list."""
         user_id = await create_test_user()
 
         response = await test_client.get(
@@ -338,6 +451,19 @@ class TestGetPreferences:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
+        assert len(data) > 0  # Should return preferences for all event types
+
+        # Validate structure of each preference
+        for pref in data:
+            assert "event_type" in pref
+            assert isinstance(pref["event_type"], str)
+            assert "channels" in pref
+            assert isinstance(pref["channels"], dict)
+            # Channels should have keys for each channel type
+            assert len(pref["channels"]) > 0
+            for channel, enabled in pref["channels"].items():
+                assert isinstance(channel, str)
+                assert isinstance(enabled, bool)
 
 
 class TestUpdatePreference:
@@ -374,6 +500,28 @@ class TestUpdatePreference:
 
         assert response.status_code == 404
 
+    async def test_invalid_event_type_returns_400(self, test_client, create_test_user):
+        """Update preference with invalid event type returns 400."""
+        user_id = await create_test_user()
+
+        response = await test_client.put(
+            f"/api/v4/notifications/users/{user_id}/preferences/invalid_event/discord_dm",
+            params={"enabled": True},
+        )
+
+        assert response.status_code == 400
+
+    async def test_invalid_channel_returns_400(self, test_client, create_test_user):
+        """Update preference with invalid channel returns 400."""
+        user_id = await create_test_user()
+
+        response = await test_client.put(
+            f"/api/v4/notifications/users/{user_id}/preferences/map_edit_approved/invalid_channel",
+            params={"enabled": True},
+        )
+
+        assert response.status_code == 400
+
     @pytest.mark.parametrize(
         "event_type",
         [
@@ -401,8 +549,7 @@ class TestUpdatePreference:
             params={"enabled": enabled},
         )
 
-        assert response.status_code in (204, 404)
-        assert response.status_code != 500
+        assert response.status_code == 204
 
 
 class TestBulkUpdatePreferences:
@@ -436,11 +583,36 @@ class TestBulkUpdatePreferences:
         assert response.status_code == 204
 
 
+    async def test_user_not_found_returns_404(self, test_client):
+        """Bulk update for non-existent user returns 404."""
+        payload = [
+            {"event_type": "map_edit_approved", "channel": "discord_dm", "enabled": True},
+        ]
+
+        response = await test_client.put(
+            "/api/v4/notifications/users/999999999999999999/preferences/bulk",
+            json=payload,
+        )
+
+        assert response.status_code == 404
+
+
 class TestShouldDeliver:
     """GET /api/v4/notifications/users/{user_id}/should-deliver"""
 
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Should deliver without auth returns 401."""
+        user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            f"/api/v4/notifications/users/{user_id}/should-deliver",
+            params={"event_type": "map_edit_approved", "channel": "discord_dm"},
+        )
+
+        assert response.status_code == 401
+
     async def test_happy_path(self, test_client, create_test_user):
-        """Should deliver returns 200 with boolean."""
+        """Should deliver returns 200 with boolean response."""
         user_id = await create_test_user()
 
         response = await test_client.get(
@@ -452,6 +624,8 @@ class TestShouldDeliver:
         data = response.json()
         assert "should_deliver" in data
         assert isinstance(data["should_deliver"], bool)
+        # Response should only have the should_deliver field
+        assert len(data) == 1
 
     @pytest.mark.parametrize("event_type", ["map_edit_approved", "rank_up", "verification_approved"])
     @pytest.mark.parametrize("channel", ["discord_dm", "discord_ping", "web"])

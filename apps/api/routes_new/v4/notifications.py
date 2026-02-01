@@ -22,6 +22,8 @@ from litestar.params import Parameter
 from litestar.status_codes import HTTP_201_CREATED, HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 
 from repository.notifications_repository import NotificationsRepository
+from repository.users_repository import UsersRepository, provide_users_repository
+from services.exceptions.notifications import NotificationEventNotFoundError
 from services.exceptions.users import UserNotFoundError
 from services.notifications_service import NotificationsService
 from utilities.errors import CustomHTTPException
@@ -42,6 +44,7 @@ async def provide_notifications_repository(state: State) -> NotificationsReposit
 async def provide_notifications_service(
     state: State,
     notifications_repo: NotificationsRepository,
+    users_repo: UsersRepository,
 ) -> NotificationsService:
     """Litestar DI provider for notifications service.
 
@@ -52,7 +55,9 @@ async def provide_notifications_service(
     Returns:
         Service instance.
     """
-    return NotificationsService(pool=state.db_pool, state=state, notifications_repo=notifications_repo)
+    return NotificationsService(
+        pool=state.db_pool, state=state, notifications_repo=notifications_repo, users_repo=users_repo
+    )
 
 
 class NotificationsController(Controller):
@@ -63,6 +68,7 @@ class NotificationsController(Controller):
     dependencies = {
         "notifications_repo": Provide(provide_notifications_repository),
         "notifications_service": Provide(provide_notifications_service),
+        "users_repo": Provide(provide_users_repository),
     }
 
     @post(
@@ -237,13 +243,22 @@ class NotificationsController(Controller):
 
         Returns:
             None (204 No Content from decorator).
+
+        Raises:
+            CustomHTTPException: 404 if notification event does not exist.
         """
-        await notifications_service.record_delivery_result(
-            event_id=event_id,
-            channel=data.channel,
-            status=data.status,
-            error_message=data.error_message,
-        )
+        try:
+            await notifications_service.record_delivery_result(
+                event_id=event_id,
+                channel=data.channel,
+                status=data.status,
+                error_message=data.error_message,
+            )
+        except NotificationEventNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=e.message,
+            ) from e
 
     @get(
         "/users/{user_id:int}/preferences",
@@ -325,7 +340,13 @@ class NotificationsController(Controller):
         Returns:
             None (204 No Content from decorator).
         """
-        await notifications_service.bulk_update_preferences(user_id, data)
+        try:
+            await notifications_service.bulk_update_preferences(user_id, data)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=e.message,
+            ) from e
 
     @get(
         "/users/{user_id:int}/should-deliver",

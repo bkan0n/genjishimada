@@ -239,6 +239,9 @@ class NotificationsRepository(BaseRepository):
             status: Delivery status.
             error_message: Optional error message if failed.
             conn: Optional connection for transaction participation.
+
+        Raises:
+            ForeignKeyViolationError: If event_id does not exist.
         """
         _conn = self._get_connection(conn)
 
@@ -253,7 +256,15 @@ class NotificationsRepository(BaseRepository):
                 delivered_at = CASE WHEN $3 = 'delivered' THEN now() END,
                 error_message = $4
         """
-        await _conn.execute(query, event_id, channel, status, error_message)
+        try:
+            await _conn.execute(query, event_id, channel, status, error_message)
+        except AsyncpgFKError as e:
+            constraint = extract_constraint_name(e) or "unknown"
+            raise ForeignKeyViolationError(
+                constraint_name=constraint,
+                table="notifications.delivery_log",
+                detail=str(e),
+            ) from e
 
     async def fetch_preferences(
         self,
