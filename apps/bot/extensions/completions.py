@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import pprint
 import re
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Sequence, cast, get_args
@@ -525,19 +526,16 @@ class CompletionHandler(BaseHandler):
         channel = guild.get_channel(channel_id)
         assert isinstance(channel, TextChannel)
 
+        json_data = msgspec.json.encode(event.extracted).decode()
+        formatted_json = pprint.pformat(json_data)
         content = (
-            f"`Submitted Code` {event.submitted_code}\n"
-            f"`Extracted Code` {event.extracted_code_cleaned} "
-            f"{'✅' if event.code_match else '❌'}\n"
-            f"`Submitted Time` {event.submitted_time}\n"
-            f"`Extracted Time` {event.extracted_time} "
-            f"{'✅' if event.time_match else '❌'}\n"
-            f"`User ID` {event.user_id}\n"
-            f"`Usernames` {event.usernames} "
-            f"{'✅' if event.user_match else '❌'}\n"
+            f"`User ID`: {event.user_id}\n"
+            f"`Name`: {event.extracted.name} in {event.submitted_user_names} {'✅' if event.user_match else '❌'}"
+            f"`Code`: {event.extracted.code} in {event.submitted_code} {'✅' if event.code_match else '❌'}"
+            f"`Name`: {event.extracted.time} in {event.submitted_time} {'✅' if event.time_match else '❌'}"
             f"`Extracted Raw`\n"
             "```json\n"
-            f"{msgspec.json.encode(event.extracted).decode()}\n"
+            f"{formatted_json}\n"
             "```"
         )
         await channel.send(content)

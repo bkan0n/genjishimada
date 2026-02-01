@@ -101,7 +101,6 @@ class CompletionsService(BaseService):
     async def _attempt_auto_verify(
         self,
         request: Request,
-        autocomplete: AutocompleteRepository,
         users: UsersService,
         completion_id: int,
         data: CompletionCreateRequest,
@@ -116,9 +115,19 @@ class CompletionsService(BaseService):
         try:
             hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
             try:
+                user_name_response = await users.fetch_all_user_names(data.user_id)
+                user_names = [x.upper() for x in user_name_response]
                 async with (
                     aiohttp.ClientSession() as session,
-                    session.post(f"http://{hostname}:8000/extract", json={"image_url": data.screenshot}) as resp,
+                    session.post(
+                        f"http://{hostname}:8000/extract",
+                        json={
+                            "image_url": data.screenshot,
+                            "code": data.code,
+                            "time": data.time,
+                            "names": user_names,
+                        },
+                    ) as resp,
                 ):
                     resp.raise_for_status()
                     raw_ocr_data = await resp.read()
@@ -126,38 +135,9 @@ class CompletionsService(BaseService):
 
                 extracted = ocr_data.extracted
 
-                user_name_response = await users.fetch_all_user_names(data.user_id)
-                user_names = [x.upper() for x in user_name_response]
-                name_match = False
-                if extracted.name and user_names:
-                    best_match = rapidfuzz.process.extractOne(
-                        extracted.name,
-                        user_names,
-                        scorer=rapidfuzz.fuzz.ratio,
-                        score_cutoff=60,
-                    )
-
-                    if best_match:
-                        matched_name, score, _ = best_match
-                        log.debug(f"Name fuzzy match: '{extracted.name}' → '{matched_name}' (score: {score})")
-                        name_match = True
-                    else:
-                        log.debug(f"No name match found for '{extracted.name}' against {user_names}")
-
-                extracted_code_cleaned = await autocomplete.transform_map_codes(extracted.code or "")
-                if extracted_code_cleaned:
-                    extracted_code_cleaned = extracted_code_cleaned.replace('"', "")
-
-                code_match = data.code == extracted_code_cleaned
+                code_match = data.code == extracted.code
                 time_match = data.time == extracted.time
-                user_match = name_match
-
-                log.debug(f"extracted: {extracted}")
-                log.debug(f"data: {data}")
-                log.debug(f"extracted_code_cleaned: {extracted_code_cleaned}")
-                log.debug(f"code_match: {code_match} ({data.code=} vs {extracted_code_cleaned=})")
-                log.debug(f"time_match: {time_match} ({data.time=} vs {extracted.time=})")
-                log.debug(f"user_match: {user_match} ({name_match=})")
+                user_match = extracted.name in user_names
 
                 if code_match and time_match and user_match:
                     verification_data = CompletionVerificationUpdateRequest(
@@ -183,14 +163,12 @@ class CompletionsService(BaseService):
                 data=FailedAutoverifyEvent(
                     submitted_code=data.code,
                     submitted_time=data.time,
+                    submitted_user_names=user_names,
                     user_id=data.user_id,
                     extracted=extracted,
                     code_match=code_match,
                     time_match=time_match,
                     user_match=user_match,
-                    extracted_code_cleaned=extracted_code_cleaned,
-                    extracted_time=extracted.time,
-                    usernames=user_names,
                 ),
                 headers=request.headers,
                 idempotency_key=None,
@@ -298,7 +276,6 @@ class CompletionsService(BaseService):
                 auto_verified = await asyncio.wait_for(
                     self._attempt_auto_verify(
                         request=request,
-                        autocomplete=autocomplete,
                         users=users,
                         completion_id=completion_id,
                         data=data,
