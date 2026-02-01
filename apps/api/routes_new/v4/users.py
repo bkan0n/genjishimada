@@ -19,11 +19,13 @@ from litestar.di import Provide
 from litestar.exceptions import HTTPException
 from litestar.params import Body
 from litestar.response import Response
-from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST
+from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 from msgspec import UNSET
 
 from repository.users_repository import provide_users_repository
+from services.exceptions.users import InvalidUserIdError, UserAlreadyExistsError, UserNotFoundError
 from services.users_service import UsersService, provide_users_service
+from utilities.errors import CustomHTTPException
 
 log = logging.getLogger(__name__)
 
@@ -148,8 +150,17 @@ class UsersController(litestar.Controller):
 
         Returns:
             The created (or existing) user with default fields.
+
+        Raises:
+            HTTPException: 400 if user_id is invalid (< 100000000).
+            HTTPException: 409 if user already exists.
         """
-        return await svc.create_user(data)
+        try:
+            return await svc.create_user(data)
+        except InvalidUserIdError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except UserAlreadyExistsError as e:
+            raise HTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
 
     @litestar.put(
         path="/{user_id:int}/overwatch",
@@ -262,4 +273,7 @@ class UsersController(litestar.Controller):
             real_user_id: The real user ID to migrate references to.
             conn: Database connection.
         """
-        return await svc.link_fake_member_id_to_real_user_id(fake_user_id, real_user_id, conn)
+        try:
+            return await svc.link_fake_member_id_to_real_user_id(fake_user_id, real_user_id, conn)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(detail=e.message, status_code=HTTP_404_NOT_FOUND)

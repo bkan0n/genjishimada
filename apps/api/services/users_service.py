@@ -18,7 +18,7 @@ from genjishimada_sdk.users import (
 from repository.exceptions import UniqueConstraintViolationError
 from repository.users_repository import UsersRepository
 from services.base import BaseService
-from services.exceptions.users import InvalidUserIdError, UserAlreadyExistsError
+from services.exceptions.users import InvalidUserIdError, UserAlreadyExistsError, UserNotFoundError
 from utilities.shared_queries import get_user_rank_data
 
 log = logging.getLogger(__name__)
@@ -246,6 +246,9 @@ class UsersService(BaseService):
             real_user_id: The real user ID.
             conn: Database connection.
         """
+        if not await self._users_repo.check_user_exists(real_user_id):
+            raise UserNotFoundError(real_user_id)
+
         async with conn.transaction():
             await self._users_repo.update_maps_creators_for_fake_member(
                 fake_user_id=fake_user_id,
