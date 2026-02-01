@@ -182,6 +182,17 @@ class NotificationsService(BaseService):
         """
         return await self._notifications_repo.mark_all_events_read(user_id)
 
+    async def dismiss_all(self, user_id: int) -> int:
+        """Dismiss all notifications and return count.
+
+        Args:
+            user_id: Target user ID.
+
+        Returns:
+            Count of notifications dismissed.
+        """
+        return await self._notifications_repo.dismiss_all_events(user_id)
+
     async def dismiss_event(self, event_id: int) -> None:
         """Dismiss a notification from the tray.
 

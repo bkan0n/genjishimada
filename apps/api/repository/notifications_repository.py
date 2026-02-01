@@ -205,6 +205,33 @@ class NotificationsRepository(BaseRepository):
         result = await _conn.fetch(query, user_id)
         return len(result)
 
+    async def dismiss_all_events(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int:
+        """Dismiss all notifications and return count.
+
+        Args:
+            user_id: Target user ID.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            Count of notifications dismissed.
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            UPDATE notifications.events
+            SET dismissed_at = now(),
+                read_at = COALESCE(read_at, now())
+            WHERE user_id = $1 AND dismissed_at IS NULL
+            RETURNING id
+        """
+        result = await _conn.fetch(query, user_id)
+        return len(result)
+
     async def dismiss_event(
         self,
         event_id: int,

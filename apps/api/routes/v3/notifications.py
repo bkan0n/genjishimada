@@ -223,6 +223,28 @@ class NotificationsController(Controller):
         """
         await notifications_service.dismiss_event(event_id)
 
+    @patch(
+        "/users/{user_id:int}/dismiss-all",
+        summary="Dismiss All Notifications",
+        description="Dismiss all notifications for a user and mark them as read.",
+    )
+    async def dismiss_all(
+        self,
+        user_id: int,
+        notifications_service: NotificationsService,
+    ) -> dict[str, int]:
+        """Dismiss all notifications.
+
+        Args:
+            user_id: Target user ID.
+            notifications_service: Service dependency.
+
+        Returns:
+            Count of notifications dismissed (200 OK automatic).
+        """
+        count = await notifications_service.dismiss_all(user_id)
+        return {"dismissed": count}
+
     @post(
         "/events/{event_id:int}/delivery-result",
         summary="Record Delivery Result",

@@ -348,6 +348,33 @@ class TestDismissEvent:
         assert response.status_code == 204
 
 
+class TestDismissAll:
+    """PATCH /api/v3/notifications/users/{user_id}/dismiss-all"""
+
+    async def test_happy_path(self, test_client, create_test_user):
+        """Dismiss all returns 200 with count."""
+        user_id = await create_test_user()
+
+        response = await test_client.patch(
+            f"/api/v3/notifications/users/{user_id}/dismiss-all",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "dismissed" in data
+        assert isinstance(data["dismissed"], int)
+
+    async def test_non_existent_user_succeeds_idempotently(self, test_client):
+        """Dismiss all for non-existent user returns 200 with 0 count (idempotent)."""
+        response = await test_client.patch(
+            "/api/v3/notifications/users/999999999/dismiss-all",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["dismissed"] == 0
+
+
 class TestRecordDeliveryResult:
     """POST /api/v3/notifications/events/{event_id}/delivery-result"""
 
