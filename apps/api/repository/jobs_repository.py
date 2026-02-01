@@ -41,6 +41,8 @@ class InternalJobsRepository(BaseRepository):
                 "status='failed', finished_at=$2, error_code=$3, error_msg=$4",
                 (job_id, now, data.error_code, data.error_msg),
             ),
+            "timeout": ("status='timeout', finished_at=$2, error_code=$3, error_msg=$4", (job_id, now, data.error_code, data.error_msg)),
+            "queued": ("status='queued'", (job_id,)),
         }
         sql_set, params = sets[data.status]
         await _conn.execute(f"UPDATE public.jobs SET {sql_set} WHERE id=$1", *params)
