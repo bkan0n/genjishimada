@@ -39,7 +39,6 @@ from litestar import Request
 from litestar.datastructures import Headers, State
 
 from events.schemas import OcrVerificationRequestedEvent
-from repository.autocomplete_repository import AutocompleteRepository
 from repository.completions_repository import CompletionsRepository
 from repository.exceptions import (
     ForeignKeyViolationError,
