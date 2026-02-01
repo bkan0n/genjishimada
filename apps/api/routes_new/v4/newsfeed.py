@@ -49,6 +49,7 @@ class NewsfeedController(litestar.Controller):
         "newsfeed_repo": Provide(provide_newsfeed_repository),
         "newsfeed_service": Provide(provide_newsfeed_service),
     }
+
     @litestar.post(
         path="/",
         summary="Create Newsfeed Event",
@@ -87,7 +88,7 @@ class NewsfeedController(litestar.Controller):
     async def get_newsfeed_events(
         self,
         newsfeed_service: NewsfeedService,
-        page_size: Annotated[Literal[10, 20, 25, 50], Parameter()] = 10,
+        page_size: int = 10,
         page_number: int = 1,
         event_type: Annotated[NewsfeedEventType | None, Parameter(query="type")] = None,
     ) -> list[NewsfeedEvent] | None:

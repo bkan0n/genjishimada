@@ -418,7 +418,7 @@ class APIService:
         completion_filter: CompletionFilter = "All",
         playtest_filter: PlaytestFilter = "All",
         return_all: bool = True,
-        page_size: Literal[10, 20, 25, 50] = 10,
+        page_size: int = 10,
         page_number: int = 1,
     ) -> Response[list[MapModel]]:
         """Get a list of maps matching the given filters.
@@ -508,7 +508,7 @@ class APIService:
         completion_filter: CompletionFilter = "All",
         playtest_filter: PlaytestFilter = "All",
         return_all: bool = True,
-        page_size: Literal[10, 20, 25, 50] = 10,
+        page_size: int = 10,
         page_number: int = 1,
     ) -> MapModel:
         """Get the first map result matching the given filters.
@@ -1227,7 +1227,7 @@ class APIService:
     def get_newsfeed(
         self,
         *,
-        page_size: Literal[10, 20, 25, 50] = 10,
+        page_size: int = 10,
         page_number: int = 1,
         type_: NewsfeedEventType | None = None,
     ) -> Response[list[NewsfeedEvent]]:

@@ -138,7 +138,7 @@ class MapsController(Controller):
         # Quality
         minimum_quality: Annotated[int | None, Parameter(description="Minimum average quality rating")] = None,
         # Pagination
-        page_size: Annotated[Literal[10, 20, 25, 50, 12], Parameter(description="Results per page")] = 10,
+        page_size: Annotated[int, Parameter(description="Results per page")] = 10,
         page_number: Annotated[int, Parameter(description="Page number (1-indexed)")] = 1,
         # Sorting
         sort: Annotated[list[SortKey] | None, Parameter(description="List of 'field:direction' sort keys")] = None,

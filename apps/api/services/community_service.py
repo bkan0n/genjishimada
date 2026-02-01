@@ -54,7 +54,7 @@ class CommunityService(BaseService):
             "skill_rank",
         ] = "xp_amount",
         sort_direction: Literal["asc", "desc"] = "asc",
-        page_size: Literal[10, 20, 25, 50] = 10,
+        page_size: int = 10,
         page_number: int = 1,
     ) -> list[CommunityLeaderboardResponse]:
         """Get community leaderboard with filtering and pagination."""

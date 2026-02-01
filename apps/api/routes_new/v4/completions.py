@@ -75,7 +75,7 @@ class CompletionsController(Controller):
         svc: CompletionsService,
         user_id: int,
         difficulty: DifficultyTop | None = None,
-        page_size: Literal[10, 20, 25, 50, 100000] = 10,
+        page_size: int = 10,
         page_number: int = 1,
     ) -> Response[list[CompletionResponse]]:
         """Get completions for a specific user."""
@@ -200,7 +200,7 @@ class CompletionsController(Controller):
         self,
         svc: CompletionsService,
         code: str,
-        page_size: Literal[10, 20, 25, 50, 0] = 10,
+        page_size: int = 10,
         page_number: int = 1,
     ) -> list[CompletionResponse]:
         """Get the leaderboard for a map."""
@@ -261,7 +261,7 @@ class CompletionsController(Controller):
     async def get_all_completions(
         self,
         svc: CompletionsService,
-        page_size: Literal[10, 20, 25, 50] = 10,
+        page_size: int = 10,
         page_number: int = 1,
     ) -> list[CompletionResponse]:
         """Get all completions that are verified sorted by most recent."""
@@ -289,7 +289,7 @@ class CompletionsController(Controller):
         user_id: int | None = None,
         verification_status: Literal["Verified", "Unverified", "All"] = "All",
         latest_only: bool = True,
-        page_size: Literal[10, 20, 25, 50, 0] = 10,
+        page_size: int = 10,
         page_number: int = 1,
     ) -> list[CompletionResponse]:
         """Get filtered records for moderation."""
@@ -333,7 +333,7 @@ class CompletionsController(Controller):
         svc: CompletionsService,
         code: str,
         page_number: int = 1,
-        page_size: Literal[10, 20, 25, 50] = 10,
+        page_size: int = 10,
     ) -> list[CompletionResponse]:
         """Get the legacy completions for a map code."""
         return await svc.get_legacy_completions_per_map(code, page_number, page_size)
