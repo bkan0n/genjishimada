@@ -302,8 +302,6 @@ def unique_idempotency_key(global_idempotency_key_tracker: set[str]) -> str:
 # ==============================================================================
 
 
-
-
 @pytest.fixture
 async def create_test_user(postgres_service: PostgresService, global_user_id_tracker: set[int]):
     """Factory fixture for creating test users.
