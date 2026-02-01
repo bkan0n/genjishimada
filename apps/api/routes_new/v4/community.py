@@ -127,7 +127,17 @@ class CommunityController(Controller):
         description="Return min, max, and average verified completion times for a map code.",
     )
     async def get_map_completion_statistics(
-        self, community_service: CommunityService, code: OverwatchCode
+        self,
+        community_service: CommunityService,
+        code: Annotated[
+            OverwatchCode,
+            Parameter(
+                pattern="^[A-Z0-9]{4,6}$",
+                min_length=4,
+                max_length=6,
+                description="Overwatch map code (4-6 uppercase alphanumeric characters)",
+            ),
+        ],
     ) -> list[MapCompletionStatisticsResponse]:
         """Return summary completion time statistics for a map.
 
@@ -231,7 +241,15 @@ class CommunityController(Controller):
         self,
         community_service: CommunityService,
         user_id: int,
-        code: OverwatchCode,
+        code: Annotated[
+            OverwatchCode,
+            Parameter(
+                pattern="^[A-Z0-9]{4,6}$",
+                min_length=4,
+                max_length=6,
+                description="Overwatch map code (4-6 uppercase alphanumeric characters)",
+            ),
+        ],
     ) -> list[MapRecordProgressionResponse]:
         """Return a user's record progression for a map.
 
