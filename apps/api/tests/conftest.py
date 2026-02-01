@@ -134,6 +134,15 @@ def global_thread_id_tracker() -> set[int]:
 
 
 @pytest.fixture(scope="session")
+def global_message_id_tracker() -> set[int]:
+    """Session-wide tracker for all used message IDs.
+
+    Prevents collisions across all tests in the session.
+    """
+    return set()
+
+
+@pytest.fixture(scope="session")
 def global_email_tracker() -> set[str]:
     """Session-wide tracker for all used email addresses.
 
@@ -232,6 +241,20 @@ def unique_thread_id(global_thread_id_tracker: set[int]) -> int:
         if thread_id not in global_thread_id_tracker:
             global_thread_id_tracker.add(thread_id)
             return thread_id
+
+
+@pytest.fixture
+def unique_message_id(global_message_id_tracker: set[int]) -> int:
+    """Generate a unique Discord message ID.
+
+    Message IDs are 18-digit integers (snowflakes), same as user/thread IDs.
+    We generate random IDs in the valid range and track them.
+    """
+    while True:
+        message_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+        if message_id not in global_message_id_tracker:
+            global_message_id_tracker.add(message_id)
+            return message_id
 
 
 @pytest.fixture

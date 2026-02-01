@@ -9,7 +9,7 @@ import asyncpg
 import msgspec
 from asyncpg import Connection
 from genjishimada_sdk.difficulties import convert_raw_difficulty_to_difficulty_all
-from genjishimada_sdk.maps import OverwatchMap
+from genjishimada_sdk.maps import Mechanics, OverwatchMap, Restrictions, Tags
 from litestar.datastructures import State
 
 from utilities.map_search import MapSearchFilters, MapSearchSQLSpecBuilder
@@ -338,7 +338,7 @@ class MapsRepository(BaseRepository):
     async def insert_mechanics(
         self,
         map_id: int,
-        mechanics: list[str] | None,
+        mechanics: list[Mechanics] | None,
         *,
         conn: Connection | None = None,
     ) -> None:
@@ -409,7 +409,7 @@ class MapsRepository(BaseRepository):
     async def insert_restrictions(
         self,
         map_id: int,
-        restrictions: list[str] | None,
+        restrictions: list[Restrictions] | None,
         *,
         conn: Connection | None = None,
     ) -> None:
@@ -480,7 +480,7 @@ class MapsRepository(BaseRepository):
     async def insert_tags(
         self,
         map_id: int,
-        tags: list[str] | None,
+        tags: list[Tags] | None,
         *,
         conn: Connection | None = None,
     ) -> None:

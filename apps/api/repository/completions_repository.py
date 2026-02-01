@@ -179,6 +179,8 @@ class CompletionsRepository(BaseRepository):
             wm.legacy,
             wm.legacy_medal,
             wm.message_id,
+            wm.map_name,
+            wm.difficulty,
             FALSE as suspicious,
             (SELECT COUNT(*) FROM completions.upvotes WHERE message_id=wm.message_id) AS upvotes,
             COUNT(*) OVER() AS total_results
