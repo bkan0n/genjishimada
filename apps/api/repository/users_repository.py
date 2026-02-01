@@ -277,23 +277,25 @@ class UsersRepository(BaseRepository):
         query = """
             SELECT DISTINCT name
             FROM (
-                SELECT username AS name
+                SELECT username AS name,
+                       CASE WHEN owu.is_primary THEN 2 ELSE 1 END AS sort_order
                 FROM core.users u
                 LEFT JOIN users.overwatch_usernames owu ON u.id = owu.user_id
                 WHERE u.id = $1 AND username IS NOT NULL
 
-                UNION
+                UNION ALL
 
-                SELECT global_name AS name
+                SELECT global_name AS name, 0
                 FROM core.users
                 WHERE id = $1 AND global_name IS NOT NULL
 
-                UNION
+                UNION ALL
 
-                SELECT nickname AS name
+                SELECT nickname AS name, 0
                 FROM core.users
                 WHERE id = $1 AND nickname IS NOT NULL
-            ) all_names;
+            ) all_names
+            ORDER BY sort_order DESC;
         """
         rows = await _conn.fetch(query, user_id)
         return [row["name"] for row in rows]

@@ -437,11 +437,18 @@ class ExtractedTextsResponse(CamelConfig):
     """
 
     top_left: str | None
-    top_left_white: str | None
-    top_left_cyan: str | None
     banner: str | None
     top_right: str | None
-    bottom_left: str | None
+
+
+class ExtractedResultsSourcesResponse(CamelConfig):
+    """OCR output summarizing detected result details."""
+
+    name: str
+    code: str
+    time: str
+    code_verified_by: str
+    time_verified_by: str
 
 
 class ExtractedResultResponse(CamelConfig):
@@ -457,6 +464,7 @@ class ExtractedResultResponse(CamelConfig):
     name: str | None
     time: float | None
     code: str | None
+    sources: ExtractedResultsSourcesResponse
     texts: ExtractedTextsResponse
 
 
