@@ -20,9 +20,10 @@ from litestar.static_files.config import create_static_files_router
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR, HTTP_503_SERVICE_UNAVAILABLE
 from litestar_asyncpg import AsyncpgConfig, AsyncpgConnection, AsyncpgPlugin, PoolConfig
 
+from events import listeners
 from middleware.auth import CustomAuthenticationMiddleware
 from middleware.guards import scope_guard
-from routes import route_handlers
+from routes.v3 import route_handlers as v3_route_handlers
 from utilities.errors import CustomHTTPException
 
 APP_ENVIRONMENT = os.getenv("APP_ENVIRONMENT")
@@ -115,7 +116,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         ),
     )
 
-    v3_router = litestar.Router("/api/v3", route_handlers=route_handlers)
+    v3_router = litestar.Router("/api/v3", route_handlers=v3_route_handlers)
 
     @get("/healthcheck", tags=["Utilities"], opt={"exclude_from_auth": True})
     async def _health_check(conn: Connection) -> bool:
@@ -133,7 +134,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         title="Genji Shimada API",
         description="REST API for Genji Shimada project.",
         version="0.0.1",
-        render_plugins=[ScalarRenderPlugin(version="1.39.0")],
+        render_plugins=[ScalarRenderPlugin()],
         path="/docs",
         servers=[
             Server(
@@ -180,6 +181,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
             CustomHTTPException: default_exception_handler,
             HTTP_500_INTERNAL_SERVER_ERROR: internal_server_error_handler,
         },
+        listeners=listeners,
         lifespan=[rabbitmq_connection],
         logging_config=logging_config,
         middleware=[auth_middleware],

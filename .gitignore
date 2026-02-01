@@ -278,3 +278,4 @@ backups/*
 !backups/.gitkeep
 /docs/plans/
 .env.local
+/docs/reviews

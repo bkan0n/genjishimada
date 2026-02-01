@@ -17,7 +17,6 @@ __all__ = (
     "CompletionSubmissionResponse",
     "CompletionVerificationUpdateRequest",
     "ExtractedResultResponse",
-    "ExtractedTextsResponse",
     "FailedAutoverifyEvent",
     "MapRecordProgressionResponse",
     "OcrResponse",
@@ -424,26 +423,6 @@ class CamelConfig(Struct, rename=to_camel):
     """Base struct that renames fields to camelCase during encoding/decoding."""
 
 
-class ExtractedTextsResponse(CamelConfig):
-    """OCR text snippets extracted from a screenshot.
-
-    Attributes:
-        top_left: Raw text detected in the top-left area.
-        top_left_white: White-colored text detected in the top-left area.
-        top_left_cyan: Cyan-colored text detected in the top-left area.
-        banner: Text detected in the banner region.
-        top_right: Raw text detected in the top-right area.
-        bottom_left: Raw text detected in the bottom-left area.
-    """
-
-    top_left: str | None
-    top_left_white: str | None
-    top_left_cyan: str | None
-    banner: str | None
-    top_right: str | None
-    bottom_left: str | None
-
-
 class ExtractedResultResponse(CamelConfig):
     """OCR output summarizing detected result details.
 
@@ -457,7 +436,8 @@ class ExtractedResultResponse(CamelConfig):
     name: str | None
     time: float | None
     code: str | None
-    texts: ExtractedTextsResponse
+    sources: dict
+    texts: dict
 
 
 class OcrResponse(CamelConfig):
@@ -472,23 +452,19 @@ class FailedAutoverifyEvent(Struct):
     Attributes:
         submitted_code: Workshop code submitted by the user.
         submitted_time: Completion time submitted by the user.
+        submitted_user_names: Names submitted by the user.
         user_id: Identifier of the submitting user.
         extracted: OCR results extracted from the proof.
         code_match: Whether the extracted code matched the submission.
         time_match: Whether the extracted time matched the submission.
         user_match: Whether the extracted user matched the submission.
-        extracted_code_cleaned: Normalized code detected via OCR.
-        extracted_time: Time detected via OCR.
-        extracted_user_id: User identifier detected via OCR.
     """
 
     submitted_code: OverwatchCode
     submitted_time: float
+    submitted_user_names: list[str]
     user_id: int
     extracted: ExtractedResultResponse
     code_match: bool
     time_match: bool
     user_match: bool
-    extracted_code_cleaned: str | None
-    extracted_time: float | None
-    usernames: list[str] | None

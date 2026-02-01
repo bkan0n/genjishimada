@@ -98,16 +98,16 @@ class UserResponse(Struct):
 
     Attributes:
         id: Discord user identifier.
-        global_name: Global display name.
-        nickname: Server nickname.
+        global_name: Global display name (may be None for users without a global name).
+        nickname: Server nickname (may be None for users without a server nickname).
         overwatch_usernames: Linked Overwatch usernames.
         coalesced_name: Combined display name for presentation.
         coins: Current coin balance.
     """
 
     id: int
-    global_name: str
-    nickname: str
+    global_name: str | None
+    nickname: str | None
     overwatch_usernames: list[str] | None
     coalesced_name: str | None = None
     coins: int = 0
@@ -216,7 +216,7 @@ class CommunityLeaderboardResponse(Struct):
 
     Attributes:
         user_id: Identifier of the user.
-        nickname: Display nickname for the leaderboard.
+        nickname: Display nickname for the leaderboard (may be None).
         xp_amount: Total XP accumulated.
         raw_tier: Raw tier value.
         normalized_tier: Normalized tier value.
@@ -231,7 +231,7 @@ class CommunityLeaderboardResponse(Struct):
     """
 
     user_id: int
-    nickname: str
+    nickname: str | None
     xp_amount: int
     raw_tier: int
     normalized_tier: int

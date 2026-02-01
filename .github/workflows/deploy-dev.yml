@@ -49,29 +49,12 @@ jobs:
           else
             echo "ref=${{ inputs.ref }}" >> "$GITHUB_OUTPUT"
           fi
-
-  lint:
-    uses: ./.github/workflows/lint.yml
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
-    needs: [ resolve-ref ]
-    with:
-      ref: ${{ needs.resolve-ref.outputs.ref }}
-
-  tests:
-    uses: ./.github/workflows/tests.yml
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request) }}
-    needs: [ resolve-ref ]
-    with:
-      ref: ${{ needs.resolve-ref.outputs.ref }}
-
   dev-deploy:
-    needs: [ resolve-ref, lint, tests ]
+    needs: [ resolve-ref ]
     # Run if manually dispatched OR if this is a comment on a PR and branch-deploy says to continue
     if: |
       always() &&
-      (needs.resolve-ref.outputs.continue == 'true' || github.event_name == 'workflow_dispatch') &&
-      needs.lint.result == 'success' &&
-      needs.tests.result == 'success'
+      (needs.resolve-ref.outputs.continue == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: development
 

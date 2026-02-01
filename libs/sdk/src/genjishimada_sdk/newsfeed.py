@@ -257,10 +257,10 @@ class NewsfeedAnnouncement(_TaggedPayload, tag="announcement", kw_only=True):
 
     title: str
     content: str
-    url: str | None
-    banner_url: GuideURL | None
-    thumbnail_url: GuideURL | None
-    from_discord: bool
+    url: str | None = None
+    banner_url: GuideURL | None = None
+    thumbnail_url: GuideURL | None = None
+    from_discord: bool = False
 
 
 class NewsfeedLinkedMap(_TaggedPayload, tag="linked_map", kw_only=True):

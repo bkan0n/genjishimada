@@ -3,16 +3,34 @@
 from msgspec import Struct
 
 __all__ = (
+    "AuthUserPublic",
     "AuthUserResponse",
+    "AuthUserVerify",
+    "CreateRememberTokenResponse",
+    "DestroyUserSessionsResponse",
     "EmailAuthStatus",
     "EmailLoginRequest",
     "EmailRegisterRequest",
     "EmailVerifyRequest",
+    "LoginResponse",
     "PasswordResetConfirmRequest",
+    "PasswordResetConfirmResponse",
+    "PasswordResetEmailEvent",
     "PasswordResetRequest",
+    "PasswordResetRequestResponse",
+    "RegisterResponse",
+    "ResendVerificationResponse",
+    "RevokeRememberTokensResponse",
+    "SessionDestroyResponse",
+    "SessionGcResponse",
     "SessionInfo",
     "SessionReadResponse",
     "SessionWriteRequest",
+    "SessionWriteResponse",
+    "UserSessionsResponse",
+    "ValidateRememberTokenResponse",
+    "VerificationEmailEvent",
+    "VerifyEmailResponse",
 )
 
 
@@ -106,6 +124,95 @@ class AuthUserResponse(Struct):
     is_mod: bool = False
 
 
+class AuthUserPublic(Struct):
+    """Public-facing user info for registration responses.
+
+    Attributes:
+        id: User ID.
+        email: User's email address.
+        username: Display name.
+        email_verified: Whether email is verified.
+    """
+
+    id: int
+    email: str
+    username: str
+    email_verified: bool
+
+
+class AuthUserVerify(Struct):
+    """User info returned from verification and password reset flows.
+
+    Attributes:
+        id: User ID.
+        email: User's email address.
+        username: Display name.
+        email_verified: Whether email is verified.
+        is_mod: Whether user has moderator/admin permissions.
+    """
+
+    id: int
+    email: str
+    username: str
+    email_verified: bool
+    is_mod: bool = False
+
+
+class VerificationEmailEvent(Struct):
+    """Payload for verification email events."""
+
+    email: str
+    username: str
+    token: str
+
+
+class PasswordResetEmailEvent(Struct):
+    """Payload for password reset email events."""
+
+    email: str
+    username: str
+    token: str
+
+
+class RegisterResponse(Struct):
+    """Response for user registration."""
+
+    user: AuthUserPublic
+    verification_email_sent: bool
+
+
+class LoginResponse(Struct):
+    """Response for user login."""
+
+    user: AuthUserResponse
+
+
+class VerifyEmailResponse(Struct):
+    """Response for email verification."""
+
+    message: str
+    user: AuthUserVerify
+
+
+class ResendVerificationResponse(Struct):
+    """Response for resend verification."""
+
+    message: str
+
+
+class PasswordResetRequestResponse(Struct):
+    """Response for password reset request."""
+
+    message: str
+
+
+class PasswordResetConfirmResponse(Struct):
+    """Response for password reset confirmation."""
+
+    message: str
+    user: AuthUserVerify
+
+
 class SessionWriteRequest(Struct):
     """Payload for writing session data.
 
@@ -144,3 +251,52 @@ class SessionReadResponse(Struct):
 
     payload: str | None
     is_mod: bool = False
+
+
+class SessionWriteResponse(Struct):
+    """Response for session write."""
+
+    success: bool
+
+
+class SessionDestroyResponse(Struct):
+    """Response for session destroy."""
+
+    deleted: bool
+
+
+class SessionGcResponse(Struct):
+    """Response for session garbage collection."""
+
+    deleted_count: int
+
+
+class UserSessionsResponse(Struct):
+    """Response for user sessions list."""
+
+    sessions: list[SessionInfo]
+
+
+class DestroyUserSessionsResponse(Struct):
+    """Response for destroying all user sessions."""
+
+    destroyed_count: int
+
+
+class CreateRememberTokenResponse(Struct):
+    """Response for creating remember token."""
+
+    token: str
+
+
+class ValidateRememberTokenResponse(Struct):
+    """Response for validating remember token."""
+
+    valid: bool
+    user_id: int | None
+
+
+class RevokeRememberTokensResponse(Struct):
+    """Response for revoking remember tokens."""
+
+    revoked_count: int

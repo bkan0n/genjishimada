@@ -17,7 +17,7 @@ if typing.TYPE_CHECKING:
 
 log = getLogger(__name__)
 
-__all__ = ["ConstraintHandler", "CustomHTTPException", "handle_db_exceptions", "parse_pg_detail"]
+__all__ = ["ConstraintHandler", "CustomHTTPException", "DomainError", "handle_db_exceptions", "parse_pg_detail"]
 
 
 def parse_pg_detail(detail: str | None) -> Optional[dict[str, str]]:
@@ -148,3 +148,25 @@ def handle_db_exceptions(
         return wrapper
 
     return decorator
+
+
+class DomainError(Exception):
+    """Base exception for domain-level business rule violations.
+
+    Attributes:
+        message: Human-readable error message.
+        context: Additional context about the error.
+
+    """
+
+    def __init__(self, message: str, **context: typing.Any) -> None:  # noqa: ANN401
+        """Initialize domain error.
+
+        Args:
+            message: Human-readable error message.
+            **context: Additional context (e.g., field names, identifiers).
+
+        """
+        super().__init__(message)
+        self.message = message
+        self.context = context

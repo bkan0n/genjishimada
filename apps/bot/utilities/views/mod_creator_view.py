@@ -47,7 +47,8 @@ class FormattableUser(UserResponse):
             dict: Mapping of display labels to user data.
         """
         overwatch_usernames = self.overwatch_usernames or []
-        aka = ", ".join([self.global_name, self.nickname, *overwatch_usernames])
+        names = [name for name in [self.global_name, self.nickname, *overwatch_usernames] if name is not None]
+        aka = ", ".join(names)
         return {
             "User": self.mention_user,
             "User ID": self.id,

@@ -72,7 +72,7 @@ class MapSearchFilters(msgspec.Struct):
     playtest_filter: PlaytestFilter = "All"
     return_all: bool = False
     force_filters: bool = False
-    page_size: Literal[10, 20, 25, 50, 12] = 10
+    page_size: int = 10
     page_number: int = 1
 
 

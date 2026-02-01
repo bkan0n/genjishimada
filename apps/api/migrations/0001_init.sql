@@ -46,13 +46,20 @@ COMMENT ON COLUMN core.users.coins IS 'Coins received from community contributio
 CREATE INDEX IF NOT EXISTS idx_users_nickname_trgm ON core.users USING gin (nickname gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_users_global_name_trgm ON core.users USING gin (global_name gin_trgm_ops);
 
+DROP TRIGGER IF EXISTS update_core_users_updated_at ON core.users;
 CREATE TRIGGER update_core_users_updated_at
     BEFORE UPDATE
     ON core.users
     FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
-CREATE TYPE playtest_status AS enum ('Approved', 'In Progress', 'Rejected');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'playtest_status') THEN
+        CREATE TYPE playtest_status AS enum ('Approved', 'In Progress', 'Rejected');
+    END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS core.maps
 (
@@ -97,6 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_maps_archived ON core.maps (archived);
 CREATE INDEX IF NOT EXISTS idx_maps_difficulty ON core.maps (difficulty);
 CREATE INDEX IF NOT EXISTS idx_maps_raw_difficulty ON core.maps (raw_difficulty);
 
+DROP TRIGGER IF EXISTS update_core_maps_updated_at ON core.maps;
 CREATE TRIGGER update_core_maps_updated_at
     BEFORE UPDATE
     ON core.maps
@@ -202,8 +210,8 @@ CREATE TABLE IF NOT EXISTS maps.creators
 );
 COMMENT ON COLUMN maps.creators.is_primary IS 'There can only be one primary creator';
 
-CREATE INDEX idx_creators_user_id ON maps.creators (user_id);
-CREATE INDEX idx_creators_user_primary ON maps.creators (user_id, is_primary);
+CREATE INDEX IF NOT EXISTS idx_creators_user_id ON maps.creators (user_id);
+CREATE INDEX IF NOT EXISTS idx_creators_user_primary ON maps.creators (user_id, is_primary);
 
 CREATE TABLE IF NOT EXISTS maps.medals
 (
@@ -221,8 +229,13 @@ CREATE TABLE IF NOT EXISTS maps.guides
     user_id bigint REFERENCES core.users (id) ON DELETE CASCADE
 );
 
-ALTER TABLE maps.guides
-    ADD CONSTRAINT guides_user_id_map_id_unique UNIQUE (user_id, map_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'guides_user_id_map_id_unique') THEN
+        ALTER TABLE maps.guides ADD CONSTRAINT guides_user_id_map_id_unique UNIQUE (user_id, map_id);
+    END IF;
+END
+$$;
 
 
 CREATE TABLE IF NOT EXISTS maps.clicks
@@ -260,8 +273,13 @@ CREATE TRIGGER trg_clicks_day_bucket_ins
     FOR EACH ROW
 EXECUTE FUNCTION maps.set_clicks_day_bucket();
 
-ALTER TABLE maps.clicks
-    ADD CONSTRAINT u_click_unique_per_day UNIQUE (map_id, ip_hash, day_bucket);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'u_click_unique_per_day') THEN
+        ALTER TABLE maps.clicks ADD CONSTRAINT u_click_unique_per_day UNIQUE (map_id, ip_hash, day_bucket);
+    END IF;
+END
+$$;
 
 
 CREATE TABLE IF NOT EXISTS maps.ratings
@@ -281,6 +299,7 @@ COMMENT ON COLUMN maps.ratings.quality IS 'A quality rating of the map 1 through
 CREATE INDEX IF NOT EXISTS idx_ratings_map_id_quality ON maps.ratings (map_id, quality);
 CREATE INDEX IF NOT EXISTS idx_ratings_map_id_quality_verified ON maps.ratings (map_id, quality, verified);
 
+DROP TRIGGER IF EXISTS update_maps_ratings_updated_at ON maps.ratings;
 CREATE TRIGGER update_maps_ratings_updated_at
     BEFORE UPDATE
     ON maps.ratings
@@ -307,6 +326,7 @@ COMMENT ON COLUMN playtests.meta.verification_id IS 'Playtest verification queue
 COMMENT ON COLUMN playtests.meta.initial_difficulty IS 'The difficulty value the creator believes the map to be';
 COMMENT ON COLUMN playtests.meta.completed IS 'If the playtest has concluded';
 
+DROP TRIGGER IF EXISTS update_playtests_meta_updated_at ON playtests.meta;
 CREATE TRIGGER update_playtests_meta_updated_at
     BEFORE UPDATE
     ON playtests.meta
@@ -362,6 +382,7 @@ $$;
 
 
 
+DROP TRIGGER IF EXISTS votes_requires_verified_completion ON playtests.votes;
 CREATE TRIGGER votes_requires_verified_completion
     BEFORE INSERT OR UPDATE OF user_id, map_id
     ON playtests.votes
@@ -370,6 +391,7 @@ EXECUTE FUNCTION playtests.enforce_verified_completion_immediate();
 
 
 
+DROP TRIGGER IF EXISTS update_playtests_votes_updated_at ON playtests.votes;
 CREATE TRIGGER update_playtests_votes_updated_at
     BEFORE UPDATE
     ON playtests.votes
@@ -1540,7 +1562,13 @@ CREATE INDEX IF NOT EXISTS analytics_command_name_date_idx ON public.analytics (
 
 
 
-CREATE TYPE job_status AS enum ('queued','processing','succeeded','failed','timeout');
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status') THEN
+        CREATE TYPE job_status AS enum ('queued','processing','succeeded','failed','timeout');
+    END IF;
+END
+$$;
 
 CREATE TABLE public.jobs
 (
@@ -1555,7 +1583,7 @@ CREATE TABLE public.jobs
     finished_at timestamptz
 );
 
-CREATE INDEX ON public.jobs (status, created_at);
+CREATE INDEX IF NOT EXISTS jobs_status_created_at_idx ON public.jobs (status, created_at);
 
 CREATE TABLE public.tags
 (
@@ -1579,24 +1607,24 @@ CREATE TABLE public.tag_lookup
 );
 
 
-CREATE INDEX tag_lookup_location_id_idx ON public.tag_lookup (location_id);
+CREATE INDEX IF NOT EXISTS tag_lookup_location_id_idx ON public.tag_lookup (location_id);
 
-CREATE INDEX tag_lookup_name_idx ON public.tag_lookup (name);
+CREATE INDEX IF NOT EXISTS tag_lookup_name_idx ON public.tag_lookup (name);
 
-CREATE INDEX tag_lookup_name_lower_idx ON public.tag_lookup (lower(name));
+CREATE INDEX IF NOT EXISTS tag_lookup_name_lower_idx ON public.tag_lookup (lower(name));
 
-CREATE INDEX tag_lookup_name_trgm_idx ON public.tag_lookup USING gin (name public.gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS tag_lookup_name_trgm_idx ON public.tag_lookup USING gin (name public.gin_trgm_ops);
 
-CREATE UNIQUE INDEX tag_lookup_uniq_idx ON public.tag_lookup (lower(name), location_id);
+CREATE UNIQUE INDEX IF NOT EXISTS tag_lookup_uniq_idx ON public.tag_lookup (lower(name), location_id);
 
 
-CREATE INDEX tags_location_id_idx ON public.tags (location_id);
+CREATE INDEX IF NOT EXISTS tags_location_id_idx ON public.tags (location_id);
 
-CREATE INDEX tags_name_idx ON public.tags (name);
+CREATE INDEX IF NOT EXISTS tags_name_idx ON public.tags (name);
 
-CREATE INDEX tags_name_lower_idx ON public.tags (lower(name));
+CREATE INDEX IF NOT EXISTS tags_name_lower_idx ON public.tags (lower(name));
 
-CREATE INDEX tags_name_trgm_idx ON public.tags USING gin (name public.gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS tags_name_trgm_idx ON public.tags USING gin (name public.gin_trgm_ops);
 
 CREATE UNIQUE INDEX tags_uniq_idx ON public.tags (lower(name), location_id);
 
