@@ -13,6 +13,7 @@ from repository.rank_card_repository import RankCardRepository
 from utilities.shared_queries import get_map_mastery_data, get_user_rank_data
 
 from .base import BaseService
+from .exceptions.users import UserNotFoundError
 
 
 class RankCardService(BaseService):
@@ -28,6 +29,23 @@ class RankCardService(BaseService):
         """
         super().__init__(pool, state)
         self._rank_card_repo = rank_card_repo
+
+    async def _ensure_user_exists(self, user_id: int) -> None:
+        """Verify user exists in database.
+
+        Args:
+            user_id: User ID to check.
+
+        Raises:
+            UserNotFoundError: If user does not exist.
+        """
+        async with self._pool.acquire() as conn:
+            exists = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM core.users WHERE id = $1)",
+                user_id,
+            )
+            if not exists:
+                raise UserNotFoundError(user_id)
 
     async def get_background(self, user_id: int) -> BackgroundResponse:
         """Get user's rank card background.
@@ -51,7 +69,11 @@ class RankCardService(BaseService):
 
         Returns:
             Background response with updated name.
+
+        Raises:
+            UserNotFoundError: If user does not exist.
         """
+        await self._ensure_user_exists(user_id)
         await self._rank_card_repo.upsert_background(user_id, background)
         return BackgroundResponse(name=background)
 
@@ -77,7 +99,11 @@ class RankCardService(BaseService):
 
         Returns:
             Avatar response with updated skin.
+
+        Raises:
+            UserNotFoundError: If user does not exist.
         """
+        await self._ensure_user_exists(user_id)
         await self._rank_card_repo.upsert_avatar_skin(user_id, skin)
         return AvatarResponse(skin=skin)
 
@@ -103,7 +129,11 @@ class RankCardService(BaseService):
 
         Returns:
             Avatar response with updated pose.
+
+        Raises:
+            UserNotFoundError: If user does not exist.
         """
+        await self._ensure_user_exists(user_id)
         await self._rank_card_repo.upsert_avatar_pose(user_id, pose)
         return AvatarResponse(pose=pose)
 
@@ -143,7 +173,11 @@ class RankCardService(BaseService):
         Args:
             user_id: User ID.
             data: Badge settings to store.
+
+        Raises:
+            UserNotFoundError: If user does not exist.
         """
+        await self._ensure_user_exists(user_id)
         await self._rank_card_repo.upsert_badges(
             user_id,
             data.badge_name1,
@@ -185,7 +219,12 @@ class RankCardService(BaseService):
         Returns:
             Complete rank card information including ranks, nickname, avatar,
             badges, stats, and XP.
+
+        Raises:
+            UserNotFoundError: If user does not exist.
         """
+        await self._ensure_user_exists(user_id)
+
         # Fetch all data in parallel where possible
         async with self._pool.acquire() as conn:
             rank_data = await get_user_rank_data(conn, user_id)  # type: ignore[arg-type]

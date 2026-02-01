@@ -9,11 +9,13 @@ from litestar import Controller, get, put
 from litestar.di import Provide
 from litestar.params import Body
 from litestar.response import Response
-from litestar.status_codes import HTTP_204_NO_CONTENT
+from litestar.status_codes import HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 from msgspec import Struct
 
 from repository.rank_card_repository import provide_rank_card_repository
+from services.exceptions.users import UserNotFoundError
 from services.rank_card_service import RankCardService, provide_rank_card_service
+from utilities.errors import CustomHTTPException
 
 
 class BackgroundBody(Struct):
@@ -66,7 +68,10 @@ class RankCardController(Controller):
         Returns:
             The complete rank card model ready for rendering (200 OK).
         """
-        return await rank_card_service.get_rank_card_data(user_id)
+        try:
+            return await rank_card_service.get_rank_card_data(user_id)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(detail=e.message, status_code=HTTP_404_NOT_FOUND)
 
     @get(
         "/background",
@@ -110,7 +115,10 @@ class RankCardController(Controller):
         Returns:
             The updated background name (200 OK).
         """
-        return await rank_card_service.set_background(user_id, data.name)
+        try:
+            return await rank_card_service.set_background(user_id, data.name)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(detail=e.message, status_code=HTTP_404_NOT_FOUND)
 
     @get(
         "/avatar/skin",
@@ -154,7 +162,10 @@ class RankCardController(Controller):
         Returns:
             The updated avatar skin (200 OK).
         """
-        return await rank_card_service.set_avatar_skin(user_id, data.skin)
+        try:
+            return await rank_card_service.set_avatar_skin(user_id, data.skin)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(detail=e.message, status_code=HTTP_404_NOT_FOUND)
 
     @get(
         "/avatar/pose",
@@ -198,7 +209,10 @@ class RankCardController(Controller):
         Returns:
             The updated avatar pose (200 OK).
         """
-        return await rank_card_service.set_avatar_pose(user_id, data.pose)
+        try:
+            return await rank_card_service.set_avatar_pose(user_id, data.pose)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(detail=e.message, status_code=HTTP_404_NOT_FOUND)
 
     @get(
         "/badges",
@@ -248,5 +262,8 @@ class RankCardController(Controller):
         Returns:
             Empty response with 204 No Content.
         """
-        await rank_card_service.set_badges(user_id, data)
-        return Response(None, status_code=HTTP_204_NO_CONTENT)
+        try:
+            await rank_card_service.set_badges(user_id, data)
+            return Response(None, status_code=HTTP_204_NO_CONTENT)
+        except UserNotFoundError as e:
+            raise CustomHTTPException(detail=e.message, status_code=HTTP_404_NOT_FOUND)
