@@ -44,7 +44,7 @@ class PlaytestController(Controller):
     """Controller for playtest endpoints."""
 
     tags = ["Playtest"]
-    path = "/playtests"
+    path = "/maps/playtests"
     dependencies = {
         "playtest_repo": Provide(provide_playtest_repository),
         "playtest_service": Provide(provide_playtest_service),

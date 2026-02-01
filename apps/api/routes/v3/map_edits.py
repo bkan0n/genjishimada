@@ -46,7 +46,7 @@ class MapEditsController(Controller):
     """Controller for map edit request endpoints."""
 
     tags = ["Map Edits"]
-    path = "/map-edits"
+    path = "/maps/map-edits"
     dependencies = {
         "maps_repo": Provide(provide_maps_repository),
         "maps_service": Provide(provide_maps_service),
