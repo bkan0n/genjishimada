@@ -275,26 +275,30 @@ class UsersRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
         query = """
-            SELECT DISTINCT name
+            SELECT name
             FROM (
-                SELECT username AS name,
-                       CASE WHEN owu.is_primary THEN 2 ELSE 1 END AS sort_order
-                FROM core.users u
-                LEFT JOIN users.overwatch_usernames owu ON u.id = owu.user_id
-                WHERE u.id = $1 AND username IS NOT NULL
+                SELECT DISTINCT ON (name) name, sort_order
+                FROM (
+                    SELECT username AS name,
+                           CASE WHEN owu.is_primary THEN 2 ELSE 1 END AS sort_order
+                    FROM core.users u
+                    LEFT JOIN users.overwatch_usernames owu ON u.id = owu.user_id
+                    WHERE u.id = $1 AND username IS NOT NULL
 
-                UNION ALL
+                    UNION ALL
 
-                SELECT global_name AS name, 0
-                FROM core.users
-                WHERE id = $1 AND global_name IS NOT NULL
+                    SELECT global_name AS name, 0 as sort_order
+                    FROM core.users
+                    WHERE id = $1 AND global_name IS NOT NULL
 
-                UNION ALL
+                    UNION ALL
 
-                SELECT nickname AS name, 0
-                FROM core.users
-                WHERE id = $1 AND nickname IS NOT NULL
-            ) all_names
+                    SELECT nickname AS name, 0 as sort_order
+                    FROM core.users
+                    WHERE id = $1 AND nickname IS NOT NULL
+                ) all_names
+                ORDER BY name, sort_order DESC
+            ) deduped
             ORDER BY sort_order DESC;
         """
         rows = await _conn.fetch(query, user_id)
