@@ -15,7 +15,7 @@ pytestmark = [
 
 
 class TestCreateNewsfeedEvent:
-    """POST /api/v4/newsfeed/"""
+    """POST /api/v3/newsfeed/"""
 
     async def test_happy_path(self, test_client):
         """Create newsfeed event returns job status and event ID."""
@@ -29,7 +29,7 @@ class TestCreateNewsfeedEvent:
             },
         }
 
-        response = await test_client.post("/api/v4/newsfeed/", json=payload)
+        response = await test_client.post("/api/v3/newsfeed/", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -52,7 +52,7 @@ class TestCreateNewsfeedEvent:
             },
         }
 
-        response = await unauthenticated_client.post("/api/v4/newsfeed/", json=payload)
+        response = await unauthenticated_client.post("/api/v3/newsfeed/", json=payload)
 
         assert response.status_code == 401
 
@@ -64,7 +64,7 @@ class TestCreateNewsfeedEvent:
             # Missing payload field - required
         }
 
-        response = await test_client.post("/api/v4/newsfeed/", json=payload)
+        response = await test_client.post("/api/v3/newsfeed/", json=payload)
 
         assert response.status_code == 400
 
@@ -80,7 +80,7 @@ class TestCreateNewsfeedEvent:
             },
         }
 
-        response = await test_client.post("/api/v4/newsfeed/", json=payload)
+        response = await test_client.post("/api/v3/newsfeed/", json=payload)
 
         assert response.status_code == 400
 
@@ -99,13 +99,13 @@ class TestCreateNewsfeedEvent:
         }
 
         # Create
-        create_response = await test_client.post("/api/v4/newsfeed/", json=payload)
+        create_response = await test_client.post("/api/v3/newsfeed/", json=payload)
         assert create_response.status_code == 201
         created_data = create_response.json()
         newsfeed_id = created_data["newsfeed_id"]
 
         # Retrieve
-        get_response = await test_client.get(f"/api/v4/newsfeed/{newsfeed_id}")
+        get_response = await test_client.get(f"/api/v3/newsfeed/{newsfeed_id}")
         assert get_response.status_code == 200
         retrieved_data = get_response.json()
 
@@ -131,13 +131,13 @@ class TestCreateNewsfeedEvent:
         }
 
         # Create
-        create_response = await test_client.post("/api/v4/newsfeed/", json=payload)
+        create_response = await test_client.post("/api/v3/newsfeed/", json=payload)
         assert create_response.status_code == 201
         created_data = create_response.json()
         newsfeed_id = created_data["newsfeed_id"]
 
         # Retrieve
-        get_response = await test_client.get(f"/api/v4/newsfeed/{newsfeed_id}")
+        get_response = await test_client.get(f"/api/v3/newsfeed/{newsfeed_id}")
         assert get_response.status_code == 200
         retrieved_data = get_response.json()
 
@@ -163,13 +163,13 @@ class TestCreateNewsfeedEvent:
         }
 
         # Create
-        create_response = await test_client.post("/api/v4/newsfeed/", json=payload)
+        create_response = await test_client.post("/api/v3/newsfeed/", json=payload)
         assert create_response.status_code == 201
         created_data = create_response.json()
         newsfeed_id = created_data["newsfeed_id"]
 
         # Retrieve
-        get_response = await test_client.get(f"/api/v4/newsfeed/{newsfeed_id}")
+        get_response = await test_client.get(f"/api/v3/newsfeed/{newsfeed_id}")
         assert get_response.status_code == 200
         retrieved_data = get_response.json()
 
@@ -182,7 +182,7 @@ class TestCreateNewsfeedEvent:
 
 
 class TestGetNewsfeedEvents:
-    """GET /api/v4/newsfeed/"""
+    """GET /api/v3/newsfeed/"""
 
     async def test_happy_path(self, test_client):
         """List newsfeed events returns paginated list."""
@@ -196,9 +196,9 @@ class TestGetNewsfeedEvents:
                 "content": "Test content",
             },
         }
-        await test_client.post("/api/v4/newsfeed/", json=payload)
+        await test_client.post("/api/v3/newsfeed/", json=payload)
 
-        response = await test_client.get("/api/v4/newsfeed/")
+        response = await test_client.get("/api/v3/newsfeed/")
 
         assert response.status_code == 200
         data = response.json()
@@ -217,14 +217,14 @@ class TestGetNewsfeedEvents:
 
     async def test_requires_auth(self, unauthenticated_client):
         """List newsfeed events without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/newsfeed/")
+        response = await unauthenticated_client.get("/api/v3/newsfeed/")
 
         assert response.status_code == 401
 
     @pytest.mark.parametrize("page_size", [10, 20, 25, 50])
     async def test_pagination_page_size(self, test_client, page_size):
         """Pagination with different page sizes works correctly."""
-        response = await test_client.get("/api/v4/newsfeed/", params={"page_size": page_size})
+        response = await test_client.get("/api/v3/newsfeed/", params={"page_size": page_size})
 
         assert response.status_code == 200
         data = response.json()
@@ -237,7 +237,7 @@ class TestGetNewsfeedEvents:
     @pytest.mark.parametrize("page_number", [1, 2, 3])
     async def test_pagination_page_number(self, test_client, page_number):
         """Pagination with different page numbers works correctly."""
-        response = await test_client.get("/api/v4/newsfeed/", params={"page_number": page_number})
+        response = await test_client.get("/api/v3/newsfeed/", params={"page_number": page_number})
 
         assert response.status_code == 200
         data = response.json()
@@ -265,7 +265,7 @@ class TestGetNewsfeedEvents:
     )
     async def test_filter_by_event_type(self, test_client, event_type):
         """Filtering by event type returns only matching events."""
-        response = await test_client.get("/api/v4/newsfeed/", params={"type": event_type})
+        response = await test_client.get("/api/v3/newsfeed/", params={"type": event_type})
 
         assert response.status_code == 200
         data = response.json()
@@ -278,7 +278,7 @@ class TestGetNewsfeedEvents:
 
 
 class TestGetNewsfeedEvent:
-    """GET /api/v4/newsfeed/{newsfeed_id}"""
+    """GET /api/v3/newsfeed/{newsfeed_id}"""
 
     async def test_happy_path(self, test_client):
         """Get single newsfeed event returns event data."""
@@ -292,11 +292,11 @@ class TestGetNewsfeedEvent:
                 "content": "Specific content",
             },
         }
-        create_response = await test_client.post("/api/v4/newsfeed/", json=payload)
+        create_response = await test_client.post("/api/v3/newsfeed/", json=payload)
         created_data = create_response.json()
         newsfeed_id = created_data["newsfeed_id"]
 
-        response = await test_client.get(f"/api/v4/newsfeed/{newsfeed_id}")
+        response = await test_client.get(f"/api/v3/newsfeed/{newsfeed_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -310,13 +310,13 @@ class TestGetNewsfeedEvent:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get newsfeed event without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/newsfeed/999999999")
+        response = await unauthenticated_client.get("/api/v3/newsfeed/999999999")
 
         assert response.status_code == 401
 
     async def test_not_found_returns_none(self, test_client):
         """Get non-existent newsfeed event returns None (200 with null body)."""
-        response = await test_client.get("/api/v4/newsfeed/999999999")
+        response = await test_client.get("/api/v3/newsfeed/999999999")
 
         assert response.status_code == 200
         data = response.json()

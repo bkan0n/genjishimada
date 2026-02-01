@@ -1,4 +1,4 @@
-"""Lootbox v4 controller."""
+"""Lootbox v3 controller."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ async def provide_lootbox_service(state: State, lootbox_repo: LootboxRepository)
 
 
 class LootboxController(litestar.Controller):
-    """Lootbox v4 controller."""
+    """Lootbox v3 controller."""
 
     tags = ["Lootbox"]
     path = "/lootbox"

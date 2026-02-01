@@ -15,7 +15,7 @@ pytestmark = [
 
 
 class TestGetJob:
-    """GET /api/v4/internal/jobs/{job_id}"""
+    """GET /api/v3/internal/jobs/{job_id}"""
 
     async def test_happy_path(self, test_client, asyncpg_conn):
         """Get job returns status with valid structure."""
@@ -31,7 +31,7 @@ class TestGetJob:
             "queued",
         )
 
-        response = await test_client.get(f"/api/v4/internal/jobs/{job_id}")
+        response = await test_client.get(f"/api/v3/internal/jobs/{job_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -50,7 +50,7 @@ class TestGetJob:
     async def test_requires_auth(self, unauthenticated_client):
         """Get job without auth returns 401."""
         job_id = uuid.uuid4()
-        response = await unauthenticated_client.get(f"/api/v4/internal/jobs/{job_id}")
+        response = await unauthenticated_client.get(f"/api/v3/internal/jobs/{job_id}")
 
         assert response.status_code == 401
 
@@ -58,13 +58,13 @@ class TestGetJob:
         """Get non-existent job returns 404."""
         # Use valid UUID that doesn't exist in database
         job_id = uuid.uuid4()
-        response = await test_client.get(f"/api/v4/internal/jobs/{job_id}")
+        response = await test_client.get(f"/api/v3/internal/jobs/{job_id}")
 
         assert response.status_code == 404
 
     async def test_invalid_uuid_returns_400(self, test_client):
         """Get job with invalid UUID format returns 400."""
-        response = await test_client.get("/api/v4/internal/jobs/not-a-uuid")
+        response = await test_client.get("/api/v3/internal/jobs/not-a-uuid")
 
         assert response.status_code == 400
 
@@ -86,7 +86,7 @@ class TestGetJob:
             status,
         )
 
-        response = await test_client.get(f"/api/v4/internal/jobs/{job_id}")
+        response = await test_client.get(f"/api/v3/internal/jobs/{job_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -109,7 +109,7 @@ class TestGetJob:
             "Job failed due to invalid input",
         )
 
-        response = await test_client.get(f"/api/v4/internal/jobs/{job_id}")
+        response = await test_client.get(f"/api/v3/internal/jobs/{job_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -123,7 +123,7 @@ class TestGetJob:
 
 
 class TestUpdateJob:
-    """PATCH /api/v4/internal/jobs/{job_id}"""
+    """PATCH /api/v3/internal/jobs/{job_id}"""
 
     async def test_happy_path(self, test_client, asyncpg_conn):
         """Update job status returns 200."""
@@ -143,7 +143,7 @@ class TestUpdateJob:
             "status": "processing",
         }
 
-        response = await test_client.patch(f"/api/v4/internal/jobs/{job_id}", json=payload)
+        response = await test_client.patch(f"/api/v3/internal/jobs/{job_id}", json=payload)
 
         assert response.status_code == 200
 
@@ -151,7 +151,7 @@ class TestUpdateJob:
         """Update job without auth returns 401."""
         job_id = uuid.uuid4()
         payload = {"status": "processing"}
-        response = await unauthenticated_client.patch(f"/api/v4/internal/jobs/{job_id}", json=payload)
+        response = await unauthenticated_client.patch(f"/api/v3/internal/jobs/{job_id}", json=payload)
 
         assert response.status_code == 401
 
@@ -170,7 +170,7 @@ class TestUpdateJob:
         )
 
         payload = {"status": "invalid_status"}
-        response = await test_client.patch(f"/api/v4/internal/jobs/{job_id}", json=payload)
+        response = await test_client.patch(f"/api/v3/internal/jobs/{job_id}", json=payload)
 
         assert response.status_code == 400
 
@@ -193,19 +193,19 @@ class TestUpdateJob:
         )
 
         payload = {"status": status}
-        response = await test_client.patch(f"/api/v4/internal/jobs/{job_id}", json=payload)
+        response = await test_client.patch(f"/api/v3/internal/jobs/{job_id}", json=payload)
 
         assert response.status_code == 200
 
 
 class TestClaimIdempotency:
-    """POST /api/v4/internal/idempotency/claim"""
+    """POST /api/v3/internal/idempotency/claim"""
 
     async def test_happy_path(self, test_client):
         """Claim idempotency key returns claimed=True on first claim."""
         payload = {"key": f"test-key-{uuid.uuid4()}"}
 
-        response = await test_client.post("/api/v4/internal/idempotency/claim", json=payload)
+        response = await test_client.post("/api/v3/internal/idempotency/claim", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -217,7 +217,7 @@ class TestClaimIdempotency:
     async def test_requires_auth(self, unauthenticated_client):
         """Claim idempotency without auth returns 401."""
         payload = {"key": f"test-key-{uuid.uuid4()}"}
-        response = await unauthenticated_client.post("/api/v4/internal/idempotency/claim", json=payload)
+        response = await unauthenticated_client.post("/api/v3/internal/idempotency/claim", json=payload)
 
         assert response.status_code == 401
 
@@ -227,20 +227,20 @@ class TestClaimIdempotency:
         payload = {"key": key}
 
         # First claim
-        response1 = await test_client.post("/api/v4/internal/idempotency/claim", json=payload)
+        response1 = await test_client.post("/api/v3/internal/idempotency/claim", json=payload)
         assert response1.status_code == 201
         data1 = response1.json()
         assert data1["claimed"] is True
 
         # Second claim (duplicate)
-        response2 = await test_client.post("/api/v4/internal/idempotency/claim", json=payload)
+        response2 = await test_client.post("/api/v3/internal/idempotency/claim", json=payload)
         assert response2.status_code == 201
         data2 = response2.json()
         assert data2["claimed"] is False
 
 
 class TestDeleteClaimedIdempotency:
-    """DELETE /api/v4/internal/idempotency/claim"""
+    """DELETE /api/v3/internal/idempotency/claim"""
 
     async def test_happy_path(self, test_client, asyncpg_conn):
         """Delete claimed idempotency key returns 204."""
@@ -257,13 +257,13 @@ class TestDeleteClaimedIdempotency:
         payload = {"key": key}
 
         # Use request() method for DELETE with body
-        response = await test_client.request("DELETE", "/api/v4/internal/idempotency/claim", json=payload)
+        response = await test_client.request("DELETE", "/api/v3/internal/idempotency/claim", json=payload)
 
         assert response.status_code == 204
 
     async def test_requires_auth(self, unauthenticated_client):
         """Delete idempotency without auth returns 401."""
         payload = {"key": f"test-key-{uuid.uuid4()}"}
-        response = await unauthenticated_client.request("DELETE", "/api/v4/internal/idempotency/claim", json=payload)
+        response = await unauthenticated_client.request("DELETE", "/api/v3/internal/idempotency/claim", json=payload)
 
         assert response.status_code == 401

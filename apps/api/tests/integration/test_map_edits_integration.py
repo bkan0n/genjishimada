@@ -15,7 +15,7 @@ pytestmark = [
 
 
 class TestCreateEditRequest:
-    """POST /api/v4/map-edits/"""
+    """POST /api/v3/map-edits/"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """Create edit request returns ID and details."""
@@ -30,7 +30,7 @@ class TestCreateEditRequest:
             "difficulty": "Hard",
         }
 
-        response = await test_client.post("/api/v4/map-edits/", json=payload)
+        response = await test_client.post("/api/v3/map-edits/", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -74,7 +74,7 @@ class TestCreateEditRequest:
             "created_by": 1,
             "difficulty": "Hard",
         }
-        response = await unauthenticated_client.post("/api/v4/map-edits/", json=payload)
+        response = await unauthenticated_client.post("/api/v3/map-edits/", json=payload)
 
         assert response.status_code == 401
 
@@ -88,7 +88,7 @@ class TestCreateEditRequest:
             "difficulty": "Hard",
         }
 
-        response = await test_client.post("/api/v4/map-edits/", json=payload)
+        response = await test_client.post("/api/v3/map-edits/", json=payload)
 
         assert response.status_code == 404
 
@@ -106,12 +106,12 @@ class TestCreateEditRequest:
         }
 
         # First request succeeds
-        response1 = await test_client.post("/api/v4/map-edits/", json=payload)
+        response1 = await test_client.post("/api/v3/map-edits/", json=payload)
         assert response1.status_code == 201
 
         # Second request for same map returns 409
         payload["reason"] = "Second edit"
-        response2 = await test_client.post("/api/v4/map-edits/", json=payload)
+        response2 = await test_client.post("/api/v3/map-edits/", json=payload)
 
         assert response2.status_code == 409
 
@@ -123,13 +123,13 @@ class TestCreateEditRequest:
             # Missing created_by - required field
         }
 
-        response = await test_client.post("/api/v4/map-edits/", json=payload)
+        response = await test_client.post("/api/v3/map-edits/", json=payload)
 
         assert response.status_code == 400
 
 
 class TestGetPendingRequests:
-    """GET /api/v4/map-edits/pending"""
+    """GET /api/v3/map-edits/pending"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """List pending edit requests returns list."""
@@ -144,9 +144,9 @@ class TestGetPendingRequests:
             "created_by": user_id,
             "difficulty": "Hard",
         }
-        await test_client.post("/api/v4/map-edits/", json=payload)
+        await test_client.post("/api/v3/map-edits/", json=payload)
 
-        response = await test_client.get("/api/v4/map-edits/pending")
+        response = await test_client.get("/api/v3/map-edits/pending")
 
         assert response.status_code == 200
         data = response.json()
@@ -167,13 +167,13 @@ class TestGetPendingRequests:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get pending requests without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/map-edits/pending")
+        response = await unauthenticated_client.get("/api/v3/map-edits/pending")
 
         assert response.status_code == 401
 
 
 class TestGetEditRequest:
-    """GET /api/v4/map-edits/{edit_id}"""
+    """GET /api/v3/map-edits/{edit_id}"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """Get edit request returns full details."""
@@ -188,10 +188,10 @@ class TestGetEditRequest:
             "created_by": user_id,
             "difficulty": "Hard",
         }
-        create_response = await test_client.post("/api/v4/map-edits/", json=payload)
+        create_response = await test_client.post("/api/v3/map-edits/", json=payload)
         edit_id = create_response.json()["id"]
 
-        response = await test_client.get(f"/api/v4/map-edits/{edit_id}")
+        response = await test_client.get(f"/api/v3/map-edits/{edit_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -222,19 +222,19 @@ class TestGetEditRequest:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get edit request without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/map-edits/999999999")
+        response = await unauthenticated_client.get("/api/v3/map-edits/999999999")
 
         assert response.status_code == 401
 
     async def test_not_found_returns_404(self, test_client):
         """Get non-existent edit request returns 404."""
-        response = await test_client.get("/api/v4/map-edits/999999999")
+        response = await test_client.get("/api/v3/map-edits/999999999")
 
         assert response.status_code == 404
 
 
 class TestGetEditSubmission:
-    """GET /api/v4/map-edits/{edit_id}/submission"""
+    """GET /api/v3/map-edits/{edit_id}/submission"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """Get edit submission returns enriched data."""
@@ -249,10 +249,10 @@ class TestGetEditSubmission:
             "created_by": user_id,
             "difficulty": "Hard",
         }
-        create_response = await test_client.post("/api/v4/map-edits/", json=payload)
+        create_response = await test_client.post("/api/v3/map-edits/", json=payload)
         edit_id = create_response.json()["id"]
 
-        response = await test_client.get(f"/api/v4/map-edits/{edit_id}/submission")
+        response = await test_client.get(f"/api/v3/map-edits/{edit_id}/submission")
 
         assert response.status_code == 200
         data = response.json()
@@ -271,19 +271,19 @@ class TestGetEditSubmission:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get edit submission without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/map-edits/999999999/submission")
+        response = await unauthenticated_client.get("/api/v3/map-edits/999999999/submission")
 
         assert response.status_code == 401
 
     async def test_not_found_returns_404(self, test_client):
         """Get non-existent edit submission returns 404."""
-        response = await test_client.get("/api/v4/map-edits/999999999/submission")
+        response = await test_client.get("/api/v3/map-edits/999999999/submission")
 
         assert response.status_code == 404
 
 
 class TestSetMessageId:
-    """PATCH /api/v4/map-edits/{edit_id}/message"""
+    """PATCH /api/v3/map-edits/{edit_id}/message"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """Set message ID returns 204."""
@@ -298,17 +298,17 @@ class TestSetMessageId:
             "created_by": user_id,
             "difficulty": "Hard",
         }
-        create_response = await test_client.post("/api/v4/map-edits/", json=payload)
+        create_response = await test_client.post("/api/v3/map-edits/", json=payload)
         edit_id = create_response.json()["id"]
 
         # Set message ID
         message_payload = {"message_id": 123456789}
-        response = await test_client.patch(f"/api/v4/map-edits/{edit_id}/message", json=message_payload)
+        response = await test_client.patch(f"/api/v3/map-edits/{edit_id}/message", json=message_payload)
 
         assert response.status_code == 204
 
         # Verify message ID was set
-        get_response = await test_client.get(f"/api/v4/map-edits/{edit_id}")
+        get_response = await test_client.get(f"/api/v3/map-edits/{edit_id}")
         data = get_response.json()
         assert data["message_id"] == 123456789
         assert isinstance(data["message_id"], int)
@@ -316,14 +316,14 @@ class TestSetMessageId:
     async def test_requires_auth(self, unauthenticated_client):
         """Set message ID without auth returns 401."""
         payload = {"message_id": 123}
-        response = await unauthenticated_client.patch("/api/v4/map-edits/999999999/message", json=payload)
+        response = await unauthenticated_client.patch("/api/v3/map-edits/999999999/message", json=payload)
 
         assert response.status_code == 401
 
     async def test_not_found_returns_404(self, test_client):
         """Set message ID for non-existent edit request returns 404."""
         payload = {"message_id": 123456789}
-        response = await test_client.patch("/api/v4/map-edits/999999999/message", json=payload)
+        response = await test_client.patch("/api/v3/map-edits/999999999/message", json=payload)
 
         assert response.status_code == 404
 
@@ -340,17 +340,17 @@ class TestSetMessageId:
             "created_by": user_id,
             "difficulty": "Hard",
         }
-        create_response = await test_client.post("/api/v4/map-edits/", json=payload)
+        create_response = await test_client.post("/api/v3/map-edits/", json=payload)
         edit_id = create_response.json()["id"]
 
         # Invalid payload - missing message_id
-        response = await test_client.patch(f"/api/v4/map-edits/{edit_id}/message", json={})
+        response = await test_client.patch(f"/api/v3/map-edits/{edit_id}/message", json={})
 
         assert response.status_code == 400
 
 
 class TestResolveEditRequest:
-    """PUT /api/v4/map-edits/{edit_id}/resolve"""
+    """PUT /api/v3/map-edits/{edit_id}/resolve"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """Resolve edit request returns 204."""
@@ -366,7 +366,7 @@ class TestResolveEditRequest:
             "created_by": user_id,
             "difficulty": "Hard",
         }
-        create_response = await test_client.post("/api/v4/map-edits/", json=payload)
+        create_response = await test_client.post("/api/v3/map-edits/", json=payload)
         edit_id = create_response.json()["id"]
 
         # Resolve the request (accept)
@@ -375,12 +375,12 @@ class TestResolveEditRequest:
             "resolved_by": resolver_id,
             "send_to_playtest": False,
         }
-        response = await test_client.put(f"/api/v4/map-edits/{edit_id}/resolve", json=resolve_payload)
+        response = await test_client.put(f"/api/v3/map-edits/{edit_id}/resolve", json=resolve_payload)
 
         assert response.status_code == 204
 
         # Verify resolution
-        get_response = await test_client.get(f"/api/v4/map-edits/{edit_id}")
+        get_response = await test_client.get(f"/api/v3/map-edits/{edit_id}")
         data = get_response.json()
         assert data["accepted"] is True
         assert data["resolved_by"] == resolver_id
@@ -392,7 +392,7 @@ class TestResolveEditRequest:
             "accepted": True,
             "resolved_by": 1,
         }
-        response = await unauthenticated_client.put("/api/v4/map-edits/999999999/resolve", json=payload)
+        response = await unauthenticated_client.put("/api/v3/map-edits/999999999/resolve", json=payload)
 
         assert response.status_code == 401
 
@@ -402,13 +402,13 @@ class TestResolveEditRequest:
             "accepted": True,
             "resolved_by": 1,
         }
-        response = await test_client.put("/api/v4/map-edits/999999999/resolve", json=payload)
+        response = await test_client.put("/api/v3/map-edits/999999999/resolve", json=payload)
 
         assert response.status_code == 404
 
 
 class TestGetUserEditRequests:
-    """GET /api/v4/map-edits/user/{user_id}"""
+    """GET /api/v3/map-edits/user/{user_id}"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """Get user edit requests returns list."""
@@ -423,9 +423,9 @@ class TestGetUserEditRequests:
             "created_by": user_id,
             "difficulty": "Hard",
         }
-        await test_client.post("/api/v4/map-edits/", json=payload)
+        await test_client.post("/api/v3/map-edits/", json=payload)
 
-        response = await test_client.get(f"/api/v4/map-edits/user/{user_id}")
+        response = await test_client.get(f"/api/v3/map-edits/user/{user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -444,7 +444,7 @@ class TestGetUserEditRequests:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get user edit requests without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/map-edits/user/999999999")
+        response = await unauthenticated_client.get("/api/v3/map-edits/user/999999999")
 
         assert response.status_code == 401
 
@@ -463,7 +463,7 @@ class TestGetUserEditRequests:
             "created_by": user_id,
             "difficulty": "Hard",
         }
-        create_response = await test_client.post("/api/v4/map-edits/", json=payload)
+        create_response = await test_client.post("/api/v3/map-edits/", json=payload)
         edit_id = create_response.json()["id"]
 
         # Resolve it
@@ -473,13 +473,13 @@ class TestGetUserEditRequests:
         }
         # Note: This will fail due to the bug, but we're testing the parameter handling
         try:
-            await test_client.put(f"/api/v4/map-edits/{edit_id}/resolve", json=resolve_payload)
+            await test_client.put(f"/api/v3/map-edits/{edit_id}/resolve", json=resolve_payload)
         except Exception:
             pass  # Ignore resolution failure due to known bug
 
         # Test with parameter
         response = await test_client.get(
-            f"/api/v4/map-edits/user/{user_id}",
+            f"/api/v3/map-edits/user/{user_id}",
             params={"include_resolved": include_resolved}
         )
 
@@ -507,13 +507,13 @@ class TestCreateEditRequestRoundTrip:
         }
 
         # Create
-        create_response = await test_client.post("/api/v4/map-edits/", json=payload)
+        create_response = await test_client.post("/api/v3/map-edits/", json=payload)
         assert create_response.status_code == 201
         created_data = create_response.json()
         edit_id = created_data["id"]
 
         # Retrieve
-        get_response = await test_client.get(f"/api/v4/map-edits/{edit_id}")
+        get_response = await test_client.get(f"/api/v3/map-edits/{edit_id}")
         assert get_response.status_code == 200
         retrieved_data = get_response.json()
 
@@ -544,12 +544,12 @@ class TestCreateEditRequestRoundTrip:
             "hidden": True,
         }
 
-        create_response = await test_client.post("/api/v4/map-edits/", json=payload)
+        create_response = await test_client.post("/api/v3/map-edits/", json=payload)
         assert create_response.status_code == 201
         edit_id = create_response.json()["id"]
 
         # Retrieve and validate all changes
-        get_response = await test_client.get(f"/api/v4/map-edits/{edit_id}")
+        get_response = await test_client.get(f"/api/v3/map-edits/{edit_id}")
         data = get_response.json()
 
         assert data["proposed_changes"]["difficulty"] == "Very Hard"

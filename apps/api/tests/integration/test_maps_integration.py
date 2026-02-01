@@ -16,11 +16,11 @@ pytestmark = [
 
 
 class TestSearchMaps:
-    """GET /api/v4/maps/"""
+    """GET /api/v3/maps/"""
 
     async def test_happy_path(self, test_client):
         """Search maps returns list with valid structure."""
-        response = await test_client.get("/api/v4/maps/")
+        response = await test_client.get("/api/v3/maps/")
 
         assert response.status_code == 200
         data = response.json()
@@ -39,7 +39,7 @@ class TestSearchMaps:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Search maps without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/maps/")
+        response = await unauthenticated_client.get("/api/v3/maps/")
 
         assert response.status_code == 401
 
@@ -48,7 +48,7 @@ class TestSearchMaps:
         code = unique_map_code
         await create_test_map(code=code)
 
-        response = await test_client.get("/api/v4/maps/", params={"code": code})
+        response = await test_client.get("/api/v3/maps/", params={"code": code})
 
         assert response.status_code == 200
         data = response.json()
@@ -66,7 +66,7 @@ class TestSearchMaps:
     async def test_pagination_variants(self, test_client, page_size, page_number):
         """Pagination parameters work without 500s."""
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"page_size": page_size, "page_number": page_number},
         )
 
@@ -79,7 +79,7 @@ class TestSearchMaps:
     async def test_bool_filter_combinations(self, test_client, archived, hidden, official):
         """Boolean filters serialize correctly."""
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"archived": archived, "hidden": hidden, "official": official},
         )
 
@@ -92,7 +92,7 @@ class TestSearchMaps:
         await create_test_map(code=code, playtesting="In Progress")
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"playtest_status": "In Progress"},
         )
 
@@ -114,7 +114,7 @@ class TestSearchMaps:
         await create_test_playtest(map_id=map_id, thread_id=thread_id)
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"playtest_thread_id": thread_id},
         )
 
@@ -128,7 +128,7 @@ class TestSearchMaps:
         await create_test_map(code=code, category="Classic")
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"category": ["Classic", "Other"]},
         )
 
@@ -142,7 +142,7 @@ class TestSearchMaps:
         await create_test_map(code=code, map_name="Nepal")
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"map_name": ["Nepal", "Hanamura"]},
         )
 
@@ -159,7 +159,7 @@ class TestSearchMaps:
         await create_test_map(code=code, difficulty="Hard")
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"difficulty_exact": "Hard"},
         )
 
@@ -176,7 +176,7 @@ class TestSearchMaps:
         await create_test_map(code=code, difficulty="Medium")
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"difficulty_range_min": "Easy", "difficulty_range_max": "Hard"},
         )
 
@@ -191,7 +191,7 @@ class TestSearchMaps:
         await create_test_map(code=code, mechanics=[1, 2])
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"mechanics": ["Edge Climb", "Bhop"]},  # API should accept names
         )
 
@@ -209,7 +209,7 @@ class TestSearchMaps:
         await create_test_map(code=code, restrictions=[9])
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"restrictions": ["Wall Climb"]},  # API should accept names
         )
 
@@ -227,7 +227,7 @@ class TestSearchMaps:
         await create_test_map(code=code)
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"tags": ["XP Based"]},  # API should accept names
         )
 
@@ -242,7 +242,7 @@ class TestSearchMaps:
         await create_test_map(code=code, creator_id=user_id)
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"creator_ids": [user_id]},
         )
 
@@ -260,7 +260,7 @@ class TestSearchMaps:
         await create_test_map(code=code, creator_id=user_id)
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"creator_names": ["TestCreator"]},
         )
 
@@ -271,7 +271,7 @@ class TestSearchMaps:
     async def test_minimum_quality_filter(self, test_client):
         """Filter by minimum quality."""
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"minimum_quality": 7},
         )
 
@@ -282,7 +282,7 @@ class TestSearchMaps:
     async def test_sort_single_key(self, test_client):
         """Sort by single key."""
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"sort": ["code:desc"]},  # Valid SortKey
         )
 
@@ -293,7 +293,7 @@ class TestSearchMaps:
     async def test_sort_multiple_keys(self, test_client):
         """Sort by multiple keys."""
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"sort": ["difficulty:asc", "checkpoints:desc"]},  # Valid SortKeys
         )
 
@@ -304,7 +304,7 @@ class TestSearchMaps:
     async def test_return_all_flag(self, test_client):
         """Return all results without pagination."""
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"return_all": True},
         )
 
@@ -318,7 +318,7 @@ class TestSearchMaps:
         await create_test_map(code=code, difficulty="Easy")
 
         response = await test_client.get(
-            "/api/v4/maps/",
+            "/api/v3/maps/",
             params={"code": code, "difficulty_exact": "Hard", "force_filters": True},
         )
 
@@ -330,7 +330,7 @@ class TestSearchMaps:
 
 
 class TestGetPartialMap:
-    """GET /api/v4/maps/{code}/partial"""
+    """GET /api/v3/maps/{code}/partial"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code, create_test_playtest):
         """Get map by code returns map data."""
@@ -338,7 +338,7 @@ class TestGetPartialMap:
         # create_test_map fixture uses default difficulty from conftest
         map_id = await create_test_map(code=code, checkpoints=15, difficulty="Medium")
         await create_test_playtest(map_id=map_id)
-        response = await test_client.get(f"/api/v4/maps/{code}/partial")
+        response = await test_client.get(f"/api/v3/maps/{code}/partial")
 
         assert response.status_code == 200
         data = response.json()
@@ -347,19 +347,19 @@ class TestGetPartialMap:
 
     async def test_non_existent_map_returns_404(self, test_client):
         """Non-existent map code returns 404."""
-        response = await test_client.get("/api/v4/maps/NONEXISTENT/partial")
+        response = await test_client.get("/api/v3/maps/NONEXISTENT/partial")
 
         assert response.status_code == 404
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get partial map without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/maps/ZZZZZZ/partial")
+        response = await unauthenticated_client.get("/api/v3/maps/ZZZZZZ/partial")
 
         assert response.status_code == 401
 
 
 class TestCreateMap:
-    """POST /api/v4/maps/"""
+    """POST /api/v3/maps/"""
 
     async def test_happy_path(self, test_client, unique_map_code, create_test_user):
         """Create map returns job response."""
@@ -375,7 +375,7 @@ class TestCreateMap:
             "difficulty": "Medium",
         }
 
-        response = await test_client.post("/api/v4/maps/", json=payload)
+        response = await test_client.post("/api/v3/maps/", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -396,7 +396,7 @@ class TestCreateMap:
             "creator_ids": [user_id],
         }
 
-        response = await test_client.post("/api/v4/maps/", json=payload)
+        response = await test_client.post("/api/v3/maps/", json=payload)
 
         assert response.status_code == 400
 
@@ -415,7 +415,7 @@ class TestCreateMap:
             "mechanics": ["Edge Climb", "Edge Climb"],  # Duplicate mechanic name
         }
 
-        response = await test_client.post("/api/v4/maps/", json=payload)
+        response = await test_client.post("/api/v3/maps/", json=payload)
 
         assert response.status_code == 400
 
@@ -434,7 +434,7 @@ class TestCreateMap:
             "restrictions": ["Wall Climb", "Wall Climb"],  # Duplicate restriction name
         }
 
-        response = await test_client.post("/api/v4/maps/", json=payload)
+        response = await test_client.post("/api/v3/maps/", json=payload)
 
         assert response.status_code == 400
 
@@ -455,7 +455,7 @@ class TestCreateMap:
             "difficulty": "Medium",
         }
 
-        response = await test_client.post("/api/v4/maps/", json=payload)
+        response = await test_client.post("/api/v3/maps/", json=payload)
 
         assert response.status_code == 400
 
@@ -473,7 +473,7 @@ class TestCreateMap:
             "difficulty": "Medium",
         }
 
-        response = await test_client.post("/api/v4/maps/", json=payload)
+        response = await test_client.post("/api/v3/maps/", json=payload)
 
         assert response.status_code == 400
 
@@ -486,13 +486,13 @@ class TestCreateMap:
             "category": "Ranked",
         }
 
-        response = await unauthenticated_client.post("/api/v4/maps/", json=payload)
+        response = await unauthenticated_client.post("/api/v3/maps/", json=payload)
 
         assert response.status_code == 401
 
 
 class TestUpdateMap:
-    """PATCH /api/v4/maps/{code}"""
+    """PATCH /api/v3/maps/{code}"""
 
     async def test_update_checkpoints(self, test_client, create_test_map, unique_map_code):
         """Update map checkpoints."""
@@ -500,7 +500,7 @@ class TestUpdateMap:
         await create_test_map(code=code, checkpoints=10)
 
         response = await test_client.patch(
-            f"/api/v4/maps/{code}",
+            f"/api/v3/maps/{code}",
             json={"checkpoints": 25},
         )
 
@@ -515,7 +515,7 @@ class TestUpdateMap:
         await create_test_map(code=code)
 
         response = await test_client.patch(
-            f"/api/v4/maps/{code}",
+            f"/api/v3/maps/{code}",
             json={
                 "checkpoints": 30,
                 "hidden": True,
@@ -531,7 +531,7 @@ class TestUpdateMap:
     async def test_non_existent_map_returns_404(self, test_client):
         """Updating non-existent map should return 404."""
         response = await test_client.patch(
-            "/api/v4/maps/ZZZZZZ",
+            "/api/v3/maps/ZZZZZZ",
             json={"checkpoints": 10},
         )
 
@@ -547,7 +547,7 @@ class TestUpdateMap:
 
         # Try to change code2 to code1
         response = await test_client.patch(
-            f"/api/v4/maps/{code2}",
+            f"/api/v3/maps/{code2}",
             json={"code": code1},
         )
 
@@ -559,7 +559,7 @@ class TestUpdateMap:
         await create_test_map(code=code)
 
         response = await test_client.patch(
-            f"/api/v4/maps/{code}",
+            f"/api/v3/maps/{code}",
             json={"mechanics": ["Edge Climb", "Edge Climb"]},  # Duplicate mechanic name
         )
 
@@ -571,7 +571,7 @@ class TestUpdateMap:
         await create_test_map(code=code)
 
         response = await test_client.patch(
-            f"/api/v4/maps/{code}",
+            f"/api/v3/maps/{code}",
             json={"restrictions": ["Wall Climb", "Wall Climb"]},  # Duplicate restriction name
         )
 
@@ -584,7 +584,7 @@ class TestUpdateMap:
         await create_test_map(code=code)
 
         response = await test_client.patch(
-            f"/api/v4/maps/{code}",
+            f"/api/v3/maps/{code}",
             json={
                 "creators": [
                     {"id": user_id, "is_primary": True},
@@ -602,7 +602,7 @@ class TestUpdateMap:
         non_existent_user_id = 999999999999999999
 
         response = await test_client.patch(
-            f"/api/v4/maps/{code}",
+            f"/api/v3/maps/{code}",
             json={"creators": [{"id": non_existent_user_id, "is_primary": True}]},
         )
 
@@ -611,7 +611,7 @@ class TestUpdateMap:
     async def test_requires_auth(self, unauthenticated_client):
         """Update map without auth returns 401."""
         response = await unauthenticated_client.patch(
-            "/api/v4/maps/ZZZZZZ",
+            "/api/v3/maps/ZZZZZZ",
             json={"checkpoints": 10},
         )
 
@@ -619,14 +619,14 @@ class TestUpdateMap:
 
 
 class TestCheckCodeExists:
-    """GET /api/v4/maps/{code}/exists"""
+    """GET /api/v3/maps/{code}/exists"""
 
     async def test_existing_code(self, test_client, create_test_map, unique_map_code):
         """Existing code returns true with correct type."""
         code = unique_map_code
         await create_test_map(code=code)
 
-        response = await test_client.get(f"/api/v4/maps/{code}/exists")
+        response = await test_client.get(f"/api/v3/maps/{code}/exists")
 
         assert response.status_code == 200
         result = response.json()
@@ -635,7 +635,7 @@ class TestCheckCodeExists:
 
     async def test_non_existent_code(self, test_client):
         """Non-existent code returns false with correct type."""
-        response = await test_client.get("/api/v4/maps/ZZZZZZ/exists")
+        response = await test_client.get("/api/v3/maps/ZZZZZZ/exists")
 
         assert response.status_code == 200
         result = response.json()
@@ -652,25 +652,25 @@ class TestCheckCodeExists:
         ]
 
         for invalid_code in invalid_codes:
-            response = await test_client.get(f"/api/v4/maps/{invalid_code}/exists")
+            response = await test_client.get(f"/api/v3/maps/{invalid_code}/exists")
             assert response.status_code == 400
 
     async def test_requires_auth(self, unauthenticated_client):
         """Check code exists without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/maps/ZZZZZZ/exists")
+        response = await unauthenticated_client.get("/api/v3/maps/ZZZZZZ/exists")
 
         assert response.status_code == 401
 
 
 class TestGetGuides:
-    """GET /api/v4/maps/{code}/guides"""
+    """GET /api/v3/maps/{code}/guides"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Get guides for map returns list with valid structure."""
         code = unique_map_code
         await create_test_map(code=code)
 
-        response = await test_client.get(f"/api/v4/maps/{code}/guides")
+        response = await test_client.get(f"/api/v3/maps/{code}/guides")
 
         assert response.status_code == 200
         data = response.json()
@@ -686,19 +686,19 @@ class TestGetGuides:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get guides without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/maps/ZZZZZZ/guides")
+        response = await unauthenticated_client.get("/api/v3/maps/ZZZZZZ/guides")
 
         assert response.status_code == 401
 
     async def test_non_existent_map_returns_404(self, test_client):
         """Get guides for non-existent map returns 404."""
-        response = await test_client.get("/api/v4/maps/ZZZZZZ/guides")
+        response = await test_client.get("/api/v3/maps/ZZZZZZ/guides")
 
         assert response.status_code == 404
 
 
 class TestCreateGuide:
-    """POST /api/v4/maps/{code}/guides"""
+    """POST /api/v3/maps/{code}/guides"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code, create_test_user):
         """Create guide returns guide data."""
@@ -712,7 +712,7 @@ class TestCreateGuide:
             "guide_type": "video",
         }
 
-        response = await test_client.post(f"/api/v4/maps/{code}/guides", json=payload)
+        response = await test_client.post(f"/api/v3/maps/{code}/guides", json=payload)
 
         assert response.status_code == 201
 
@@ -723,7 +723,7 @@ class TestCreateGuide:
             "user_id": 999,
         }
 
-        response = await unauthenticated_client.post("/api/v4/maps/ZZZZZZ/guides", json=payload)
+        response = await unauthenticated_client.post("/api/v3/maps/ZZZZZZ/guides", json=payload)
 
         assert response.status_code == 401
 
@@ -735,7 +735,7 @@ class TestCreateGuide:
             "user_id": user_id,
         }
 
-        response = await test_client.post("/api/v4/maps/ZZZZZZ/guides", json=payload)
+        response = await test_client.post("/api/v3/maps/ZZZZZZ/guides", json=payload)
 
         assert response.status_code == 404
 
@@ -751,17 +751,17 @@ class TestCreateGuide:
         }
 
         # First guide
-        response1 = await test_client.post(f"/api/v4/maps/{code}/guides", json=payload)
+        response1 = await test_client.post(f"/api/v3/maps/{code}/guides", json=payload)
         assert response1.status_code == 201
 
         # Duplicate guide (same user + map)
-        response2 = await test_client.post(f"/api/v4/maps/{code}/guides", json=payload)
+        response2 = await test_client.post(f"/api/v3/maps/{code}/guides", json=payload)
 
         assert response2.status_code == 409
 
 
 class TestUpdateGuide:
-    """PATCH /api/v4/maps/{code}/guides/{user_id}"""
+    """PATCH /api/v3/maps/{code}/guides/{user_id}"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code, create_test_user):
         """Update guide URL successfully."""
@@ -775,11 +775,11 @@ class TestUpdateGuide:
             "user_id": user_id,
             "guide_type": "video",
         }
-        await test_client.post(f"/api/v4/maps/{code}/guides", json=create_payload)
+        await test_client.post(f"/api/v3/maps/{code}/guides", json=create_payload)
 
         # Update guide
         response = await test_client.patch(
-            f"/api/v4/maps/{code}/guides/{user_id}",
+            f"/api/v3/maps/{code}/guides/{user_id}",
             params={"url": "https://youtube.com/watch?v=updated"},
         )
 
@@ -791,7 +791,7 @@ class TestUpdateGuide:
     async def test_non_existent_map_returns_404(self, test_client):
         """Update guide for non-existent map returns 404."""
         response = await test_client.patch(
-            "/api/v4/maps/ZZZZZZ/guides/999",
+            "/api/v3/maps/ZZZZZZ/guides/999",
             params={"url": "https://youtube.com/watch?v=updated"},
         )
 
@@ -803,7 +803,7 @@ class TestUpdateGuide:
         await create_test_map(code=code)
 
         response = await test_client.patch(
-            f"/api/v4/maps/{code}/guides/999",
+            f"/api/v3/maps/{code}/guides/999",
             params={"url": "https://youtube.com/watch?v=updated"},
         )
 
@@ -811,7 +811,7 @@ class TestUpdateGuide:
 
 
 class TestDeleteGuide:
-    """DELETE /api/v4/maps/{code}/guides/{user_id}"""
+    """DELETE /api/v3/maps/{code}/guides/{user_id}"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code, create_test_user):
         """Delete guide successfully."""
@@ -825,16 +825,16 @@ class TestDeleteGuide:
             "user_id": user_id,
             "guide_type": "video",
         }
-        await test_client.post(f"/api/v4/maps/{code}/guides", json=create_payload)
+        await test_client.post(f"/api/v3/maps/{code}/guides", json=create_payload)
 
         # Delete guide
-        response = await test_client.delete(f"/api/v4/maps/{code}/guides/{user_id}")
+        response = await test_client.delete(f"/api/v3/maps/{code}/guides/{user_id}")
 
         assert response.status_code == 204
 
     async def test_non_existent_map_returns_404(self, test_client):
         """Delete guide for non-existent map returns 404."""
-        response = await test_client.delete("/api/v4/maps/ZZZZZZ/guides/999")
+        response = await test_client.delete("/api/v3/maps/ZZZZZZ/guides/999")
 
         assert response.status_code == 404
 
@@ -843,32 +843,32 @@ class TestDeleteGuide:
         code = unique_map_code
         await create_test_map(code=code)
 
-        response = await test_client.delete(f"/api/v4/maps/{code}/guides/999")
+        response = await test_client.delete(f"/api/v3/maps/{code}/guides/999")
 
         assert response.status_code == 404
 
 
 class TestGetMastery:
-    """GET /api/v4/maps/mastery"""
+    """GET /api/v3/maps/mastery"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get mastery data returns info."""
         user_id = await create_test_user()
 
-        response = await test_client.get("/api/v4/maps/mastery", params={"user_id": user_id})
+        response = await test_client.get("/api/v3/maps/mastery", params={"user_id": user_id})
 
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get mastery without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/maps/mastery", params={"user_id": 999})
+        response = await unauthenticated_client.get("/api/v3/maps/mastery", params={"user_id": 999})
 
         assert response.status_code == 401
 
 
 class TestUpdateMastery:
-    """POST /api/v4/maps/mastery"""
+    """POST /api/v3/maps/mastery"""
 
     async def test_happy_path(self, test_client, create_test_map, create_test_user, unique_map_code):
         """Create/update mastery."""
@@ -882,7 +882,7 @@ class TestUpdateMastery:
             "level": "gold",  # Required field
         }
 
-        response = await test_client.post("/api/v4/maps/mastery", json=payload)
+        response = await test_client.post("/api/v3/maps/mastery", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -898,13 +898,13 @@ class TestUpdateMastery:
             "level": "bronze",
         }
 
-        response = await unauthenticated_client.post("/api/v4/maps/mastery", json=payload)
+        response = await unauthenticated_client.post("/api/v3/maps/mastery", json=payload)
 
         assert response.status_code == 401
 
 
 class TestSetArchiveStatus:
-    """PATCH /api/v4/maps/archive"""
+    """PATCH /api/v3/maps/archive"""
 
     async def test_archive_map(self, test_client, create_test_map, unique_map_code):
         """Archive a map and verify response."""
@@ -912,7 +912,7 @@ class TestSetArchiveStatus:
         await create_test_map(code=code, archived=False)
 
         response = await test_client.patch(
-            "/api/v4/maps/archive",
+            "/api/v3/maps/archive",
             json={"codes": [code], "status": "Archive"},
         )
 
@@ -926,7 +926,7 @@ class TestSetArchiveStatus:
         await create_test_map(code=code, archived=True)
 
         response = await test_client.patch(
-            "/api/v4/maps/archive",
+            "/api/v3/maps/archive",
             json={"codes": [code], "status": "Unarchived"},
         )
 
@@ -937,7 +937,7 @@ class TestSetArchiveStatus:
     async def test_requires_auth(self, unauthenticated_client):
         """Set archive status without auth returns 401."""
         response = await unauthenticated_client.patch(
-            "/api/v4/maps/archive",
+            "/api/v3/maps/archive",
             json={"codes": ["ZZZZZZ"], "status": "Archive"},
         )
 
@@ -946,7 +946,7 @@ class TestSetArchiveStatus:
     async def test_non_existent_map_returns_404(self, test_client):
         """Archive non-existent map returns 404."""
         response = await test_client.patch(
-            "/api/v4/maps/archive",
+            "/api/v3/maps/archive",
             json={"codes": ["ZZZZZZ"], "status": "Archive"},
         )
 
@@ -954,7 +954,7 @@ class TestSetArchiveStatus:
 
 
 class TestConvertToLegacy:
-    """POST /api/v4/maps/{code}/legacy"""
+    """POST /api/v3/maps/{code}/legacy"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Convert map to legacy successfully."""
@@ -962,7 +962,7 @@ class TestConvertToLegacy:
         await create_test_map(code=code)
 
         response = await test_client.post(
-            f"/api/v4/maps/{code}/legacy",
+            f"/api/v3/maps/{code}/legacy",
             params={"reason": "Map is outdated"},
         )
 
@@ -971,7 +971,7 @@ class TestConvertToLegacy:
     async def test_non_existent_map_returns_404(self, test_client):
         """Convert non-existent map to legacy returns 404."""
         response = await test_client.post(
-            "/api/v4/maps/ZZZZZZ/legacy",
+            "/api/v3/maps/ZZZZZZ/legacy",
             params={"reason": "Map is outdated"},
         )
 
@@ -979,7 +979,7 @@ class TestConvertToLegacy:
 
 
 class TestOverrideQualityVotes:
-    """POST /api/v4/maps/{code}/quality"""
+    """POST /api/v3/maps/{code}/quality"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Override quality votes successfully."""
@@ -987,7 +987,7 @@ class TestOverrideQualityVotes:
         await create_test_map(code=code)
 
         response = await test_client.post(
-            f"/api/v4/maps/{code}/quality",
+            f"/api/v3/maps/{code}/quality",
             json={"value": 5},  # Must be between 1 and 6
         )
 
@@ -996,7 +996,7 @@ class TestOverrideQualityVotes:
     async def test_non_existent_map_returns_404(self, test_client):
         """Override quality for non-existent map returns 404."""
         response = await test_client.post(
-            "/api/v4/maps/ZZZZZZ/quality",
+            "/api/v3/maps/ZZZZZZ/quality",
             json={"value": 5},
         )
 
@@ -1004,7 +1004,7 @@ class TestOverrideQualityVotes:
 
 
 class TestSendToPlaytest:
-    """POST /api/v4/maps/{code}/playtest"""
+    """POST /api/v3/maps/{code}/playtest"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Send approved map to playtest successfully."""
@@ -1012,7 +1012,7 @@ class TestSendToPlaytest:
         await create_test_map(code=code, playtesting="Approved")
 
         response = await test_client.post(
-            f"/api/v4/maps/{code}/playtest",
+            f"/api/v3/maps/{code}/playtest",
             json={"initial_difficulty": "Medium"},
         )
 
@@ -1028,7 +1028,7 @@ class TestSendToPlaytest:
         await create_test_playtest(map_id=map_id)
 
         response = await test_client.post(
-            f"/api/v4/maps/{code}/playtest",
+            f"/api/v3/maps/{code}/playtest",
             json={"initial_difficulty": "Medium"},
         )
 
@@ -1037,7 +1037,7 @@ class TestSendToPlaytest:
     async def test_non_existent_map_returns_404(self, test_client):
         """Send non-existent map to playtest returns 404."""
         response = await test_client.post(
-            "/api/v4/maps/ZZZZZZ/playtest",
+            "/api/v3/maps/ZZZZZZ/playtest",
             json={"initial_difficulty": "Medium"},
         )
 
@@ -1045,14 +1045,14 @@ class TestSendToPlaytest:
 
 
 class TestGetAffectedUsers:
-    """GET /api/v4/maps/{code}/affected"""
+    """GET /api/v3/maps/{code}/affected"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Get affected users returns list of user IDs."""
         code = unique_map_code
         await create_test_map(code=code)
 
-        response = await test_client.get(f"/api/v4/maps/{code}/affected")
+        response = await test_client.get(f"/api/v3/maps/{code}/affected")
 
         assert response.status_code == 200
         data = response.json()
@@ -1063,13 +1063,13 @@ class TestGetAffectedUsers:
 
     async def test_non_existent_map_returns_404(self, test_client):
         """Get affected users for non-existent map returns 404."""
-        response = await test_client.get("/api/v4/maps/ZZZZZZ/affected")
+        response = await test_client.get("/api/v3/maps/ZZZZZZ/affected")
 
         assert response.status_code == 404
 
 
 class TestGetMapPlot:
-    """GET /api/v4/maps/{code}/plot"""
+    """GET /api/v3/maps/{code}/plot"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code, create_test_playtest):
         """Get map plot returns stream response."""
@@ -1077,7 +1077,7 @@ class TestGetMapPlot:
         map_id = await create_test_map(code=code)
         await create_test_playtest(map_id=map_id)
 
-        response = await test_client.get(f"/api/v4/maps/{code}/plot")
+        response = await test_client.get(f"/api/v3/maps/{code}/plot")
 
         assert response.status_code == 200
         # Verify it's a streaming response (check content type)
@@ -1085,17 +1085,17 @@ class TestGetMapPlot:
 
     async def test_non_existent_map_returns_404(self, test_client):
         """Get plot for non-existent map returns 404."""
-        response = await test_client.get("/api/v4/maps/ZZZZZZ/plot")
+        response = await test_client.get("/api/v3/maps/ZZZZZZ/plot")
 
         assert response.status_code == 404
 
 
 class TestGetTrendingMaps:
-    """GET /api/v4/maps/trending"""
+    """GET /api/v3/maps/trending"""
 
     async def test_happy_path(self, test_client):
         """Get trending maps returns list with valid structure."""
-        response = await test_client.get("/api/v4/maps/trending")
+        response = await test_client.get("/api/v3/maps/trending")
 
         assert response.status_code == 200
         data = response.json()
@@ -1110,13 +1110,13 @@ class TestGetTrendingMaps:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get trending maps without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/maps/trending")
+        response = await unauthenticated_client.get("/api/v3/maps/trending")
 
         assert response.status_code == 401
 
 
 class TestLinkMapCodes:
-    """POST /api/v4/maps/link-codes"""
+    """POST /api/v3/maps/link-codes"""
 
     async def test_clone_scenario(self, test_client, create_test_map, unique_map_code):
         """Link codes when one needs to be cloned returns job status."""
@@ -1131,7 +1131,7 @@ class TestLinkMapCodes:
             "unofficial_code": unofficial_code,
         }
 
-        response = await test_client.post("/api/v4/maps/link-codes", json=payload)
+        response = await test_client.post("/api/v3/maps/link-codes", json=payload)
 
         # Endpoint may return 201 for creation or 200 for link
         assert response.status_code in [200, 201]
@@ -1154,7 +1154,7 @@ class TestLinkMapCodes:
             "unofficial_code": unofficial_code,
         }
 
-        response = await test_client.post("/api/v4/maps/link-codes", json=payload)
+        response = await test_client.post("/api/v3/maps/link-codes", json=payload)
 
         # Endpoint may return 201 or 200
         assert response.status_code in [200, 201]
@@ -1171,13 +1171,13 @@ class TestLinkMapCodes:
 
         # Link A to B
         await test_client.post(
-            "/api/v4/maps/link-codes",
+            "/api/v3/maps/link-codes",
             json={"official_code": code_a, "unofficial_code": code_b},
         )
 
         # Try to link A to C (should fail)
         response = await test_client.post(
-            "/api/v4/maps/link-codes",
+            "/api/v3/maps/link-codes",
             json={"official_code": code_a, "unofficial_code": code_c},
         )
 
@@ -1186,7 +1186,7 @@ class TestLinkMapCodes:
     async def test_requires_auth(self, unauthenticated_client):
         """Link codes without auth returns 401."""
         response = await unauthenticated_client.post(
-            "/api/v4/maps/link-codes",
+            "/api/v3/maps/link-codes",
             json={"official_code": "AAAA", "unofficial_code": "BBBB"},
         )
 
@@ -1194,7 +1194,7 @@ class TestLinkMapCodes:
 
 
 class TestUnlinkMapCodes:
-    """DELETE /api/v4/maps/link-codes"""
+    """DELETE /api/v3/maps/link-codes"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Unlink codes successfully."""
@@ -1206,14 +1206,14 @@ class TestUnlinkMapCodes:
 
         # Link them first
         await test_client.post(
-            "/api/v4/maps/link-codes",
+            "/api/v3/maps/link-codes",
             json={"official_code": official_code, "unofficial_code": unofficial_code},
         )
 
         # Unlink them
         response = await test_client.request(
             "DELETE",
-            "/api/v4/maps/link-codes",
+            "/api/v3/maps/link-codes",
             json={
                 "official_code": official_code,
                 "unofficial_code": unofficial_code,
@@ -1227,7 +1227,7 @@ class TestUnlinkMapCodes:
         """Unlink non-existent map returns 404."""
         response = await test_client.request(
             "DELETE",
-            "/api/v4/maps/link-codes",
+            "/api/v3/maps/link-codes",
             json={
                 "official_code": "ZZZZZZ",
                 "unofficial_code": "YYYYYY",
@@ -1241,7 +1241,7 @@ class TestUnlinkMapCodes:
         """Unlink codes without auth returns 401."""
         response = await unauthenticated_client.request(
             "DELETE",
-            "/api/v4/maps/link-codes",
+            "/api/v3/maps/link-codes",
             json={
                 "official_code": "AAAA",
                 "unofficial_code": "BBBB",

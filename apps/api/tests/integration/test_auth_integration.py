@@ -17,7 +17,7 @@ pytestmark = [
 
 
 class TestRegister:
-    """POST /api/v4/auth/register"""
+    """POST /api/v3/auth/register"""
 
     async def test_happy_path(self, test_client):
         """Register with valid data creates user."""
@@ -27,7 +27,7 @@ class TestRegister:
             "username": "newuser",
         }
 
-        response = await test_client.post("/api/v4/auth/register", json=payload)
+        response = await test_client.post("/api/v3/auth/register", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -52,11 +52,11 @@ class TestRegister:
         }
 
         # First registration
-        await test_client.post("/api/v4/auth/register", json=payload)
+        await test_client.post("/api/v3/auth/register", json=payload)
 
         # Second registration with same email
         payload["username"] = "user2"
-        response = await test_client.post("/api/v4/auth/register", json=payload)
+        response = await test_client.post("/api/v3/auth/register", json=payload)
 
         assert response.status_code == 400
 
@@ -68,7 +68,7 @@ class TestRegister:
             "username": "testuser",
         }
 
-        response = await test_client.post("/api/v4/auth/register", json=payload)
+        response = await test_client.post("/api/v3/auth/register", json=payload)
 
         assert response.status_code == 400
 
@@ -80,7 +80,7 @@ class TestRegister:
             "username": "testuser",
         }
 
-        response = await test_client.post("/api/v4/auth/register", json=payload)
+        response = await test_client.post("/api/v3/auth/register", json=payload)
 
         assert response.status_code == 400
 
@@ -92,13 +92,13 @@ class TestRegister:
             "username": "",  # Empty username
         }
 
-        response = await test_client.post("/api/v4/auth/register", json=payload)
+        response = await test_client.post("/api/v3/auth/register", json=payload)
 
         assert response.status_code == 400
 
 
 class TestLogin:
-    """POST /api/v4/auth/login"""
+    """POST /api/v3/auth/login"""
 
     async def test_happy_path(self, test_client):
         """Login with valid credentials returns user."""
@@ -108,14 +108,14 @@ class TestLogin:
             "password": "SecurePassword123!",
             "username": "loginuser",
         }
-        await test_client.post("/api/v4/auth/register", json=register_payload)
+        await test_client.post("/api/v3/auth/register", json=register_payload)
 
         # Login
         login_payload = {
             "email": "logintest@example.com",
             "password": "SecurePassword123!",
         }
-        response = await test_client.post("/api/v4/auth/login", json=login_payload)
+        response = await test_client.post("/api/v3/auth/login", json=login_payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -139,7 +139,7 @@ class TestLogin:
             "password": "wrongpassword",
         }
 
-        response = await test_client.post("/api/v4/auth/login", json=payload)
+        response = await test_client.post("/api/v3/auth/login", json=payload)
 
         assert response.status_code == 401
 
@@ -151,20 +151,20 @@ class TestLogin:
             "password": "CorrectPassword123!",
             "username": "rightuser",
         }
-        await test_client.post("/api/v4/auth/register", json=register_payload)
+        await test_client.post("/api/v3/auth/register", json=register_payload)
 
         # Login with wrong password
         login_payload = {
             "email": "rightuser@example.com",
             "password": "WrongPassword123!",
         }
-        response = await test_client.post("/api/v4/auth/login", json=login_payload)
+        response = await test_client.post("/api/v3/auth/login", json=login_payload)
 
         assert response.status_code == 401
 
 
 class TestVerifyEmail:
-    """POST /api/v4/auth/verify-email"""
+    """POST /api/v3/auth/verify-email"""
 
     async def test_valid_token_verifies_email(self, test_client, asyncpg_conn):
         """Valid verification token verifies email."""
@@ -174,7 +174,7 @@ class TestVerifyEmail:
             "password": "SecurePassword123!",
             "username": "verifyuser",
         }
-        register_response = await test_client.post("/api/v4/auth/register", json=register_payload)
+        register_response = await test_client.post("/api/v3/auth/register", json=register_payload)
         user_id = register_response.json()["user"]["id"]
 
         # Generate verification token and insert it into database
@@ -203,7 +203,7 @@ class TestVerifyEmail:
 
         # Verify email with real token
         payload = {"token": token}
-        response = await test_client.post("/api/v4/auth/verify-email", json=payload)
+        response = await test_client.post("/api/v3/auth/verify-email", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -219,7 +219,7 @@ class TestVerifyEmail:
             "password": "SecurePassword123!",
             "username": "alreadyverified",
         }
-        register_response = await test_client.post("/api/v4/auth/register", json=register_payload)
+        register_response = await test_client.post("/api/v3/auth/register", json=register_payload)
         user_id = register_response.json()["user"]["id"]
 
         # Generate and use verification token
@@ -248,7 +248,7 @@ class TestVerifyEmail:
 
         # Verify email first time
         payload = {"token": token}
-        first_response = await test_client.post("/api/v4/auth/verify-email", json=payload)
+        first_response = await test_client.post("/api/v3/auth/verify-email", json=payload)
         assert first_response.status_code == 200
 
         # Try to verify again with a new token
@@ -274,20 +274,20 @@ class TestVerifyEmail:
         )
 
         payload2 = {"token": token2}
-        second_response = await test_client.post("/api/v4/auth/verify-email", json=payload2)
+        second_response = await test_client.post("/api/v3/auth/verify-email", json=payload2)
         assert second_response.status_code == 400
 
     async def test_invalid_token_returns_400(self, test_client):
         """Invalid token returns 400."""
         payload = {"token": "invalid-token"}
 
-        response = await test_client.post("/api/v4/auth/verify-email", json=payload)
+        response = await test_client.post("/api/v3/auth/verify-email", json=payload)
 
         assert response.status_code == 400
 
 
 class TestResendVerification:
-    """POST /api/v4/auth/resend-verification"""
+    """POST /api/v3/auth/resend-verification"""
 
     async def test_resend_for_registered_user(self, test_client):
         """Resend verification for registered unverified user."""
@@ -297,11 +297,11 @@ class TestResendVerification:
             "password": "SecurePassword123!",
             "username": "resenduser",
         }
-        await test_client.post("/api/v4/auth/register", json=register_payload)
+        await test_client.post("/api/v3/auth/register", json=register_payload)
 
         # Resend verification
         payload = {"email": "resendtest@example.com"}
-        response = await test_client.post("/api/v4/auth/resend-verification", json=payload)
+        response = await test_client.post("/api/v3/auth/resend-verification", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -311,13 +311,13 @@ class TestResendVerification:
         """Resend verification for non-existent email returns 404."""
         payload = {"email": "nonexistent@example.com"}
 
-        response = await test_client.post("/api/v4/auth/resend-verification", json=payload)
+        response = await test_client.post("/api/v3/auth/resend-verification", json=payload)
 
         assert response.status_code == 404
 
 
 class TestForgotPassword:
-    """POST /api/v4/auth/forgot-password"""
+    """POST /api/v3/auth/forgot-password"""
 
     async def test_request_password_reset_for_existing_user(self, test_client):
         """Request password reset for existing email."""
@@ -327,11 +327,11 @@ class TestForgotPassword:
             "password": "SecurePassword123!",
             "username": "resetuser",
         }
-        await test_client.post("/api/v4/auth/register", json=register_payload)
+        await test_client.post("/api/v3/auth/register", json=register_payload)
 
         # Request password reset
         payload = {"email": "resettest@example.com"}
-        response = await test_client.post("/api/v4/auth/forgot-password", json=payload)
+        response = await test_client.post("/api/v3/auth/forgot-password", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -341,7 +341,7 @@ class TestForgotPassword:
         """Request password reset for non-existent email still returns 200 (security)."""
         payload = {"email": "nonexistent@example.com"}
 
-        response = await test_client.post("/api/v4/auth/forgot-password", json=payload)
+        response = await test_client.post("/api/v3/auth/forgot-password", json=payload)
 
         # Returns 200 even for non-existent emails to prevent email enumeration
         assert response.status_code == 200
@@ -350,7 +350,7 @@ class TestForgotPassword:
 
 
 class TestResetPassword:
-    """POST /api/v4/auth/reset-password"""
+    """POST /api/v3/auth/reset-password"""
 
     async def test_reset_with_valid_token(self, test_client, asyncpg_conn):
         """Reset password with valid token."""
@@ -360,7 +360,7 @@ class TestResetPassword:
             "password": "OldPassword123!",
             "username": "resetuser",
         }
-        register_response = await test_client.post("/api/v4/auth/register", json=register_payload)
+        register_response = await test_client.post("/api/v3/auth/register", json=register_payload)
         user_id = register_response.json()["user"]["id"]
 
         # Generate password reset token and insert it into database
@@ -392,7 +392,7 @@ class TestResetPassword:
             "token": token,
             "password": "NewSecurePassword123!",
         }
-        response = await test_client.post("/api/v4/auth/reset-password", json=payload)
+        response = await test_client.post("/api/v3/auth/reset-password", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -405,7 +405,7 @@ class TestResetPassword:
             "email": "passwordreset@example.com",
             "password": "NewSecurePassword123!",
         }
-        login_response = await test_client.post("/api/v4/auth/login", json=login_payload)
+        login_response = await test_client.post("/api/v3/auth/login", json=login_payload)
         assert login_response.status_code == 200
 
         # Verify old password doesn't work
@@ -413,7 +413,7 @@ class TestResetPassword:
             "email": "passwordreset@example.com",
             "password": "OldPassword123!",
         }
-        old_login_response = await test_client.post("/api/v4/auth/login", json=old_login_payload)
+        old_login_response = await test_client.post("/api/v3/auth/login", json=old_login_payload)
         assert old_login_response.status_code == 401
 
     async def test_reset_with_invalid_token_returns_400(self, test_client):
@@ -423,7 +423,7 @@ class TestResetPassword:
             "password": "NewSecurePassword123!",
         }
 
-        response = await test_client.post("/api/v4/auth/reset-password", json=payload)
+        response = await test_client.post("/api/v3/auth/reset-password", json=payload)
 
         assert response.status_code == 400
 
@@ -434,13 +434,13 @@ class TestResetPassword:
             "password": "weak",
         }
 
-        response = await test_client.post("/api/v4/auth/reset-password", json=payload)
+        response = await test_client.post("/api/v3/auth/reset-password", json=payload)
 
         assert response.status_code == 400
 
 
 class TestGetAuthStatus:
-    """GET /api/v4/auth/status/{user_id}"""
+    """GET /api/v3/auth/status/{user_id}"""
 
     async def test_get_status_for_email_auth_user(self, test_client):
         """Get auth status for user with email authentication."""
@@ -450,11 +450,11 @@ class TestGetAuthStatus:
             "password": "SecurePassword123!",
             "username": "statususer",
         }
-        register_response = await test_client.post("/api/v4/auth/register", json=register_payload)
+        register_response = await test_client.post("/api/v3/auth/register", json=register_payload)
         user_id = register_response.json()["user"]["id"]
 
         # Get auth status
-        response = await test_client.get(f"/api/v4/auth/status/{user_id}")
+        response = await test_client.get(f"/api/v3/auth/status/{user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -465,7 +465,7 @@ class TestGetAuthStatus:
 
     async def test_get_status_for_nonexistent_user_returns_404(self, test_client):
         """Get auth status for non-existent user returns 404."""
-        response = await test_client.get("/api/v4/auth/status/999999999")
+        response = await test_client.get("/api/v3/auth/status/999999999")
 
         assert response.status_code == 404
 
@@ -473,19 +473,19 @@ class TestGetAuthStatus:
         """Get auth status for Discord-only user (no email auth) returns 404."""
         user_id = await create_test_user()  # Creates Discord user, not email auth
 
-        response = await test_client.get(f"/api/v4/auth/status/{user_id}")
+        response = await test_client.get(f"/api/v3/auth/status/{user_id}")
 
         assert response.status_code == 404
 
 
 class TestSessionRead:
-    """GET /api/v4/auth/sessions/{session_id}"""
+    """GET /api/v3/auth/sessions/{session_id}"""
 
     async def test_read_nonexistent_session(self, test_client):
         """Read non-existent session returns empty payload."""
         session_id = "nonexistent-session-id"
 
-        response = await test_client.get(f"/api/v4/auth/sessions/{session_id}")
+        response = await test_client.get(f"/api/v3/auth/sessions/{session_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -496,14 +496,14 @@ class TestSessionRead:
 
 
 class TestSessionWrite:
-    """PUT /api/v4/auth/sessions/{session_id}"""
+    """PUT /api/v3/auth/sessions/{session_id}"""
 
     async def test_write_session_data(self, test_client):
         """Write session data."""
         session_id = "test-session-id"
         payload = {"payload": "base64encodeddata", "user_id": None}
 
-        response = await test_client.put(f"/api/v4/auth/sessions/{session_id}", json=payload)
+        response = await test_client.put(f"/api/v3/auth/sessions/{session_id}", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -515,24 +515,24 @@ class TestSessionWrite:
         payload = {"payload": "test-session-data", "user_id": None}
 
         # Write session
-        write_response = await test_client.put(f"/api/v4/auth/sessions/{session_id}", json=payload)
+        write_response = await test_client.put(f"/api/v3/auth/sessions/{session_id}", json=payload)
         assert write_response.status_code == 200
 
         # Read session back
-        read_response = await test_client.get(f"/api/v4/auth/sessions/{session_id}")
+        read_response = await test_client.get(f"/api/v3/auth/sessions/{session_id}")
         assert read_response.status_code == 200
         data = read_response.json()
         assert data["payload"] == "test-session-data"
 
 
 class TestSessionDestroy:
-    """DELETE /api/v4/auth/sessions/{session_id}"""
+    """DELETE /api/v3/auth/sessions/{session_id}"""
 
     async def test_destroy_nonexistent_session(self, test_client):
         """Destroy non-existent session returns deleted=False."""
         session_id = "nonexistent-session-id"
 
-        response = await test_client.delete(f"/api/v4/auth/sessions/{session_id}")
+        response = await test_client.delete(f"/api/v3/auth/sessions/{session_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -540,11 +540,11 @@ class TestSessionDestroy:
 
 
 class TestSessionGc:
-    """POST /api/v4/auth/sessions/gc"""
+    """POST /api/v3/auth/sessions/gc"""
 
     async def test_garbage_collect_sessions(self, test_client):
         """Garbage collect expired sessions."""
-        response = await test_client.post("/api/v4/auth/sessions/gc")
+        response = await test_client.post("/api/v3/auth/sessions/gc")
 
         assert response.status_code == 200
         data = response.json()
@@ -553,13 +553,13 @@ class TestSessionGc:
 
 
 class TestGetUserSessions:
-    """GET /api/v4/auth/sessions/user/{user_id}"""
+    """GET /api/v3/auth/sessions/user/{user_id}"""
 
     async def test_get_user_sessions(self, test_client, create_test_user):
         """Get all sessions for a user."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/auth/sessions/user/{user_id}")
+        response = await test_client.get(f"/api/v3/auth/sessions/user/{user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -568,13 +568,13 @@ class TestGetUserSessions:
 
 
 class TestDestroyUserSessions:
-    """DELETE /api/v4/auth/sessions/user/{user_id}"""
+    """DELETE /api/v3/auth/sessions/user/{user_id}"""
 
     async def test_destroy_all_user_sessions(self, test_client, create_test_user):
         """Destroy all sessions for a user."""
         user_id = await create_test_user()
 
-        response = await test_client.delete(f"/api/v4/auth/sessions/user/{user_id}")
+        response = await test_client.delete(f"/api/v3/auth/sessions/user/{user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -583,14 +583,14 @@ class TestDestroyUserSessions:
 
 
 class TestCreateRememberToken:
-    """POST /api/v4/auth/remember-token"""
+    """POST /api/v3/auth/remember-token"""
 
     async def test_create_remember_token(self, test_client, create_test_user):
         """Create remember token for user."""
         user_id = await create_test_user()
         payload = {"user_id": user_id}
 
-        response = await test_client.post("/api/v4/auth/remember-token", json=payload)
+        response = await test_client.post("/api/v3/auth/remember-token", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -604,12 +604,12 @@ class TestCreateRememberToken:
 
         # Create token
         create_payload = {"user_id": user_id}
-        create_response = await test_client.post("/api/v4/auth/remember-token", json=create_payload)
+        create_response = await test_client.post("/api/v3/auth/remember-token", json=create_payload)
         token = create_response.json()["token"]
 
         # Validate token
         validate_payload = {"token": token}
-        validate_response = await test_client.post("/api/v4/auth/remember-token/validate", json=validate_payload)
+        validate_response = await test_client.post("/api/v3/auth/remember-token/validate", json=validate_payload)
 
         assert validate_response.status_code == 200
         data = validate_response.json()
@@ -618,13 +618,13 @@ class TestCreateRememberToken:
 
 
 class TestValidateRememberToken:
-    """POST /api/v4/auth/remember-token/validate"""
+    """POST /api/v3/auth/remember-token/validate"""
 
     async def test_validate_invalid_token(self, test_client):
         """Validate an invalid remember token returns valid=False."""
         payload = {"token": "invalid-remember-token"}
 
-        response = await test_client.post("/api/v4/auth/remember-token/validate", json=payload)
+        response = await test_client.post("/api/v3/auth/remember-token/validate", json=payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -633,13 +633,13 @@ class TestValidateRememberToken:
 
 
 class TestRevokeRememberTokens:
-    """DELETE /api/v4/auth/remember-token/user/{user_id}"""
+    """DELETE /api/v3/auth/remember-token/user/{user_id}"""
 
     async def test_revoke_user_tokens(self, test_client, create_test_user):
         """Revoke all remember tokens for a user."""
         user_id = await create_test_user()
 
-        response = await test_client.delete(f"/api/v4/auth/remember-token/user/{user_id}")
+        response = await test_client.delete(f"/api/v3/auth/remember-token/user/{user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -652,15 +652,15 @@ class TestRevokeRememberTokens:
 
         # Create token
         create_payload = {"user_id": user_id}
-        create_response = await test_client.post("/api/v4/auth/remember-token", json=create_payload)
+        create_response = await test_client.post("/api/v3/auth/remember-token", json=create_payload)
         token = create_response.json()["token"]
 
         # Revoke all tokens for user
-        await test_client.delete(f"/api/v4/auth/remember-token/user/{user_id}")
+        await test_client.delete(f"/api/v3/auth/remember-token/user/{user_id}")
 
         # Try to validate revoked token
         validate_payload = {"token": token}
-        validate_response = await test_client.post("/api/v4/auth/remember-token/validate", json=validate_payload)
+        validate_response = await test_client.post("/api/v3/auth/remember-token/validate", json=validate_payload)
 
         assert validate_response.status_code == 200
         data = validate_response.json()

@@ -14,7 +14,7 @@ pytestmark = [
 
 
 class TestCheckPermission:
-    """GET /api/v4/change-requests/permission"""
+    """GET /api/v3/change-requests/permission"""
 
     async def test_happy_path_with_permission(
         self,
@@ -52,7 +52,7 @@ class TestCheckPermission:
         )
 
         response = await test_client.get(
-            "/api/v4/change-requests/permission",
+            "/api/v3/change-requests/permission",
             params={"thread_id": thread_id, "user_id": user_id, "code": code},
         )
 
@@ -97,7 +97,7 @@ class TestCheckPermission:
         )
 
         response = await test_client.get(
-            "/api/v4/change-requests/permission",
+            "/api/v3/change-requests/permission",
             params={"thread_id": thread_id, "user_id": user_id, "code": code},
         )
 
@@ -108,7 +108,7 @@ class TestCheckPermission:
     async def test_requires_auth(self, unauthenticated_client):
         """Check permission without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/change-requests/permission",
+            "/api/v3/change-requests/permission",
             params={"thread_id": 123456789, "user_id": 123456789, "code": "TEST01"},
         )
 
@@ -116,7 +116,7 @@ class TestCheckPermission:
 
 
 class TestCreateChangeRequest:
-    """POST /api/v4/change-requests/"""
+    """POST /api/v3/change-requests/"""
 
     async def test_happy_path(
         self,
@@ -142,7 +142,7 @@ class TestCreateChangeRequest:
             "creator_mentions": f"{user_id}",
         }
 
-        response = await test_client.post("/api/v4/change-requests/", json=payload)
+        response = await test_client.post("/api/v3/change-requests/", json=payload)
 
         assert response.status_code == 201
 
@@ -157,7 +157,7 @@ class TestCreateChangeRequest:
             "creator_mentions": "",
         }
 
-        response = await unauthenticated_client.post("/api/v4/change-requests/", json=payload)
+        response = await unauthenticated_client.post("/api/v3/change-requests/", json=payload)
 
         assert response.status_code == 401
 
@@ -180,7 +180,7 @@ class TestCreateChangeRequest:
             "creator_mentions": "",
         }
 
-        response = await test_client.post("/api/v4/change-requests/", json=payload)
+        response = await test_client.post("/api/v3/change-requests/", json=payload)
 
         assert response.status_code == 404
 
@@ -228,7 +228,7 @@ class TestCreateChangeRequest:
             "creator_mentions": "",
         }
 
-        response = await test_client.post("/api/v4/change-requests/", json=payload)
+        response = await test_client.post("/api/v3/change-requests/", json=payload)
 
         assert response.status_code == 409
 
@@ -255,7 +255,7 @@ class TestCreateChangeRequest:
             "creator_mentions": "",
         }
 
-        response = await test_client.post("/api/v4/change-requests/", json=payload)
+        response = await test_client.post("/api/v3/change-requests/", json=payload)
 
         assert response.status_code == 400
 
@@ -293,13 +293,13 @@ class TestCreateChangeRequest:
             "creator_mentions": "",
         }
 
-        response = await test_client.post("/api/v4/change-requests/", json=payload)
+        response = await test_client.post("/api/v3/change-requests/", json=payload)
 
         assert response.status_code == 201
 
 
 class TestResolveChangeRequest:
-    """PATCH /api/v4/change-requests/{thread_id}/resolve"""
+    """PATCH /api/v3/change-requests/{thread_id}/resolve"""
 
     async def test_happy_path(
         self,
@@ -336,19 +336,19 @@ class TestResolveChangeRequest:
             False,
         )
 
-        response = await test_client.patch(f"/api/v4/change-requests/{thread_id}/resolve")
+        response = await test_client.patch(f"/api/v3/change-requests/{thread_id}/resolve")
 
         assert response.status_code == 200
 
     async def test_requires_auth(self, unauthenticated_client):
         """Resolve change request without auth returns 401."""
-        response = await unauthenticated_client.patch("/api/v4/change-requests/123456789/resolve")
+        response = await unauthenticated_client.patch("/api/v3/change-requests/123456789/resolve")
 
         assert response.status_code == 401
 
 
 class TestGetChangeRequests:
-    """GET /api/v4/change-requests/"""
+    """GET /api/v3/change-requests/"""
 
     async def test_happy_path(
         self,
@@ -386,7 +386,7 @@ class TestGetChangeRequests:
         )
 
         response = await test_client.get(
-            "/api/v4/change-requests/",
+            "/api/v3/change-requests/",
             params={"code": code},
         )
 
@@ -421,7 +421,7 @@ class TestGetChangeRequests:
     async def test_requires_auth(self, unauthenticated_client):
         """Get change requests without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/change-requests/",
+            "/api/v3/change-requests/",
             params={"code": "TEST01"},
         )
 
@@ -429,11 +429,11 @@ class TestGetChangeRequests:
 
 
 class TestGetStaleChangeRequests:
-    """GET /api/v4/change-requests/stale"""
+    """GET /api/v3/change-requests/stale"""
 
     async def test_happy_path(self, test_client):
         """Get stale change requests returns list."""
-        response = await test_client.get("/api/v4/change-requests/stale")
+        response = await test_client.get("/api/v3/change-requests/stale")
 
         assert response.status_code == 200
         data = response.json()
@@ -451,7 +451,7 @@ class TestGetStaleChangeRequests:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get stale change requests without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/change-requests/stale")
+        response = await unauthenticated_client.get("/api/v3/change-requests/stale")
 
         assert response.status_code == 401
 
@@ -489,7 +489,7 @@ class TestGetStaleChangeRequests:
             False,  # Not alerted
         )
 
-        response = await test_client.get("/api/v4/change-requests/stale")
+        response = await test_client.get("/api/v3/change-requests/stale")
 
         assert response.status_code == 200
         data = response.json()
@@ -502,7 +502,7 @@ class TestGetStaleChangeRequests:
 
 
 class TestMarkAlerted:
-    """PATCH /api/v4/change-requests/{thread_id}/alerted"""
+    """PATCH /api/v3/change-requests/{thread_id}/alerted"""
 
     async def test_happy_path(
         self,
@@ -539,12 +539,12 @@ class TestMarkAlerted:
             False,  # Not alerted
         )
 
-        response = await test_client.patch(f"/api/v4/change-requests/{thread_id}/alerted")
+        response = await test_client.patch(f"/api/v3/change-requests/{thread_id}/alerted")
 
         assert response.status_code == 200
 
     async def test_requires_auth(self, unauthenticated_client):
         """Mark change request as alerted without auth returns 401."""
-        response = await unauthenticated_client.patch("/api/v4/change-requests/123456789/alerted")
+        response = await unauthenticated_client.patch("/api/v3/change-requests/123456789/alerted")
 
         assert response.status_code == 401

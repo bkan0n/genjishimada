@@ -14,7 +14,7 @@ pytestmark = [
 
 
 class TestAutocompleteMapNames:
-    """GET /api/v4/utilities/autocomplete/names"""
+    """GET /api/v3/utilities/autocomplete/names"""
 
     async def test_happy_path(self, test_client, create_test_map):
         """Autocomplete map names returns list."""
@@ -22,7 +22,7 @@ class TestAutocompleteMapNames:
         await create_test_map()
 
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/names",
+            "/api/v3/utilities/autocomplete/names",
             params={"search": "Practice", "limit": 5},
         )
 
@@ -34,7 +34,7 @@ class TestAutocompleteMapNames:
     async def test_requires_auth(self, unauthenticated_client):
         """Autocomplete map names without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/autocomplete/names",
+            "/api/v3/utilities/autocomplete/names",
             params={"search": "Practice"},
         )
 
@@ -43,14 +43,14 @@ class TestAutocompleteMapNames:
     async def test_missing_search_returns_400(self, test_client):
         """Missing search parameter returns 400."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/names",
+            "/api/v3/utilities/autocomplete/names",
         )
 
         assert response.status_code == 400
 
 
 class TestTransformMapName:
-    """GET /api/v4/utilities/transformers/names"""
+    """GET /api/v3/utilities/transformers/names"""
 
     async def test_happy_path(self, test_client, create_test_map):
         """Transform map name returns single value."""
@@ -58,7 +58,7 @@ class TestTransformMapName:
         await create_test_map()
 
         response = await test_client.get(
-            "/api/v4/utilities/transformers/names",
+            "/api/v3/utilities/transformers/names",
             params={"search": "Practice"},
         )
 
@@ -70,7 +70,7 @@ class TestTransformMapName:
     async def test_requires_auth(self, unauthenticated_client):
         """Transform map name without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/transformers/names",
+            "/api/v3/utilities/transformers/names",
             params={"search": "Practice"},
         )
 
@@ -78,12 +78,12 @@ class TestTransformMapName:
 
 
 class TestAutocompleteRestrictions:
-    """GET /api/v4/utilities/autocomplete/restrictions"""
+    """GET /api/v3/utilities/autocomplete/restrictions"""
 
     async def test_happy_path(self, test_client):
         """Autocomplete restrictions returns valid values."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/restrictions",
+            "/api/v3/utilities/autocomplete/restrictions",
             params={"search": "Wall", "limit": 5},
         )
 
@@ -99,7 +99,7 @@ class TestAutocompleteRestrictions:
     async def test_requires_auth(self, unauthenticated_client):
         """Autocomplete restrictions without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/autocomplete/restrictions",
+            "/api/v3/utilities/autocomplete/restrictions",
             params={"search": "Wall"},
         )
 
@@ -109,7 +109,7 @@ class TestAutocompleteRestrictions:
     async def test_search_variants(self, test_client, search_term):
         """Different search terms return valid restriction values."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/restrictions",
+            "/api/v3/utilities/autocomplete/restrictions",
             params={"search": search_term, "limit": 5},
         )
 
@@ -122,12 +122,12 @@ class TestAutocompleteRestrictions:
 
 
 class TestTransformRestriction:
-    """GET /api/v4/utilities/transformers/restrictions"""
+    """GET /api/v3/utilities/transformers/restrictions"""
 
     async def test_happy_path(self, test_client):
         """Transform restriction returns single value."""
         response = await test_client.get(
-            "/api/v4/utilities/transformers/restrictions",
+            "/api/v3/utilities/transformers/restrictions",
             params={"search": "Wall"},
         )
 
@@ -139,7 +139,7 @@ class TestTransformRestriction:
     async def test_requires_auth(self, unauthenticated_client):
         """Transform restriction without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/transformers/restrictions",
+            "/api/v3/utilities/transformers/restrictions",
             params={"search": "Wall"},
         )
 
@@ -147,12 +147,12 @@ class TestTransformRestriction:
 
 
 class TestAutocompleteMechanics:
-    """GET /api/v4/utilities/autocomplete/mechanics"""
+    """GET /api/v3/utilities/autocomplete/mechanics"""
 
     async def test_happy_path(self, test_client):
         """Autocomplete mechanics returns valid values."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/mechanics",
+            "/api/v3/utilities/autocomplete/mechanics",
             params={"search": "Climb", "limit": 5},
         )
 
@@ -168,7 +168,7 @@ class TestAutocompleteMechanics:
     async def test_requires_auth(self, unauthenticated_client):
         """Autocomplete mechanics without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/autocomplete/mechanics",
+            "/api/v3/utilities/autocomplete/mechanics",
             params={"search": "Climb"},
         )
 
@@ -177,7 +177,7 @@ class TestAutocompleteMechanics:
     async def test_missing_search_returns_400(self, test_client):
         """Missing search parameter returns 400."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/mechanics",
+            "/api/v3/utilities/autocomplete/mechanics",
         )
 
         assert response.status_code == 400
@@ -186,7 +186,7 @@ class TestAutocompleteMechanics:
     async def test_search_variants(self, test_client, search_term):
         """Different search terms return valid mechanic values."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/mechanics",
+            "/api/v3/utilities/autocomplete/mechanics",
             params={"search": search_term, "limit": 5},
         )
 
@@ -199,12 +199,12 @@ class TestAutocompleteMechanics:
 
 
 class TestTransformMechanic:
-    """GET /api/v4/utilities/transformers/mechanics"""
+    """GET /api/v3/utilities/transformers/mechanics"""
 
     async def test_happy_path(self, test_client):
         """Transform mechanic returns single value."""
         response = await test_client.get(
-            "/api/v4/utilities/transformers/mechanics",
+            "/api/v3/utilities/transformers/mechanics",
             params={"search": "Climb"},
         )
 
@@ -216,7 +216,7 @@ class TestTransformMechanic:
     async def test_requires_auth(self, unauthenticated_client):
         """Transform mechanic without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/transformers/mechanics",
+            "/api/v3/utilities/transformers/mechanics",
             params={"search": "Climb"},
         )
 
@@ -224,7 +224,7 @@ class TestTransformMechanic:
 
 
 class TestAutocompleteMapCodes:
-    """GET /api/v4/utilities/autocomplete/codes"""
+    """GET /api/v3/utilities/autocomplete/codes"""
 
     async def test_happy_path(self, test_client, create_test_map):
         """Autocomplete map codes returns list."""
@@ -232,7 +232,7 @@ class TestAutocompleteMapCodes:
         await create_test_map()
 
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/codes",
+            "/api/v3/utilities/autocomplete/codes",
             params={"search": "A", "limit": 5},
         )
 
@@ -247,7 +247,7 @@ class TestAutocompleteMapCodes:
         await create_test_map()
 
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/codes",
+            "/api/v3/utilities/autocomplete/codes",
             params={
                 "search": "A",
                 "archived": False,
@@ -264,7 +264,7 @@ class TestAutocompleteMapCodes:
     async def test_requires_auth(self, unauthenticated_client):
         """Autocomplete map codes without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/autocomplete/codes",
+            "/api/v3/utilities/autocomplete/codes",
             params={"search": "A"},
         )
 
@@ -273,7 +273,7 @@ class TestAutocompleteMapCodes:
     async def test_missing_search_returns_400(self, test_client):
         """Missing search parameter returns 400."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/codes",
+            "/api/v3/utilities/autocomplete/codes",
         )
 
         assert response.status_code == 400
@@ -281,7 +281,7 @@ class TestAutocompleteMapCodes:
     async def test_invalid_playtest_status_returns_400(self, test_client):
         """Invalid playtesting enum value returns 400."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/codes",
+            "/api/v3/utilities/autocomplete/codes",
             params={"search": "A", "playtesting": "InvalidStatus"},
         )
 
@@ -293,7 +293,7 @@ class TestAutocompleteMapCodes:
         await create_test_map()
 
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/codes",
+            "/api/v3/utilities/autocomplete/codes",
             params={"search": "A", "playtesting": playtest_status, "limit": 5},
         )
 
@@ -303,7 +303,7 @@ class TestAutocompleteMapCodes:
 
 
 class TestTransformMapCode:
-    """GET /api/v4/utilities/transformers/codes"""
+    """GET /api/v3/utilities/transformers/codes"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Transform map code returns single value."""
@@ -312,7 +312,7 @@ class TestTransformMapCode:
         await create_test_map(code=code)
 
         response = await test_client.get(
-            "/api/v4/utilities/transformers/codes",
+            "/api/v3/utilities/transformers/codes",
             params={"search": code[:2]},
         )
 
@@ -324,7 +324,7 @@ class TestTransformMapCode:
     async def test_requires_auth(self, unauthenticated_client):
         """Transform map code without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/transformers/codes",
+            "/api/v3/utilities/transformers/codes",
             params={"search": "A"},
         )
 
@@ -332,7 +332,7 @@ class TestTransformMapCode:
 
 
 class TestAutocompleteUsers:
-    """GET /api/v4/utilities/autocomplete/users"""
+    """GET /api/v3/utilities/autocomplete/users"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Autocomplete users returns list of tuples."""
@@ -340,7 +340,7 @@ class TestAutocompleteUsers:
         await create_test_user()
 
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/users",
+            "/api/v3/utilities/autocomplete/users",
             params={"search": "test", "limit": 10},
         )
 
@@ -362,7 +362,7 @@ class TestAutocompleteUsers:
         user_id = await create_test_user()
 
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/users",
+            "/api/v3/utilities/autocomplete/users",
             params={"search": "test", "limit": 10, "fake_users_only": True},
         )
 
@@ -373,7 +373,7 @@ class TestAutocompleteUsers:
     async def test_requires_auth(self, unauthenticated_client):
         """Autocomplete users without auth returns 401."""
         response = await unauthenticated_client.get(
-            "/api/v4/utilities/autocomplete/users",
+            "/api/v3/utilities/autocomplete/users",
             params={"search": "test"},
         )
 
@@ -382,7 +382,7 @@ class TestAutocompleteUsers:
     async def test_missing_search_returns_400(self, test_client):
         """Missing search parameter returns 400."""
         response = await test_client.get(
-            "/api/v4/utilities/autocomplete/users",
+            "/api/v3/utilities/autocomplete/users",
         )
 
         assert response.status_code == 400

@@ -1,4 +1,4 @@
-"""Users v4 controller."""
+"""Users v3 controller."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 
 class UsersController(litestar.Controller):
-    """Users v4 controller."""
+    """Users v3 controller."""
 
     tags = ["Users"]
     path = "/users"

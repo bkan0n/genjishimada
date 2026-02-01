@@ -13,7 +13,7 @@ pytestmark = [
 
 
 class TestCheckIfUserIsCreator:
-    """GET /api/v4/users/{user_id}/creator"""
+    """GET /api/v3/users/{user_id}/creator"""
 
     async def test_happy_path_creator(self, test_client, create_test_user, create_test_map, unique_map_code):
         """User with maps is a creator."""
@@ -22,7 +22,7 @@ class TestCheckIfUserIsCreator:
         code = unique_map_code
         await create_test_map(code=code, creator_id=user_id)
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/creator")
+        response = await test_client.get(f"/api/v3/users/{user_id}/creator")
 
         assert response.status_code == 200
         result = response.json()
@@ -34,7 +34,7 @@ class TestCheckIfUserIsCreator:
         """User without maps is not a creator."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/creator")
+        response = await test_client.get(f"/api/v3/users/{user_id}/creator")
 
         assert response.status_code == 200
         result = response.json()
@@ -44,20 +44,20 @@ class TestCheckIfUserIsCreator:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Check creator without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/creator")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/creator")
 
         assert response.status_code == 401
 
 
 class TestUpdateUserNames:
-    """PATCH /api/v4/users/{user_id}"""
+    """PATCH /api/v3/users/{user_id}"""
 
     async def test_update_nickname(self, test_client, create_test_user):
         """Update user nickname."""
         user_id = await create_test_user(nickname="OldName")
 
         response = await test_client.patch(
-            f"/api/v4/users/{user_id}",
+            f"/api/v3/users/{user_id}",
             json={"nickname": "NewName"},
         )
 
@@ -66,7 +66,7 @@ class TestUpdateUserNames:
     async def test_requires_auth(self, unauthenticated_client):
         """Update user without auth returns 401."""
         response = await unauthenticated_client.patch(
-            "/api/v4/users/999999999",
+            "/api/v3/users/999999999",
             json={"nickname": "NewName"},
         )
 
@@ -76,7 +76,7 @@ class TestUpdateUserNames:
         """Update non-existent user succeeds (creates or updates silently)."""
         # Note: The repository likely does an upsert or ignores non-existent users
         response = await test_client.patch(
-            "/api/v4/users/999999999999999999",
+            "/api/v3/users/999999999999999999",
             json={"nickname": "NewName"},
         )
 
@@ -88,7 +88,7 @@ class TestUpdateUserNames:
         user_id = await create_test_user()
 
         response = await test_client.patch(
-            f"/api/v4/users/{user_id}",
+            f"/api/v3/users/{user_id}",
             json={"global_name": "NewGlobalName"},
         )
 
@@ -99,7 +99,7 @@ class TestUpdateUserNames:
         user_id = await create_test_user()
 
         response = await test_client.patch(
-            f"/api/v4/users/{user_id}",
+            f"/api/v3/users/{user_id}",
             json={"nickname": "NewNick", "global_name": "NewGlobal"},
         )
 
@@ -110,7 +110,7 @@ class TestUpdateUserNames:
         user_id = await create_test_user()
 
         response = await test_client.patch(
-            f"/api/v4/users/{user_id}",
+            f"/api/v3/users/{user_id}",
             json={},
         )
 
@@ -118,11 +118,11 @@ class TestUpdateUserNames:
 
 
 class TestListUsers:
-    """GET /api/v4/users/"""
+    """GET /api/v3/users/"""
 
     async def test_happy_path(self, test_client):
         """List users returns 200 with list."""
-        response = await test_client.get("/api/v4/users/")
+        response = await test_client.get("/api/v3/users/")
 
         assert response.status_code == 200
         data = response.json()
@@ -131,7 +131,7 @@ class TestListUsers:
 
     async def test_requires_auth(self, unauthenticated_client):
         """List users without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/")
+        response = await unauthenticated_client.get("/api/v3/users/")
 
         assert response.status_code == 401
 
@@ -139,7 +139,7 @@ class TestListUsers:
         """List includes created users with valid structure."""
         user_id = await create_test_user(nickname="TestUser123")
 
-        response = await test_client.get("/api/v4/users/")
+        response = await test_client.get("/api/v3/users/")
 
         assert response.status_code == 200
         data = response.json()
@@ -159,13 +159,13 @@ class TestListUsers:
 
 
 class TestGetUser:
-    """GET /api/v4/users/{user_id}"""
+    """GET /api/v3/users/{user_id}"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get user returns user data."""
         user_id = await create_test_user(nickname="TestUser")
 
-        response = await test_client.get(f"/api/v4/users/{user_id}")
+        response = await test_client.get(f"/api/v3/users/{user_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -176,7 +176,7 @@ class TestGetUser:
 
     async def test_non_existent_user_returns_null(self, test_client):
         """Non-existent user returns null."""
-        response = await test_client.get("/api/v4/users/999999999999999999")
+        response = await test_client.get("/api/v3/users/999999999999999999")
 
         assert response.status_code == 200
         # Service returns None, which serializes to null in JSON
@@ -184,39 +184,39 @@ class TestGetUser:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get user without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999")
+        response = await unauthenticated_client.get("/api/v3/users/999999999")
 
         assert response.status_code == 401
 
 
 class TestCheckUserExists:
-    """GET /api/v4/users/{user_id}/exists"""
+    """GET /api/v3/users/{user_id}/exists"""
 
     async def test_existing_user(self, test_client, create_test_user):
         """Existing user returns true."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/exists")
+        response = await test_client.get(f"/api/v3/users/{user_id}/exists")
 
         assert response.status_code == 200
         assert response.json() is True
 
     async def test_non_existent_user(self, test_client):
         """Non-existent user returns false."""
-        response = await test_client.get("/api/v4/users/999999999999999999/exists")
+        response = await test_client.get("/api/v3/users/999999999999999999/exists")
 
         assert response.status_code == 200
         assert response.json() is False
 
     async def test_requires_auth(self, unauthenticated_client):
         """Check user exists without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/exists")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/exists")
 
         assert response.status_code == 401
 
 
 class TestCreateUser:
-    """POST /api/v4/users/"""
+    """POST /api/v3/users/"""
 
     async def test_happy_path(self, test_client, unique_user_id):
         """Create user returns user data with valid structure."""
@@ -226,7 +226,7 @@ class TestCreateUser:
             "global_name": "GlobalNewUser",
         }
 
-        response = await test_client.post("/api/v4/users/", json=payload)
+        response = await test_client.post("/api/v3/users/", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -249,7 +249,7 @@ class TestCreateUser:
             "global_name": "DifferentGlobal",
         }
 
-        response = await test_client.post("/api/v4/users/", json=payload)
+        response = await test_client.post("/api/v3/users/", json=payload)
 
         assert response.status_code == 409
         data = response.json()
@@ -264,7 +264,7 @@ class TestCreateUser:
             "global_name": "GlobalInvalid",
         }
 
-        response = await test_client.post("/api/v4/users/", json=payload)
+        response = await test_client.post("/api/v3/users/", json=payload)
 
         assert response.status_code == 400
         data = response.json()
@@ -279,13 +279,13 @@ class TestCreateUser:
             "global_name": "GlobalUser",
         }
 
-        response = await unauthenticated_client.post("/api/v4/users/", json=payload)
+        response = await unauthenticated_client.post("/api/v3/users/", json=payload)
 
         assert response.status_code == 401
 
 
 class TestUpdateOverwatchUsernames:
-    """PUT /api/v4/users/{user_id}/overwatch"""
+    """PUT /api/v3/users/{user_id}/overwatch"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Update Overwatch usernames returns success with valid structure."""
@@ -299,7 +299,7 @@ class TestUpdateOverwatchUsernames:
         }
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/overwatch",
+            f"/api/v3/users/{user_id}/overwatch",
             json=payload,
         )
 
@@ -316,7 +316,7 @@ class TestUpdateOverwatchUsernames:
         payload = {"usernames": [{"username": "OnlyAccount#9999", "is_primary": True}]}
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/overwatch",
+            f"/api/v3/users/{user_id}/overwatch",
             json=payload,
         )
 
@@ -330,7 +330,7 @@ class TestUpdateOverwatchUsernames:
         payload = {"usernames": []}
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/overwatch",
+            f"/api/v3/users/{user_id}/overwatch",
             json=payload,
         )
 
@@ -341,7 +341,7 @@ class TestUpdateOverwatchUsernames:
         payload = {"usernames": [{"username": "Player#1234", "is_primary": True}]}
 
         response = await unauthenticated_client.put(
-            "/api/v4/users/999999999/overwatch",
+            "/api/v3/users/999999999/overwatch",
             json=payload,
         )
 
@@ -352,7 +352,7 @@ class TestUpdateOverwatchUsernames:
         payload = {"usernames": [{"username": "Player#1234", "is_primary": True}]}
 
         response = await test_client.put(
-            "/api/v4/users/999999999999999999/overwatch",
+            "/api/v3/users/999999999999999999/overwatch",
             json=payload,
         )
 
@@ -361,7 +361,7 @@ class TestUpdateOverwatchUsernames:
 
 
 class TestGetOverwatchUsernames:
-    """GET /api/v4/users/{user_id}/overwatch"""
+    """GET /api/v3/users/{user_id}/overwatch"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get Overwatch usernames returns data with valid structure."""
@@ -369,7 +369,7 @@ class TestGetOverwatchUsernames:
 
         # Set some usernames first
         await test_client.put(
-            f"/api/v4/users/{user_id}/overwatch",
+            f"/api/v3/users/{user_id}/overwatch",
             json={
                 "usernames": [
                     {"username": "Player#1234", "is_primary": True},
@@ -377,7 +377,7 @@ class TestGetOverwatchUsernames:
             },
         )
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/overwatch")
+        response = await test_client.get(f"/api/v3/users/{user_id}/overwatch")
 
         assert response.status_code == 200
         data = response.json()
@@ -391,13 +391,13 @@ class TestGetOverwatchUsernames:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get Overwatch usernames without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/overwatch")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/overwatch")
 
         assert response.status_code == 401
 
     async def test_non_existent_user_response(self, test_client):
         """Get Overwatch usernames for non-existent user."""
-        response = await test_client.get("/api/v4/users/999999999999999999/overwatch")
+        response = await test_client.get("/api/v3/users/999999999999999999/overwatch")
 
         # Might return 200 with null values or empty response
         assert response.status_code == 200
@@ -408,13 +408,13 @@ class TestGetOverwatchUsernames:
 
 
 class TestGetUserRankData:
-    """GET /api/v4/users/{user_id}/rank"""
+    """GET /api/v3/users/{user_id}/rank"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get rank data returns list of rank details with valid structure."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/rank")
+        response = await test_client.get(f"/api/v3/users/{user_id}/rank")
 
         assert response.status_code == 200
         data = response.json()
@@ -430,18 +430,18 @@ class TestGetUserRankData:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get rank data without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/rank")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/rank")
 
         assert response.status_code == 401
 
 
 class TestCreateFakeMember:
-    """POST /api/v4/users/fake"""
+    """POST /api/v3/users/fake"""
 
     async def test_happy_path(self, test_client):
         """Create fake member returns new user ID with valid type."""
         response = await test_client.post(
-            "/api/v4/users/fake",
+            "/api/v3/users/fake",
             params={"name": "FakeMember"},
         )
 
@@ -455,7 +455,7 @@ class TestCreateFakeMember:
     async def test_requires_auth(self, unauthenticated_client):
         """Create fake member without auth returns 401."""
         response = await unauthenticated_client.post(
-            "/api/v4/users/fake",
+            "/api/v3/users/fake",
             params={"name": "FakeMember"},
         )
 
@@ -463,13 +463,13 @@ class TestCreateFakeMember:
 
 
 class TestLinkFakeMemberToRealUser:
-    """PUT /api/v4/users/fake/{fake_user_id}/link/{real_user_id}"""
+    """PUT /api/v3/users/fake/{fake_user_id}/link/{real_user_id}"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Link fake member to real user succeeds."""
         # Create a fake member
         fake_response = await test_client.post(
-            "/api/v4/users/fake",
+            "/api/v3/users/fake",
             params={"name": "FakeUser"},
         )
         fake_user_id = fake_response.json()
@@ -479,7 +479,7 @@ class TestLinkFakeMemberToRealUser:
 
         # Link them
         response = await test_client.put(
-            f"/api/v4/users/fake/{fake_user_id}/link/{real_user_id}",
+            f"/api/v3/users/fake/{fake_user_id}/link/{real_user_id}",
         )
 
         assert response.status_code == 200
@@ -487,7 +487,7 @@ class TestLinkFakeMemberToRealUser:
     async def test_requires_auth(self, unauthenticated_client):
         """Link fake member without auth returns 401."""
         response = await unauthenticated_client.put(
-            "/api/v4/users/fake/999/link/888888888",
+            "/api/v3/users/fake/999/link/888888888",
         )
 
         assert response.status_code == 401
@@ -497,7 +497,7 @@ class TestLinkFakeMemberToRealUser:
         real_user_id = await create_test_user()
 
         response = await test_client.put(
-            f"/api/v4/users/fake/999999999/link/{real_user_id}",
+            f"/api/v3/users/fake/999999999/link/{real_user_id}",
         )
 
         # Should handle non-existent fake user gracefully
@@ -508,13 +508,13 @@ class TestLinkFakeMemberToRealUser:
         """Link fake user to non-existent real user should return 404."""
         # Create a fake member
         fake_response = await test_client.post(
-            "/api/v4/users/fake",
+            "/api/v3/users/fake",
             params={"name": "FakeUser"},
         )
         fake_user_id = fake_response.json()
 
         response = await test_client.put(
-            f"/api/v4/users/fake/{fake_user_id}/link/999999999999999999",
+            f"/api/v3/users/fake/{fake_user_id}/link/999999999999999999",
         )
 
         # Should return 404 for non-existent real user

@@ -1,4 +1,4 @@
-"""Pytest configuration for v4 tests."""
+"""Pytest configuration for v3 tests."""
 
 import glob
 import os

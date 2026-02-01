@@ -13,13 +13,13 @@ pytestmark = [
 
 
 class TestGetRankCard:
-    """GET /api/v4/users/{user_id}/rank-card/"""
+    """GET /api/v3/users/{user_id}/rank-card/"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get rank card returns complete structure."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/rank-card/")
+        response = await test_client.get(f"/api/v3/users/{user_id}/rank-card/")
 
         assert response.status_code == 200
         data = response.json()
@@ -57,25 +57,25 @@ class TestGetRankCard:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get rank card without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/rank-card/")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/rank-card/")
 
         assert response.status_code == 401
 
     async def test_user_not_found_returns_404(self, test_client):
         """Get rank card for non-existent user returns 404."""
-        response = await test_client.get("/api/v4/users/999999999/rank-card/")
+        response = await test_client.get("/api/v3/users/999999999/rank-card/")
 
         assert response.status_code == 404
 
 
 class TestGetBackground:
-    """GET /api/v4/users/{user_id}/rank-card/background"""
+    """GET /api/v3/users/{user_id}/rank-card/background"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get background returns name and URL."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/rank-card/background")
+        response = await test_client.get(f"/api/v3/users/{user_id}/rank-card/background")
 
         assert response.status_code == 200
         data = response.json()
@@ -88,13 +88,13 @@ class TestGetBackground:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get background without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/rank-card/background")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/rank-card/background")
 
         assert response.status_code == 401
 
 
 class TestSetBackground:
-    """PUT /api/v4/users/{user_id}/rank-card/background"""
+    """PUT /api/v3/users/{user_id}/rank-card/background"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Set background returns updated name and URL."""
@@ -102,7 +102,7 @@ class TestSetBackground:
         payload = {"name": "sunset"}
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/rank-card/background",
+            f"/api/v3/users/{user_id}/rank-card/background",
             json=payload,
         )
 
@@ -121,7 +121,7 @@ class TestSetBackground:
         """Set background without auth returns 401."""
         payload = {"name": "sunset"}
         response = await unauthenticated_client.put(
-            "/api/v4/users/999999999/rank-card/background",
+            "/api/v3/users/999999999/rank-card/background",
             json=payload,
         )
 
@@ -131,7 +131,7 @@ class TestSetBackground:
         """Set background for non-existent user returns 404."""
         payload = {"name": "sunset"}
         response = await test_client.put(
-            "/api/v4/users/999999999/rank-card/background",
+            "/api/v3/users/999999999/rank-card/background",
             json=payload,
         )
 
@@ -143,7 +143,7 @@ class TestSetBackground:
         payload = {}
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/rank-card/background",
+            f"/api/v3/users/{user_id}/rank-card/background",
             json=payload,
         )
 
@@ -151,13 +151,13 @@ class TestSetBackground:
 
 
 class TestGetAvatarSkin:
-    """GET /api/v4/users/{user_id}/rank-card/avatar/skin"""
+    """GET /api/v3/users/{user_id}/rank-card/avatar/skin"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get avatar skin returns skin and URL."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/rank-card/avatar/skin")
+        response = await test_client.get(f"/api/v3/users/{user_id}/rank-card/avatar/skin")
 
         assert response.status_code == 200
         data = response.json()
@@ -170,13 +170,13 @@ class TestGetAvatarSkin:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get avatar skin without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/rank-card/avatar/skin")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/rank-card/avatar/skin")
 
         assert response.status_code == 401
 
 
 class TestSetAvatarSkin:
-    """PUT /api/v4/users/{user_id}/rank-card/avatar/skin"""
+    """PUT /api/v3/users/{user_id}/rank-card/avatar/skin"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Set avatar skin returns updated skin and URL."""
@@ -184,7 +184,7 @@ class TestSetAvatarSkin:
         payload = {"skin": "Overwatch 2"}
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/rank-card/avatar/skin",
+            f"/api/v3/users/{user_id}/rank-card/avatar/skin",
             json=payload,
         )
 
@@ -203,7 +203,7 @@ class TestSetAvatarSkin:
         """Set avatar skin without auth returns 401."""
         payload = {"skin": "Overwatch 2"}
         response = await unauthenticated_client.put(
-            "/api/v4/users/999999999/rank-card/avatar/skin",
+            "/api/v3/users/999999999/rank-card/avatar/skin",
             json=payload,
         )
 
@@ -213,7 +213,7 @@ class TestSetAvatarSkin:
         """Set avatar skin for non-existent user returns 404."""
         payload = {"skin": "Overwatch 2"}
         response = await test_client.put(
-            "/api/v4/users/999999999/rank-card/avatar/skin",
+            "/api/v3/users/999999999/rank-card/avatar/skin",
             json=payload,
         )
 
@@ -225,7 +225,7 @@ class TestSetAvatarSkin:
         payload = {}
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/rank-card/avatar/skin",
+            f"/api/v3/users/{user_id}/rank-card/avatar/skin",
             json=payload,
         )
 
@@ -233,13 +233,13 @@ class TestSetAvatarSkin:
 
 
 class TestGetAvatarPose:
-    """GET /api/v4/users/{user_id}/rank-card/avatar/pose"""
+    """GET /api/v3/users/{user_id}/rank-card/avatar/pose"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get avatar pose returns pose and URL."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/rank-card/avatar/pose")
+        response = await test_client.get(f"/api/v3/users/{user_id}/rank-card/avatar/pose")
 
         assert response.status_code == 200
         data = response.json()
@@ -252,13 +252,13 @@ class TestGetAvatarPose:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get avatar pose without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/rank-card/avatar/pose")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/rank-card/avatar/pose")
 
         assert response.status_code == 401
 
 
 class TestSetAvatarPose:
-    """PUT /api/v4/users/{user_id}/rank-card/avatar/pose"""
+    """PUT /api/v3/users/{user_id}/rank-card/avatar/pose"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Set avatar pose returns updated pose and URL."""
@@ -266,7 +266,7 @@ class TestSetAvatarPose:
         payload = {"pose": "Sitting"}
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/rank-card/avatar/pose",
+            f"/api/v3/users/{user_id}/rank-card/avatar/pose",
             json=payload,
         )
 
@@ -285,7 +285,7 @@ class TestSetAvatarPose:
         """Set avatar pose without auth returns 401."""
         payload = {"pose": "Sitting"}
         response = await unauthenticated_client.put(
-            "/api/v4/users/999999999/rank-card/avatar/pose",
+            "/api/v3/users/999999999/rank-card/avatar/pose",
             json=payload,
         )
 
@@ -295,7 +295,7 @@ class TestSetAvatarPose:
         """Set avatar pose for non-existent user returns 404."""
         payload = {"pose": "Sitting"}
         response = await test_client.put(
-            "/api/v4/users/999999999/rank-card/avatar/pose",
+            "/api/v3/users/999999999/rank-card/avatar/pose",
             json=payload,
         )
 
@@ -307,7 +307,7 @@ class TestSetAvatarPose:
         payload = {}
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/rank-card/avatar/pose",
+            f"/api/v3/users/{user_id}/rank-card/avatar/pose",
             json=payload,
         )
 
@@ -315,13 +315,13 @@ class TestSetAvatarPose:
 
 
 class TestGetBadges:
-    """GET /api/v4/users/{user_id}/rank-card/badges"""
+    """GET /api/v3/users/{user_id}/rank-card/badges"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get badges returns badge settings structure."""
         user_id = await create_test_user()
 
-        response = await test_client.get(f"/api/v4/users/{user_id}/rank-card/badges")
+        response = await test_client.get(f"/api/v3/users/{user_id}/rank-card/badges")
 
         assert response.status_code == 200
         data = response.json()
@@ -337,13 +337,13 @@ class TestGetBadges:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get badges without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/users/999999999/rank-card/badges")
+        response = await unauthenticated_client.get("/api/v3/users/999999999/rank-card/badges")
 
         assert response.status_code == 401
 
 
 class TestSetBadges:
-    """PUT /api/v4/users/{user_id}/rank-card/badges"""
+    """PUT /api/v3/users/{user_id}/rank-card/badges"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Set badges returns 204 No Content."""
@@ -364,7 +364,7 @@ class TestSetBadges:
         }
 
         response = await test_client.put(
-            f"/api/v4/users/{user_id}/rank-card/badges",
+            f"/api/v3/users/{user_id}/rank-card/badges",
             json=payload,
         )
 
@@ -387,7 +387,7 @@ class TestSetBadges:
             "badge_type6": None,
         }
         response = await unauthenticated_client.put(
-            "/api/v4/users/999999999/rank-card/badges",
+            "/api/v3/users/999999999/rank-card/badges",
             json=payload,
         )
 
@@ -410,7 +410,7 @@ class TestSetBadges:
             "badge_type6": None,
         }
         response = await test_client.put(
-            "/api/v4/users/999999999/rank-card/badges",
+            "/api/v3/users/999999999/rank-card/badges",
             json=payload,
         )
 
@@ -437,13 +437,13 @@ class TestSetBadges:
         }
 
         set_response = await test_client.put(
-            f"/api/v4/users/{user_id}/rank-card/badges",
+            f"/api/v3/users/{user_id}/rank-card/badges",
             json=payload,
         )
         assert set_response.status_code == 204
 
         # Get badges and verify
-        get_response = await test_client.get(f"/api/v4/users/{user_id}/rank-card/badges")
+        get_response = await test_client.get(f"/api/v3/users/{user_id}/rank-card/badges")
         assert get_response.status_code == 200
         data = get_response.json()
 

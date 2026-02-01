@@ -1,4 +1,4 @@
-"""Newsfeed v4 controller."""
+"""Newsfeed v3 controller."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ async def provide_newsfeed_service(state: State, newsfeed_repo: NewsfeedReposito
 
 
 class NewsfeedController(litestar.Controller):
-    """Newsfeed v4 controller."""
+    """Newsfeed v3 controller."""
 
     tags = ["Newsfeed"]
     path = "/newsfeed"

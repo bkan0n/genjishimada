@@ -16,7 +16,7 @@ faker = Faker()
 
 
 class TestGetCompletionsForUser:
-    """GET /api/v4/completions/ with user_id query param"""
+    """GET /api/v3/completions/ with user_id query param"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """Get completions for user returns list with valid structure."""
@@ -33,9 +33,9 @@ class TestGetCompletionsForUser:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": 123456789,
         }
-        await test_client.post("/api/v4/completions/", json=completion_payload)
+        await test_client.post("/api/v3/completions/", json=completion_payload)
 
-        response = await test_client.get("/api/v4/completions/", params={"user_id": user_id})
+        response = await test_client.get("/api/v3/completions/", params={"user_id": user_id})
 
         assert response.status_code == 200
         data = response.json()
@@ -56,7 +56,7 @@ class TestGetCompletionsForUser:
         user_id = await create_test_user()
 
         response = await unauthenticated_client.get(
-            "/api/v4/completions/",
+            "/api/v3/completions/",
             params={"user_id": user_id},
         )
 
@@ -88,20 +88,20 @@ class TestGetCompletionsForUser:
                 "screenshot": "https://example.com/screenshot.png",
                 "message_id": msg_id,
             }
-            submit_response = await test_client.post("/api/v4/completions/", json=completion_payload)
+            submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
             assert submit_response.status_code == 201
 
             # Verify each completion so it appears in results
             completion_id = submit_response.json()["completion_id"]
             verify_payload = {"verified": True, "verified_by": user_id, "reason": None}
-            await test_client.put(f"/api/v4/completions/{completion_id}/verification", json=verify_payload)
+            await test_client.put(f"/api/v3/completions/{completion_id}/verification", json=verify_payload)
 
             # Patch with message_id after verification
             patch_payload = {"message_id": msg_id}
-            await test_client.patch(f"/api/v4/completions/{completion_id}", json=patch_payload)
+            await test_client.patch(f"/api/v3/completions/{completion_id}", json=patch_payload)
 
         # Query with difficulty filter
-        response = await test_client.get("/api/v4/completions/", params={"user_id": user_id, "difficulty": "Medium"})
+        response = await test_client.get("/api/v3/completions/", params={"user_id": user_id, "difficulty": "Medium"})
 
         assert response.status_code == 200
         data = response.json()
@@ -115,13 +115,13 @@ class TestGetCompletionsForUser:
 
 
 class TestGetWorldRecordsPerUser:
-    """GET /api/v4/completions/world-records with user_id query param"""
+    """GET /api/v3/completions/world-records with user_id query param"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get world records for user returns list with valid structure."""
         user_id = await create_test_user()
 
-        response = await test_client.get("/api/v4/completions/world-records", params={"user_id": user_id})
+        response = await test_client.get("/api/v3/completions/world-records", params={"user_id": user_id})
 
         assert response.status_code == 200
         data = response.json()
@@ -140,7 +140,7 @@ class TestGetWorldRecordsPerUser:
         user_id = await create_test_user()
 
         response = await unauthenticated_client.get(
-            "/api/v4/completions/world-records",
+            "/api/v3/completions/world-records",
             params={"user_id": user_id},
         )
 
@@ -148,7 +148,7 @@ class TestGetWorldRecordsPerUser:
 
 
 class TestSubmitCompletion:
-    """POST /api/v4/completions/"""
+    """POST /api/v3/completions/"""
 
     async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
         """Submit completion creates record."""
@@ -165,7 +165,7 @@ class TestSubmitCompletion:
             "message_id": 123456789,
         }
 
-        response = await test_client.post("/api/v4/completions/", json=payload)
+        response = await test_client.post("/api/v3/completions/", json=payload)
 
         assert response.status_code == 201
         data = response.json()
@@ -185,7 +185,7 @@ class TestSubmitCompletion:
             "message_id": 123456789,
         }
 
-        response = await test_client.post("/api/v4/completions/", json=payload)
+        response = await test_client.post("/api/v3/completions/", json=payload)
 
         assert response.status_code == 404
 
@@ -207,22 +207,22 @@ class TestSubmitCompletion:
         }
 
         # First submission
-        response1 = await test_client.post("/api/v4/completions/", json=payload)
+        response1 = await test_client.post("/api/v3/completions/", json=payload)
         assert response1.status_code == 201
 
         # Duplicate submission (same user + map, same time) - should return 400
         payload["message_id"] = 987654321
-        response2 = await test_client.post("/api/v4/completions/", json=payload)
+        response2 = await test_client.post("/api/v3/completions/", json=payload)
 
         assert response2.status_code == 400
 
 
 class TestGetPendingVerifications:
-    """GET /api/v4/completions/pending"""
+    """GET /api/v3/completions/pending"""
 
     async def test_happy_path(self, test_client):
         """Get pending verifications returns list with valid structure."""
-        response = await test_client.get("/api/v4/completions/pending")
+        response = await test_client.get("/api/v3/completions/pending")
 
         assert response.status_code == 200
         data = response.json()
@@ -240,14 +240,14 @@ class TestGetPendingVerifications:
 
 
 class TestGetCompletionsLeaderboard:
-    """GET /api/v4/completions/{code}"""
+    """GET /api/v3/completions/{code}"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Get leaderboard returns list with valid structure."""
         code = unique_map_code
         await create_test_map(code=code)
 
-        response = await test_client.get(f"/api/v4/completions/{code}")
+        response = await test_client.get(f"/api/v3/completions/{code}")
 
         assert response.status_code == 200
         data = response.json()
@@ -269,7 +269,7 @@ class TestGetCompletionsLeaderboard:
         await create_test_map(code=code)
 
         response = await unauthenticated_client.get(
-            f"/api/v4/completions/{code}",
+            f"/api/v3/completions/{code}",
         )
 
         assert response.status_code == 401
@@ -282,7 +282,7 @@ class TestGetCompletionsLeaderboard:
         await create_test_map(code=code)
 
         response = await test_client.get(
-            f"/api/v4/completions/{code}",
+            f"/api/v3/completions/{code}",
             params={"page_size": page_size, "page_number": page_number},
         )
 
@@ -291,11 +291,11 @@ class TestGetCompletionsLeaderboard:
 
 
 class TestGetAllCompletions:
-    """GET /api/v4/completions/all"""
+    """GET /api/v3/completions/all"""
 
     async def test_happy_path(self, test_client):
         """Get all completions returns list with valid structure."""
-        response = await test_client.get("/api/v4/completions/all")
+        response = await test_client.get("/api/v3/completions/all")
 
         assert response.status_code == 200
         data = response.json()
@@ -312,14 +312,14 @@ class TestGetAllCompletions:
 
 
 class TestGetSuspiciousFlags:
-    """GET /api/v4/completions/suspicious"""
+    """GET /api/v3/completions/suspicious"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Get suspicious flags returns list with valid structure."""
         user_id = await create_test_user()
 
         response = await test_client.get(
-            "/api/v4/completions/suspicious",
+            "/api/v3/completions/suspicious",
             params={"user_id": user_id},
         )
 
@@ -336,7 +336,7 @@ class TestGetSuspiciousFlags:
 
 
 class TestEditCompletion:
-    """PATCH /api/v4/completions/{record_id}"""
+    """PATCH /api/v3/completions/{record_id}"""
 
     async def test_happy_path(
         self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
@@ -355,7 +355,7 @@ class TestEditCompletion:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": unique_message_id,
         }
-        submit_response = await test_client.post("/api/v4/completions/", json=completion_payload)
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
         assert submit_response.status_code == 201
         completion_id = submit_response.json()["completion_id"]
 
@@ -365,7 +365,7 @@ class TestEditCompletion:
             "message_id": new_message_id,
             "legacy": False,
         }
-        response = await test_client.patch(f"/api/v4/completions/{completion_id}", json=edit_payload)
+        response = await test_client.patch(f"/api/v3/completions/{completion_id}", json=edit_payload)
 
         assert response.status_code in [200, 204]
 
@@ -374,7 +374,7 @@ class TestEditCompletion:
         record_id = 999999999
 
         response = await test_client.patch(
-            f"/api/v4/completions/{record_id}",
+            f"/api/v3/completions/{record_id}",
             json={"time": 30.5},
         )
 
@@ -382,7 +382,7 @@ class TestEditCompletion:
 
 
 class TestGetCompletionSubmission:
-    """GET /api/v4/completions/{record_id}/submission"""
+    """GET /api/v3/completions/{record_id}/submission"""
 
     async def test_happy_path(
         self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
@@ -401,12 +401,12 @@ class TestGetCompletionSubmission:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": unique_message_id,
         }
-        submit_response = await test_client.post("/api/v4/completions/", json=completion_payload)
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
         assert submit_response.status_code == 201
         completion_id = submit_response.json()["completion_id"]
 
         # Get submission details
-        response = await test_client.get(f"/api/v4/completions/{completion_id}/submission")
+        response = await test_client.get(f"/api/v3/completions/{completion_id}/submission")
 
         assert response.status_code == 200
         data = response.json()
@@ -420,13 +420,13 @@ class TestGetCompletionSubmission:
         """Get non-existent completion submission should return 404."""
         record_id = 999999999
 
-        response = await test_client.get(f"/api/v4/completions/{record_id}/submission")
+        response = await test_client.get(f"/api/v3/completions/{record_id}/submission")
 
         assert response.status_code == 404
 
 
 class TestVerifyCompletion:
-    """PUT /api/v4/completions/{record_id}/verification"""
+    """PUT /api/v3/completions/{record_id}/verification"""
 
     async def test_happy_path(
         self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
@@ -445,7 +445,7 @@ class TestVerifyCompletion:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": unique_message_id,
         }
-        submit_response = await test_client.post("/api/v4/completions/", json=completion_payload)
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
         assert submit_response.status_code == 201
         completion_id = submit_response.json()["completion_id"]
 
@@ -455,7 +455,7 @@ class TestVerifyCompletion:
             "verified_by": user_id,
             "reason": None,
         }
-        response = await test_client.put(f"/api/v4/completions/{completion_id}/verification", json=verify_payload)
+        response = await test_client.put(f"/api/v3/completions/{completion_id}/verification", json=verify_payload)
 
         assert response.status_code == 200
         data = response.json()
@@ -472,13 +472,13 @@ class TestVerifyCompletion:
             "reason": None,
         }
 
-        response = await test_client.put(f"/api/v4/completions/{record_id}/verification", json=payload)
+        response = await test_client.put(f"/api/v3/completions/{record_id}/verification", json=payload)
 
         assert response.status_code == 404
 
 
 class TestSetSuspiciousFlag:
-    """POST /api/v4/completions/suspicious"""
+    """POST /api/v3/completions/suspicious"""
 
     async def test_happy_path(
         self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
@@ -497,7 +497,7 @@ class TestSetSuspiciousFlag:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": unique_message_id,
         }
-        submit_response = await test_client.post("/api/v4/completions/", json=completion_payload)
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
         assert submit_response.status_code == 201
 
         # Set suspicious flag
@@ -507,7 +507,7 @@ class TestSetSuspiciousFlag:
             "flag_type": "Cheating",  # Valid values: "Cheating" or "Scripting"
             "flagged_by": user_id,
         }
-        response = await test_client.post("/api/v4/completions/suspicious", json=flag_payload)
+        response = await test_client.post("/api/v3/completions/suspicious", json=flag_payload)
 
         assert response.status_code in [200, 201, 204]
 
@@ -516,19 +516,19 @@ class TestSetSuspiciousFlag:
         """Setting suspicious flag without required fields returns 400."""
         payload = {"reason": "Suspicious activity"}
 
-        response = await test_client.post("/api/v4/completions/suspicious", json=payload)
+        response = await test_client.post("/api/v3/completions/suspicious", json=payload)
 
         assert response.status_code == 400
 
 
 class TestUpvoteSubmission:
-    """POST /api/v4/completions/upvoting"""
+    """POST /api/v3/completions/upvoting"""
 
     async def test_non_existent_message_returns_404(self, test_client):
         """Upvoting non-existent message should return 404."""
         payload = {"message_id": 999999999, "user_id": 999}
 
-        response = await test_client.post("/api/v4/completions/upvoting", json=payload)
+        response = await test_client.post("/api/v3/completions/upvoting", json=payload)
 
         assert response.status_code == 404
 
@@ -549,30 +549,30 @@ class TestUpvoteSubmission:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": 123456789,
         }
-        response = await test_client.post("/api/v4/completions/", json=completion_payload)
+        response = await test_client.post("/api/v3/completions/", json=completion_payload)
         assert response.status_code == 201
         completion_id = response.json()["completion_id"]
 
         # Patch the completion to set message_id
         await test_client.patch(
-            f"/api/v4/completions/{completion_id}",
+            f"/api/v3/completions/{completion_id}",
             json={"message_id": 123456789},
         )
 
         upvote_payload = {"message_id": 123456789, "user_id": user_id}
 
         # First upvote
-        response1 = await test_client.post("/api/v4/completions/upvoting", json=upvote_payload)
+        response1 = await test_client.post("/api/v3/completions/upvoting", json=upvote_payload)
         assert response1.status_code == 201
 
         # Duplicate upvote
-        response2 = await test_client.post("/api/v4/completions/upvoting", json=upvote_payload)
+        response2 = await test_client.post("/api/v3/completions/upvoting", json=upvote_payload)
 
         assert response2.status_code == 409
 
 
 class TestCheckWorldRecordXp:
-    """GET /api/v4/completions/{code}/wr-xp-check"""
+    """GET /api/v3/completions/{code}/wr-xp-check"""
 
     async def test_returns_boolean(self, test_client, create_test_map, create_test_user, unique_map_code):
         """Check WR XP returns boolean with correct type."""
@@ -581,7 +581,7 @@ class TestCheckWorldRecordXp:
         await create_test_map(code=code)
 
         response = await test_client.get(
-            f"/api/v4/completions/{code}/wr-xp-check",
+            f"/api/v3/completions/{code}/wr-xp-check",
             params={"user_id": user_id},
         )
 
@@ -593,11 +593,11 @@ class TestCheckWorldRecordXp:
 
 
 class TestGetRecordsFiltered:
-    """GET /api/v4/completions/moderation/records"""
+    """GET /api/v3/completions/moderation/records"""
 
     async def test_happy_path(self, test_client):
         """Get filtered records for moderation with valid structure."""
-        response = await test_client.get("/api/v4/completions/moderation/records")
+        response = await test_client.get("/api/v3/completions/moderation/records")
 
         assert response.status_code == 200
         data = response.json()
@@ -618,7 +618,7 @@ class TestGetRecordsFiltered:
     async def test_filter_combinations(self, test_client, verification_status, latest_only):
         """Test various filter combinations."""
         response = await test_client.get(
-            "/api/v4/completions/moderation/records",
+            "/api/v3/completions/moderation/records",
             params={"verification_status": verification_status, "latest_only": latest_only},
         )
 
@@ -648,21 +648,21 @@ class TestGetRecordsFiltered:
                 "screenshot": "https://example.com/screenshot.png",
                 "message_id": msg_id,
             }
-            response = await test_client.post("/api/v4/completions/", json=payload)
+            response = await test_client.post("/api/v3/completions/", json=payload)
             assert response.status_code == 201
             completion_ids.append(response.json()["completion_id"])
 
         # Verify only the first one
         verify_payload = {"verified": True, "verified_by": user1, "reason": None}
-        await test_client.put(f"/api/v4/completions/{completion_ids[0]}/verification", json=verify_payload)
+        await test_client.put(f"/api/v3/completions/{completion_ids[0]}/verification", json=verify_payload)
 
         # Patch with message_id after verification
         patch_payload = {"message_id": msg_id1}
-        await test_client.patch(f"/api/v4/completions/{completion_ids[0]}", json=patch_payload)
+        await test_client.patch(f"/api/v3/completions/{completion_ids[0]}", json=patch_payload)
 
         # Filter by verified status
         response = await test_client.get(
-            "/api/v4/completions/moderation/records",
+            "/api/v3/completions/moderation/records",
             params={"code": code, "verification_status": "Verified"},
         )
 
@@ -697,11 +697,11 @@ class TestGetRecordsFiltered:
                 "screenshot": "https://example.com/screenshot.png",
                 "message_id": msg_id,
             }
-            response = await test_client.post("/api/v4/completions/", json=payload)
+            response = await test_client.post("/api/v3/completions/", json=payload)
             assert response.status_code == 201
 
         # Filter by specific code
-        response = await test_client.get("/api/v4/completions/moderation/records", params={"code": code1})
+        response = await test_client.get("/api/v3/completions/moderation/records", params={"code": code1})
 
         assert response.status_code == 200
         data = response.json()
@@ -730,11 +730,11 @@ class TestGetRecordsFiltered:
                 "screenshot": "https://example.com/screenshot.png",
                 "message_id": msg_id,
             }
-            response = await test_client.post("/api/v4/completions/", json=payload)
+            response = await test_client.post("/api/v3/completions/", json=payload)
             assert response.status_code == 201
 
         # Filter by user1
-        response = await test_client.get("/api/v4/completions/moderation/records", params={"user_id": user1})
+        response = await test_client.get("/api/v3/completions/moderation/records", params={"user_id": user1})
 
         assert response.status_code == 200
         data = response.json()
@@ -761,21 +761,21 @@ class TestGetRecordsFiltered:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": msg_id1,
         }
-        response1 = await test_client.post("/api/v4/completions/", json=payload1)
+        response1 = await test_client.post("/api/v3/completions/", json=payload1)
         assert response1.status_code == 201
         completion_id1 = response1.json()["completion_id"]
 
         # Verify first completion
         verify_payload = {"verified": True, "verified_by": user, "reason": None}
-        await test_client.put(f"/api/v4/completions/{completion_id1}/verification", json=verify_payload)
+        await test_client.put(f"/api/v3/completions/{completion_id1}/verification", json=verify_payload)
 
         # Edit to create a second version (simulates new submission)
         edit_payload = {"time": 45.0}
-        await test_client.patch(f"/api/v4/completions/{completion_id1}", json=edit_payload)
+        await test_client.patch(f"/api/v3/completions/{completion_id1}", json=edit_payload)
 
         # Filter with latest_only=True should return only one
         response_latest = await test_client.get(
-            "/api/v4/completions/moderation/records",
+            "/api/v3/completions/moderation/records",
             params={"user_id": user, "code": code, "latest_only": True},
         )
 
@@ -787,7 +787,7 @@ class TestGetRecordsFiltered:
 
 
 class TestModerateCompletion:
-    """PUT /api/v4/completions/{record_id}/moderate"""
+    """PUT /api/v3/completions/{record_id}/moderate"""
 
     async def test_happy_path(
         self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
@@ -807,7 +807,7 @@ class TestModerateCompletion:
             "screenshot": "https://example.com/screenshot.png",
             "message_id": unique_message_id,
         }
-        submit_response = await test_client.post("/api/v4/completions/", json=completion_payload)
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
         assert submit_response.status_code == 201
         completion_id = submit_response.json()["completion_id"]
 
@@ -817,7 +817,7 @@ class TestModerateCompletion:
             "time": 40.0,
             "time_change_reason": "Corrected timing error",
         }
-        response = await test_client.put(f"/api/v4/completions/{completion_id}/moderate", json=moderate_payload)
+        response = await test_client.put(f"/api/v3/completions/{completion_id}/moderate", json=moderate_payload)
 
         assert response.status_code in [200, 204]
 
@@ -829,20 +829,20 @@ class TestModerateCompletion:
             "time": 45.0,
         }
 
-        response = await test_client.put(f"/api/v4/completions/{record_id}/moderate", json=payload)
+        response = await test_client.put(f"/api/v3/completions/{record_id}/moderate", json=payload)
 
         assert response.status_code == 404
 
 
 class TestGetLegacyCompletions:
-    """GET /api/v4/completions/{code}/legacy"""
+    """GET /api/v3/completions/{code}/legacy"""
 
     async def test_happy_path(self, test_client, create_test_map, unique_map_code):
         """Get legacy completions for a map with valid structure."""
         code = unique_map_code
         await create_test_map(code=code)
 
-        response = await test_client.get(f"/api/v4/completions/{code}/legacy")
+        response = await test_client.get(f"/api/v3/completions/{code}/legacy")
 
         assert response.status_code == 200
         data = response.json()
@@ -865,7 +865,7 @@ class TestGetLegacyCompletions:
         await create_test_map(code=code)
 
         response = await test_client.get(
-            f"/api/v4/completions/{code}/legacy",
+            f"/api/v3/completions/{code}/legacy",
             params={"page_size": page_size, "page_number": page_number},
         )
 
@@ -874,7 +874,7 @@ class TestGetLegacyCompletions:
 
 
 class TestSetQualityVote:
-    """POST /api/v4/completions/{code}/quality"""
+    """POST /api/v3/completions/{code}/quality"""
 
     async def test_set_quality_vote(self, test_client, create_test_map, create_test_user, unique_map_code):
         """Set quality vote for a map."""
@@ -884,7 +884,7 @@ class TestSetQualityVote:
 
         payload = {"user_id": user_id, "quality": 5}
 
-        response = await test_client.post(f"/api/v4/completions/{code}/quality", json=payload)
+        response = await test_client.post(f"/api/v3/completions/{code}/quality", json=payload)
 
         assert response.status_code == 201
 
@@ -894,7 +894,7 @@ class TestSetQualityVote:
 
         payload = {"user_id": user_id, "quality": 5}
 
-        response = await test_client.post("/api/v4/completions/ZZZZZZ/quality", json=payload)
+        response = await test_client.post("/api/v3/completions/ZZZZZZ/quality", json=payload)
 
         assert response.status_code == 404
 
@@ -907,23 +907,23 @@ class TestSetQualityVote:
         payload = {"user_id": user_id, "quality": 5}
 
         # First vote
-        response1 = await test_client.post(f"/api/v4/completions/{code}/quality", json=payload)
+        response1 = await test_client.post(f"/api/v3/completions/{code}/quality", json=payload)
         assert response1.status_code == 201
 
         # Duplicate vote (upsert updates existing)
-        response2 = await test_client.post(f"/api/v4/completions/{code}/quality", json=payload)
+        response2 = await test_client.post(f"/api/v3/completions/{code}/quality", json=payload)
 
         assert response2.status_code == 201
 
 
 class TestGetUpvotesFromMessageId:
-    """GET /api/v4/completions/upvoting/{message_id}"""
+    """GET /api/v3/completions/upvoting/{message_id}"""
 
     async def test_returns_integer_count(self, test_client):
         """Get upvote count returns integer with correct type and value."""
         message_id = 123456789
 
-        response = await test_client.get(f"/api/v4/completions/upvoting/{message_id}")
+        response = await test_client.get(f"/api/v3/completions/upvoting/{message_id}")
 
         assert response.status_code == 200
         count = response.json()

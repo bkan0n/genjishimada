@@ -17,7 +17,7 @@ pytestmark = [
 
 
 class TestCreateNotification:
-    """POST /api/v4/notifications/events"""
+    """POST /api/v3/notifications/events"""
 
     async def test_requires_auth(self, unauthenticated_client, create_test_user):
         """Create notification without auth returns 401."""
@@ -30,7 +30,7 @@ class TestCreateNotification:
         }
 
         response = await unauthenticated_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json=payload,
         )
 
@@ -47,7 +47,7 @@ class TestCreateNotification:
         }
 
         response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json=payload,
         )
 
@@ -72,7 +72,7 @@ class TestCreateNotification:
         }
 
         response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json=payload,
         )
 
@@ -91,7 +91,7 @@ class TestCreateNotification:
         }
 
         response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json=payload,
         )
 
@@ -118,7 +118,7 @@ class TestCreateNotification:
         }
 
         response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json=payload,
         )
 
@@ -136,7 +136,7 @@ class TestCreateNotification:
         }
 
         response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json=payload,
         )
 
@@ -144,14 +144,14 @@ class TestCreateNotification:
 
 
 class TestGetUserEvents:
-    """GET /api/v4/notifications/users/{user_id}/events"""
+    """GET /api/v3/notifications/users/{user_id}/events"""
 
     async def test_requires_auth(self, unauthenticated_client, create_test_user):
         """Get user events without auth returns 401."""
         user_id = await create_test_user()
 
         response = await unauthenticated_client.get(
-            f"/api/v4/notifications/users/{user_id}/events",
+            f"/api/v3/notifications/users/{user_id}/events",
         )
 
         assert response.status_code == 401
@@ -161,7 +161,7 @@ class TestGetUserEvents:
         user_id = await create_test_user()
 
         response = await test_client.get(
-            f"/api/v4/notifications/users/{user_id}/events",
+            f"/api/v3/notifications/users/{user_id}/events",
         )
 
         assert response.status_code == 200
@@ -178,11 +178,11 @@ class TestGetUserEvents:
             "title": "You gained XP!",
             "body": "+100 XP",
         }
-        await test_client.post("/api/v4/notifications/events", json=create_payload)
+        await test_client.post("/api/v3/notifications/events", json=create_payload)
 
         # Get events
         response = await test_client.get(
-            f"/api/v4/notifications/users/{user_id}/events",
+            f"/api/v3/notifications/users/{user_id}/events",
         )
 
         assert response.status_code == 200
@@ -220,7 +220,7 @@ class TestGetUserEvents:
         user_id = await create_test_user()
 
         response = await test_client.get(
-            f"/api/v4/notifications/users/{user_id}/events",
+            f"/api/v3/notifications/users/{user_id}/events",
             params={"unread_only": unread_only, "limit": limit, "offset": offset},
         )
 
@@ -229,14 +229,14 @@ class TestGetUserEvents:
 
 
 class TestGetUnreadCount:
-    """GET /api/v4/notifications/users/{user_id}/unread-count"""
+    """GET /api/v3/notifications/users/{user_id}/unread-count"""
 
     async def test_requires_auth(self, unauthenticated_client, create_test_user):
         """Get unread count without auth returns 401."""
         user_id = await create_test_user()
 
         response = await unauthenticated_client.get(
-            f"/api/v4/notifications/users/{user_id}/unread-count",
+            f"/api/v3/notifications/users/{user_id}/unread-count",
         )
 
         assert response.status_code == 401
@@ -247,7 +247,7 @@ class TestGetUnreadCount:
 
         # Create an unread notification
         await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json={
                 "user_id": user_id,
                 "event_type": NotificationEventType.XP_GAIN.value,
@@ -257,7 +257,7 @@ class TestGetUnreadCount:
         )
 
         response = await test_client.get(
-            f"/api/v4/notifications/users/{user_id}/unread-count",
+            f"/api/v3/notifications/users/{user_id}/unread-count",
         )
 
         assert response.status_code == 200
@@ -268,7 +268,7 @@ class TestGetUnreadCount:
 
 
 class TestMarkRead:
-    """PATCH /api/v4/notifications/events/{event_id}/read"""
+    """PATCH /api/v3/notifications/events/{event_id}/read"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Mark read returns 204."""
@@ -276,7 +276,7 @@ class TestMarkRead:
 
         # Create a notification first
         create_response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json={
                 "user_id": user_id,
                 "event_type": NotificationEventType.PRESTIGE.value,
@@ -288,21 +288,21 @@ class TestMarkRead:
 
         # Mark it as read
         response = await test_client.patch(
-            f"/api/v4/notifications/events/{event_id}/read",
+            f"/api/v3/notifications/events/{event_id}/read",
         )
 
         assert response.status_code == 204
 
 
 class TestMarkAllRead:
-    """PATCH /api/v4/notifications/users/{user_id}/read-all"""
+    """PATCH /api/v3/notifications/users/{user_id}/read-all"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Mark all read returns 200 with count."""
         user_id = await create_test_user()
 
         response = await test_client.patch(
-            f"/api/v4/notifications/users/{user_id}/read-all",
+            f"/api/v3/notifications/users/{user_id}/read-all",
         )
 
         assert response.status_code == 200
@@ -313,7 +313,7 @@ class TestMarkAllRead:
     async def test_non_existent_user_succeeds_idempotently(self, test_client):
         """Mark all read for non-existent user returns 200 with 0 count (idempotent)."""
         response = await test_client.patch(
-            "/api/v4/notifications/users/999999999/read-all",
+            "/api/v3/notifications/users/999999999/read-all",
         )
 
         assert response.status_code == 200
@@ -322,7 +322,7 @@ class TestMarkAllRead:
 
 
 class TestDismissEvent:
-    """PATCH /api/v4/notifications/events/{event_id}/dismiss"""
+    """PATCH /api/v3/notifications/events/{event_id}/dismiss"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Dismiss event returns 204."""
@@ -330,7 +330,7 @@ class TestDismissEvent:
 
         # Create a notification first
         create_response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json={
                 "user_id": user_id,
                 "event_type": NotificationEventType.PLAYTEST_UPDATE.value,
@@ -342,14 +342,14 @@ class TestDismissEvent:
 
         # Dismiss it
         response = await test_client.patch(
-            f"/api/v4/notifications/events/{event_id}/dismiss",
+            f"/api/v3/notifications/events/{event_id}/dismiss",
         )
 
         assert response.status_code == 204
 
 
 class TestRecordDeliveryResult:
-    """POST /api/v4/notifications/events/{event_id}/delivery-result"""
+    """POST /api/v3/notifications/events/{event_id}/delivery-result"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Record delivery result returns 204."""
@@ -357,7 +357,7 @@ class TestRecordDeliveryResult:
 
         # Create a notification first
         create_response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json={
                 "user_id": user_id,
                 "event_type": NotificationEventType.MASTERY_EARNED.value,
@@ -369,7 +369,7 @@ class TestRecordDeliveryResult:
 
         # Record delivery result
         response = await test_client.post(
-            f"/api/v4/notifications/events/{event_id}/delivery-result",
+            f"/api/v3/notifications/events/{event_id}/delivery-result",
             json={
                 "channel": "discord_dm",
                 "status": "delivered",
@@ -381,7 +381,7 @@ class TestRecordDeliveryResult:
     async def test_non_existent_event_returns_404(self, test_client):
         """Record delivery for non-existent event returns 404."""
         response = await test_client.post(
-            "/api/v4/notifications/events/999999999/delivery-result",
+            "/api/v3/notifications/events/999999999/delivery-result",
             json={
                 "channel": "discord_dm",
                 "status": "delivered",
@@ -404,7 +404,7 @@ class TestRecordDeliveryResult:
 
         # Create a notification
         create_response = await test_client.post(
-            "/api/v4/notifications/events",
+            "/api/v3/notifications/events",
             json={
                 "user_id": user_id,
                 "event_type": NotificationEventType.RANK_UP.value,
@@ -420,7 +420,7 @@ class TestRecordDeliveryResult:
             payload["error_message"] = "Test error"
 
         response = await test_client.post(
-            f"/api/v4/notifications/events/{event_id}/delivery-result",
+            f"/api/v3/notifications/events/{event_id}/delivery-result",
             json=payload,
         )
 
@@ -428,14 +428,14 @@ class TestRecordDeliveryResult:
 
 
 class TestGetPreferences:
-    """GET /api/v4/notifications/users/{user_id}/preferences"""
+    """GET /api/v3/notifications/users/{user_id}/preferences"""
 
     async def test_requires_auth(self, unauthenticated_client, create_test_user):
         """Get preferences without auth returns 401."""
         user_id = await create_test_user()
 
         response = await unauthenticated_client.get(
-            f"/api/v4/notifications/users/{user_id}/preferences",
+            f"/api/v3/notifications/users/{user_id}/preferences",
         )
 
         assert response.status_code == 401
@@ -445,7 +445,7 @@ class TestGetPreferences:
         user_id = await create_test_user()
 
         response = await test_client.get(
-            f"/api/v4/notifications/users/{user_id}/preferences",
+            f"/api/v3/notifications/users/{user_id}/preferences",
         )
 
         assert response.status_code == 200
@@ -467,14 +467,14 @@ class TestGetPreferences:
 
 
 class TestUpdatePreference:
-    """PUT /api/v4/notifications/users/{user_id}/preferences/{event_type}/{channel}"""
+    """PUT /api/v3/notifications/users/{user_id}/preferences/{event_type}/{channel}"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Update preference returns 204."""
         user_id = await create_test_user()
 
         response = await test_client.put(
-            f"/api/v4/notifications/users/{user_id}/preferences/map_edit_approved/discord_dm",
+            f"/api/v3/notifications/users/{user_id}/preferences/map_edit_approved/discord_dm",
             params={"enabled": True},
         )
 
@@ -485,7 +485,7 @@ class TestUpdatePreference:
         user_id = await create_test_user()
 
         response = await test_client.put(
-            f"/api/v4/notifications/users/{user_id}/preferences/rank_up/web",
+            f"/api/v3/notifications/users/{user_id}/preferences/rank_up/web",
             params={"enabled": False},
         )
 
@@ -494,7 +494,7 @@ class TestUpdatePreference:
     async def test_user_not_found_returns_404(self, test_client):
         """Non-existent user returns 404."""
         response = await test_client.put(
-            "/api/v4/notifications/users/999999999999999999/preferences/map_edit_approved/discord_dm",
+            "/api/v3/notifications/users/999999999999999999/preferences/map_edit_approved/discord_dm",
             params={"enabled": True},
         )
 
@@ -505,7 +505,7 @@ class TestUpdatePreference:
         user_id = await create_test_user()
 
         response = await test_client.put(
-            f"/api/v4/notifications/users/{user_id}/preferences/invalid_event/discord_dm",
+            f"/api/v3/notifications/users/{user_id}/preferences/invalid_event/discord_dm",
             params={"enabled": True},
         )
 
@@ -516,7 +516,7 @@ class TestUpdatePreference:
         user_id = await create_test_user()
 
         response = await test_client.put(
-            f"/api/v4/notifications/users/{user_id}/preferences/map_edit_approved/invalid_channel",
+            f"/api/v3/notifications/users/{user_id}/preferences/map_edit_approved/invalid_channel",
             params={"enabled": True},
         )
 
@@ -545,7 +545,7 @@ class TestUpdatePreference:
         user_id = await create_test_user()
 
         response = await test_client.put(
-            f"/api/v4/notifications/users/{user_id}/preferences/{event_type}/{channel}",
+            f"/api/v3/notifications/users/{user_id}/preferences/{event_type}/{channel}",
             params={"enabled": enabled},
         )
 
@@ -553,7 +553,7 @@ class TestUpdatePreference:
 
 
 class TestBulkUpdatePreferences:
-    """PUT /api/v4/notifications/users/{user_id}/preferences/bulk"""
+    """PUT /api/v3/notifications/users/{user_id}/preferences/bulk"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Bulk update preferences returns 204."""
@@ -565,7 +565,7 @@ class TestBulkUpdatePreferences:
         ]
 
         response = await test_client.put(
-            f"/api/v4/notifications/users/{user_id}/preferences/bulk",
+            f"/api/v3/notifications/users/{user_id}/preferences/bulk",
             json=payload,
         )
 
@@ -576,7 +576,7 @@ class TestBulkUpdatePreferences:
         user_id = await create_test_user()
 
         response = await test_client.put(
-            f"/api/v4/notifications/users/{user_id}/preferences/bulk",
+            f"/api/v3/notifications/users/{user_id}/preferences/bulk",
             json=[],
         )
 
@@ -590,7 +590,7 @@ class TestBulkUpdatePreferences:
         ]
 
         response = await test_client.put(
-            "/api/v4/notifications/users/999999999999999999/preferences/bulk",
+            "/api/v3/notifications/users/999999999999999999/preferences/bulk",
             json=payload,
         )
 
@@ -598,14 +598,14 @@ class TestBulkUpdatePreferences:
 
 
 class TestShouldDeliver:
-    """GET /api/v4/notifications/users/{user_id}/should-deliver"""
+    """GET /api/v3/notifications/users/{user_id}/should-deliver"""
 
     async def test_requires_auth(self, unauthenticated_client, create_test_user):
         """Should deliver without auth returns 401."""
         user_id = await create_test_user()
 
         response = await unauthenticated_client.get(
-            f"/api/v4/notifications/users/{user_id}/should-deliver",
+            f"/api/v3/notifications/users/{user_id}/should-deliver",
             params={"event_type": "map_edit_approved", "channel": "discord_dm"},
         )
 
@@ -616,7 +616,7 @@ class TestShouldDeliver:
         user_id = await create_test_user()
 
         response = await test_client.get(
-            f"/api/v4/notifications/users/{user_id}/should-deliver",
+            f"/api/v3/notifications/users/{user_id}/should-deliver",
             params={"event_type": "map_edit_approved", "channel": "discord_dm"},
         )
 
@@ -634,7 +634,7 @@ class TestShouldDeliver:
         user_id = await create_test_user()
 
         response = await test_client.get(
-            f"/api/v4/notifications/users/{user_id}/should-deliver",
+            f"/api/v3/notifications/users/{user_id}/should-deliver",
             params={"event_type": event_type, "channel": channel},
         )
 

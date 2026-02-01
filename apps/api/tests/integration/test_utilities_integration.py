@@ -17,7 +17,7 @@ pytestmark = [
 
 
 class TestUploadImage:
-    """POST /api/v4/utilities/image"""
+    """POST /api/v3/utilities/image"""
 
     @pytest.mark.xfail(reason="BUG: S3 client requires R2_ACCOUNT_ID env var which is not set in test environment")
     async def test_happy_path(self, test_client):
@@ -27,7 +27,7 @@ class TestUploadImage:
         file = BytesIO(image_data)
 
         response = await test_client.post(
-            "/api/v4/utilities/image",
+            "/api/v3/utilities/image",
             files={"data": ("test.png", file, "image/png")},
         )
 
@@ -44,7 +44,7 @@ class TestUploadImage:
         file = BytesIO(image_data)
 
         response = await unauthenticated_client.post(
-            "/api/v4/utilities/image",
+            "/api/v3/utilities/image",
             files={"data": ("test.png", file, "image/png")},
         )
 
@@ -53,7 +53,7 @@ class TestUploadImage:
     async def test_missing_file_returns_400(self, test_client):
         """Upload image without file data returns 400."""
         response = await test_client.post(
-            "/api/v4/utilities/image",
+            "/api/v3/utilities/image",
             json={},  # No file data
         )
 
@@ -61,7 +61,7 @@ class TestUploadImage:
 
 
 class TestLogAnalytics:
-    """POST /api/v4/utilities/log"""
+    """POST /api/v3/utilities/log"""
 
     async def test_happy_path(self, test_client, create_test_user):
         """Log analytics returns 204."""
@@ -74,7 +74,7 @@ class TestLogAnalytics:
             "namespace": {"key": "value"},
         }
 
-        response = await test_client.post("/api/v4/utilities/log", json=payload)
+        response = await test_client.post("/api/v3/utilities/log", json=payload)
 
         assert response.status_code == 204
 
@@ -87,7 +87,7 @@ class TestLogAnalytics:
             "namespace": {"key": "value"},
         }
 
-        response = await unauthenticated_client.post("/api/v4/utilities/log", json=payload)
+        response = await unauthenticated_client.post("/api/v3/utilities/log", json=payload)
 
         assert response.status_code == 401
 
@@ -98,13 +98,13 @@ class TestLogAnalytics:
             # Missing user_id, created_at, namespace
         }
 
-        response = await test_client.post("/api/v4/utilities/log", json=payload)
+        response = await test_client.post("/api/v3/utilities/log", json=payload)
 
         assert response.status_code == 400
 
 
 class TestLogMapClick:
-    """POST /api/v4/utilities/log-map-click"""
+    """POST /api/v3/utilities/log-map-click"""
 
     async def test_happy_path(self, test_client, create_test_map, create_test_user, unique_map_code):
         """Log map click returns 204."""
@@ -119,7 +119,7 @@ class TestLogMapClick:
             "source": "web",
         }
 
-        response = await test_client.post("/api/v4/utilities/log-map-click", json=payload)
+        response = await test_client.post("/api/v3/utilities/log-map-click", json=payload)
 
         assert response.status_code == 204
 
@@ -135,7 +135,7 @@ class TestLogMapClick:
             "source": "bot",
         }
 
-        response = await test_client.post("/api/v4/utilities/log-map-click", json=payload)
+        response = await test_client.post("/api/v3/utilities/log-map-click", json=payload)
 
         assert response.status_code == 204
 
@@ -148,7 +148,7 @@ class TestLogMapClick:
             "source": "web",
         }
 
-        response = await unauthenticated_client.post("/api/v4/utilities/log-map-click", json=payload)
+        response = await unauthenticated_client.post("/api/v3/utilities/log-map-click", json=payload)
 
         assert response.status_code == 401
 
@@ -161,7 +161,7 @@ class TestLogMapClick:
             "source": "web",
         }
 
-        response = await test_client.post("/api/v4/utilities/log-map-click", json=payload)
+        response = await test_client.post("/api/v3/utilities/log-map-click", json=payload)
 
         assert response.status_code == 400
 
@@ -174,7 +174,7 @@ class TestLogMapClick:
             "source": "invalid_source",  # Not "web" or "bot"
         }
 
-        response = await test_client.post("/api/v4/utilities/log-map-click", json=payload)
+        response = await test_client.post("/api/v3/utilities/log-map-click", json=payload)
 
         assert response.status_code == 400
 
@@ -191,13 +191,13 @@ class TestLogMapClick:
             "source": source,
         }
 
-        response = await test_client.post("/api/v4/utilities/log-map-click", json=payload)
+        response = await test_client.post("/api/v3/utilities/log-map-click", json=payload)
 
         assert response.status_code == 204
 
 
 class TestGetLogMapClicks:
-    """GET /api/v4/utilities/log-map-click"""
+    """GET /api/v3/utilities/log-map-click"""
 
     async def test_happy_path(self, test_client, create_test_map, create_test_user, unique_map_code):
         """Get log map clicks returns list with complete structure."""
@@ -207,7 +207,7 @@ class TestGetLogMapClicks:
         user_id = await create_test_user()
 
         await test_client.post(
-            "/api/v4/utilities/log-map-click",
+            "/api/v3/utilities/log-map-click",
             json={
                 "code": code,
                 "ip_address": "192.168.1.1",
@@ -216,7 +216,7 @@ class TestGetLogMapClicks:
             },
         )
 
-        response = await test_client.get("/api/v4/utilities/log-map-click")
+        response = await test_client.get("/api/v3/utilities/log-map-click")
 
         assert response.status_code == 200
         data = response.json()
@@ -249,6 +249,6 @@ class TestGetLogMapClicks:
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get log map clicks without auth returns 401."""
-        response = await unauthenticated_client.get("/api/v4/utilities/log-map-click")
+        response = await unauthenticated_client.get("/api/v3/utilities/log-map-click")
 
         assert response.status_code == 401
