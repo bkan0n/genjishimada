@@ -69,6 +69,7 @@ from services.exceptions.maps import (
     DuplicateGuideError,
     DuplicateMechanicError,
     DuplicateRestrictionError,
+    DuplicateTagsError,
     EditRequestNotFoundError,
     GuideNotFoundError,
     LinkedMapError,
@@ -184,6 +185,8 @@ class MapsService(BaseService):
 
                 # Mechanics
                 if data.mechanics:
+                    if len(set(data.mechanics)) != len(data.mechanics):
+                        raise DuplicateMechanicError()
                     await self._maps_repo.insert_mechanics(
                         map_id,
                         data.mechanics,  # type: ignore[arg-type]
@@ -192,6 +195,8 @@ class MapsService(BaseService):
 
                 # Restrictions
                 if data.restrictions:
+                    if len(set(data.restrictions)) != len(data.restrictions):
+                        raise DuplicateRestrictionError()
                     await self._maps_repo.insert_restrictions(
                         map_id,
                         data.restrictions,  # type: ignore[arg-type]
@@ -200,6 +205,8 @@ class MapsService(BaseService):
 
                 # Tags
                 if data.tags:
+                    if len(set(data.tags)) != len(data.tags):
+                        raise DuplicateTagsError()
                     await self._maps_repo.insert_tags(
                         map_id,
                         data.tags,  # type: ignore[arg-type]
@@ -369,27 +376,33 @@ class MapsService(BaseService):
                 if data.mechanics is not msgspec.UNSET:
                     await self._maps_repo.delete_mechanics(map_id, conn=conn)  # type: ignore[arg-type]
                     if data.mechanics:
+                        if len(set(data.mechanics)) != len(data.mechanics):
+                            raise DuplicateMechanicError()
                         await self._maps_repo.insert_mechanics(
                             map_id,
-                            data.mechanics,  # type: ignore[arg-type]
+                            data.mechanics,
                             conn=conn,  # type: ignore[arg-type]
                         )
 
                 if data.restrictions is not msgspec.UNSET:
                     await self._maps_repo.delete_restrictions(map_id, conn=conn)  # type: ignore[arg-type]
                     if data.restrictions:
+                        if len(set(data.restrictions)) != len(data.restrictions):
+                            raise DuplicateRestrictionError()
                         await self._maps_repo.insert_restrictions(
                             map_id,
-                            data.restrictions,  # type: ignore[arg-type]
+                            data.restrictions,
                             conn=conn,  # type: ignore[arg-type]
                         )
 
                 if data.tags is not msgspec.UNSET:
                     await self._maps_repo.delete_tags(map_id, conn=conn)  # type: ignore[arg-type]
                     if data.tags:
+                        if len(set(data.tags)) != len(data.tags):
+                            raise DuplicateTagsError()
                         await self._maps_repo.insert_tags(
                             map_id,
-                            data.tags,  # type: ignore[arg-type]
+                            data.tags,
                             conn=conn,  # type: ignore[arg-type]
                         )
 
@@ -956,7 +969,7 @@ class MapsService(BaseService):
                 # Create playtest metadata
                 playtest_id = await self._maps_repo.create_playtest_meta_partial(
                     code,
-                    data.initial_difficulty,  # type: ignore[arg-type]
+                    DIFFICULTY_MIDPOINTS[data.initial_difficulty],
                     conn=conn,  # type: ignore[arg-type]
                 )
 

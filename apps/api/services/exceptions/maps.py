@@ -57,6 +57,13 @@ class DuplicateRestrictionError(MapsError):
         super().__init__("You have a duplicate restriction.")
 
 
+class DuplicateTagsError(MapsError):
+    """Duplicate tag in request."""
+
+    def __init__(self) -> None:
+        super().__init__("You have a duplicate tag.")
+
+
 class DuplicateCreatorError(MapsError):
     """Duplicate creator ID in request."""
 
