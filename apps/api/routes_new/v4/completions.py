@@ -36,7 +36,6 @@ from services.completions_service import CompletionsService, provide_completions
 from services.exceptions.completions import (
     CompletionNotFoundError,
     DuplicateCompletionError,
-    DuplicateFlagError,
     DuplicateQualityVoteError,
     DuplicateUpvoteError,
     DuplicateVerificationError,

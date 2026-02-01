@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 import aiohttp
 import msgspec
-import rapidfuzz
 import sentry_sdk
 from asyncpg import Connection, Pool
 from genjishimada_sdk.completions import (

@@ -7,6 +7,16 @@ from genjishimada_sdk.users import RankDetailResponse
 async def get_map_mastery_data_raw(
     conn: Connection | Pool, user_id: int, map_name: OverwatchMap | None = None
 ) -> list[dict]:
+    """Get raw mastery data for a user, optionally scoped to a map.
+
+    Args:
+        conn: Database connection or pool.
+        user_id: Target user ID.
+        map_name: Optional map filter.
+
+    Returns:
+        List of raw dictionary rows with map mastery data.
+    """
     query = """
             WITH minimized_records AS (
                 SELECT DISTINCT ON (c.map_id, m.map_name) map_name

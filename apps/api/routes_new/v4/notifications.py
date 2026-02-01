@@ -51,6 +51,7 @@ async def provide_notifications_service(
     Args:
         state: Application state.
         notifications_repo: Notifications repository instance.
+        users_repo: Users repository instance.
 
     Returns:
         Service instance.

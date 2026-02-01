@@ -109,7 +109,7 @@ class MapsService(BaseService):
 
     # Core CRUD operations
 
-    async def create_map(  # noqa: PLR0912
+    async def create_map(  # noqa: PLR0912, PLR0915
         self,
         data: MapCreateRequest,
         headers: Headers,

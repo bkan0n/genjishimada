@@ -309,6 +309,7 @@ class MapsController(Controller):
             maps_service: Maps service.
             newsfeed_service: Newsfeed service.
             users_service: Users service.
+            users_repo: Users repository.
 
         Returns:
             Updated map response.

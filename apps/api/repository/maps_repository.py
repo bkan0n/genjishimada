@@ -867,6 +867,7 @@ class MapsRepository(BaseRepository):
             map_name (OverwatchMap): Map name.
             user_id (int): User ID.
             level (str): Mastery level.
+            conn: Optional database connection.
 
         Returns:
             Dict with medal and operation_status ('inserted' or 'updated'), or None if no change.

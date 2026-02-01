@@ -46,6 +46,7 @@ class NotificationsService(BaseService):
             pool: Database connection pool.
             state: Application state.
             notifications_repo: Notifications repository instance.
+            users_repo: Users repository instance.
         """
         super().__init__(pool, state)
         self._notifications_repo = notifications_repo
@@ -392,6 +393,7 @@ async def provide_notifications_service(state: State, users_repo: UsersRepositor
 
     Args:
         state: Application state.
+        users_repo: Users repository instance.
 
     Returns:
         NotificationsService instance.
