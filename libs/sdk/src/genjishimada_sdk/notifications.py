@@ -38,6 +38,7 @@ class NotificationEventType(str, Enum):
     VERIFICATION_REJECTED = "verification_rejected"
     RECORD_REMOVED = "record_removed"
     RECORD_EDITED = "record_edited"
+    AUTO_VERIFY_FAILED = "auto_verify_failed"
 
     # Progression events
     SKILL_ROLE_UPDATE = "skill_role_update"
@@ -62,6 +63,7 @@ NOTIFICATION_EVENT_TYPE = Literal[
     "verification_rejected",
     "record_removed",
     "record_edited",
+    "auto_verify_failed",
     "skill_role_update",
     "xp_gain",
     "rank_up",
@@ -81,6 +83,7 @@ EVENT_TYPE_DEFAULT_CHANNELS: dict[NotificationEventType, list[NotificationChanne
     NotificationEventType.VERIFICATION_APPROVED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.VERIFICATION_REJECTED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.RECORD_REMOVED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
+    NotificationEventType.AUTO_VERIFY_FAILED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.SKILL_ROLE_UPDATE: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.XP_GAIN: [NotificationChannel.DISCORD_PING, NotificationChannel.WEB],
     NotificationEventType.RANK_UP: [NotificationChannel.DISCORD_PING, NotificationChannel.WEB],

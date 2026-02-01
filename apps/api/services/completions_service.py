@@ -105,6 +105,7 @@ class CompletionsService(BaseService):
         time: float,
         screenshot: str,
         users: UsersService,
+        notifications: NotificationsService | None = None,
     ) -> None:
         """Attempt to auto-verify a completion using OCR.
 
@@ -118,6 +119,7 @@ class CompletionsService(BaseService):
             time: Completion time.
             screenshot: Screenshot URL.
             users: Users service for fetching user names.
+            notifications: Notifications service for sending failure notifications.
         """
         idempotency_key = f"completion:submission:{user_id}:{completion_id}"
 
@@ -181,6 +183,22 @@ class CompletionsService(BaseService):
                 idempotency_key=idempotency_key,
             )
 
+            # Notify user that auto-verification failed
+            if notifications:
+                await notifications.create_and_dispatch(
+                    data=NotificationCreateRequest(
+                        user_id=user_id,
+                        event_type=NotificationEventType.AUTO_VERIFY_FAILED,  # type: ignore
+                        title="Auto-Verification Failed",
+                        body=(
+                            f"Auto-verification failed for your completion on {code}. "
+                            "Your submission is now awaiting manual verification."
+                        ),
+                        metadata={"completion_id": completion_id, "map_code": code},
+                    ),
+                    headers=Headers(),
+                )
+
         except Exception as e:
             # ANY error = fall back to manual verification
             log.exception(
@@ -196,6 +214,22 @@ class CompletionsService(BaseService):
                 headers=Headers(),
                 idempotency_key=idempotency_key,
             )
+
+            # Notify user that auto-verification failed
+            if notifications:
+                await notifications.create_and_dispatch(
+                    data=NotificationCreateRequest(
+                        user_id=user_id,
+                        event_type=NotificationEventType.AUTO_VERIFY_FAILED,  # type: ignore
+                        title="Auto-Verification Failed",
+                        body=(
+                            f"Auto-verification encountered an error for your completion on {code}. "
+                            "Your submission is now awaiting manual verification."
+                        ),
+                        metadata={"completion_id": completion_id, "map_code": code},
+                    ),
+                    headers=Headers(),
+                )
 
     async def submit_completion(
         self, data: CompletionCreateRequest, request: Request, autocomplete: AutocompleteRepository, users: UsersService
