@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 from collections.abc import Awaitable, Callable
 from logging import getLogger
@@ -39,6 +38,7 @@ from genjishimada_sdk.notifications import NotificationCreateRequest, Notificati
 from litestar import Request
 from litestar.datastructures import Headers, State
 
+from events.schemas import OcrVerificationRequestedEvent
 from repository.autocomplete_repository import AutocompleteRepository
 from repository.completions_repository import CompletionsRepository
 from repository.exceptions import (
@@ -97,92 +97,94 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
-    async def _attempt_auto_verify(
+    async def attempt_auto_verify_async(  # noqa: PLR0913
         self,
-        request: Request,
-        users: UsersService,
         completion_id: int,
-        data: CompletionCreateRequest,
-    ) -> bool:
+        user_id: int,
+        code: str,
+        time: float,
+        screenshot: str,
+        users: UsersService,
+    ) -> None:
         """Attempt to auto-verify a completion using OCR.
 
-        Returns:
-            True if auto-verification succeeded, False otherwise.
+        Runs asynchronously in response to completion.ocr.requested event.
+        Always falls back to manual verification on any failure.
+
+        Args:
+            completion_id: Completion record ID.
+            user_id: User who submitted the completion.
+            code: Map code.
+            time: Completion time.
+            screenshot: Screenshot URL.
+            users: Users service for fetching user names.
         """
-        idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
+        idempotency_key = f"completion:submission:{user_id}:{completion_id}"
 
         try:
             hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
-            try:
-                user_name_response = await users.fetch_all_user_names(data.user_id)
-                user_names = [x.upper() for x in user_name_response]
-                async with (
-                    aiohttp.ClientSession() as session,
-                    session.post(
-                        f"http://{hostname}:8000/extract",
-                        json={
-                            "image_url": data.screenshot,
-                            "code": data.code,
-                            "time": data.time,
-                            "names": user_names,
-                        },
-                    ) as resp,
-                ):
-                    resp.raise_for_status()
-                    raw_ocr_data = await resp.read()
-                    ocr_data = msgspec.json.decode(raw_ocr_data, type=OcrResponse)
+            user_name_response = await users.fetch_all_user_names(user_id)
+            user_names = [x.upper() for x in user_name_response]
 
-                extracted = ocr_data.extracted
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
+                    f"http://{hostname}:8000/extract",
+                    json={
+                        "image_url": screenshot,
+                        "code": code,
+                        "time": time,
+                        "names": user_names,
+                    },
+                ) as resp,
+            ):
+                resp.raise_for_status()
+                raw_ocr_data = await resp.read()
+                ocr_data = msgspec.json.decode(raw_ocr_data, type=OcrResponse)
 
-                code_match = data.code == extracted.code
-                time_match = data.time == extracted.time
-                user_match = extracted.name in user_names
+            extracted = ocr_data.extracted
 
-                if code_match and time_match and user_match:
-                    verification_data = CompletionVerificationUpdateRequest(
-                        verified_by=969632729643753482,
-                        verified=True,
-                        reason="Auto Verified by Genji Shimada.",
-                    )
-                    await self.verify_completion_with_pool(request, completion_id, verification_data)
-                    return True
-            except aiohttp.ClientConnectorDNSError:
-                log.warning("OCR service DNS error, falling back to manual verification")
-                await self.publish_message(
-                    routing_key="api.completion.submission",
-                    data=CompletionCreatedEvent(completion_id),
-                    headers=request.headers,
-                    idempotency_key=idempotency_key,
+            code_match = code == extracted.code
+            time_match = time == extracted.time
+            user_match = extracted.name in user_names
+
+            if code_match and time_match and user_match:
+                # Auto-verification succeeded
+                verification_data = CompletionVerificationUpdateRequest(
+                    verified_by=BOT_USER_ID,
+                    verified=True,
+                    reason="Auto Verified by Genji Shimada.",
                 )
-                return False
+                await self.verify_completion_with_pool(None, completion_id, verification_data)
+                return
 
             # Autoverification failed validation, send failure details and fall back to manual
             await self.publish_message(
                 routing_key="api.completion.autoverification.failed",
                 data=FailedAutoverifyEvent(
-                    submitted_code=data.code,
-                    submitted_time=data.time,
+                    submitted_code=code,
+                    submitted_time=time,
                     submitted_user_names=user_names,
-                    user_id=data.user_id,
+                    user_id=user_id,
                     extracted=extracted,
                     code_match=code_match,
                     time_match=time_match,
                     user_match=user_match,
                 ),
-                headers=request.headers,
+                headers=Headers(),
                 idempotency_key=None,
             )
             await self.publish_message(
                 routing_key="api.completion.submission",
                 data=CompletionCreatedEvent(completion_id),
-                headers=request.headers,
+                headers=Headers(),
                 idempotency_key=idempotency_key,
             )
-            return False
 
         except Exception as e:
+            # ANY error = fall back to manual verification
             log.exception(
-                "[!] Autoverification failed with unexpected error for completion_id=%s: %s",
+                "OCR auto-verification failed for completion_id=%s: %s",
                 completion_id,
                 e,
             )
@@ -191,10 +193,9 @@ class CompletionsService(BaseService):
             await self.publish_message(
                 routing_key="api.completion.submission",
                 data=CompletionCreatedEvent(completion_id),
-                headers=request.headers,
+                headers=Headers(),
                 idempotency_key=idempotency_key,
             )
-            return False
 
     async def submit_completion(
         self, data: CompletionCreateRequest, request: Request, autocomplete: AutocompleteRepository, users: UsersService
@@ -271,20 +272,19 @@ class CompletionsService(BaseService):
         suspicious_flags = await self.get_suspicious_flags(data.user_id)
 
         if not (data.video or suspicious_flags):
-            try:
-                auto_verified = await asyncio.wait_for(
-                    self._attempt_auto_verify(
-                        request=request,
-                        users=users,
-                        completion_id=completion_id,
-                        data=data,
-                    ),
-                    timeout=5.0,
-                )
-                if auto_verified:
-                    return CompletionSubmissionJobResponse(None, completion_id)
-            except asyncio.TimeoutError:
-                log.warning(f"Auto-verification timed out for completion {completion_id}, falling back to manual")
+            # Emit event for background OCR processing
+            await request.app.state.emit(
+                "completion.ocr.requested",
+                OcrVerificationRequestedEvent(
+                    completion_id=completion_id,
+                    user_id=data.user_id,
+                    code=data.code,
+                    time=data.time,
+                    screenshot=data.screenshot,
+                ),
+            )
+            # Return immediately - OCR happens in background
+            return CompletionSubmissionJobResponse(None, completion_id)
 
         idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
         job_status = await self.publish_message(
@@ -370,13 +370,22 @@ class CompletionsService(BaseService):
 
     async def verify_completion(
         self,
-        request: Request,
+        request: Request | None,
         record_id: int,
         data: CompletionVerificationUpdateRequest,
         *,
         conn: Connection | None = None,
     ) -> JobStatusResponse:
         """Update verification status for a completion and publish an event.
+
+        Args:
+            request: HTTP request for headers (optional for event-driven calls).
+            record_id: Completion record ID.
+            data: Verification update data.
+            conn: Database connection (optional).
+
+        Returns:
+            Job status response.
 
         Raises:
             DuplicateVerificationError: If verification record already exists.
@@ -410,14 +419,14 @@ class CompletionsService(BaseService):
         job_status = await self.publish_message(
             routing_key="api.completion.verification",
             data=message_data,
-            headers=request.headers,
+            headers=request.headers if request else Headers(),
             idempotency_key=idempotency_key,
         )
         return job_status
 
     async def verify_completion_with_pool(
         self,
-        request: Request,
+        request: Request | None,
         record_id: int,
         data: CompletionVerificationUpdateRequest,
     ) -> JobStatusResponse:
