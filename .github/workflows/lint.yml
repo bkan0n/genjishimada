@@ -52,7 +52,8 @@ jobs:
       - name: Basedpyright API
         id: pyright-api
         continue-on-error: true
-        run: uv run basedpyright apps/api
+        working-directory: apps/api                                                                                                                                                                                                                                                        
+        run: uv run basedpyright .
 
       - name: Basedpyright Bot
         id: pyright-bot
