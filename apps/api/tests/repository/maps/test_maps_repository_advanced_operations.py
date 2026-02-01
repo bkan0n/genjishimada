@@ -93,9 +93,18 @@ async def create_test_map(db_pool: asyncpg.Pool, code: str) -> int:
     return map_id
 
 
+# Module-level tracker to prevent user ID collisions in parallel test execution
+_user_id_tracker: set[int] = set()
+
+
 async def create_test_user(db_pool: asyncpg.Pool, nickname: str) -> int:
     """Helper to create a test user."""
-    user_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+    # Generate a unique Discord snowflake-like ID
+    while True:
+        user_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+        if user_id not in _user_id_tracker:
+            _user_id_tracker.add(user_id)
+            break
 
     async with db_pool.acquire() as conn:
         await conn.execute(

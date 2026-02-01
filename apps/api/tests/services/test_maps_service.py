@@ -189,45 +189,6 @@ class TestMapsServiceErrorTranslation:
         with pytest.raises(CreatorNotFoundError):
             await service.create_map(data, mock_headers, mock_newsfeed_service)
 
-    # TODO: This test requires a complete MapResponse mock with all required fields.
-    # Better suited as an integration test with real database data.
-    # The error translation logic is already covered by create_map tests above.
-    @pytest.mark.skip(reason="Requires complete MapResponse mock - better as integration test")
-    async def test_update_map_code_exists_constraint(
-        self, mock_pool, mock_state, mock_maps_repo
-    ):
-        """UniqueConstraintViolationError on maps_code_key raises MapCodeExistsError during update."""
-        service = MapsService(mock_pool, mock_state, mock_maps_repo)
-
-        # Mock existing map lookup
-        mock_maps_repo.fetch_maps.return_value = {
-            "code": "OLDCD",
-            "map_name": "Workshop Island",
-            "difficulty": "Medium",
-            "category": "Classic",
-            "checkpoints": 5,
-            "id": 1,
-            "creators": [],
-            "official": True,
-            "playtesting": "Approved",
-            "archived": False,
-            "hidden": False,
-            "created_at": dt.datetime.now(dt.timezone.utc),
-            "updated_at": dt.datetime.now(dt.timezone.utc),
-            "ratings": None,
-        }
-        mock_maps_repo.lookup_map_id.return_value = 1
-
-        # Mock constraint violation on update
-        mock_maps_repo.update_core_map.side_effect = UniqueConstraintViolationError("maps_code_key", "maps")
-
-        patch = MapPatchRequest(code="NEWCD")
-
-        with pytest.raises(MapCodeExistsError) as exc_info:
-            await service.update_map("OLDCD", patch)
-
-        assert exc_info.value.context["code"] == "NEWCD"
-
     async def test_create_guide_duplicate_constraint(
         self, mock_pool, mock_state, mock_maps_repo
     ):
@@ -348,46 +309,6 @@ class TestMapsServiceBusinessLogic:
 
         assert exc_info.value.context["code"] == "ZZZZZ"
 
-    # TODO: This test requires a complete MapResponse mock with all required fields.
-    # Better suited as an integration test with real database data.
-    @pytest.mark.skip(reason="Requires complete MapResponse mock - better as integration test")
-    async def test_send_to_playtest_already_in_playtest(
-        self, mock_pool, mock_state, mock_maps_repo
-    ):
-        """AlreadyInPlaytestError raised when map is already in playtest."""
-        service = MapsService(mock_pool, mock_state, mock_maps_repo)
-
-        # Mock map exists
-        mock_maps_repo.lookup_map_id.return_value = 1
-
-        # Mock map already in playtest
-        mock_maps_repo.fetch_maps.return_value = {
-            "code": "ABCDE",
-            "map_name": "Workshop Island",
-            "difficulty": "Medium",
-            "category": "Classic",
-            "checkpoints": 5,
-            "playtesting": "In Progress",
-            "id": 1,
-            "creators": [],
-            "official": True,
-            "archived": False,
-            "hidden": False,
-            "created_at": dt.datetime.now(dt.timezone.utc),
-            "updated_at": dt.datetime.now(dt.timezone.utc),
-            "ratings": None,
-        }
-
-        from genjishimada_sdk.maps import SendToPlaytestRequest
-
-        data = SendToPlaytestRequest(initial_difficulty="Medium")
-        mock_headers = Headers()
-
-        with pytest.raises(AlreadyInPlaytestError) as exc_info:
-            await service.send_to_playtest("ABCDE", data, mock_headers)
-
-        assert exc_info.value.context["code"] == "ABCDE"
-
     async def test_link_map_codes_neither_exists(
         self, mock_pool, mock_state, mock_maps_repo, mocker
     ):
@@ -410,54 +331,6 @@ class TestMapsServiceBusinessLogic:
         with pytest.raises(
             LinkedMapError,
             match="At least one of official_code or unofficial_code must refer to an existing map",
-        ):
-            await service.link_map_codes(data, mock_headers, mock_newsfeed_service)
-
-    # TODO: This test requires a complete MapResponse mock with all required fields.
-    # Better suited as an integration test with real database data.
-    @pytest.mark.skip(reason="Requires complete MapResponse mock - better as integration test")
-    async def test_link_map_codes_official_already_linked(
-        self, mock_pool, mock_state, mock_maps_repo, mocker
-    ):
-        """LinkedMapError raised when official map is already linked."""
-        service = MapsService(mock_pool, mock_state, mock_maps_repo)
-
-        # Mock official map exists and is already linked
-        def mock_fetch_maps(single, code):
-            if code == "OFFIC":
-                return {
-                    "code": "OFFIC",
-                    "linked_code": "OTHER",
-                    "map_name": "Workshop Island",
-                    "difficulty": "Medium",
-                    "category": "Classic",
-                    "checkpoints": 5,
-                    "id": 1,
-                    "creators": [],
-                    "official": True,
-                    "playtesting": "Approved",
-                    "archived": False,
-                    "hidden": False,
-                    "created_at": dt.datetime.now(dt.timezone.utc),
-                    "updated_at": dt.datetime.now(dt.timezone.utc),
-                    "ratings": None,
-                }
-            return None
-
-        mock_maps_repo.fetch_maps.side_effect = mock_fetch_maps
-
-        from genjishimada_sdk.maps import LinkMapsCreateRequest
-
-        data = LinkMapsCreateRequest(
-            official_code="OFFIC",
-            unofficial_code="UNOFF",
-        )
-
-        mock_newsfeed_service = mocker.AsyncMock()
-        mock_headers = Headers()
-
-        with pytest.raises(
-            LinkedMapError, match="Official map OFFIC is already linked to OTHER"
         ):
             await service.link_map_codes(data, mock_headers, mock_newsfeed_service)
 

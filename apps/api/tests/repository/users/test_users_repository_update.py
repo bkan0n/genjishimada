@@ -226,12 +226,7 @@ class TestUpdateMapsCreatorsForFakeMember:
         # Create map with fake member as creator
         code = f"T{uuid4().hex[:5].upper()}"
         global_code_tracker.add(code)
-        map_id = await create_test_map(code)
-        await asyncpg_conn.execute(
-            "INSERT INTO maps.creators (map_id, user_id) VALUES ($1, $2)",
-            map_id,
-            fake_user_id,
-        )
+        map_id = await create_test_map(code, creator_id=fake_user_id)
 
         # Act
         await repository.update_maps_creators_for_fake_member(fake_user_id, unique_user_id)

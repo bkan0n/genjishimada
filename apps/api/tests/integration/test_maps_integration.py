@@ -1105,9 +1105,8 @@ class TestGetTrendingMaps:
         for trending_map in data:
             assert "code" in trending_map
             assert "map_name" in trending_map
-            assert "score" in trending_map
-            assert isinstance(trending_map["score"], (int, float))
-            assert "difficulty" in trending_map
+            assert "trending_score" in trending_map
+            assert isinstance(trending_map["trending_score"], (int, float))
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get trending maps without auth returns 401."""

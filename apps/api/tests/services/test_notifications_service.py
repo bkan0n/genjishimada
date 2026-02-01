@@ -23,11 +23,11 @@ class TestNotificationsServiceCreateAndDispatch:
     """Test create_and_dispatch business logic and error translation."""
 
     async def test_create_and_dispatch_foreign_key_violation_user_id(
-        self, mock_pool, mock_state, mock_notifications_repo
+        self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo
     ):
         """ForeignKeyViolationError on user_id raises UserNotFoundError."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
         mock_notifications_repo.insert_event.side_effect = ForeignKeyViolationError(
             constraint_name="notifications_events_user_id_fkey",
             table="notifications_events",
@@ -45,11 +45,11 @@ class TestNotificationsServiceCreateAndDispatch:
             await service.create_and_dispatch(request, headers={})
 
     async def test_create_and_dispatch_success_no_discord_channels(
-        self, mock_pool, mock_state, mock_notifications_repo, mocker
+        self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo, mocker
     ):
         """Successful creation without Discord channels does not publish to RabbitMQ."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         # Mock insert_event to return an event_id
         mock_notifications_repo.insert_event.return_value = 1
@@ -91,13 +91,13 @@ class TestNotificationsServiceCreateAndDispatch:
         publish_spy.assert_not_called()
 
     async def test_create_and_dispatch_with_discord_channels_above_limit(
-        self, mock_pool, mock_state, mock_notifications_repo, mocker
+        self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo, mocker
     ):
         """Creation with Discord channels and user_id >= limit publishes to RabbitMQ."""
         # Arrange
         from litestar.datastructures import Headers
 
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         mock_notifications_repo.insert_event.return_value = 1
         mock_notifications_repo.fetch_event_by_id.return_value = {
@@ -137,11 +137,11 @@ class TestNotificationsServiceCreateAndDispatch:
         assert publish_spy.call_args[1]["routing_key"] == "api.notification.delivery"
 
     async def test_create_and_dispatch_with_discord_channels_below_limit(
-        self, mock_pool, mock_state, mock_notifications_repo, mocker
+        self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo, mocker
     ):
         """Creation with Discord channels but user_id < limit does not publish."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         mock_notifications_repo.insert_event.return_value = 1
         mock_notifications_repo.fetch_event_by_id.return_value = {
@@ -181,10 +181,10 @@ class TestNotificationsServiceCreateAndDispatch:
 class TestNotificationsServiceGetPreferences:
     """Test get_preferences business logic."""
 
-    async def test_get_preferences_with_explicit_preferences(self, mock_pool, mock_state, mock_notifications_repo):
+    async def test_get_preferences_with_explicit_preferences(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Returns explicit preferences when set."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         # User has explicitly disabled discord_dm for MAP_APPROVED
         mock_notifications_repo.fetch_preferences.return_value = [
@@ -202,10 +202,10 @@ class TestNotificationsServiceGetPreferences:
         assert map_approved_pref is not None
         assert map_approved_pref.channels["discord_dm"] is False
 
-    async def test_get_preferences_with_defaults(self, mock_pool, mock_state, mock_notifications_repo):
+    async def test_get_preferences_with_defaults(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Returns default channels when no explicit preference."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         # No explicit preferences
         mock_notifications_repo.fetch_preferences.return_value = []
@@ -225,11 +225,11 @@ class TestNotificationsServiceGetPreferences:
             assert len(pref.channels) == len(NotificationChannel)
 
     async def test_get_preferences_mixed_explicit_and_defaults(
-        self, mock_pool, mock_state, mock_notifications_repo
+        self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo
     ):
         """Merges explicit preferences with defaults."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         # User has set discord_dm=False for MAP_APPROVED, but no preference for web
         mock_notifications_repo.fetch_preferences.return_value = [
@@ -254,11 +254,11 @@ class TestNotificationsServiceUpdatePreference:
     """Test update_preference error translation."""
 
     async def test_update_preference_foreign_key_violation_user_id(
-        self, mock_pool, mock_state, mock_notifications_repo
+        self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo
     ):
         """ForeignKeyViolationError on user_id raises UserNotFoundError."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
         mock_notifications_repo.upsert_preference.side_effect = ForeignKeyViolationError(
             constraint_name="notification_preferences_user_id_fkey",
             table="notification_preferences",
@@ -273,10 +273,10 @@ class TestNotificationsServiceUpdatePreference:
                 enabled=True,
             )
 
-    async def test_update_preference_success(self, mock_pool, mock_state, mock_notifications_repo):
+    async def test_update_preference_success(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Successful preference update."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         # Act
         await service.update_preference(
@@ -298,10 +298,10 @@ class TestNotificationsServiceUpdatePreference:
 class TestNotificationsServiceGetEnabledChannels:
     """Test _get_enabled_channels business logic."""
 
-    async def test_get_enabled_channels_explicit_enabled(self, mock_pool, mock_state, mock_notifications_repo):
+    async def test_get_enabled_channels_explicit_enabled(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Returns explicitly enabled channels."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         mock_notifications_repo.fetch_preferences.return_value = [
             {"event_type": NotificationEventType.MAP_EDIT_APPROVED.value, "channel": "discord_dm", "enabled": True}
@@ -313,10 +313,10 @@ class TestNotificationsServiceGetEnabledChannels:
         # Assert
         assert "discord_dm" in result
 
-    async def test_get_enabled_channels_explicit_disabled(self, mock_pool, mock_state, mock_notifications_repo):
+    async def test_get_enabled_channels_explicit_disabled(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Excludes explicitly disabled channels."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         mock_notifications_repo.fetch_preferences.return_value = [
             {"event_type": NotificationEventType.MAP_EDIT_APPROVED.value, "channel": "web", "enabled": False}
@@ -329,11 +329,11 @@ class TestNotificationsServiceGetEnabledChannels:
         assert "web" not in result
 
     async def test_get_enabled_channels_defaults_when_no_explicit(
-        self, mock_pool, mock_state, mock_notifications_repo
+        self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo
     ):
         """Includes default channels when no explicit preference."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         # No preferences for this event type
         mock_notifications_repo.fetch_preferences.return_value = []
@@ -345,10 +345,10 @@ class TestNotificationsServiceGetEnabledChannels:
         # MAP_APPROVED defaults include WEB
         assert "web" in result
 
-    async def test_get_enabled_channels_invalid_event_type(self, mock_pool, mock_state, mock_notifications_repo):
+    async def test_get_enabled_channels_invalid_event_type(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Handles invalid event_type gracefully with empty defaults."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         mock_notifications_repo.fetch_preferences.return_value = []
 
@@ -362,10 +362,10 @@ class TestNotificationsServiceGetEnabledChannels:
 class TestNotificationsServiceRowToEventResponse:
     """Test _row_to_event_response data transformation."""
 
-    def test_row_to_event_response_with_string_metadata(self, mock_pool, mock_state, mock_notifications_repo):
+    def test_row_to_event_response_with_string_metadata(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Converts row with JSON string metadata correctly."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         row = {
             "id": 1,
@@ -390,10 +390,10 @@ class TestNotificationsServiceRowToEventResponse:
         assert result.read_at is None
         assert result.dismissed_at is None
 
-    def test_row_to_event_response_with_dict_metadata(self, mock_pool, mock_state, mock_notifications_repo):
+    def test_row_to_event_response_with_dict_metadata(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Converts row with dict metadata correctly."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         row = {
             "id": 1,
@@ -413,10 +413,10 @@ class TestNotificationsServiceRowToEventResponse:
         # Assert
         assert result.metadata == {"map_id": 456}
 
-    def test_row_to_event_response_with_none_metadata(self, mock_pool, mock_state, mock_notifications_repo):
+    def test_row_to_event_response_with_none_metadata(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Handles None metadata correctly."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         row = {
             "id": 1,
@@ -436,10 +436,10 @@ class TestNotificationsServiceRowToEventResponse:
         # Assert
         assert result.metadata is None
 
-    def test_row_to_event_response_with_datetimes(self, mock_pool, mock_state, mock_notifications_repo):
+    def test_row_to_event_response_with_datetimes(self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo):
         """Formats datetime fields correctly."""
         # Arrange
-        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo)
+        service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
         created = datetime(2026, 1, 30, 12, 0, 0, tzinfo=timezone.utc)
         read = datetime(2026, 1, 30, 13, 0, 0, tzinfo=timezone.utc)

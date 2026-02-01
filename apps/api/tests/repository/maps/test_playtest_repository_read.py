@@ -161,18 +161,8 @@ class TestGetPrimaryCreator:
     ) -> None:
         """Test get_primary_creator returns primary creator's user ID."""
         # Arrange
-        map_id = await create_test_map()
         user_id = await create_test_user()
-
-        # Insert creator as primary
-        await asyncpg_conn.execute(
-            """
-            INSERT INTO maps.creators (map_id, user_id, is_primary)
-            VALUES ($1, $2, TRUE)
-            """,
-            map_id,
-            user_id,
-        )
+        map_id = await create_test_map(creator_id=user_id)
 
         # Act
         result = await repository.get_primary_creator(map_id)
