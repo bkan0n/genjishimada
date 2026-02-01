@@ -12,12 +12,15 @@ from genjishimada_sdk.change_requests import (
 from genjishimada_sdk.maps import OverwatchCode
 from litestar import Controller, get, patch, post
 from litestar.di import Provide
+from litestar.exceptions import HTTPException
 from litestar.params import Body
 from litestar.response import Response
-from litestar.status_codes import HTTP_200_OK, HTTP_201_CREATED
+from litestar.status_codes import HTTP_200_OK, HTTP_201_CREATED, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
 from repository.change_requests_repository import provide_change_requests_repository
+from repository.maps_repository import provide_maps_repository
 from services.change_requests_service import ChangeRequestsService, provide_change_requests_service
+from services.exceptions.change_requests import ChangeRequestAlreadyExistsError, MapNotFoundError
 
 
 class ChangeRequestsController(Controller):
@@ -27,6 +30,7 @@ class ChangeRequestsController(Controller):
     path = "/change-requests"
     dependencies = {
         "change_requests_repo": Provide(provide_change_requests_repository),
+        "maps_repo": Provide(provide_maps_repository),
         "change_requests_service": Provide(provide_change_requests_service),
     }
 
@@ -73,9 +77,23 @@ class ChangeRequestsController(Controller):
 
         Returns:
             Empty response with 201 status.
+
+        Raises:
+            HTTPException: 404 if map not found, 409 if change request already exists.
         """
-        await change_requests_service.create_request(data)
-        return Response(None, status_code=HTTP_201_CREATED)
+        try:
+            await change_requests_service.create_request(data)
+            return Response(None, status_code=HTTP_201_CREATED)
+        except MapNotFoundError as e:
+            raise HTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=f"Map with code '{e.context['code']}' not found",
+            ) from e
+        except ChangeRequestAlreadyExistsError as e:
+            raise HTTPException(
+                status_code=HTTP_409_CONFLICT,
+                detail=f"Change request already exists for thread {e.context['thread_id']}",
+            ) from e
 
     @patch(
         path="/{thread_id:int}/resolve",

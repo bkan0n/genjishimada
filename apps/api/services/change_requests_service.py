@@ -12,23 +12,34 @@ from genjishimada_sdk.change_requests import (
 from litestar.datastructures import State
 
 from repository.change_requests_repository import ChangeRequestsRepository
+from repository.exceptions import ForeignKeyViolationError, UniqueConstraintViolationError
+from repository.maps_repository import MapsRepository
 
 from .base import BaseService
+from .exceptions.change_requests import ChangeRequestAlreadyExistsError, MapNotFoundError
 
 
 class ChangeRequestsService(BaseService):
     """Service for change requests business logic."""
 
-    def __init__(self, pool: Pool, state: State, change_requests_repo: ChangeRequestsRepository) -> None:
+    def __init__(
+        self,
+        pool: Pool,
+        state: State,
+        change_requests_repo: ChangeRequestsRepository,
+        maps_repo: MapsRepository,
+    ) -> None:
         """Initialize change requests service.
 
         Args:
             pool: AsyncPG connection pool.
             state: Application state.
             change_requests_repo: Change requests repository.
+            maps_repo: Maps repository for map validation.
         """
         super().__init__(pool, state)
         self._change_requests_repo = change_requests_repo
+        self._maps_repo = maps_repo
 
     async def check_permission(self, thread_id: int, user_id: int, code: str) -> bool:
         """Check if user has creator permission for a change request.
@@ -51,15 +62,35 @@ class ChangeRequestsService(BaseService):
 
         Args:
             data: Change request creation data.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+            ChangeRequestAlreadyExistsError: If change request already exists for this thread.
         """
-        await self._change_requests_repo.create_request(
-            thread_id=data.thread_id,
-            code=data.code,
-            user_id=data.user_id,
-            content=data.content,
-            change_request_type=data.change_request_type,
-            creator_mentions=data.creator_mentions,
-        )
+        # Check if map exists first
+        map_exists = await self._maps_repo.check_code_exists(data.code)
+        if not map_exists:
+            raise MapNotFoundError(data.code)
+
+        try:
+            await self._change_requests_repo.create_request(
+                thread_id=data.thread_id,
+                code=data.code,
+                user_id=data.user_id,
+                content=data.content,
+                change_request_type=data.change_request_type,
+                creator_mentions=data.creator_mentions,
+            )
+        except UniqueConstraintViolationError as e:
+            # thread_id is primary key, so this means duplicate thread
+            if "thread_id" in e.constraint_name or "pkey" in e.constraint_name:
+                raise ChangeRequestAlreadyExistsError(data.thread_id) from e
+            raise
+        except ForeignKeyViolationError as e:
+            # This shouldn't happen since we checked map exists, but handle anyway
+            if "code" in e.constraint_name:
+                raise MapNotFoundError(data.code) from e
+            raise
 
     async def resolve_request(self, thread_id: int) -> None:
         """Mark a change request as resolved.
@@ -102,14 +133,16 @@ class ChangeRequestsService(BaseService):
 async def provide_change_requests_service(
     state: State,
     change_requests_repo: ChangeRequestsRepository,
+    maps_repo: MapsRepository,
 ) -> ChangeRequestsService:
     """Litestar DI provider for ChangeRequestsService.
 
     Args:
         state: Application state.
         change_requests_repo: Change requests repository instance.
+        maps_repo: Maps repository instance.
 
     Returns:
         ChangeRequestsService instance.
     """
-    return ChangeRequestsService(state.db_pool, state, change_requests_repo)
+    return ChangeRequestsService(state.db_pool, state, change_requests_repo, maps_repo)

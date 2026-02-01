@@ -14,6 +14,11 @@ from .auth import (  # noqa: I001
     UserNotFoundError,
     UsernameValidationError,
 )
+from .change_requests import (
+    ChangeRequestAlreadyExistsError,
+    ChangeRequestsError,
+    MapNotFoundError as ChangeRequestsMapNotFoundError,
+)
 from .completions import (
     CompletionNotFoundError,
     CompletionsError,
@@ -66,6 +71,9 @@ from .users import (
 __all__ = [
     "AlreadyInPlaytestError",
     "AuthError",
+    "ChangeRequestAlreadyExistsError",
+    "ChangeRequestsError",
+    "ChangeRequestsMapNotFoundError",
     "CompletionNotFoundError",
     "CompletionsError",
     "CompletionsMapNotFoundError",

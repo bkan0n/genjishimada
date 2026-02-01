@@ -7,7 +7,11 @@ from asyncpg import Connection
 from litestar.datastructures import State
 
 from .base import BaseRepository
-from .exceptions import ForeignKeyViolationError, extract_constraint_name
+from .exceptions import (
+    ForeignKeyViolationError,
+    UniqueConstraintViolationError,
+    extract_constraint_name,
+)
 
 
 class ChangeRequestsRepository(BaseRepository):
@@ -87,6 +91,13 @@ class ChangeRequestsRepository(BaseRepository):
                 content,
                 creator_mentions,
                 change_request_type,
+            )
+        except asyncpg.UniqueViolationError as e:
+            constraint = extract_constraint_name(e)
+            raise UniqueConstraintViolationError(
+                constraint_name=constraint or "unknown",
+                table="change_requests",
+                detail=str(e),
             )
         except asyncpg.ForeignKeyViolationError as e:
             constraint = extract_constraint_name(e)
