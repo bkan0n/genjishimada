@@ -13,7 +13,7 @@ pytestmark = [
 
 
 class TestGetPlaytest:
-    """GET /api/v3/playtests/{thread_id}"""
+    """GET /api/v3/maps/playtests/{thread_id}"""
 
     async def test_happy_path(
         self,
@@ -29,7 +29,7 @@ class TestGetPlaytest:
         map_id = await create_test_map()
         await create_test_playtest(map_id, thread_id=thread_id)
 
-        response = await test_client.get(f"/api/v3/playtests/{thread_id}")
+        response = await test_client.get(f"/api/v3/maps/playtests/{thread_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -44,7 +44,7 @@ class TestGetPlaytest:
         """Get non-existent playtest returns 404."""
         thread_id = 999999999
 
-        response = await test_client.get(f"/api/v3/playtests/{thread_id}")
+        response = await test_client.get(f"/api/v3/maps/playtests/{thread_id}")
 
         assert response.status_code == 404
         # Validate error response structure
@@ -53,7 +53,7 @@ class TestGetPlaytest:
 
 
 class TestCastVote:
-    """POST /api/v3/playtests/{thread_id}/vote/{user_id}"""
+    """POST /api/v3/maps/playtests/{thread_id}/vote/{user_id}"""
 
     async def test_happy_path(
         self,
@@ -78,7 +78,7 @@ class TestCastVote:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/vote/{user_id}",
+            f"/api/v3/maps/playtests/{thread_id}/vote/{user_id}",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
@@ -108,7 +108,7 @@ class TestCastVote:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/vote/{user_id}",
+            f"/api/v3/maps/playtests/{thread_id}/vote/{user_id}",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
@@ -117,13 +117,13 @@ class TestCastVote:
         
 
 class TestGetVotes:
-    """GET /api/v3/playtests/{thread_id}/votes"""
+    """GET /api/v3/maps/playtests/{thread_id}/votes"""
 
     async def test_happy_path(self, test_client, unique_thread_id):
         """Get votes for playtest."""
         thread_id = unique_thread_id
 
-        response = await test_client.get(f"/api/v3/playtests/{thread_id}/votes")
+        response = await test_client.get(f"/api/v3/maps/playtests/{thread_id}/votes")
 
         assert response.status_code == 200
         data = response.json()
@@ -143,7 +143,7 @@ class TestGetVotes:
 
 
 class TestDeleteVote:
-    """DELETE /api/v3/playtests/{thread_id}/vote/{user_id}"""
+    """DELETE /api/v3/maps/playtests/{thread_id}/vote/{user_id}"""
 
     async def test_happy_path(
         self,
@@ -166,7 +166,7 @@ class TestDeleteVote:
         await create_test_vote(user_id, map_id, thread_id)
 
         response = await test_client.delete(
-            f"/api/v3/playtests/{thread_id}/vote/{user_id}",
+            f"/api/v3/maps/playtests/{thread_id}/vote/{user_id}",
             headers={"X-PYTEST-ENABLED": "1"},
         )
 
@@ -180,7 +180,7 @@ class TestDeleteVote:
         user_id = await create_test_user()
 
         response = await test_client.delete(
-            f"/api/v3/playtests/{thread_id}/vote/{user_id}",
+            f"/api/v3/maps/playtests/{thread_id}/vote/{user_id}",
             headers={"X-PYTEST-ENABLED": "1"},
         )
 
@@ -191,19 +191,19 @@ class TestDeleteVote:
         
 
 class TestDeleteAllVotes:
-    """DELETE /api/v3/playtests/{thread_id}/vote"""
+    """DELETE /api/v3/maps/playtests/{thread_id}/vote"""
 
     async def test_happy_path(self, test_client, unique_thread_id):
         """Delete all votes for playtest."""
         thread_id = unique_thread_id
 
-        response = await test_client.delete(f"/api/v3/playtests/{thread_id}/vote")
+        response = await test_client.delete(f"/api/v3/maps/playtests/{thread_id}/vote")
 
         assert response.status_code == 204
 
 
 class TestEditPlaytestMeta:
-    """PATCH /api/v3/playtests/{thread_id}"""
+    """PATCH /api/v3/maps/playtests/{thread_id}"""
 
     async def test_happy_path(
         self,
@@ -224,7 +224,7 @@ class TestEditPlaytestMeta:
         }
 
         response = await test_client.patch(
-            f"/api/v3/playtests/{thread_id}",
+            f"/api/v3/maps/playtests/{thread_id}",
             json=payload,
         )
 
@@ -237,7 +237,7 @@ class TestEditPlaytestMeta:
         payload = {}
 
         response = await test_client.patch(
-            f"/api/v3/playtests/{thread_id}",
+            f"/api/v3/maps/playtests/{thread_id}",
             json=payload,
         )
 
@@ -248,7 +248,7 @@ class TestEditPlaytestMeta:
         
 
 class TestAssociatePlaytestMeta:
-    """PATCH /api/v3/playtests/"""
+    """PATCH /api/v3/maps/playtests/"""
 
     async def test_happy_path(
         self,
@@ -270,7 +270,7 @@ class TestAssociatePlaytestMeta:
         }
 
         response = await test_client.patch(
-            "/api/v3/playtests/",
+            "/api/v3/maps/playtests/",
             json=payload,
         )
 
@@ -293,7 +293,7 @@ class TestAssociatePlaytestMeta:
         }
 
         response = await test_client.patch(
-            "/api/v3/playtests/",
+            "/api/v3/maps/playtests/",
             json=payload,
         )
 
@@ -304,7 +304,7 @@ class TestAssociatePlaytestMeta:
         
 
 class TestApprovePlaytest:
-    """POST /api/v3/playtests/{thread_id}/approve"""
+    """POST /api/v3/maps/playtests/{thread_id}/approve"""
 
     async def test_happy_path(
         self,
@@ -334,7 +334,7 @@ class TestApprovePlaytest:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/approve",
+            f"/api/v3/maps/playtests/{thread_id}/approve",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
@@ -357,7 +357,7 @@ class TestApprovePlaytest:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/approve",
+            f"/api/v3/maps/playtests/{thread_id}/approve",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
@@ -369,7 +369,7 @@ class TestApprovePlaytest:
         
 
 class TestForceAcceptPlaytest:
-    """POST /api/v3/playtests/{thread_id}/force_accept"""
+    """POST /api/v3/maps/playtests/{thread_id}/force_accept"""
 
     async def test_happy_path(
         self,
@@ -393,7 +393,7 @@ class TestForceAcceptPlaytest:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/force_accept",
+            f"/api/v3/maps/playtests/{thread_id}/force_accept",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
@@ -414,7 +414,7 @@ class TestForceAcceptPlaytest:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/force_accept",
+            f"/api/v3/maps/playtests/{thread_id}/force_accept",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
@@ -426,7 +426,7 @@ class TestForceAcceptPlaytest:
         
 
 class TestForceDenyPlaytest:
-    """POST /api/v3/playtests/{thread_id}/force_deny"""
+    """POST /api/v3/maps/playtests/{thread_id}/force_deny"""
 
     async def test_happy_path(
         self,
@@ -450,7 +450,7 @@ class TestForceDenyPlaytest:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/force_deny",
+            f"/api/v3/maps/playtests/{thread_id}/force_deny",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
@@ -471,7 +471,7 @@ class TestForceDenyPlaytest:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/force_deny",
+            f"/api/v3/maps/playtests/{thread_id}/force_deny",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
@@ -483,7 +483,7 @@ class TestForceDenyPlaytest:
         
 
 class TestResetPlaytest:
-    """POST /api/v3/playtests/{thread_id}/reset"""
+    """POST /api/v3/maps/playtests/{thread_id}/reset"""
 
     async def test_happy_path(self, test_client, unique_thread_id, create_test_user):
         """Reset playtest."""
@@ -498,7 +498,7 @@ class TestResetPlaytest:
         }
 
         response = await test_client.post(
-            f"/api/v3/playtests/{thread_id}/reset",
+            f"/api/v3/maps/playtests/{thread_id}/reset",
             json=payload,
             headers={"X-PYTEST-ENABLED": "1"},
         )
