@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import pprint
 import re
@@ -527,12 +528,12 @@ class CompletionHandler(BaseHandler):
         assert isinstance(channel, TextChannel)
 
         json_data = msgspec.json.encode(event.extracted).decode()
-        formatted_json = pprint.pformat(json_data)
+        formatted_json = pprint.pformat(json.loads(json_data))
         content = (
             f"`User ID`: {event.user_id}\n"
-            f"`Name`: {event.extracted.name} in {event.submitted_user_names} {'✅' if event.user_match else '❌'}"
-            f"`Code`: {event.extracted.code} in {event.submitted_code} {'✅' if event.code_match else '❌'}"
-            f"`Name`: {event.extracted.time} in {event.submitted_time} {'✅' if event.time_match else '❌'}"
+            f"`Name`: {event.extracted.name} in {event.submitted_user_names} {'✅' if event.user_match else '❌'}\n"
+            f"`Code`: {event.extracted.code} == {event.submitted_code} {'✅' if event.code_match else '❌'}\n"
+            f"`Name`: {event.extracted.time} == {event.submitted_time} {'✅' if event.time_match else '❌'}\n"
             f"`Extracted Raw`\n"
             "```json\n"
             f"{formatted_json}\n"
