@@ -54,7 +54,7 @@ class HousekeepingCog(BaseCog):
 
     @commands.command()
     @commands.guild_only()
-    @commands.is_owner()
+    @commands.check(lambda ctx: ctx.message.author.id in {681391478605479948, 141372217677053952})
     async def purge(
         self,
         ctx: GenjiCtx,
