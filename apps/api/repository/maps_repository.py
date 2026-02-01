@@ -1043,7 +1043,8 @@ class MapsRepository(BaseRepository):
             ms.upvotes,
             ms.trend_score,
             r.avg_rating,
-            r.rating_count
+            r.rating_count,
+            0 AS momentum
         FROM metrics_scored ms
         LEFT JOIN ratings r ON r.map_id = ms.id
         ORDER BY ms.trend_score DESC
