@@ -307,7 +307,7 @@ class CompletionsService(BaseService):
 
         if not (data.video or suspicious_flags):
             # Emit event for background OCR processing
-            await request.app.state.emit(
+            request.app.emit(
                 "completion.ocr.requested",
                 OcrVerificationRequestedEvent(
                     completion_id=completion_id,
