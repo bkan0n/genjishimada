@@ -43,6 +43,7 @@ NOTIFICATION_SETTINGS = {
     "dm_on_lootbox_gain": (NotificationEventType.LOOTBOX_EARNED, NotificationChannel.DISCORD_DM),
     "dm_on_records_removal": (NotificationEventType.RECORD_REMOVED, NotificationChannel.DISCORD_DM),
     "dm_on_playtest_alerts": (NotificationEventType.PLAYTEST_UPDATE, NotificationChannel.DISCORD_DM),
+    "dm_on_auto_verify_failed": (NotificationEventType.AUTO_VERIFY_FAILED, NotificationChannel.DISCORD_DM),
     # Channel ping notifications
     "ping_on_xp_gain": (NotificationEventType.XP_GAIN, NotificationChannel.DISCORD_PING),
     "ping_on_mastery": (NotificationEventType.MASTERY_EARNED, NotificationChannel.DISCORD_PING),
@@ -110,6 +111,10 @@ class SettingsView(BaseView):
             "dm_on_playtest_alerts",
             self._is_enabled("dm_on_playtest_alerts"),
         )
+        self._dm_on_auto_verify_failed_button = NotificationButton(
+            "dm_on_auto_verify_failed",
+            self._is_enabled("dm_on_auto_verify_failed"),
+        )
         self._ping_on_xp_gain_button = NotificationButton(
             "ping_on_xp_gain",
             self._is_enabled("ping_on_xp_gain"),
@@ -146,6 +151,10 @@ class SettingsView(BaseView):
             ui.Section(
                 ui.TextDisplay("Direct message on followed playtest updates."),
                 accessory=self._dm_on_playtest_alerts_button,
+            ),
+            ui.Section(
+                ui.TextDisplay("Direct message on failed auto verification."),
+                accessory=self._dm_on_auto_verify_failed_button,
             ),
             ui.TextDisplay("### Pings"),
             ui.Section(
