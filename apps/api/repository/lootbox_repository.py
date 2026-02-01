@@ -294,13 +294,16 @@ class LootboxRepository(BaseRepository):
         key_type: LootboxKeyType,
         *,
         conn: Connection | None = None,
-    ) -> None:
+    ) -> bool:
         """Delete the oldest key of a given type for a user.
 
         Args:
             user_id: Target user ID.
             key_type: Key type to delete.
             conn: Optional connection for transaction participation.
+
+        Returns:
+            True if a key was deleted, False if no key existed to delete.
         """
         _conn = self._get_connection(conn)
 
@@ -312,7 +315,9 @@ class LootboxRepository(BaseRepository):
                 WHERE user_id = $1::bigint AND key_type = $2::text
             ) AND user_id = $1::bigint AND key_type = $2::text
         """
-        await _conn.execute(query, user_id, key_type)
+        result = await _conn.execute(query, user_id, key_type)
+        # Result is like "DELETE 1" or "DELETE 0"
+        return result != "DELETE 0"
 
     async def check_user_has_reward(
         self,

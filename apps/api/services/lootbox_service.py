@@ -222,10 +222,15 @@ class LootboxService(BaseService):
 
         Returns:
             Reward response with duplicate flag and coin amount.
+
+        Raises:
+            InsufficientKeysError: If user has no keys to consume.
         """
         async with self._pool.acquire() as conn, conn.transaction():
-            # Delete oldest key
-            await self._lootbox_repo.delete_oldest_user_key(user_id, key_type, conn=conn)  # type: ignore[arg-type]
+            # Delete oldest key - raises error if no key exists
+            key_deleted = await self._lootbox_repo.delete_oldest_user_key(user_id, key_type, conn=conn)  # type: ignore[arg-type]
+            if not key_deleted:
+                raise InsufficientKeysError(key_type)
 
             # Check for duplicate
             rarity = await self._lootbox_repo.check_user_has_reward(
