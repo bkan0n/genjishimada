@@ -29,7 +29,6 @@ from litestar.di import Provide
 from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
-from repository.autocomplete_repository import AutocompleteRepository, provide_autocomplete_repository
 from repository.completions_repository import provide_completions_repository
 from repository.users_repository import provide_users_repository
 from services.completions_service import CompletionsService, provide_completions_service
@@ -58,7 +57,6 @@ class CompletionsController(Controller):
         "completions_repo": Provide(provide_completions_repository),
         "svc": Provide(provide_completions_service),
         "users": Provide(provide_users_service),
-        "autocomplete": Provide(provide_autocomplete_repository),
         "notifications": Provide(provide_notifications_service),
         "users_repo": Provide(provide_users_repository),
     }
@@ -101,12 +99,12 @@ class CompletionsController(Controller):
         svc: CompletionsService,
         request: Request,
         data: CompletionCreateRequest,
-        autocomplete: AutocompleteRepository,
+        notifications: NotificationsService,
         users: UsersService,
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion."""
         try:
-            resp = await svc.submit_completion(data, request, autocomplete, users)
+            resp = await svc.submit_completion(data, request, notifications, users)
             return resp
         except MapNotFoundError as e:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e

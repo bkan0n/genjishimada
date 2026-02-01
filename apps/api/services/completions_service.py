@@ -232,14 +232,14 @@ class CompletionsService(BaseService):
                 )
 
     async def submit_completion(
-        self, data: CompletionCreateRequest, request: Request, autocomplete: AutocompleteRepository, users: UsersService
+        self, data: CompletionCreateRequest, request: Request, notifications: NotificationsService, users: UsersService
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion record and publish an event.
 
         Args:
             data: Completion submission data.
             request: HTTP request (for headers).
-            autocomplete: Autocomplete repository for OCR.
+            notifications: notifications service.
             users: Users service for name fetching.
 
         Returns:
@@ -316,6 +316,9 @@ class CompletionsService(BaseService):
                     time=data.time,
                     screenshot=data.screenshot,
                 ),
+                svc=self,
+                users=users,
+                notifications=notifications,
             )
             # Return immediately - OCR happens in background
             return CompletionSubmissionJobResponse(None, completion_id)
