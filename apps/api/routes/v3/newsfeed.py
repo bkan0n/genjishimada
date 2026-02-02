@@ -6,38 +6,11 @@ from typing import Annotated
 
 import litestar
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedEventType, PublishNewsfeedJobResponse
-from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.params import Parameter
 from litestar.status_codes import HTTP_201_CREATED
 
-from repository.newsfeed_repository import NewsfeedRepository
-from services.newsfeed_service import NewsfeedService
-
-
-async def provide_newsfeed_repository(state: State) -> NewsfeedRepository:
-    """Provide newsfeed repository.
-
-    Args:
-        state: Application state.
-
-    Returns:
-        NewsfeedRepository instance.
-    """
-    return NewsfeedRepository(pool=state.db_pool)
-
-
-async def provide_newsfeed_service(state: State, newsfeed_repo: NewsfeedRepository) -> NewsfeedService:
-    """Provide newsfeed service.
-
-    Args:
-        state: Application state.
-        newsfeed_repo: Newsfeed repository instance.
-
-    Returns:
-        NewsfeedService instance.
-    """
-    return NewsfeedService(pool=state.db_pool, state=state, newsfeed_repo=newsfeed_repo)
+from services.newsfeed_service import NewsfeedService, provide_newsfeed_service
 
 
 class NewsfeedController(litestar.Controller):
@@ -46,7 +19,6 @@ class NewsfeedController(litestar.Controller):
     tags = ["Newsfeed"]
     path = "/newsfeed"
     dependencies = {
-        "newsfeed_repo": Provide(provide_newsfeed_repository),
         "newsfeed_service": Provide(provide_newsfeed_service),
     }
 

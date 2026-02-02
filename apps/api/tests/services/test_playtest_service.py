@@ -29,10 +29,10 @@ class TestPlaytestServiceGetVotes:
     """Test get_votes() business logic."""
 
     async def test_get_votes_multiple_votes_calculates_average(
-        self, mock_pool, mock_state, mock_playtest_repo
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo
     ):
         """get_votes() calculates correct average from multiple votes."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock repository returning multiple votes
         mock_playtest_repo.fetch_playtest_votes.return_value = [
@@ -48,10 +48,10 @@ class TestPlaytestServiceGetVotes:
         mock_playtest_repo.fetch_playtest_votes.assert_called_once_with(12345)
 
     async def test_get_votes_empty_votes_returns_zero_average(
-        self, mock_pool, mock_state, mock_playtest_repo
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo
     ):
         """get_votes() returns average of 0 when no votes exist."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock repository returning empty list
         mock_playtest_repo.fetch_playtest_votes.return_value = []
@@ -63,10 +63,10 @@ class TestPlaytestServiceGetVotes:
         mock_playtest_repo.fetch_playtest_votes.assert_called_once_with(12345)
 
     async def test_get_votes_single_vote_returns_that_value(
-        self, mock_pool, mock_state, mock_playtest_repo
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo
     ):
         """get_votes() returns the single vote value as average."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock repository returning single vote
         mock_playtest_repo.fetch_playtest_votes.return_value = [
@@ -80,10 +80,10 @@ class TestPlaytestServiceGetVotes:
         mock_playtest_repo.fetch_playtest_votes.assert_called_once_with(12345)
 
     async def test_get_votes_rounds_to_two_decimals(
-        self, mock_pool, mock_state, mock_playtest_repo
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo
     ):
         """get_votes() rounds average to 2 decimal places."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock repository returning votes that produce non-round average
         mock_playtest_repo.fetch_playtest_votes.return_value = [
@@ -102,10 +102,10 @@ class TestPlaytestServiceCastVote:
     """Test cast_vote() error translation."""
 
     async def test_cast_vote_success(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """cast_vote() successfully casts vote when no constraints violated."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers for RabbitMQ idempotency
         mock_headers = mocker.Mock()
@@ -128,10 +128,10 @@ class TestPlaytestServiceCastVote:
         mock_playtest_repo.cast_vote.assert_called_once_with(12345, 999, 6.5)
 
     async def test_cast_vote_constraint_violation_raises_domain_error(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """cast_vote() translates CheckConstraintViolationError to VoteConstraintError."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -164,10 +164,10 @@ class TestPlaytestServiceDeleteVote:
     """Test delete_vote() business logic."""
 
     async def test_delete_vote_success(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """delete_vote() successfully deletes vote when it exists."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -190,10 +190,10 @@ class TestPlaytestServiceDeleteVote:
         mock_playtest_repo.delete_vote.assert_called_once_with(12345, 999)
 
     async def test_delete_vote_not_found_raises_domain_error(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """delete_vote() raises VoteNotFoundError when vote doesn't exist."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -222,10 +222,10 @@ class TestPlaytestServiceEditMeta:
     """Test edit_playtest_meta() validation."""
 
     async def test_edit_playtest_meta_valid_patch(
-        self, mock_pool, mock_state, mock_playtest_repo
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo
     ):
         """edit_playtest_meta() successfully updates with valid fields."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Create patch with some fields set
         patch_data = PlaytestPatchRequest(
@@ -246,10 +246,10 @@ class TestPlaytestServiceEditMeta:
         assert "thread_id" not in cleaned_data  # UNSET should be filtered out
 
     async def test_edit_playtest_meta_all_unset_raises_error(
-        self, mock_pool, mock_state, mock_playtest_repo
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo
     ):
         """edit_playtest_meta() raises InvalidPatchError when all fields are UNSET."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Create patch with all fields UNSET
         patch_data = PlaytestPatchRequest(
@@ -266,10 +266,10 @@ class TestPlaytestServiceEditMeta:
         mock_playtest_repo.update_playtest_meta.assert_not_called()
 
     async def test_edit_playtest_meta_filters_unset_fields(
-        self, mock_pool, mock_state, mock_playtest_repo
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo
     ):
         """edit_playtest_meta() filters UNSET fields and passes only set ones."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Create patch with mixed UNSET and valid fields
         patch_data = PlaytestPatchRequest(
@@ -291,10 +291,10 @@ class TestPlaytestServiceApprove:
     """Test approve() orchestration and state validation."""
 
     async def test_approve_success(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """approve() successfully approves playtest with all data present."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -323,10 +323,10 @@ class TestPlaytestServiceApprove:
         mock_playtest_repo.get_map_code.assert_called_once_with(100, conn=ANY)
 
     async def test_approve_playtest_not_found_no_map_id(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """approve() raises PlaytestNotFoundError when map_id is None."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -345,10 +345,10 @@ class TestPlaytestServiceApprove:
         assert "12345" in str(exc_info.value)
 
     async def test_approve_no_votes_raises_state_error(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """approve() raises PlaytestStateError when no votes exist."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -366,10 +366,10 @@ class TestPlaytestServiceApprove:
             )
 
     async def test_approve_no_map_code_raises_state_error(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """approve() raises PlaytestStateError when map code is None."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -390,10 +390,10 @@ class TestPlaytestServiceApprove:
             )
 
     async def test_approve_no_primary_creator_raises_state_error(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """approve() raises PlaytestStateError when primary creator is None."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -418,10 +418,10 @@ class TestPlaytestServiceForceAccept:
     """Test force_accept() difficulty conversion."""
 
     async def test_force_accept_success_with_difficulty_conversion(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """force_accept() successfully converts difficulty tier to raw value."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -450,10 +450,10 @@ class TestPlaytestServiceForceAccept:
         )
 
     async def test_force_accept_playtest_not_found(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """force_accept() raises PlaytestNotFoundError when map_id is None."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -473,10 +473,10 @@ class TestPlaytestServiceForceAccept:
         assert "12345" in str(exc_info.value)
 
     async def test_force_accept_difficulty_lookup(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """force_accept() correctly looks up difficulty from DIFFICULTY_MIDPOINTS."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -508,10 +508,10 @@ class TestPlaytestServiceReset:
     """Test reset() conditional logic."""
 
     async def test_reset_remove_votes_true(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """reset() calls delete_all_votes when remove_votes=True."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -533,10 +533,10 @@ class TestPlaytestServiceReset:
         mock_playtest_repo.delete_completions_for_playtest.assert_not_called()
 
     async def test_reset_remove_votes_false(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """reset() does not call delete_all_votes when remove_votes=False."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -557,10 +557,10 @@ class TestPlaytestServiceReset:
         mock_playtest_repo.delete_all_votes.assert_not_called()
 
     async def test_reset_remove_completions_true(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """reset() calls delete_completions_for_playtest when remove_completions=True."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -582,10 +582,10 @@ class TestPlaytestServiceReset:
         mock_playtest_repo.delete_all_votes.assert_not_called()
 
     async def test_reset_remove_completions_false(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """reset() does not call delete_completions_for_playtest when remove_completions=False."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -606,10 +606,10 @@ class TestPlaytestServiceReset:
         mock_playtest_repo.delete_completions_for_playtest.assert_not_called()
 
     async def test_reset_both_flags_true(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """reset() calls both delete methods when both flags are True."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()
@@ -631,10 +631,10 @@ class TestPlaytestServiceReset:
         mock_playtest_repo.delete_completions_for_playtest.assert_called_once_with(12345, conn=ANY)
 
     async def test_reset_both_flags_false(
-        self, mock_pool, mock_state, mock_playtest_repo, mocker
+        self, mock_pool, mock_state, mock_playtest_repo, mock_maps_repo, mocker
     ):
         """reset() calls neither delete method when both flags are False."""
-        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo)
+        service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
         # Mock headers
         mock_headers = mocker.Mock()

@@ -29,6 +29,7 @@ from genjishimada_sdk.maps import (
 from litestar.datastructures import Headers, State
 
 from repository.exceptions import CheckConstraintViolationError
+from repository.maps_repository import MapsRepository
 from repository.playtest_repository import PlaytestRepository
 from services.exceptions.playtest import (
     InvalidPatchError,
@@ -52,6 +53,7 @@ class PlaytestService(BaseService):
         pool: Pool,
         state: State,
         playtest_repo: PlaytestRepository,
+        maps_repo: MapsRepository,
     ) -> None:
         """Initialize service."""
         super().__init__(pool, state)
@@ -468,6 +470,7 @@ class PlaytestService(BaseService):
 async def provide_playtest_service(
     state: State,
     playtest_repo: PlaytestRepository,
+    maps_repo: MapsRepository,
 ) -> PlaytestService:
     """Litestar DI provider for service."""
-    return PlaytestService(state.db_pool, state, playtest_repo)
+    return PlaytestService(state.db_pool, state, playtest_repo, maps_repo)

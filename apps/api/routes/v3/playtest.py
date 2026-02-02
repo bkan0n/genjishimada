@@ -27,6 +27,7 @@ from litestar.status_codes import (
     HTTP_404_NOT_FOUND,
 )
 
+from repository.maps_repository import provide_maps_repository
 from repository.playtest_repository import provide_playtest_repository
 from services.exceptions.playtest import (
     InvalidPatchError,
@@ -49,6 +50,7 @@ class PlaytestController(Controller):
         "playtest_repo": Provide(provide_playtest_repository),
         "playtest_service": Provide(provide_playtest_service),
         "maps_service": Provide(provide_maps_service),
+        "maps_repo": Provide(provide_maps_repository),
     }
 
     @get(

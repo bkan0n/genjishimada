@@ -196,7 +196,7 @@ class CompletionsController(Controller):
     async def get_completions_leaderboard(
         self,
         svc: CompletionsService,
-        code: str,
+        code: OverwatchCode,
         page_size: int = 10,
         page_number: int = 1,
     ) -> list[CompletionResponse]:
@@ -282,7 +282,7 @@ class CompletionsController(Controller):
     async def get_records_filtered(  # noqa: PLR0913
         self,
         svc: CompletionsService,
-        code: str | None = None,
+        code: OverwatchCode | None = None,
         user_id: int | None = None,
         verification_status: Literal["Verified", "Unverified", "All"] = "All",
         latest_only: bool = True,
@@ -328,7 +328,7 @@ class CompletionsController(Controller):
     async def get_legacy_completions_per_map(
         self,
         svc: CompletionsService,
-        code: str,
+        code: OverwatchCode,
         page_number: int = 1,
         page_size: int = 10,
     ) -> list[CompletionResponse]:

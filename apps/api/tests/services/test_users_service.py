@@ -18,9 +18,9 @@ pytestmark = [
 class TestUsersServiceValidation:
     """Test validation logic in UsersService."""
 
-    async def test_create_user_valid_id_succeeds(self, mock_users_repo):
+    async def test_create_user_valid_id_succeeds(self, mock_pool, mock_state, mock_users_repo):
         """User ID >= 100000000 passes validation."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.create_user.return_value = None
 
         data = UserCreateRequest(
@@ -40,9 +40,9 @@ class TestUsersServiceValidation:
             global_name="Test User",
         )
 
-    async def test_create_user_invalid_id_raises_error(self, mock_users_repo):
+    async def test_create_user_invalid_id_raises_error(self, mock_pool, mock_state, mock_users_repo):
         """User ID < 100000000 raises InvalidUserIdError."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
 
         data = UserCreateRequest(
             id=99_999_999,
@@ -60,9 +60,9 @@ class TestUsersServiceValidation:
 class TestUsersServiceUserCreation:
     """Test user creation business logic."""
 
-    async def test_create_user_success_returns_response(self, mock_users_repo):
+    async def test_create_user_success_returns_response(self, mock_pool, mock_state, mock_users_repo):
         """Successful user creation returns UserResponse."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.create_user.return_value = None
 
         data = UserCreateRequest(
@@ -80,9 +80,9 @@ class TestUsersServiceUserCreation:
         assert result.overwatch_usernames == []
         assert result.coalesced_name == "newuser"
 
-    async def test_create_user_duplicate_raises_user_already_exists_error(self, mock_users_repo):
+    async def test_create_user_duplicate_raises_user_already_exists_error(self, mock_pool, mock_state, mock_users_repo):
         """Duplicate user ID raises UserAlreadyExistsError."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.create_user.side_effect = UniqueConstraintViolationError("users_pkey", "users")
 
         data = UserCreateRequest(
@@ -98,9 +98,11 @@ class TestUsersServiceUserCreation:
 class TestUsersServiceErrorTranslation:
     """Test repository exception translation to domain exceptions."""
 
-    async def test_create_user_unique_constraint_on_pkey_raises_user_already_exists(self, mock_users_repo):
+    async def test_create_user_unique_constraint_on_pkey_raises_user_already_exists(
+        self, mock_pool, mock_state, mock_users_repo
+    ):
         """UniqueConstraintViolationError on users_pkey raises UserAlreadyExistsError."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.create_user.side_effect = UniqueConstraintViolationError("users_pkey", "users")
 
         data = UserCreateRequest(
@@ -112,9 +114,9 @@ class TestUsersServiceErrorTranslation:
         with pytest.raises(UserAlreadyExistsError):
             await service.create_user(data)
 
-    async def test_create_user_unique_constraint_other_reraises(self, mock_users_repo):
+    async def test_create_user_unique_constraint_other_reraises(self, mock_pool, mock_state, mock_users_repo):
         """UniqueConstraintViolationError on other constraint re-raises."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.create_user.side_effect = UniqueConstraintViolationError("some_other_constraint", "users")
 
         data = UserCreateRequest(
@@ -130,9 +132,9 @@ class TestUsersServiceErrorTranslation:
 class TestUsersServiceOverwatchUsernames:
     """Test Overwatch username data transformation."""
 
-    async def test_get_overwatch_usernames_response_empty_list(self, mock_users_repo):
+    async def test_get_overwatch_usernames_response_empty_list(self, mock_pool, mock_state, mock_users_repo):
         """Empty username list returns all None."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.fetch_overwatch_usernames.return_value = []
 
         result = await service.get_overwatch_usernames_response(user_id=123)
@@ -142,9 +144,9 @@ class TestUsersServiceOverwatchUsernames:
         assert result.secondary is None
         assert result.tertiary is None
 
-    async def test_get_overwatch_usernames_response_one_username(self, mock_users_repo):
+    async def test_get_overwatch_usernames_response_one_username(self, mock_pool, mock_state, mock_users_repo):
         """One username sets primary only."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.fetch_overwatch_usernames.return_value = [
             {"username": "Player1", "is_primary": True},
         ]
@@ -155,9 +157,9 @@ class TestUsersServiceOverwatchUsernames:
         assert result.secondary is None
         assert result.tertiary is None
 
-    async def test_get_overwatch_usernames_response_two_usernames(self, mock_users_repo):
+    async def test_get_overwatch_usernames_response_two_usernames(self, mock_pool, mock_state, mock_users_repo):
         """Two usernames sets primary and secondary."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.fetch_overwatch_usernames.return_value = [
             {"username": "Player1", "is_primary": True},
             {"username": "Player2", "is_primary": False},
@@ -169,9 +171,9 @@ class TestUsersServiceOverwatchUsernames:
         assert result.secondary == "Player2"
         assert result.tertiary is None
 
-    async def test_get_overwatch_usernames_response_three_usernames(self, mock_users_repo):
+    async def test_get_overwatch_usernames_response_three_usernames(self, mock_pool, mock_state, mock_users_repo):
         """Three usernames sets all fields."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.fetch_overwatch_usernames.return_value = [
             {"username": "Player1", "is_primary": True},
             {"username": "Player2", "is_primary": False},
@@ -188,9 +190,9 @@ class TestUsersServiceOverwatchUsernames:
 class TestUsersServiceUpdateNames:
     """Test user name update logic with msgspec.UNSET handling."""
 
-    async def test_update_user_names_both_fields_set(self, mock_users_repo):
+    async def test_update_user_names_both_fields_set(self, mock_pool, mock_state, mock_users_repo):
         """Both nickname and global_name update when set."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.update_user_names.return_value = None
 
         data = UserUpdateRequest(
@@ -208,9 +210,9 @@ class TestUsersServiceUpdateNames:
             update_global_name=True,
         )
 
-    async def test_update_user_names_only_nickname_set(self, mock_users_repo):
+    async def test_update_user_names_only_nickname_set(self, mock_pool, mock_state, mock_users_repo):
         """Only nickname updates when global_name is UNSET."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.update_user_names.return_value = None
 
         data = UserUpdateRequest(nickname="newnick")
@@ -225,9 +227,9 @@ class TestUsersServiceUpdateNames:
             update_global_name=False,
         )
 
-    async def test_update_user_names_only_global_name_set(self, mock_users_repo):
+    async def test_update_user_names_only_global_name_set(self, mock_pool, mock_state, mock_users_repo):
         """Only global_name updates when nickname is UNSET."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.update_user_names.return_value = None
 
         data = UserUpdateRequest(global_name="New Global")
@@ -242,9 +244,9 @@ class TestUsersServiceUpdateNames:
             update_global_name=True,
         )
 
-    async def test_update_user_names_both_unset_does_nothing(self, mock_users_repo):
+    async def test_update_user_names_both_unset_does_nothing(self, mock_pool, mock_state, mock_users_repo):
         """When both fields are UNSET, no repository call is made."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
 
         data = UserUpdateRequest()
 
@@ -252,9 +254,9 @@ class TestUsersServiceUpdateNames:
 
         mock_users_repo.update_user_names.assert_not_called()
 
-    async def test_update_user_names_null_values_allowed(self, mock_users_repo):
+    async def test_update_user_names_null_values_allowed(self, mock_pool, mock_state, mock_users_repo):
         """Null values can be set explicitly."""
-        service = UsersService(mock_users_repo)
+        service = UsersService(mock_pool, mock_state, mock_users_repo)
         mock_users_repo.update_user_names.return_value = None
 
         data = UserUpdateRequest(nickname=None, global_name=None)

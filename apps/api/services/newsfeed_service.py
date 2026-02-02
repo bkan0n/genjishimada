@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Iterable
+from typing import Any, Awaitable, Callable, Iterable
 
 import msgspec
 from asyncpg import Pool
@@ -19,10 +19,8 @@ from genjishimada_sdk.newsfeed import (
 )
 from litestar.datastructures import Headers, State
 
+from repository.newsfeed_repository import NewsfeedRepository
 from services.base import BaseService
-
-if TYPE_CHECKING:
-    from repository.newsfeed_repository import NewsfeedRepository
 
 log = logging.getLogger(__name__)
 
@@ -377,7 +375,7 @@ class NewsfeedService(BaseService):
 
 
 async def provide_newsfeed_service(state: State) -> NewsfeedService:
-    """Provide NewsfeedService DI.
+    """Litestar DI provider for newsfeed service.
 
     Args:
         state: Application state.
@@ -385,7 +383,5 @@ async def provide_newsfeed_service(state: State) -> NewsfeedService:
     Returns:
         NewsfeedService instance.
     """
-    from repository.newsfeed_repository import NewsfeedRepository  # noqa: PLC0415
-
-    newsfeed_repo = NewsfeedRepository(state.db_pool)
-    return NewsfeedService(state.db_pool, state, newsfeed_repo)
+    newsfeed_repo = NewsfeedRepository(pool=state.db_pool)
+    return NewsfeedService(pool=state.db_pool, state=state, newsfeed_repo=newsfeed_repo)

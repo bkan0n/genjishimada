@@ -399,8 +399,11 @@ class NotificationsService(BaseService):
         )
 
 
-async def provide_notifications_service(state: State, users_repo: UsersRepository) -> NotificationsService:
-    """Provide NotificationsService DI.
+async def provide_notifications_service(
+    state: State,
+    users_repo: UsersRepository,
+) -> NotificationsService:
+    """Litestar DI provider for notifications service.
 
     Args:
         state: Application state.
@@ -409,7 +412,7 @@ async def provide_notifications_service(state: State, users_repo: UsersRepositor
     Returns:
         NotificationsService instance.
     """
-    from repository.notifications_repository import NotificationsRepository  # noqa: PLC0415
-
-    notifications_repo = NotificationsRepository(state.db_pool)
-    return NotificationsService(state.db_pool, state, notifications_repo, users_repo)
+    notifications_repo = NotificationsRepository(pool=state.db_pool)
+    return NotificationsService(
+        pool=state.db_pool, state=state, notifications_repo=notifications_repo, users_repo=users_repo
+    )
