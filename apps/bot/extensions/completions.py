@@ -533,12 +533,12 @@ class CompletionHandler(BaseHandler):
             f"`User ID`: {event.user_id}\n"
             f"`Name`: {event.extracted.name} in {event.submitted_user_names} {'✅' if event.user_match else '❌'}\n"
             f"`Code`: {event.extracted.code} == {event.submitted_code} {'✅' if event.code_match else '❌'}\n"
-            f"`Name`: {event.extracted.time} == {event.submitted_time} {'✅' if event.time_match else '❌'}\n"
+            f"`Time`: {event.extracted.time} == {event.submitted_time} {'✅' if event.time_match else '❌'}\n"
             f"`Extracted Raw`\n"
             "```json\n"
             f"{formatted_json}\n"
         )
-        await channel.send(content[:1997] + "```")
+        await channel.send(content[:1996] + "```")
 
     @queue_consumer("api.completion.upvote", struct_type=UpvoteUpdateEvent)
     async def _process_update_upvote_message(self, event: UpvoteUpdateEvent, _: AbstractIncomingMessage) -> None:
