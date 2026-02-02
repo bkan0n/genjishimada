@@ -323,10 +323,10 @@ class RabbitHandler:
             guild = self.bot.get_guild(self.bot.config.guild)
             if not guild:
                 raise RuntimeError("Why is there no guild")
-            content = f"### {dlq_name}\n<@141372217677053952>\n```json\n{msg.body}```"
+            content = f"### {dlq_name}\n<@141372217677053952>\n```json\n{msg.body}"
             alert_channel = guild.get_channel(self.bot.config.channels.updates.dlq_alerts)
             assert isinstance(alert_channel, TextChannel)
-            await alert_channel.send(content)
+            await alert_channel.send(content[:1996] + "```")
 
             # Republish a *copy* with the header set, then ack the original.
             new_headers = {**headers, DLQ_HEADER_KEY: True, "dlq_notified_at": int(time.time())}
