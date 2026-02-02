@@ -16,49 +16,15 @@ from genjishimada_sdk.notifications import (
     ShouldDeliverResponse,
 )
 from litestar import Controller, Request, get, patch, post, put
-from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.params import Parameter
 from litestar.status_codes import HTTP_201_CREATED, HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 
-from repository.notifications_repository import NotificationsRepository
-from repository.users_repository import UsersRepository, provide_users_repository
+from repository.users_repository import provide_users_repository
 from services.exceptions.notifications import NotificationEventNotFoundError
 from services.exceptions.users import UserNotFoundError
-from services.notifications_service import NotificationsService
+from services.notifications_service import NotificationsService, provide_notifications_service
 from utilities.errors import CustomHTTPException
-
-
-async def provide_notifications_repository(state: State) -> NotificationsRepository:
-    """Litestar DI provider for notifications repository.
-
-    Args:
-        state: Application state.
-
-    Returns:
-        Repository instance.
-    """
-    return NotificationsRepository(pool=state.db_pool)
-
-
-async def provide_notifications_service(
-    state: State,
-    notifications_repo: NotificationsRepository,
-    users_repo: UsersRepository,
-) -> NotificationsService:
-    """Litestar DI provider for notifications service.
-
-    Args:
-        state: Application state.
-        notifications_repo: Notifications repository instance.
-        users_repo: Users repository instance.
-
-    Returns:
-        Service instance.
-    """
-    return NotificationsService(
-        pool=state.db_pool, state=state, notifications_repo=notifications_repo, users_repo=users_repo
-    )
 
 
 class NotificationsController(Controller):
@@ -67,7 +33,6 @@ class NotificationsController(Controller):
     tags = ["Notifications"]
     path = "/notifications"
     dependencies = {
-        "notifications_repo": Provide(provide_notifications_repository),
         "notifications_service": Provide(provide_notifications_service),
         "users_repo": Provide(provide_users_repository),
     }

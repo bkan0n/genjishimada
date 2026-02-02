@@ -14,41 +14,14 @@ from genjishimada_sdk.lootbox import (
 )
 from genjishimada_sdk.maps import XPMultiplierRequest
 from genjishimada_sdk.xp import TierChangeResponse, XpGrantRequest, XpGrantResponse
-from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.params import Body
 from litestar.response import Response
 from litestar.status_codes import HTTP_200_OK, HTTP_204_NO_CONTENT, HTTP_400_BAD_REQUEST
 
-from repository.lootbox_repository import LootboxRepository
 from services.exceptions.lootbox import InsufficientKeysError
-from services.lootbox_service import LootboxService
+from services.lootbox_service import LootboxService, provide_lootbox_service
 from utilities.errors import CustomHTTPException
-
-
-async def provide_lootbox_repository(state: State) -> LootboxRepository:
-    """Provide lootbox repository.
-
-    Args:
-        state: Application state.
-
-    Returns:
-        LootboxRepository instance.
-    """
-    return LootboxRepository(pool=state.db_pool)
-
-
-async def provide_lootbox_service(state: State, lootbox_repo: LootboxRepository) -> LootboxService:
-    """Provide lootbox service.
-
-    Args:
-        state: Application state.
-        lootbox_repo: Lootbox repository instance.
-
-    Returns:
-        LootboxService instance.
-    """
-    return LootboxService(pool=state.db_pool, state=state, lootbox_repo=lootbox_repo)
 
 
 class LootboxController(litestar.Controller):
@@ -57,7 +30,6 @@ class LootboxController(litestar.Controller):
     tags = ["Lootbox"]
     path = "/lootbox"
     dependencies = {
-        "lootbox_repo": Provide(provide_lootbox_repository),
         "lootbox_service": Provide(provide_lootbox_service),
     }
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import random
-from typing import TYPE_CHECKING
 
 import msgspec
 from asyncpg import Pool
@@ -19,11 +18,9 @@ from genjishimada_sdk.xp import TierChangeResponse, XpGrantEvent, XpGrantRequest
 from litestar.datastructures import State
 from litestar.datastructures.headers import Headers
 
+from repository.lootbox_repository import LootboxRepository
 from services.base import BaseService
 from services.exceptions.lootbox import InsufficientKeysError
-
-if TYPE_CHECKING:
-    from repository.lootbox_repository import LootboxRepository
 
 log = logging.getLogger(__name__)
 
@@ -481,7 +478,7 @@ class LootboxService(BaseService):
 
 
 async def provide_lootbox_service(state: State) -> LootboxService:
-    """Provide LootboxService DI.
+    """Litestar DI provider for lootbox service.
 
     Args:
         state: Application state.
@@ -489,7 +486,5 @@ async def provide_lootbox_service(state: State) -> LootboxService:
     Returns:
         LootboxService instance.
     """
-    from repository.lootbox_repository import LootboxRepository  # noqa: PLC0415
-
-    lootbox_repo = LootboxRepository(state.db_pool)
-    return LootboxService(state.db_pool, state, lootbox_repo)
+    lootbox_repo = LootboxRepository(pool=state.db_pool)
+    return LootboxService(pool=state.db_pool, state=state, lootbox_repo=lootbox_repo)
