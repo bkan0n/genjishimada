@@ -537,9 +537,8 @@ class CompletionHandler(BaseHandler):
             f"`Extracted Raw`\n"
             "```json\n"
             f"{formatted_json}\n"
-            "```"
         )
-        await channel.send(content)
+        await channel.send(content[:1997] + "```")
 
     @queue_consumer("api.completion.upvote", struct_type=UpvoteUpdateEvent)
     async def _process_update_upvote_message(self, event: UpvoteUpdateEvent, _: AbstractIncomingMessage) -> None:
