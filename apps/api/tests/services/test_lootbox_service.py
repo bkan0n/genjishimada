@@ -266,10 +266,10 @@ class TestLootboxServiceGrantReward:
         assert result.name == "Test Avatar"
         assert result.rarity == "epic"
 
-    async def test_grant_reward_deletes_key(
+    async def test_grant_reward_does_not_consume_key(
         self, mock_pool, mock_state, mock_lootbox_repo
     ):
-        """grant_reward_to_user deletes oldest key."""
+        """grant_reward_to_user does NOT consume a key (key consumed in get_random_items)."""
         service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
 
         mock_lootbox_repo.check_user_has_reward.return_value = None
@@ -284,10 +284,8 @@ class TestLootboxServiceGrantReward:
             reward_name="Test",
         )
 
-        # Should delete key before granting reward
-        mock_lootbox_repo.delete_oldest_user_key.assert_called_once_with(
-            123456789, "Winter", conn=ANY
-        )
+        # Should NOT delete key - key consumption happens in get_random_items
+        mock_lootbox_repo.delete_oldest_user_key.assert_not_called()
 
     async def test_grant_reward_duplicate_coin_values(
         self, mock_pool, mock_state, mock_lootbox_repo

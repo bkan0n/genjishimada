@@ -206,10 +206,13 @@ class LootboxService(BaseService):
     ) -> RewardTypeResponse:
         """Grant a specific reward to a user.
 
+        Note: This method does NOT consume a key. Key consumption happens
+        in get_random_items when the user previews rewards. This method
+        only grants the chosen reward.
+
         Uses transaction to:
-        1. Delete one key from user
-        2. Check if user already has the reward
-        3. If duplicate, grant coins; else grant reward
+        1. Check if user already has the reward
+        2. If duplicate, grant coins; else grant reward
 
         Args:
             user_id: Target user ID.
@@ -219,16 +222,8 @@ class LootboxService(BaseService):
 
         Returns:
             Reward response with duplicate flag and coin amount.
-
-        Raises:
-            InsufficientKeysError: If user has no keys to consume.
         """
         async with self._pool.acquire() as conn, conn.transaction():
-            # Delete oldest key - raises error if no key exists
-            key_deleted = await self._lootbox_repo.delete_oldest_user_key(user_id, key_type, conn=conn)  # type: ignore[arg-type]
-            if not key_deleted:
-                raise InsufficientKeysError(key_type)
-
             # Check for duplicate
             rarity = await self._lootbox_repo.check_user_has_reward(
                 user_id=user_id,

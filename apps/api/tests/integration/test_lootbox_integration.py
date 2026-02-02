@@ -167,15 +167,17 @@ class TestDrawRandomRewards:
 
 
 class TestGrantRewardToUser:
-    """POST /api/v3/lootbox/users/{user_id}/{key_type}/{reward_type}/{reward_name}"""
+    """POST /api/v3/lootbox/users/{user_id}/{key_type}/{reward_type}/{reward_name}
 
-    async def test_grant_reward_with_key_succeeds(self, test_client, create_test_user):
-        """Grant reward with key succeeds."""
+    Note: This endpoint does NOT consume keys. Key consumption happens in
+    get_random_items (preview endpoint). This endpoint only grants the chosen reward.
+    """
+
+    async def test_grant_reward_succeeds(self, test_client, create_test_user):
+        """Grant reward succeeds without needing a key (key consumed in preview)."""
         user_id = await create_test_user()
 
-        # Grant user a key first
-        await test_client.post(f"/api/v3/lootbox/users/{user_id}/keys/Classic")
-
+        # No key needed - key consumption happens in get_random_items
         # Use actual reward from migrations: "God Of War" spray
         response = await test_client.post(
             f"/api/v3/lootbox/users/{user_id}/Classic/spray/God Of War"
@@ -188,25 +190,11 @@ class TestGrantRewardToUser:
         assert data["type"] == "spray"
         assert data["key_type"] == "Classic"
 
-    async def test_grant_reward_without_keys_returns_error(self, test_client, create_test_user):
-        """Grant reward without keys returns 400."""
-        user_id = await create_test_user()
-
-        # Use actual reward from migrations: "God Of War" spray
-        response = await test_client.post(
-            f"/api/v3/lootbox/users/{user_id}/Classic/spray/God Of War"
-        )
-
-        # Should fail due to insufficient keys
-        assert response.status_code == 400
-
     async def test_grant_duplicate_reward_returns_coins(self, test_client, create_test_user):
         """Grant same reward twice - second time returns coins instead."""
         user_id = await create_test_user()
 
-        # Grant user 2 keys
-        await test_client.post(f"/api/v3/lootbox/users/{user_id}/keys/Classic")
-        await test_client.post(f"/api/v3/lootbox/users/{user_id}/keys/Classic")
+        # No keys needed - key consumption happens in get_random_items
 
         # Grant reward first time - should succeed and not be duplicate
         response1 = await test_client.post(
