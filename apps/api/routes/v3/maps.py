@@ -396,7 +396,8 @@ class MapsController(Controller):
         Raises:
             CustomHTTPException: 400 if code format invalid.
         """
-        # Validate code format
+        # Validate code format explicitly since this endpoint is designed
+        # to validate and check if a code exists
         if not re.match(r"^[A-Z0-9]{4,6}$", code):
             raise CustomHTTPException(
                 detail="Provided code is not valid. Must follow regex ^[A-Z0-9]{4,6}$",
