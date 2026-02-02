@@ -19,6 +19,7 @@ from litestar.params import Body
 from litestar.response import Response
 from litestar.status_codes import HTTP_200_OK, HTTP_204_NO_CONTENT, HTTP_400_BAD_REQUEST
 
+from repository.lootbox_repository import provide_lootbox_repository
 from services.exceptions.lootbox import InsufficientKeysError
 from services.lootbox_service import LootboxService, provide_lootbox_service
 from utilities.errors import CustomHTTPException
@@ -30,6 +31,7 @@ class LootboxController(litestar.Controller):
     tags = ["Lootbox"]
     path = "/lootbox"
     dependencies = {
+        "lootbox_repo": Provide(provide_lootbox_repository),
         "lootbox_service": Provide(provide_lootbox_service),
     }
 

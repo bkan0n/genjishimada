@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 import msgspec
-from asyncpg import Connection
+from asyncpg import Connection, Pool
 from genjishimada_sdk.users import (
     OverwatchUsernameItem,
     OverwatchUsernamesResponse,
@@ -14,6 +14,7 @@ from genjishimada_sdk.users import (
     UserResponse,
     UserUpdateRequest,
 )
+from litestar.datastructures import State
 
 from repository.exceptions import UniqueConstraintViolationError
 from repository.users_repository import UsersRepository
@@ -27,12 +28,15 @@ log = logging.getLogger(__name__)
 class UsersService(BaseService):
     """Service for users domain business logic."""
 
-    def __init__(self, users_repo: UsersRepository) -> None:
+    def __init__(self, pool: Pool, state: State, users_repo: UsersRepository) -> None:
         """Initialize service.
 
         Args:
+            pool: Database connection pool.
+            state: Application state.
             users_repo: Users repository instance.
         """
+        super().__init__(pool, state)
         self._users_repo = users_repo
 
     async def check_if_user_is_creator(self, user_id: int) -> bool:
@@ -258,13 +262,14 @@ class UsersService(BaseService):
             await self._users_repo.delete_user(user_id=fake_user_id, conn=conn)
 
 
-async def provide_users_service(users_repo: UsersRepository) -> UsersService:
-    """Provide users service.
+async def provide_users_service(state: State, users_repo: UsersRepository) -> UsersService:
+    """Litestar DI provider for users service.
 
     Args:
+        state: Application state.
         users_repo: Users repository instance.
 
     Returns:
         UsersService instance.
     """
-    return UsersService(users_repo=users_repo)
+    return UsersService(pool=state.db_pool, state=state, users_repo=users_repo)
