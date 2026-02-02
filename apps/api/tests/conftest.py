@@ -85,6 +85,26 @@ async def asyncpg_conn(postgres_service: PostgresService) -> AsyncIterator[async
     await conn.close()
 
 
+@pytest.fixture(scope="function")
+async def asyncpg_pool(postgres_service: PostgresService) -> AsyncIterator[asyncpg.Pool]:
+    """Shared asyncpg pool for factory fixtures within a single test.
+
+    Uses small pool size to limit connections. Each test gets its own pool
+    that is shared across all factory fixture calls within that test.
+    """
+    pool = await asyncpg.create_pool(
+        user=postgres_service.user,
+        password=postgres_service.password,
+        host=postgres_service.host,
+        port=postgres_service.port,
+        database=postgres_service.database,
+        min_size=1,
+        max_size=3,
+    )
+    yield pool
+    await pool.close()
+
+
 @pytest.fixture
 async def test_client(postgres_service: PostgresService) -> AsyncIterator[AsyncTestClient[Litestar]]:
     """Create async test client with database connection and required headers."""
@@ -280,7 +300,7 @@ def unique_ip_hash(global_ip_hash_tracker: set[str]) -> str:
 
 @pytest.fixture
 async def create_test_map(
-    postgres_service: PostgresService,
+    asyncpg_pool: asyncpg.Pool,
     global_code_tracker: set[str],
     global_user_id_tracker: set[int],
 ):
@@ -342,126 +362,116 @@ async def create_test_map(
         raw_min, raw_max = difficulties.DIFFICULTY_RANGES_ALL[difficulty]
         data["raw_difficulty"] = fake.pyfloat(min_value=raw_min, max_value=raw_max - 0.1, right_digits=2)
 
-        pool = await asyncpg.create_pool(
-            user=postgres_service.user,
-            password=postgres_service.password,
-            host=postgres_service.host,
-            port=postgres_service.port,
-            database=postgres_service.database,
-        )
-        try:
-            async with pool.acquire() as conn:
-                # Create core map
-                map_id = await conn.fetchval(
-                    """
-                    INSERT INTO core.maps (
-                        code, map_name, category, checkpoints, official,
-                        playtesting, difficulty, raw_difficulty, hidden, archived
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                    RETURNING id
-                    """,
-                    code,
-                    data["map_name"],
-                    data["category"],
-                    data["checkpoints"],
-                    data["official"],
-                    data["playtesting"],
-                    data["difficulty"],
-                    data["raw_difficulty"],
-                    data["hidden"],
-                    data["archived"],
+        async with asyncpg_pool.acquire() as conn:
+            # Create core map
+            map_id = await conn.fetchval(
+                """
+                INSERT INTO core.maps (
+                    code, map_name, category, checkpoints, official,
+                    playtesting, difficulty, raw_difficulty, hidden, archived
                 )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                RETURNING id
+                """,
+                code,
+                data["map_name"],
+                data["category"],
+                data["checkpoints"],
+                data["official"],
+                data["playtesting"],
+                data["difficulty"],
+                data["raw_difficulty"],
+                data["hidden"],
+                data["archived"],
+            )
 
-                # Create primary creator
-                if creator_id is None:
-                    # Generate unique user ID
-                    while True:
-                        creator_id = fake.random_int(min=100000000000000000, max=999999999999999999)
-                        if creator_id not in global_user_id_tracker:
-                            global_user_id_tracker.add(creator_id)
-                            break
+            # Create primary creator
+            if creator_id is None:
+                # Generate unique user ID
+                while True:
+                    creator_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+                    if creator_id not in global_user_id_tracker:
+                        global_user_id_tracker.add(creator_id)
+                        break
 
-                    # Create user
-                    await conn.execute(
-                        """
-                        INSERT INTO core.users (id, nickname, global_name)
-                        VALUES ($1, $2, $3)
-                        """,
-                        creator_id,
-                        fake.user_name(),
-                        fake.user_name(),
-                    )
-
-                # Link creator to map
+                # Create user
                 await conn.execute(
                     """
-                    INSERT INTO maps.creators (map_id, user_id, is_primary)
+                    INSERT INTO core.users (id, nickname, global_name)
                     VALUES ($1, $2, $3)
                     """,
-                    map_id,
                     creator_id,
-                    True,
+                    fake.user_name(),
+                    fake.user_name(),
                 )
 
-                # Link mechanics if provided
-                if mechanics:
-                    for mechanic_id in mechanics:
-                        await conn.execute(
-                            """
-                            INSERT INTO maps.mechanic_links (map_id, mechanic_id)
-                            VALUES ($1, $2)
-                            """,
-                            map_id,
-                            mechanic_id,
-                        )
+            # Link creator to map
+            await conn.execute(
+                """
+                INSERT INTO maps.creators (map_id, user_id, is_primary)
+                VALUES ($1, $2, $3)
+                """,
+                map_id,
+                creator_id,
+                True,
+            )
 
-                # Link restrictions if provided
-                if restrictions:
-                    for restriction_id in restrictions:
-                        await conn.execute(
-                            """
-                            INSERT INTO maps.restriction_links (map_id, restriction_id)
-                            VALUES ($1, $2)
-                            """,
-                            map_id,
-                            restriction_id,
-                        )
-
-                # Link tags if provided
-                if tags:
-                    for tag_id in tags:
-                        await conn.execute(
-                            """
-                            INSERT INTO maps.tag_links (map_id, tag_id)
-                            VALUES ($1, $2)
-                            """,
-                            map_id,
-                            tag_id,
-                        )
-
-                # Create medals if provided
-                if medals:
+            # Link mechanics if provided
+            if mechanics:
+                for mechanic_id in mechanics:
                     await conn.execute(
                         """
-                        INSERT INTO maps.medals (map_id, gold, silver, bronze)
-                        VALUES ($1, $2, $3, $4)
+                        INSERT INTO maps.mechanic_links (map_id, mechanic_id)
+                        VALUES ($1, $2)
                         """,
                         map_id,
-                        medals.get("gold"),
-                        medals.get("silver"),
-                        medals.get("bronze"),
+                        mechanic_id,
                     )
 
-            return map_id
-        finally:
-            await pool.close()
+            # Link restrictions if provided
+            if restrictions:
+                for restriction_id in restrictions:
+                    await conn.execute(
+                        """
+                        INSERT INTO maps.restriction_links (map_id, restriction_id)
+                        VALUES ($1, $2)
+                        """,
+                        map_id,
+                        restriction_id,
+                    )
+
+            # Link tags if provided
+            if tags:
+                for tag_id in tags:
+                    await conn.execute(
+                        """
+                        INSERT INTO maps.tag_links (map_id, tag_id)
+                        VALUES ($1, $2)
+                        """,
+                        map_id,
+                        tag_id,
+                    )
+
+            # Create medals if provided
+            if medals:
+                await conn.execute(
+                    """
+                    INSERT INTO maps.medals (map_id, gold, silver, bronze)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    map_id,
+                    medals.get("gold"),
+                    medals.get("silver"),
+                    medals.get("bronze"),
+                )
+
+        return map_id
 
     return _create
 
 
 @pytest.fixture
-async def create_test_user(postgres_service: PostgresService, global_user_id_tracker: set[int]):
+async def create_test_user(asyncpg_pool: asyncpg.Pool, global_user_id_tracker: set[int]):
     """Factory fixture for creating test users.
 
     Returns a function that creates a user with optional nickname.
@@ -482,33 +492,23 @@ async def create_test_user(postgres_service: PostgresService, global_user_id_tra
                 global_user_id_tracker.add(user_id)
                 break
 
-        pool = await asyncpg.create_pool(
-            user=postgres_service.user,
-            password=postgres_service.password,
-            host=postgres_service.host,
-            port=postgres_service.port,
-            database=postgres_service.database,
-        )
-        try:
-            async with pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    INSERT INTO core.users (id, nickname, global_name)
-                    VALUES ($1, $2, $3)
-                    """,
-                    user_id,
-                    nickname,
-                    nickname,
-                )
-            return user_id
-        finally:
-            await pool.close()
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO core.users (id, nickname, global_name)
+                VALUES ($1, $2, $3)
+                """,
+                user_id,
+                nickname,
+                nickname,
+            )
+        return user_id
 
     return _create
 
 
 @pytest.fixture
-async def create_test_playtest(postgres_service: PostgresService, global_thread_id_tracker: set[int]):
+async def create_test_playtest(asyncpg_pool: asyncpg.Pool, global_thread_id_tracker: set[int]):
     """Factory fixture for creating test playtest metadata.
 
     Returns a function that creates a playtest with the given map_id and optional thread_id.
@@ -537,38 +537,28 @@ async def create_test_playtest(postgres_service: PostgresService, global_thread_
         # Apply overrides
         data.update(overrides)
 
-        pool = await asyncpg.create_pool(
-            user=postgres_service.user,
-            password=postgres_service.password,
-            host=postgres_service.host,
-            port=postgres_service.port,
-            database=postgres_service.database,
-        )
-        try:
-            async with pool.acquire() as conn:
-                playtest_id = await conn.fetchval(
-                    """
-                    INSERT INTO playtests.meta (
-                        thread_id, map_id, verification_id, initial_difficulty, completed
-                    )
-                    VALUES ($1, $2, $3, $4, $5)
-                    RETURNING id
-                    """,
-                    thread_id,
-                    map_id,
-                    data["verification_id"],
-                    data["initial_difficulty"],
-                    data["completed"],
+        async with asyncpg_pool.acquire() as conn:
+            playtest_id = await conn.fetchval(
+                """
+                INSERT INTO playtests.meta (
+                    thread_id, map_id, verification_id, initial_difficulty, completed
                 )
-            return playtest_id
-        finally:
-            await pool.close()
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id
+                """,
+                thread_id,
+                map_id,
+                data["verification_id"],
+                data["initial_difficulty"],
+                data["completed"],
+            )
+        return playtest_id
 
     return _create
 
 
 @pytest.fixture
-async def create_test_completion(postgres_service: PostgresService):
+async def create_test_completion(asyncpg_pool: asyncpg.Pool):
     """Factory fixture for creating test completions.
 
     Returns a function that creates a verified completion for a user and map.
@@ -591,40 +581,30 @@ async def create_test_completion(postgres_service: PostgresService):
         # Apply overrides
         data.update(overrides)
 
-        pool = await asyncpg.create_pool(
-            user=postgres_service.user,
-            password=postgres_service.password,
-            host=postgres_service.host,
-            port=postgres_service.port,
-            database=postgres_service.database,
-        )
-        try:
-            async with pool.acquire() as conn:
-                completion_id = await conn.fetchval(
-                    """
-                    INSERT INTO core.completions (
-                        user_id, map_id, verified, legacy, time, screenshot, completion
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    RETURNING id
-                    """,
-                    user_id,
-                    map_id,
-                    data["verified"],
-                    data["legacy"],
-                    data["time"],
-                    data["screenshot"],
-                    data["completion"],
+        async with asyncpg_pool.acquire() as conn:
+            completion_id = await conn.fetchval(
+                """
+                INSERT INTO core.completions (
+                    user_id, map_id, verified, legacy, time, screenshot, completion
                 )
-            return completion_id
-        finally:
-            await pool.close()
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING id
+                """,
+                user_id,
+                map_id,
+                data["verified"],
+                data["legacy"],
+                data["time"],
+                data["screenshot"],
+                data["completion"],
+            )
+        return completion_id
 
     return _create
 
 
 @pytest.fixture
-async def create_test_vote(postgres_service: PostgresService):
+async def create_test_vote(asyncpg_pool: asyncpg.Pool):
     """Factory fixture for creating test playtest votes.
 
     Returns a function that creates a vote for a playtest.
@@ -643,30 +623,20 @@ async def create_test_vote(postgres_service: PostgresService):
         # Apply overrides
         data.update(overrides)
 
-        pool = await asyncpg.create_pool(
-            user=postgres_service.user,
-            password=postgres_service.password,
-            host=postgres_service.host,
-            port=postgres_service.port,
-            database=postgres_service.database,
-        )
-        try:
-            async with pool.acquire() as conn:
-                vote_id = await conn.fetchval(
-                    """
-                    INSERT INTO playtests.votes (
-                        user_id, map_id, playtest_thread_id, difficulty
-                    )
-                    VALUES ($1, $2, $3, $4)
-                    RETURNING id
-                    """,
-                    user_id,
-                    map_id,
-                    thread_id,
-                    data["difficulty"],
+        async with asyncpg_pool.acquire() as conn:
+            vote_id = await conn.fetchval(
+                """
+                INSERT INTO playtests.votes (
+                    user_id, map_id, playtest_thread_id, difficulty
                 )
-            return vote_id
-        finally:
-            await pool.close()
+                VALUES ($1, $2, $3, $4)
+                RETURNING id
+                """,
+                user_id,
+                map_id,
+                thread_id,
+                data["difficulty"],
+            )
+        return vote_id
 
     return _create
