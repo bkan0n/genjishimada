@@ -41,32 +41,35 @@ class TestLootboxServiceGacha:
         assert counts["common"] > counts["legendary"]
 
 
-class TestLootboxServiceKeyValidation:
-    """Test key count validation."""
+class TestLootboxServiceGetRandomItems:
+    """Test get_random_items preview behavior."""
 
-    async def test_get_random_items_insufficient_keys(
+    async def test_get_random_items_no_keys_raises_error(
         self, mock_pool, mock_state, mock_lootbox_repo
     ):
-        """Raises InsufficientKeysError when user has insufficient keys."""
+        """Raises InsufficientKeysError when user has no keys."""
         service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
 
-        mock_lootbox_repo.fetch_user_key_count.return_value = 1  # User has 1 key
+        # No key to delete
+        mock_lootbox_repo.delete_oldest_user_key.return_value = False
 
         with pytest.raises(InsufficientKeysError):
             await service.get_random_items(
                 user_id=123456789,
                 key_type="Classic",
-                amount=3,  # Requesting 3 keys
                 test_mode=False,
             )
 
-    async def test_get_random_items_sufficient_keys(
-        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+        # Should have tried to delete one key
+        mock_lootbox_repo.delete_oldest_user_key.assert_called_once()
+
+    async def test_get_random_items_consumes_one_key(
+        self, mock_pool, mock_state, mock_lootbox_repo
     ):
-        """Does not raise when user has sufficient keys."""
+        """Consumes exactly one key regardless of amount parameter."""
         service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
 
-        mock_lootbox_repo.fetch_user_key_count.return_value = 5  # User has 5 keys
+        mock_lootbox_repo.delete_oldest_user_key.return_value = True
         mock_lootbox_repo.fetch_random_reward.return_value = {
             "name": "Test Reward",
             "type": "avatar",
@@ -75,7 +78,6 @@ class TestLootboxServiceKeyValidation:
             "coin_amount": 0,
         }
 
-        # Should not raise
         result = await service.get_random_items(
             user_id=123456789,
             key_type="Classic",
@@ -83,13 +85,72 @@ class TestLootboxServiceKeyValidation:
             test_mode=False,
         )
 
+        # Should return 3 rewards
         assert len(result) == 3
-        mock_lootbox_repo.fetch_user_key_count.assert_called_once_with(123456789, "Classic")
 
-    async def test_get_random_items_test_mode_skips_validation(
-        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+        # Should only consume ONE key at the start
+        mock_lootbox_repo.delete_oldest_user_key.assert_called_once_with(
+            123456789, "Classic", conn=ANY
+        )
+
+    async def test_get_random_items_does_not_grant_rewards(
+        self, mock_pool, mock_state, mock_lootbox_repo
     ):
-        """Test mode skips key validation."""
+        """Does not grant rewards or coins (preview only)."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.delete_oldest_user_key.return_value = True
+        mock_lootbox_repo.fetch_random_reward.return_value = {
+            "name": "Test Reward",
+            "type": "avatar",
+            "rarity": "common",
+            "duplicate": False,
+            "coin_amount": 0,
+        }
+
+        await service.get_random_items(
+            user_id=123456789,
+            key_type="Classic",
+            test_mode=False,
+        )
+
+        # Should NOT grant any rewards
+        mock_lootbox_repo.insert_user_reward.assert_not_called()
+        mock_lootbox_repo.add_user_coins.assert_not_called()
+
+    async def test_get_random_items_does_not_grant_coins_for_duplicates(
+        self, mock_pool, mock_state, mock_lootbox_repo
+    ):
+        """Does not grant coins even for duplicate rewards (preview only)."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.delete_oldest_user_key.return_value = True
+        mock_lootbox_repo.fetch_random_reward.return_value = {
+            "name": "Test Reward",
+            "type": "avatar",
+            "rarity": "rare",
+            "duplicate": True,  # This is a duplicate
+            "coin_amount": 250,
+        }
+
+        result = await service.get_random_items(
+            user_id=123456789,
+            key_type="Classic",
+            test_mode=False,
+        )
+
+        # Should return rewards with duplicate info
+        assert len(result) == 3
+        assert all(r.duplicate is True for r in result)
+        assert all(r.coin_amount == 250 for r in result)
+
+        # But should NOT grant coins
+        mock_lootbox_repo.add_user_coins.assert_not_called()
+
+    async def test_get_random_items_test_mode_skips_key_consumption(
+        self, mock_pool, mock_state, mock_lootbox_repo
+    ):
+        """Test mode skips key consumption."""
         service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
 
         mock_lootbox_repo.fetch_random_reward.return_value = {
@@ -100,16 +161,40 @@ class TestLootboxServiceKeyValidation:
             "coin_amount": 0,
         }
 
-        # Should not check keys in test mode
         result = await service.get_random_items(
             user_id=123456789,
             key_type="Classic",
-            amount=3,
             test_mode=True,
         )
 
         assert len(result) == 3
-        mock_lootbox_repo.fetch_user_key_count.assert_not_called()
+        # Should NOT try to delete any keys
+        mock_lootbox_repo.delete_oldest_user_key.assert_not_called()
+
+    async def test_get_random_items_always_returns_three_rewards(
+        self, mock_pool, mock_state, mock_lootbox_repo
+    ):
+        """Always returns 3 rewards regardless of amount parameter."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.delete_oldest_user_key.return_value = True
+        mock_lootbox_repo.fetch_random_reward.return_value = {
+            "name": "Test Reward",
+            "type": "avatar",
+            "rarity": "common",
+            "duplicate": False,
+            "coin_amount": 0,
+        }
+
+        # Even with amount=1, should return 3 rewards
+        result = await service.get_random_items(
+            user_id=123456789,
+            key_type="Classic",
+            amount=1,  # This is ignored
+            test_mode=False,
+        )
+
+        assert len(result) == 3
 
 
 class TestLootboxServiceGrantReward:

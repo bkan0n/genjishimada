@@ -284,43 +284,43 @@ class LootboxService(BaseService):
         self,
         user_id: int,
         key_type: LootboxKeyType,
-        amount: int,
+        amount: int = 3,
         test_mode: bool = False,
     ) -> list[RewardTypeResponse]:
-        """Get random rewards using gacha system.
+        """Get random rewards as a preview (no granting).
 
-        Validates key count unless test_mode is True.
-        Uses transaction to:
-        1. Perform gacha for each amount
-        2. Fetch random reward from database
-        3. Delete key and grant reward or coins
+        Consumes one key and returns 3 random rewards for user to choose from.
+        Call grant_reward_to_user to actually claim one of the rewards.
 
         Args:
             user_id: Target user ID.
             key_type: Key type to use.
-            amount: Number of items to grant (1-3).
-            test_mode: If True, skip key validation.
+            amount: Ignored, always generates 3 rewards.
+            test_mode: If True, skip key consumption.
 
         Returns:
-            List of granted rewards.
+            List of 3 random rewards (preview only, not granted).
 
         Raises:
-            InsufficientKeysError: If user has insufficient keys.
+            InsufficientKeysError: If user has no keys to consume.
         """
-        # Validation: check key count
-        if not test_mode:
-            key_count = await self._lootbox_repo.fetch_user_key_count(user_id, key_type)
-            if key_count < amount:
-                raise InsufficientKeysError(key_type)
-
         results: list[RewardTypeResponse] = []
 
         async with self._pool.acquire() as conn, conn.transaction():
-            for _ in range(amount):
-                # Perform gacha
+            # Consume ONE key upfront (skip in test mode)
+            if not test_mode:
+                key_deleted = await self._lootbox_repo.delete_oldest_user_key(
+                    user_id,
+                    key_type,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if not key_deleted:
+                    raise InsufficientKeysError(key_type)
+
+            # Generate 3 random rewards (preview only, no granting)
+            for _ in range(3):
                 rarity = self._perform_gacha()
 
-                # Fetch random reward from database
                 reward_row = await self._lootbox_repo.fetch_random_reward(
                     rarity=rarity,
                     key_type=key_type,
@@ -332,36 +332,15 @@ class LootboxService(BaseService):
                     log.warning(f"No reward found for rarity={rarity}, key_type={key_type}")
                     continue
 
-                # Delete oldest key (skip in test mode)
-                if not test_mode:
-                    await self._lootbox_repo.delete_oldest_user_key(user_id, key_type, conn=conn)  # type: ignore[arg-type]
-
-                # Check if duplicate
-                is_duplicate = reward_row.get("duplicate", False)
-                coin_amount = reward_row.get("coin_amount", 0)
-
-                if is_duplicate:
-                    # Grant coins
-                    await self._lootbox_repo.add_user_coins(user_id, coin_amount, conn=conn)  # type: ignore[arg-type]
-                else:
-                    # Grant reward
-                    await self._lootbox_repo.insert_user_reward(
-                        user_id=user_id,
-                        reward_type=reward_row["type"],
-                        key_type=key_type,
-                        reward_name=reward_row["name"],
-                        conn=conn,  # type: ignore[arg-type]
-                    )
-
-                # Build response
+                # Build response (NO granting here!)
                 results.append(
                     RewardTypeResponse(
                         name=reward_row["name"],
                         key_type=key_type,
                         rarity=reward_row["rarity"],
                         type=reward_row["type"],
-                        duplicate=is_duplicate,
-                        coin_amount=coin_amount,
+                        duplicate=reward_row.get("duplicate", False),
+                        coin_amount=reward_row.get("coin_amount", 0),
                     )
                 )
 
