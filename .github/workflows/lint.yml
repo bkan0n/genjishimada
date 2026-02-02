@@ -5,9 +5,6 @@ on:
     branches:
       - main
       - dev
-  push:
-    branches:
-      - main
   workflow_call:
     inputs:
       ref:
@@ -60,7 +57,7 @@ jobs:
       - name: Basedpyright API
         id: pyright-api
         continue-on-error: true
-        working-directory: apps/api                                                                                                                                                                                                                                                        
+        working-directory: apps/api
         run: uv run basedpyright .
 
       - name: Basedpyright Bot
