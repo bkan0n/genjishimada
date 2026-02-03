@@ -11,7 +11,7 @@ from genjishimada_sdk.newsfeed import (
     NewsfeedFieldChange,
     NewsfeedMapEdit,
 )
-from genjishimada_sdk.users import CreatorFull
+from genjishimada_sdk.users import Creator, CreatorFull
 from litestar.datastructures import Headers
 
 from services.newsfeed_service import (
@@ -19,6 +19,7 @@ from services.newsfeed_service import (
     _friendly_value,
     _labelize,
     _list_norm,
+    _normalize_creator,
     _to_builtin,
     _values_equal,
 )
@@ -110,18 +111,42 @@ class TestNewsfeedServiceHelpers:
 
     def test_values_equal_list_fields_order_insensitive(self):
         """_values_equal compares list fields order-insensitively."""
-        assert _values_equal("creators", ["Alice", "Bob"], ["Bob", "Alice"]) is True
+        # Creators need proper Creator objects with id and is_primary
+        creator1 = Creator(id=1, is_primary=True)
+        creator2 = Creator(id=2, is_primary=False)
+        assert _values_equal("creators", [creator1, creator2], [creator2, creator1]) is True
         assert _values_equal("mechanics", ["Bhop", "Edge Climb"], ["Edge Climb", "Bhop"]) is True
 
     def test_values_equal_list_fields_different_content(self):
         """_values_equal detects different list content."""
-        assert _values_equal("creators", ["Alice"], ["Bob"]) is False
+        # Creators need proper Creator objects with id and is_primary
+        creator1 = Creator(id=1, is_primary=True)
+        creator2 = Creator(id=2, is_primary=True)
+        assert _values_equal("creators", [creator1], [creator2]) is False
         assert _values_equal("mechanics", ["Bhop"], ["Edge Climb"]) is False
 
     def test_values_equal_non_list_fields(self):
         """_values_equal compares non-list fields normally."""
         assert _values_equal("difficulty", "Hard", "Hard") is True
         assert _values_equal("difficulty", "Hard", "Easy") is False
+
+    def test_normalize_creator_extracts_id_and_is_primary(self):
+        """_normalize_creator extracts only id and is_primary fields."""
+        creator = Creator(id=123, is_primary=True)
+        result = _normalize_creator(creator)
+        assert result == (123, True)
+
+    def test_normalize_creator_ignores_name_field(self):
+        """_normalize_creator ignores name field from CreatorFull."""
+        creator = CreatorFull(id=456, is_primary=False, name="Alice")
+        result = _normalize_creator(creator)
+        assert result == (456, False)
+
+    def test_normalize_creator_works_with_dict(self):
+        """_normalize_creator works with dict representation."""
+        creator_dict = {"id": 789, "is_primary": True, "name": "Bob"}
+        result = _normalize_creator(creator_dict)
+        assert result == (789, True)
 
 
 class TestNewsfeedServiceFriendlyValue:
@@ -646,3 +671,140 @@ class TestNewsfeedServiceGenerateMapEdit:
         call_args = mock_publish.call_args[1]
         event = call_args["event"]
         assert event.payload.code == "AWESOME"
+
+    async def test_generate_map_edit_creators_unchanged_with_name_field_difference(
+        self, mock_pool, mock_state, mock_newsfeed_repo, mocker
+    ):
+        """generate_map_edit_newsfeed should not detect change when creators have same id/is_primary but different name presence.
+
+        This reproduces the bug where unchanged creators appear in the changes list
+        because old data has 'name' field (CreatorFull) and new data doesn't (Creator).
+        """
+        service = NewsfeedService(mock_pool, mock_state, mock_newsfeed_repo)
+
+        mock_publish = mocker.patch.object(service, "create_and_publish")
+
+        # Old data from database has CreatorFull with name
+        old_creators = [
+            CreatorFull(id=123, is_primary=True, name="Moisty"),
+        ]
+        old_data = _create_test_map(code="2TVRT", creators=old_creators, difficulty="Easy -")
+
+        # New data from patch has Creator without name (just id and is_primary)
+        new_creators = [
+            Creator(id=123, is_primary=True),
+        ]
+        patch_data = MapPatchRequest(creators=new_creators, difficulty="Hell")
+        headers = Headers({"x-pytest-enabled": "1"})
+
+        await service.generate_map_edit_newsfeed(
+            old_data=old_data,
+            patch_data=patch_data,
+            reason="",
+            headers=headers,
+        )
+
+        # Should only detect difficulty change, NOT creators change
+        mock_publish.assert_called_once()
+        call_args = mock_publish.call_args[1]
+        event = call_args["event"]
+
+        # Should have exactly 1 change (difficulty), not 2 (difficulty + creators)
+        assert len(event.payload.changes) == 1
+
+        # The one change should be difficulty
+        assert event.payload.changes[0].field == "Difficulty"
+        assert event.payload.changes[0].old == "Easy -"
+        assert event.payload.changes[0].new == "Hell"
+
+    async def test_generate_map_edit_creators_order_changed_not_detected(
+        self, mock_pool, mock_state, mock_newsfeed_repo, mocker
+    ):
+        """generate_map_edit_newsfeed should not detect change when creators are reordered."""
+        service = NewsfeedService(mock_pool, mock_state, mock_newsfeed_repo)
+
+        mock_publish = mocker.patch.object(service, "create_and_publish")
+
+        old_creators = [
+            Creator(id=1, is_primary=True),
+            Creator(id=2, is_primary=False),
+        ]
+        old_data = _create_test_map(creators=old_creators)
+
+        # Same creators, different order
+        new_creators = [
+            Creator(id=2, is_primary=False),
+            Creator(id=1, is_primary=True),
+        ]
+        patch_data = MapPatchRequest(creators=new_creators)
+        headers = Headers({"x-pytest-enabled": "1"})
+
+        await service.generate_map_edit_newsfeed(
+            old_data=old_data,
+            patch_data=patch_data,
+            reason="",
+            headers=headers,
+        )
+
+        # Should not publish because creators haven't changed
+        mock_publish.assert_not_called()
+
+    async def test_generate_map_edit_creators_id_changed_detected(
+        self, mock_pool, mock_state, mock_newsfeed_repo, mocker
+    ):
+        """generate_map_edit_newsfeed should detect change when creator ID changes."""
+        service = NewsfeedService(mock_pool, mock_state, mock_newsfeed_repo)
+
+        mock_publish = mocker.patch.object(service, "create_and_publish")
+
+        old_creators = [Creator(id=1, is_primary=True)]
+        old_data = _create_test_map(creators=old_creators)
+
+        # Different creator ID
+        new_creators = [Creator(id=2, is_primary=True)]
+        patch_data = MapPatchRequest(creators=new_creators)
+        headers = Headers({"x-pytest-enabled": "1"})
+
+        await service.generate_map_edit_newsfeed(
+            old_data=old_data,
+            patch_data=patch_data,
+            reason="",
+            headers=headers,
+        )
+
+        # Should detect change
+        mock_publish.assert_called_once()
+        call_args = mock_publish.call_args[1]
+        event = call_args["event"]
+        assert len(event.payload.changes) == 1
+        assert event.payload.changes[0].field == "Creators"
+
+    async def test_generate_map_edit_creators_is_primary_changed_detected(
+        self, mock_pool, mock_state, mock_newsfeed_repo, mocker
+    ):
+        """generate_map_edit_newsfeed should detect change when is_primary flag changes."""
+        service = NewsfeedService(mock_pool, mock_state, mock_newsfeed_repo)
+
+        mock_publish = mocker.patch.object(service, "create_and_publish")
+
+        old_creators = [Creator(id=1, is_primary=True)]
+        old_data = _create_test_map(creators=old_creators)
+
+        # Same ID but different is_primary
+        new_creators = [Creator(id=1, is_primary=False)]
+        patch_data = MapPatchRequest(creators=new_creators)
+        headers = Headers({"x-pytest-enabled": "1"})
+
+        await service.generate_map_edit_newsfeed(
+            old_data=old_data,
+            patch_data=patch_data,
+            reason="",
+            headers=headers,
+        )
+
+        # Should detect change
+        mock_publish.assert_called_once()
+        call_args = mock_publish.call_args[1]
+        event = call_args["event"]
+        assert len(event.payload.changes) == 1
+        assert event.payload.changes[0].field == "Creators"

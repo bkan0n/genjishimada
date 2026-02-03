@@ -95,6 +95,22 @@ def _list_norm(items: Iterable[Any]) -> list:
         return sorted([str(_to_builtin(x)) for x in lst])
 
 
+def _normalize_creator(creator: Any) -> tuple[int, bool]:  # noqa: ANN401
+    """Extract semantically relevant fields from a creator for comparison.
+
+    Only compares ``id`` and ``is_primary`` fields, ignoring display-only data
+    like ``name`` which can differ between Creator and CreatorFull structs.
+
+    Args:
+        creator: A creator object (Creator or CreatorFull struct).
+
+    Returns:
+        Tuple of (id, is_primary) for comparison.
+    """
+    creator_dict = _to_builtin(creator)
+    return (creator_dict["id"], creator_dict["is_primary"])
+
+
 async def _resolve_creator_name(
     resolver: Callable[[int], str | Awaitable[str]] | None,
     creator_id: int,
@@ -188,8 +204,9 @@ def _values_equal(field: str, old: Any, new: Any) -> bool:  # noqa: ANN401
     """Check semantic equality of two values for a given field.
 
     For list fields (``creators``, ``mechanics``, ``restrictions``), compares
-    order-insensitively after normalization. For all others, compares values
-    after converting to builtins.
+    order-insensitively after normalization. For creators specifically, only
+    compares ``id`` and ``is_primary`` fields, ignoring display-only ``name``.
+    For all others, compares values after converting to builtins.
 
     Args:
         field: The field name being compared.
@@ -199,6 +216,12 @@ def _values_equal(field: str, old: Any, new: Any) -> bool:  # noqa: ANN401
     Returns:
         ``True`` if the values are semantically equal; otherwise ``False``.
     """
+    if field == "creators":
+        # Special handling: compare only id and is_primary, ignoring name field
+        old_normalized = sorted(_normalize_creator(c) for c in (old or []))
+        new_normalized = sorted(_normalize_creator(c) for c in (new or []))
+        return old_normalized == new_normalized
+
     if field in _LIST_FIELDS:
         return _list_norm(old) == _list_norm(new)
     return _to_builtin(old) == _to_builtin(new)
