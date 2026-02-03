@@ -89,7 +89,7 @@ def _list_norm(items: Iterable[Any]) -> list:
     """
     lst = list(items or [])
     try:
-        return sorted((_to_builtin(x) for x in lst), key=lambda x: (str(x)))
+        return sorted((_to_builtin(x) for x in lst), key=str)
     except Exception:
         # Ultra-conservative fallback if items are not directly comparable
         return sorted([str(_to_builtin(x)) for x in lst])

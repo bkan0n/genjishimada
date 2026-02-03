@@ -59,7 +59,7 @@ class ModeratorCog(BaseCog):
     mod = app_commands.Group(
         name="mod", description="Mod only commands", guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))]
     )
-    map = app_commands.Group(
+    map_group = app_commands.Group(
         name="map", description="Mod only commands", parent=mod, guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))]
     )
     record = app_commands.Group(
@@ -75,7 +75,7 @@ class ModeratorCog(BaseCog):
         guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))],
     )
 
-    @map.command(name="edit")
+    @map_group.command(name="edit")
     async def edit_map(
         self,
         itx: GenjiItx,
@@ -109,7 +109,7 @@ class ModeratorCog(BaseCog):
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
-    @map.command(name="edit-guides")
+    @map_group.command(name="edit-guides")
     async def edit_delete_guides(
         self,
         itx: GenjiItx,
@@ -129,7 +129,7 @@ class ModeratorCog(BaseCog):
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
-    @map.command(name="edit-creators")
+    @map_group.command(name="edit-creators")
     async def edit_delete_creators(
         self,
         itx: GenjiItx,
@@ -147,7 +147,7 @@ class ModeratorCog(BaseCog):
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
-    @map.command(name="edit-status")
+    @map_group.command(name="edit-status")
     async def edit_status(
         self,
         itx: GenjiItx,
@@ -187,7 +187,7 @@ class ModeratorCog(BaseCog):
             playtesting_difficulty = cast(DifficultyAll, view.playtest_difficulty_select.values[0])
             await self.bot.api.send_map_to_playtest(data.code, SendToPlaytestRequest(playtesting_difficulty))
 
-    @map.command(name="link-codes")
+    @map_group.command(name="link-codes")
     async def link_codes(
         self,
         itx: GenjiItx,
@@ -222,7 +222,7 @@ class ModeratorCog(BaseCog):
         await itx.response.send_message(view=view, ephemeral=True)
         view.original_interaction = itx
 
-    @map.command(name="unlink-codes")
+    @map_group.command(name="unlink-codes")
     async def unlink_codes(
         self,
         itx: GenjiItx,
