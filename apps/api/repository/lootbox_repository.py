@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from asyncpg import Connection, Pool
-from genjishimada_sdk.lootbox import LootboxKeyType
 from litestar.datastructures import State
 
+from genjishimada_sdk.lootbox import LootboxKeyType
 from repository.base import BaseRepository
 
 
@@ -41,14 +41,13 @@ class LootboxRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
         query = """
-            SELECT *
-            FROM lootbox.reward_types
-            WHERE
-                ($1::text IS NULL OR type = $1::text) AND
-                ($2::text IS NULL OR key_type = $2::text) AND
-                ($3::text IS NULL OR rarity = $3::text)
-            ORDER BY key_type, name
-        """
+                SELECT *
+                FROM lootbox.reward_types
+                WHERE ($1::text IS NULL OR type = $1::text)
+                  AND ($2::text IS NULL OR key_type = $2::text)
+                  AND ($3::text IS NULL OR rarity = $3::text)
+                ORDER BY key_type, name \
+                """
         rows = await _conn.fetch(query, reward_type, key_type, rarity)
         return [dict(row) for row in rows]
 
@@ -69,12 +68,11 @@ class LootboxRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
         query = """
-            SELECT *
-            FROM lootbox.key_types
-            WHERE
-                ($1::text IS NULL OR name = $1::text)
-            ORDER BY name
-        """
+                SELECT *
+                FROM lootbox.key_types
+                WHERE ($1::text IS NULL OR name = $1::text)
+                ORDER BY name \
+                """
         rows = await _conn.fetch(query, key_type)
         return [dict(row) for row in rows]
 
@@ -103,35 +101,27 @@ class LootboxRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
         query = """
-            SELECT DISTINCT ON (rt.name, rt.key_type, rt.type)
-                ur.user_id,
-                ur.earned_at,
-                rt.name,
-                rt.type,
-                NULL as medal,
-                rt.rarity
-            FROM lootbox.user_rewards ur
-            LEFT JOIN lootbox.reward_types rt ON ur.reward_name = rt.name
-                AND ur.reward_type = rt.type
-                AND ur.key_type = rt.key_type
-            WHERE
-                ur.user_id = $1::bigint AND
-                ($2::text IS NULL OR rt.type = $2::text) AND
-                ($3::text IS NULL OR ur.key_type = $3::text) AND
-                ($4::text IS NULL OR rarity = $4::text)
+                SELECT DISTINCT ON (rt.name, rt.key_type, rt.type)
+                    ur.user_id,
+                    ur.earned_at,
+                    rt.name,
+                    rt.type,
+                    NULL AS medal,
+                    rt.rarity
+                FROM lootbox.user_rewards ur
+                LEFT JOIN lootbox.reward_types rt
+                    ON ur.reward_name = rt.name AND ur.reward_type = rt.type AND ur.key_type = rt.key_type
+                WHERE ur.user_id = $1::bigint
+                  AND ($2::text IS NULL OR rt.type = $2::text)
+                  AND ($3::text IS NULL OR ur.key_type = $3::text)
+                  AND ($4::text IS NULL OR rarity = $4::text)
 
-            UNION ALL
+                UNION ALL
 
-            SELECT
-                user_id,
-                now() as earned_at,
-                map_name as name,
-                'mastery' as type,
-                medal,
-                'common' as rarity
-            FROM maps.mastery
-            WHERE user_id = $1::bigint AND medal != 'Placeholder' AND ($2::text IS NULL OR medal = $2::text)
-        """
+                SELECT user_id, now() AS earned_at, map_name AS name, 'mastery' AS type, medal, 'common' AS rarity
+                FROM maps.mastery
+                WHERE user_id = $1::bigint AND medal != 'Placeholder' AND ($2::text IS NULL OR medal = $2::text) \
+                """
         rows = await _conn.fetch(query, user_id, reward_type, key_type, rarity)
         return [dict(row) for row in rows]
 
@@ -154,13 +144,11 @@ class LootboxRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
         query = """
-            SELECT count(*) as amount, key_type
-            FROM lootbox.user_keys
-            WHERE
-                ($1::bigint = user_id) AND
-                ($2::text IS NULL OR key_type = $2::text)
-            GROUP BY key_type
-        """
+                SELECT count(*) AS amount, key_type
+                FROM lootbox.user_keys
+                WHERE ($1::bigint = user_id) AND ($2::text IS NULL OR key_type = $2::text)
+                GROUP BY key_type \
+                """
         rows = await _conn.fetch(query, user_id, key_type)
         return [dict(row) for row in rows]
 
@@ -182,7 +170,7 @@ class LootboxRepository(BaseRepository):
             Number of keys (0 if none found).
         """
         _conn = self._get_connection(conn)
-        query = "SELECT count(*) as keys FROM lootbox.user_keys WHERE key_type = $1 AND user_id = $2"
+        query = "SELECT count(*) AS keys FROM lootbox.user_keys WHERE key_type = $1 AND user_id = $2"
         result = await _conn.fetchval(query, key_type, user_id)
         return result or 0
 
@@ -228,45 +216,46 @@ class LootboxRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
         query = """
-            WITH old_tier AS (
+                WITH old_tier AS (
+                    SELECT
+                        $1::int AS old_xp,
+                        (($1 / 100) % 100) AS old_normalized_tier,
+                        (($1 / 100) / 100) AS old_prestige_level,
+                        x.name AS old_main_tier_name,
+                        s.name AS old_sub_tier_name
+                    FROM lootbox.main_tiers x
+                    LEFT JOIN lootbox.sub_tiers s ON (($1 / 100) % 5) = s.threshold
+                    WHERE (($1 / 100) % 100) / 5 = x.threshold
+                ), new_tier AS (
+                    SELECT
+                        $2::int AS new_xp,
+                        (($2 / 100) % 100) AS new_normalized_tier,
+                        (($2 / 100) / 100) AS new_prestige_level,
+                        x.name AS new_main_tier_name,
+                        s.name AS new_sub_tier_name
+                    FROM lootbox.main_tiers x
+                    LEFT JOIN lootbox.sub_tiers s ON (($2 / 100) % 5) = s.threshold
+                    WHERE (($2 / 100) % 100) / 5 = x.threshold
+                )
                 SELECT
-                    $1::int AS old_xp,
-                    (($1 / 100) % 100) AS old_normalized_tier,
-                    (($1 / 100) / 100) AS old_prestige_level,
-                    x.name AS old_main_tier_name,
-                    s.name AS old_sub_tier_name
-                FROM lootbox.main_tiers x
-                LEFT JOIN lootbox.sub_tiers s ON (($1 / 100) % 5) = s.threshold
-                WHERE (($1 / 100) % 100) / 5 = x.threshold
-            ),
-            new_tier AS (
-                SELECT
-                    $2::int AS new_xp,
-                    (($2 / 100) % 100) AS new_normalized_tier,
-                    (($2 / 100) / 100) AS new_prestige_level,
-                    x.name AS new_main_tier_name,
-                    s.name AS new_sub_tier_name
-                FROM lootbox.main_tiers x
-                LEFT JOIN lootbox.sub_tiers s ON (($2 / 100) % 5) = s.threshold
-                WHERE (($2 / 100) % 100) / 5 = x.threshold
-            )
-            SELECT
-                o.old_xp,
-                n.new_xp,
-                o.old_main_tier_name,
-                n.new_main_tier_name,
-                o.old_sub_tier_name,
-                n.new_sub_tier_name,
-                old_prestige_level,
-                new_prestige_level,
-                CASE
-                    WHEN o.old_main_tier_name != n.new_main_tier_name THEN 'Main Tier Rank Up'
-                    WHEN o.old_sub_tier_name != n.new_sub_tier_name THEN 'Sub-Tier Rank Up'
-                END AS rank_change_type,
-                o.old_prestige_level != n.new_prestige_level AS prestige_change
-            FROM old_tier o
-            JOIN new_tier n ON TRUE;
-        """
+                    o.old_xp,
+                    n.new_xp,
+                    o.old_main_tier_name,
+                    n.new_main_tier_name,
+                    o.old_sub_tier_name,
+                    n.new_sub_tier_name,
+                    old_prestige_level,
+                    new_prestige_level,
+                    CASE
+                        WHEN o.old_main_tier_name != n.new_main_tier_name
+                            THEN 'Main Tier Rank Up'
+                        WHEN o.old_sub_tier_name != n.new_sub_tier_name
+                            THEN 'Sub-Tier Rank Up'
+                    END AS rank_change_type,
+                    o.old_prestige_level != n.new_prestige_level AS prestige_change
+                FROM old_tier o
+                JOIN new_tier n ON TRUE; \
+                """
         row = await _conn.fetchrow(query, old_xp, new_xp)
         return dict(row) if row else {}
 
@@ -308,13 +297,16 @@ class LootboxRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-            DELETE FROM lootbox.user_keys
-            WHERE earned_at = (
-                SELECT MIN(earned_at)
+                DELETE
                 FROM lootbox.user_keys
-                WHERE user_id = $1::bigint AND key_type = $2::text
-            ) AND user_id = $1::bigint AND key_type = $2::text
-        """
+                WHERE earned_at = (
+                    SELECT min(earned_at)
+                    FROM lootbox.user_keys
+                    WHERE user_id = $1::bigint AND key_type = $2::text
+                )
+                  AND user_id = $1::bigint
+                  AND key_type = $2::text \
+                """
         result = await _conn.execute(query, user_id, key_type)
         # Result is like "DELETE 1" or "DELETE 0"
         return result != "DELETE 0"
@@ -343,16 +335,15 @@ class LootboxRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-            SELECT rt.rarity
-            FROM lootbox.user_rewards ur
-            JOIN lootbox.reward_types rt ON ur.reward_name = rt.name
-                AND ur.reward_type = rt.type
-                AND ur.key_type = rt.key_type
-            WHERE ur.user_id = $1::bigint AND
-              ur.reward_type = $2::text AND
-              ur.key_type = $3::text AND
-              ur.reward_name = $4::text
-        """
+                SELECT rt.rarity
+                FROM lootbox.user_rewards ur
+                JOIN lootbox.reward_types rt
+                    ON ur.reward_name = rt.name AND ur.reward_type = rt.type AND ur.key_type = rt.key_type
+                WHERE ur.user_id = $1::bigint
+                  AND ur.reward_type = $2::text
+                  AND ur.key_type = $3::text
+                  AND ur.reward_name = $4::text \
+                """
         return await _conn.fetchval(query, user_id, reward_type, key_type, reward_name)
 
     async def insert_user_reward(
@@ -376,9 +367,13 @@ class LootboxRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-            INSERT INTO lootbox.user_rewards (user_id, reward_type, key_type, reward_name)
-            VALUES ($1, $2, $3, $4)
-        """
+                INSERT INTO lootbox.user_rewards (
+                    user_id, reward_type, key_type, reward_name
+                )
+                VALUES (
+                    $1, $2, $3, $4
+                ) \
+                """
         await _conn.execute(query, user_id, reward_type, key_type, reward_name)
 
     async def add_user_coins(
@@ -398,9 +393,14 @@ class LootboxRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-            INSERT INTO core.users (id, coins) VALUES ($1, $2)
-            ON CONFLICT (id) DO UPDATE SET coins = users.coins + excluded.coins
-        """
+                INSERT INTO core.users (
+                    id, coins
+                )
+                VALUES (
+                    $1, $2
+                )
+                ON CONFLICT (id) DO UPDATE SET coins = users.coins + excluded.coins \
+                """
         await _conn.execute(query, user_id, amount)
 
     async def insert_user_key(
@@ -437,9 +437,13 @@ class LootboxRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-            INSERT INTO lootbox.user_keys (user_id, key_type)
-            SELECT $1, key FROM lootbox.active_key LIMIT 1
-        """
+                INSERT INTO lootbox.user_keys (
+                    user_id, key_type
+                )
+                SELECT $1, key
+                FROM lootbox.active_key
+                LIMIT 1 \
+                """
         await _conn.execute(query, user_id)
 
     async def fetch_random_reward(
@@ -455,7 +459,7 @@ class LootboxRepository(BaseRepository):
         Args:
             rarity: Reward rarity to select.
             key_type: Key type filter.
-            user_id: User ID for duplicate check.
+            user_id: Use1r ID for duplicate check.
             conn: Optional connection for transaction participation.
 
         Returns:
@@ -464,45 +468,47 @@ class LootboxRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-            WITH selected_rewards AS (
-                SELECT *
-                FROM lootbox.reward_types
-                WHERE
-                    rarity = $1::text AND
-                    key_type = $2::text
-                ORDER BY random()
-                LIMIT 1
-            )
-            SELECT
-                sr.*,
-                EXISTS(
-                    SELECT 1
-                    FROM lootbox.user_rewards ur
-                    WHERE ur.user_id = $3::bigint AND
-                        ur.reward_name = sr.name AND
-                        ur.reward_type = sr.type AND
-                        ur.key_type = $2::text
-                ) AS duplicate,
-                CASE
-                    WHEN EXISTS(
+                WITH selected_rewards AS (
+                    SELECT *
+                    FROM lootbox.reward_types
+                    WHERE rarity = $1::text AND key_type = $2::text
+                    ORDER BY random()
+                    LIMIT 1
+                )
+                SELECT
+                    sr.*,
+                    exists(
                         SELECT 1
                         FROM lootbox.user_rewards ur
-                        WHERE ur.user_id = $3::bigint AND
-                            ur.reward_name = sr.name AND
-                            ur.reward_type = sr.type AND
-                            ur.key_type = $2::text
-                    )
-                    THEN CASE
-                        WHEN sr.rarity = 'common' THEN 100
-                        WHEN sr.rarity = 'rare' THEN 250
-                        WHEN sr.rarity = 'epic' THEN 500
-                        WHEN sr.rarity = 'legendary' THEN 1000
+                        WHERE ur.user_id = $3::bigint
+                          AND ur.reward_name = sr.name
+                          AND ur.reward_type = sr.type
+                          AND ur.key_type = $2::text
+                    ) AS duplicate,
+                    CASE
+                        WHEN exists(
+                            SELECT 1
+                            FROM lootbox.user_rewards ur
+                            WHERE ur.user_id = $3::bigint
+                              AND ur.reward_name = sr.name
+                              AND ur.reward_type = sr.type
+                              AND ur.key_type = $2::text
+                        )
+                            THEN CASE
+                                     WHEN sr.rarity = 'common'
+                                         THEN 100
+                                     WHEN sr.rarity = 'rare'
+                                         THEN 250
+                                     WHEN sr.rarity = 'epic'
+                                         THEN 500
+                                     WHEN sr.rarity = 'legendary'
+                                         THEN 1000
+                                     ELSE 0
+                                 END
                         ELSE 0
-                    END
-                ELSE 0
-                END AS coin_amount
-            FROM selected_rewards sr
-        """
+                    END AS coin_amount
+                FROM selected_rewards sr \
+                """
         row = await _conn.fetchrow(query, rarity.lower(), key_type, user_id)
         return dict(row) if row else {}
 
@@ -528,22 +534,23 @@ class LootboxRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-        WITH old_values AS (
-          SELECT amount
-          FROM lootbox.xp
-          WHERE user_id = $1
-        ),
-        upsert_result AS (
-          INSERT INTO lootbox.xp (user_id, amount)
-          SELECT $1, floor($2::numeric * $3::numeric)::bigint
-          ON CONFLICT (user_id) DO UPDATE
-          SET amount = lootbox.xp.amount + EXCLUDED.amount
-          RETURNING lootbox.xp.amount
-        )
-        SELECT
-          COALESCE((SELECT amount FROM old_values), 0) AS previous_amount,
-          (SELECT amount FROM upsert_result)           AS new_amount
-        """
+                WITH old_values AS (
+                    SELECT amount
+                    FROM lootbox.xp
+                    WHERE user_id = $1
+                ), upsert_result
+                    AS ( INSERT INTO lootbox.xp (user_id, amount) SELECT $1, floor($2::numeric * $3::numeric)::bigint ON CONFLICT (user_id) DO UPDATE SET amount = lootbox.xp.amount + excluded.amount RETURNING lootbox.xp.amount
+                    )
+                SELECT
+                    coalesce((
+                                 SELECT amount
+                                 FROM old_values
+                             ), 0) AS previous_amount,
+                    (
+                        SELECT amount
+                        FROM upsert_result
+                    ) AS new_amount \
+                """
         row = await _conn.fetchrow(query, user_id, xp_amount, multiplier)
         return dict(row) if row else {}
 
