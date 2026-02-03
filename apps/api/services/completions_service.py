@@ -171,6 +171,7 @@ class CompletionsService(BaseService):
                     code_match=code_match,
                     time_match=time_match,
                     user_match=user_match,
+                    screenshot=screenshot,
                 ),
                 headers=Headers(),
                 idempotency_key=None,

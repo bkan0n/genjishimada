@@ -45,7 +45,7 @@ class NewsfeedRepository(BaseRepository):
             VALUES ($1, $2::jsonb)
             RETURNING id
         """
-        return await _conn.fetchval(query, timestamp, json.dumps(payload))
+        return await _conn.fetchval(query, timestamp, payload)
 
     async def fetch_event_by_id(
         self,

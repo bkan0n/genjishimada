@@ -1180,7 +1180,7 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle submit button click to apply or queue changes."""
-        await itx.response.defer(ephemeral=True, thinking=True)
+        await itx.response.defer(ephemeral=True)
 
         state = self.view.state
 
@@ -1224,11 +1224,9 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
                 # No archive change, apply normally
                 patch = self._build_patch_request(state)
                 await itx.client.api.edit_map(state.map_data.code, patch)
-
-            await itx.edit_original_response(
-                content=f"✅ Changes applied to **{state.map_data.code}**!",
-                view=None,
-            )
+            view = LayoutView()
+            view.add_item(ui.Container(ui.TextDisplay(f"✅ Changes applied to **{state.map_data.code}**!")))
+            await itx.edit_original_response(view=view)
         else:
             # Submit for approval
             request = self._build_edit_request(state, itx.user.id)
@@ -1236,12 +1234,16 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
                 await itx.client.api.create_map_edit_request(request)
             except APIHTTPError as e:
                 raise UserFacingError(e.error or "Failed to submit the edit request.")
-            await itx.edit_original_response(
-                content=(
-                    f"✅ Edit request submitted for **{state.map_data.code}**!\nA moderator will review your changes."
-                ),
-                view=None,
+            view = LayoutView()
+            view.add_item(
+                ui.Container(
+                    ui.TextDisplay(
+                        f"✅ Edit request submitted for **{state.map_data.code}**!\n"
+                        f"A moderator will review your changes."
+                    )
+                )
             )
+            await itx.edit_original_response(view=view)
 
         self.view.submitted = True
         self.view.stop()

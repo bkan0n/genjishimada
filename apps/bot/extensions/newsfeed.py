@@ -844,13 +844,12 @@ class NewsfeedHandler:
                 guild = self.bot.get_guild(self.bot.config.guild)
                 assert guild and _map.playtest
                 thread = guild.get_thread(_map.playtest.thread_id)
+                if not thread:
+                    thread = cast(discord.Thread, await self.bot.fetch_channel(_map.playtest.thread_id))
                 await self._publish_event(newsfeed_event, channel=thread)
 
                 view = cog.playtest_views[_map.playtest.thread_id]
                 await view.fetch_data_and_rebuild(self.bot)
-                if not thread:
-                    log.warning(f"Was not able to find thread for playtest view. {_map.playtest.thread_id}")
-                    return
                 m = thread.get_partial_message(_map.playtest.thread_id)
                 await m.edit(view=view)
                 return
@@ -862,12 +861,11 @@ class NewsfeedHandler:
                 guild = self.bot.get_guild(self.bot.config.guild)
                 assert guild and _map.playtest
                 thread = guild.get_thread(_map.playtest.thread_id)
+                if not thread:
+                    thread = cast(discord.Thread, await self.bot.fetch_channel(_map.playtest.thread_id))
                 await self._publish_event(newsfeed_event, channel=thread)
                 view = cog.playtest_views[_map.playtest.thread_id]
                 await view.fetch_data_and_rebuild(self.bot)
-                if not thread:
-                    log.warning(f"Was not able to find thread for playtest view. {_map.playtest.thread_id}")
-                    return
                 m = thread.get_partial_message(_map.playtest.thread_id)
                 await m.edit(view=view)
                 return

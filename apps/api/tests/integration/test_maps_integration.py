@@ -1068,6 +1068,7 @@ class TestGetAffectedUsers:
         assert response.status_code == 404
 
 
+@pytest.mark.skip(reason="Requires external plotter service")
 class TestGetMapPlot:
     """GET /api/v3/maps/{code}/plot"""
 

@@ -534,6 +534,7 @@ class CompletionHandler(BaseHandler):
             f"`Name`: {event.extracted.name} in {event.submitted_user_names} {'✅' if event.user_match else '❌'}\n"
             f"`Code`: {event.extracted.code} == {event.submitted_code} {'✅' if event.code_match else '❌'}\n"
             f"`Time`: {event.extracted.time} == {event.submitted_time} {'✅' if event.time_match else '❌'}\n"
+            f"{event.screenshot}\n"
             f"`Extracted Raw`\n"
             "```json\n"
             f"{formatted_json}\n"

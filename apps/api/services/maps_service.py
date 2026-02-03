@@ -10,9 +10,10 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Literal, overload
 from uuid import UUID
 
+import aiohttp
 import msgspec
 from asyncpg import Pool
-from genjishimada_sdk.difficulties import DIFFICULTY_MIDPOINTS, DifficultyAll, convert_raw_difficulty_to_difficulty_all
+from genjishimada_sdk.difficulties import DIFFICULTY_MIDPOINTS, convert_raw_difficulty_to_difficulty_all
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import (
     ArchivalStatusPatchRequest,
@@ -55,7 +56,9 @@ from genjishimada_sdk.newsfeed import (
 )
 from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
 from litestar.datastructures import Headers, State
+from litestar.exceptions import HTTPException
 from litestar.response import Stream
+from litestar.status_codes import HTTP_200_OK, HTTP_503_SERVICE_UNAVAILABLE
 
 from repository.exceptions import (
     ForeignKeyViolationError,
@@ -80,7 +83,6 @@ from services.exceptions.maps import (
 )
 from utilities.jobs import wait_for_job_completion
 from utilities.map_search import MapSearchFilters
-from utilities.playtest_plot import build_playtest_plot
 
 from .base import BaseService
 
@@ -359,6 +361,18 @@ class MapsService(BaseService):
                     await self._maps_repo.update_core_map(
                         code,
                         core_updates,
+                        conn=conn,  # type: ignore[arg-type]
+                    )
+
+                # Update playtest initial_difficulty if difficulty changed during active playtest
+                if (
+                    data.difficulty is not msgspec.UNSET
+                    and original_map.playtesting == "In Progress"
+                    and original_map.playtest is not None
+                ):
+                    await self._maps_repo.update_playtest_initial_difficulty(
+                        original_map.playtest.thread_id,
+                        DIFFICULTY_MIDPOINTS[data.difficulty],
                         conn=conn,  # type: ignore[arg-type]
                     )
 
@@ -1287,7 +1301,7 @@ class MapsService(BaseService):
         thread_id: int | None = None,
         code: OverwatchCode | None = None,
     ) -> Stream:
-        """Get playtest plot as image stream.
+        """Get playtest plot as image stream from external plotter service.
 
         When code is provided (and thread_id is omitted), the initial difficulty may be
         the only datapoint—intended for early initialization before votes exist.
@@ -1297,76 +1311,92 @@ class MapsService(BaseService):
             code: Map code (alternative).
 
         Returns:
-            Stream with PNG image and headers.
+            Stream with WebP image and headers.
 
         Raises:
             MapNotFoundError: If map doesn't exist.
             ValueError: If neither thread_id nor code provided.
+            HTTPException: 503 if plotter service unavailable.
         """
-        try:
-            # Fetch difficulty data based on input
-            async with self._pool.acquire() as conn:
-                if code and not thread_id:
-                    # Fetch initial difficulty for new playtest
-                    rows = await conn.fetch(
-                        """
-                        WITH target_map AS (
-                            SELECT id FROM core.maps WHERE code = $1
-                        )
-                        SELECT initial_difficulty AS difficulty, 1 AS amount
-                        FROM playtests.meta
-                        WHERE map_id = (SELECT id FROM target_map) AND completed=FALSE
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                        """,
-                        code,
+        # Fetch difficulty data based on input
+        async with self._pool.acquire() as conn:
+            if code and not thread_id:
+                # Fetch initial difficulty for new playtest
+                rows = await conn.fetch(
+                    """
+                    WITH target_map AS (
+                        SELECT id FROM core.maps WHERE code = $1
                     )
-                elif thread_id:
-                    # Fetch votes + initial difficulty
-                    rows = await conn.fetch(
-                        """
-                        SELECT difficulty, count(*) AS amount
-                        FROM playtests.votes
-                        WHERE playtest_thread_id = $1
-                        GROUP BY difficulty
-                        UNION ALL
-                        SELECT initial_difficulty AS difficulty, 1 AS amount
-                        FROM playtests.meta
-                        WHERE thread_id = $1
-                          AND NOT EXISTS (
-                            SELECT 1 FROM playtests.votes WHERE playtest_thread_id = $1
-                        )
-                        """,
-                        thread_id,
-                    )
-                else:
-                    raise ValueError("At least one of code or thread_id is required")
-
-                if not rows:
-                    raise MapNotFoundError(code or str(thread_id))
-
-                # Convert to difficulty dict
-                data: dict[DifficultyAll, int] = {
-                    convert_raw_difficulty_to_difficulty_all(row["difficulty"]): row["amount"] for row in rows
-                }
-
-                # Build plot image
-                buffer = await build_playtest_plot(data)
-
-                # Return Stream with headers
-                return Stream(
-                    buffer,
-                    headers={
-                        "content-type": "image/png",
-                        "content-disposition": 'attachment; filename="playtest.png"',
-                    },
+                    SELECT initial_difficulty AS difficulty, 1 AS amount
+                    FROM playtests.meta
+                    WHERE map_id = (SELECT id FROM target_map) AND completed=FALSE
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    code,
                 )
+            elif thread_id:
+                # Fetch votes + initial difficulty
+                rows = await conn.fetch(
+                    """
+                    SELECT difficulty, count(*) AS amount
+                    FROM playtests.votes
+                    WHERE playtest_thread_id = $1
+                    GROUP BY difficulty
+                    UNION ALL
+                    SELECT initial_difficulty AS difficulty, 1 AS amount
+                    FROM playtests.meta
+                    WHERE thread_id = $1
+                      AND NOT EXISTS (
+                        SELECT 1 FROM playtests.votes WHERE playtest_thread_id = $1
+                    )
+                    """,
+                    thread_id,
+                )
+            else:
+                raise ValueError("At least one of code or thread_id is required")
 
-        except (MapNotFoundError, ValueError):
-            raise
-        except Exception as e:
-            log.error(f"Unexpected error fetching playtest plot: {e}", exc_info=True)
-            raise
+            if not rows:
+                raise MapNotFoundError(code or str(thread_id))
+
+            # Convert to votes dict for plotter API
+            votes: dict[str, int] = {
+                str(convert_raw_difficulty_to_difficulty_all(row["difficulty"])): row["amount"] for row in rows
+            }
+
+        # Call external plotter service
+        plotter_url = "http://genjishimada-playtest-plotter:8080/chart"
+        try:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(
+                    plotter_url,
+                    json={"votes": votes},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp,
+            ):
+                if resp.status != HTTP_200_OK:
+                    log.error(f"Plotter service returned {resp.status}: {await resp.text()}")
+                    raise HTTPException(
+                        status_code=HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Chart generation service unavailable",
+                    )
+                image_bytes = await resp.read()
+        except aiohttp.ClientError as e:
+            log.error(f"Failed to connect to plotter service: {e}")
+            raise HTTPException(
+                status_code=HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Chart generation service unavailable",
+            ) from e
+
+        # Return Stream with headers
+        return Stream(
+            iter([image_bytes]),
+            headers={
+                "content-type": "image/webp",
+                "content-disposition": 'attachment; filename="playtest.webp"',
+            },
+        )
 
     # Edit request operations
 

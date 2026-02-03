@@ -231,6 +231,7 @@ Tags = Literal[
     "Other Heroes",
     "XP Based",
     "Custom Grav/Speed",
+    "Aim Parkour",
 ]
 
 PlaytestStatus = Literal["Approved", "In Progress", "Rejected"]

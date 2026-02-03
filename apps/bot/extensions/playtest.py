@@ -138,7 +138,7 @@ class PlaytestHandler(BaseHandler):
 
         view = PlaytestComponentsV2View(data=playtest_data, thread_id=thread.id)
 
-        cog.playtest_views[playtest_id] = view
+        cog.playtest_views[thread.id] = view
 
         await message.edit(content=None, view=view, attachments=[file])
         await thread.send(f"<@{playtest_data.primary_creator_id}>")

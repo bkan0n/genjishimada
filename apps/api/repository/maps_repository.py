@@ -1271,6 +1271,28 @@ class MapsRepository(BaseRepository):
         )
         return playtest_id
 
+    async def update_playtest_initial_difficulty(
+        self,
+        thread_id: int,
+        initial_difficulty: float,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Update initial_difficulty for an active playtest.
+
+        Args:
+            thread_id: Playtest thread ID.
+            initial_difficulty: New initial difficulty value.
+            conn: Optional connection.
+        """
+        _conn = self._get_connection(conn)
+
+        await _conn.execute(
+            "UPDATE playtests.meta SET initial_difficulty = $2 WHERE thread_id = $1",
+            thread_id,
+            initial_difficulty,
+        )
+
     async def fetch_playtest_plot_data(
         self,
         thread_id: int,
