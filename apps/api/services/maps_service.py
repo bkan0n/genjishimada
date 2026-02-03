@@ -364,6 +364,18 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
+                # Update playtest initial_difficulty if difficulty changed during active playtest
+                if (
+                    data.difficulty is not msgspec.UNSET
+                    and original_map.playtesting == "In Progress"
+                    and original_map.playtest is not None
+                ):
+                    await self._maps_repo.update_playtest_initial_difficulty(
+                        original_map.playtest.thread_id,
+                        DIFFICULTY_MIDPOINTS[data.difficulty],
+                        conn=conn,  # type: ignore[arg-type]
+                    )
+
                 # Replace related data if provided
                 if data.creators is not msgspec.UNSET:
                     await self._maps_repo.delete_creators(map_id, conn=conn)  # type: ignore[arg-type]
