@@ -796,11 +796,9 @@ dependencies = [
     { name = "boto3" },
     { name = "genjishimada-sdk" },
     { name = "httpx" },
-    { name = "kaleido" },
     { name = "litestar", extra = ["standard"] },
     { name = "litestar-asyncpg" },
     { name = "msgspec" },
-    { name = "plotly" },
     { name = "python-dotenv" },
     { name = "rapidfuzz" },
     { name = "sentry-sdk", extra = ["litestar"] },
@@ -829,11 +827,9 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.40.25" },
     { name = "genjishimada-sdk", editable = "libs/sdk" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "kaleido", specifier = "==0.2.1" },
     { name = "litestar", extras = ["standard"], specifier = ">=2.16.0" },
     { name = "litestar-asyncpg", specifier = ">=0.4.0" },
     { name = "msgspec", specifier = ">=0.19.0" },
-    { name = "plotly", specifier = ">=6.1.2" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
     { name = "rapidfuzz", specifier = ">=3.12.0" },
     { name = "sentry-sdk", extras = ["litestar"], specifier = ">=2.35.1" },
@@ -1139,19 +1135,6 @@ name = "jsmin"
 version = "3.0.1"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5e/73/e01e4c5e11ad0494f4407a3f623ad4d87714909f50b17a06ed121034ff6e/jsmin-3.0.1.tar.gz", hash = "sha256:c0959a121ef94542e807a674142606f7e90214a2b3d1eb17300244bbb5cc2bfc", size = 13925, upload-time = "2022-01-16T20:35:59.13Z" }
-
-[[package]]
-name = "kaleido"
-version = "0.2.1"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/f7/0ccaa596ec341963adbb4f839774c36d5659e75a0812d946732b927d480e/kaleido-0.2.1-py2.py3-none-macosx_10_11_x86_64.whl", hash = "sha256:ca6f73e7ff00aaebf2843f73f1d3bacde1930ef5041093fe76b83a15785049a7", size = 85153681, upload-time = "2021-03-08T10:27:34.202Z" },
-    { url = "https://files.pythonhosted.org/packages/45/8e/4297556be5a07b713bb42dde0f748354de9a6918dee251c0e6bdcda341e7/kaleido-0.2.1-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:bb9a5d1f710357d5d432ee240ef6658a6d124c3e610935817b4b42da9c787c05", size = 85808197, upload-time = "2021-03-08T10:27:46.561Z" },
-    { url = "https://files.pythonhosted.org/packages/ae/b3/a0f0f4faac229b0011d8c4a7ee6da7c2dca0b6fd08039c95920846f23ca4/kaleido-0.2.1-py2.py3-none-manylinux1_x86_64.whl", hash = "sha256:aa21cf1bf1c78f8fa50a9f7d45e1003c387bd3d6fe0a767cfbbf344b95bdc3a8", size = 79902476, upload-time = "2021-03-08T10:27:57.364Z" },
-    { url = "https://files.pythonhosted.org/packages/a1/2b/680662678a57afab1685f0c431c2aba7783ce4344f06ec162074d485d469/kaleido-0.2.1-py2.py3-none-manylinux2014_aarch64.whl", hash = "sha256:845819844c8082c9469d9c17e42621fbf85c2b237ef8a86ec8a8527f98b6512a", size = 83711746, upload-time = "2021-03-08T10:28:08.847Z" },
-    { url = "https://files.pythonhosted.org/packages/88/89/4b6f8bb3f9ab036fd4ad1cb2d628ab5c81db32ac9aa0641d7b180073ba43/kaleido-0.2.1-py2.py3-none-win32.whl", hash = "sha256:ecc72635860be616c6b7161807a65c0dbd9b90c6437ac96965831e2e24066552", size = 62312480, upload-time = "2021-03-08T10:28:18.204Z" },
-    { url = "https://files.pythonhosted.org/packages/f7/9a/0408b02a4bcb3cf8b338a2b074ac7d1b2099e2b092b42473def22f7b625f/kaleido-0.2.1-py2.py3-none-win_amd64.whl", hash = "sha256:4670985f28913c2d063c5734d125ecc28e40810141bdb0a46f15b76c1d45f23c", size = 65945521, upload-time = "2021-03-08T10:28:26.823Z" },
-]
 
 [[package]]
 name = "litestar"
@@ -1601,15 +1584,6 @@ wheels = [
 ]
 
 [[package]]
-name = "narwhals"
-version = "2.13.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/89/ea/f82ef99ced4d03c33bb314c9b84a08a0a86c448aaa11ffd6256b99538aa5/narwhals-2.13.0.tar.gz", hash = "sha256:ee94c97f4cf7cfeebbeca8d274784df8b3d7fd3f955ce418af998d405576fdd9", size = 594555, upload-time = "2025-12-01T13:54:05.329Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/87/0d/1861d1599571974b15b025e12b142d8e6b42ad66c8a07a89cb0fc21f1e03/narwhals-2.13.0-py3-none-any.whl", hash = "sha256:9b795523c179ca78204e3be53726da374168f906e38de2ff174c2363baaaf481", size = 426407, upload-time = "2025-12-01T13:54:03.861Z" },
-]
-
-[[package]]
 name = "nodejs-wheel-binaries"
 version = "24.12.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1723,19 +1697,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/cf/86/0248f086a84f01b37aaec0fa567b397df1a119f73c16f6c7a9aac73ea309/platformdirs-4.5.1.tar.gz", hash = "sha256:61d5cdcc6065745cdd94f0f878977f8de9437be93de97c1c12f853c9c0cdcbda", size = 21715, upload-time = "2025-12-05T13:52:58.638Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/28/3bfe2fa5a7b9c46fe7e13c97bda14c895fb10fa2ebf1d0abb90e0cea7ee1/platformdirs-4.5.1-py3-none-any.whl", hash = "sha256:d03afa3963c806a9bed9d5125c8f4cb2fdaf74a55ab60e5d59b3fde758104d31", size = 18731, upload-time = "2025-12-05T13:52:56.823Z" },
-]
-
-[[package]]
-name = "plotly"
-version = "6.5.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "narwhals" },
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/94/05/1199e2a03ce6637960bc1e951ca0f928209a48cfceb57355806a88f214cf/plotly-6.5.0.tar.gz", hash = "sha256:d5d38224883fd38c1409bef7d6a8dc32b74348d39313f3c52ca998b8e447f5c8", size = 7013624, upload-time = "2025-11-17T18:39:24.523Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/c3/3031c931098de393393e1f93a38dc9ed6805d86bb801acc3cf2d5bd1e6b7/plotly-6.5.0-py3-none-any.whl", hash = "sha256:5ac851e100367735250206788a2b1325412aa4a4917a4fe3e6f0bc5aa6f3d90a", size = 9893174, upload-time = "2025-11-17T18:39:20.351Z" },
 ]
 
 [[package]]

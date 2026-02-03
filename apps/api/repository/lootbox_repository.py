@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from asyncpg import Connection, Pool
+from genjishimada_sdk.lootbox import LootboxKeyType
 from litestar.datastructures import State
 
-from genjishimada_sdk.lootbox import LootboxKeyType
 from repository.base import BaseRepository
 
 
@@ -539,7 +539,12 @@ class LootboxRepository(BaseRepository):
                     FROM lootbox.xp
                     WHERE user_id = $1
                 ), upsert_result
-                    AS ( INSERT INTO lootbox.xp (user_id, amount) SELECT $1, floor($2::numeric * $3::numeric)::bigint ON CONFLICT (user_id) DO UPDATE SET amount = lootbox.xp.amount + excluded.amount RETURNING lootbox.xp.amount
+                    AS (
+                        INSERT INTO lootbox.xp (user_id, amount)
+                            SELECT $1,
+                                floor($2::numeric * $3::numeric)::bigint
+                            ON CONFLICT (user_id) DO UPDATE SET amount = lootbox.xp.amount + excluded.amount
+                            RETURNING lootbox.xp.amount
                     )
                 SELECT
                     coalesce((
