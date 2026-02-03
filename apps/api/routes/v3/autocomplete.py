@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from genjishimada_sdk.maps import Mechanics, OverwatchCode, OverwatchMap, PlaytestStatus, Restrictions
+from genjishimada_sdk.maps import Mechanics, OverwatchCode, OverwatchMap, PlaytestStatus, Restrictions, Tags
 from litestar import Controller, MediaType, get
 from litestar.di import Provide
 
@@ -245,3 +245,45 @@ class AutocompleteController(Controller):
 
         """
         return await autocomplete.get_similar_users(search, limit, fake_users_only)
+
+    @get(
+        path="/autocomplete/tags",
+        tags=["Autocomplete"],
+        summary="Autocomplete Map Tags",
+        description="Return a list of map tags ordered by text similarity to the provided search string.",
+    )
+    async def get_similar_map_tags(
+        self, autocomplete: AutocompleteRepository, search: str, limit: int = 5
+    ) -> list[Tags] | None:
+        """Get similar map tags.
+
+        Args:
+            autocomplete (AutocompleteRepository): Autocomplete and transform service.
+            search (str): The input string to compare.
+            limit (int, optional): Maximum number of results. Defaults to 5.
+
+        Returns:
+            list[Tags] | None: A list of matching map tags or `None` if no matches found.
+
+        """
+        return await autocomplete.get_similar_map_tags(search, limit)
+
+    @get(
+        path="/transformers/tags",
+        tags=["Transformer"],
+        media_type=MediaType.JSON,
+        summary="Transform Map Tag",
+        description="Transform a free-form input string into the closest matching Tags name.",
+    )
+    async def transform_map_tags(self, autocomplete: AutocompleteRepository, search: str) -> Tags | None:
+        """Transform a map name into a Tags.
+
+        Args:
+            autocomplete (AutocompleteRepository): Autocomplete and transform service.
+            search (str): Input string to transform.
+
+        Returns:
+            Tags | None: The closest matching map tag, or `None` if no matches found.
+
+        """
+        return await autocomplete.transform_map_tags(search)
