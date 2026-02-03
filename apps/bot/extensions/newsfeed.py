@@ -845,7 +845,7 @@ class NewsfeedHandler:
                 assert guild and _map.playtest
                 thread = guild.get_thread(_map.playtest.thread_id)
                 if not thread:
-                    thread = await self.bot.fetch_channel(_map.playtest.thread_id)
+                    thread = cast(discord.Thread, await self.bot.fetch_channel(_map.playtest.thread_id))
                 await self._publish_event(newsfeed_event, channel=thread)
 
                 view = cog.playtest_views[_map.playtest.thread_id]
@@ -862,7 +862,7 @@ class NewsfeedHandler:
                 assert guild and _map.playtest
                 thread = guild.get_thread(_map.playtest.thread_id)
                 if not thread:
-                    thread = await self.bot.fetch_channel(_map.playtest.thread_id)
+                    thread = cast(discord.Thread, await self.bot.fetch_channel(_map.playtest.thread_id))
                 await self._publish_event(newsfeed_event, channel=thread)
                 view = cog.playtest_views[_map.playtest.thread_id]
                 await view.fetch_data_and_rebuild(self.bot)
