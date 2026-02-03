@@ -1793,7 +1793,11 @@ class MapsService(BaseService):
         proposed: dict[str, Any],
         get_creator_name: Callable[[int], str | Awaitable[str]] | None = None,
     ) -> list[MapEditFieldChange]:
-        """Build human-readable field change list."""
+        """Build human-readable field change list.
+
+        Only includes fields that have actually changed. For creators, compares
+        by id and is_primary, ignoring display-only name field.
+        """
         changes = []
 
         for field_name, new_value in proposed.items():
@@ -1809,6 +1813,16 @@ class MapsService(BaseService):
                 )
             else:
                 old_value = current_map.get(field_name)
+
+            # Check if value actually changed (using same logic as newsfeed service)
+            if field_name == "creators":
+                # Compare only id and is_primary, ignoring name field
+                old_normalized = self._normalize_creators_for_comparison(old_value)
+                new_normalized = self._normalize_creators_for_comparison(new_value)
+                if old_normalized == new_normalized:
+                    continue  # Skip unchanged creators
+            elif old_value == new_value:
+                continue  # Skip unchanged values
 
             # Format for display
             if field_name == "creators":
@@ -1836,6 +1850,42 @@ class MapsService(BaseService):
             )
 
         return changes
+
+    @staticmethod
+    def _normalize_creators_for_comparison(value: Any) -> list[tuple[int, bool]]:  # noqa: ANN401
+        """Normalize creators for comparison, extracting only id and is_primary.
+
+        Args:
+            value: Creator data (list of dicts or Creator objects, or None).
+
+        Returns:
+            Sorted list of (id, is_primary) tuples for comparison.
+        """
+        if value is None:
+            return []
+
+        if not value:
+            return []
+
+        if isinstance(value, dict):
+            value = [value]
+
+        if not isinstance(value, list):
+            return []
+
+        normalized = []
+        for creator in value:
+            if isinstance(creator, dict):
+                creator_id = creator.get("id")
+                is_primary = creator.get("is_primary")
+            else:
+                creator_id = getattr(creator, "id", None)
+                is_primary = getattr(creator, "is_primary", None)
+
+            if creator_id is not None and is_primary is not None:
+                normalized.append((creator_id, is_primary))
+
+        return sorted(normalized)
 
     @staticmethod
     async def _format_creators_for_display(

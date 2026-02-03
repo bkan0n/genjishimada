@@ -4,7 +4,7 @@ import logging
 from typing import cast
 
 from asyncpg import Connection
-from genjishimada_sdk.maps import Mechanics, OverwatchCode, OverwatchMap, PlaytestStatus, Restrictions
+from genjishimada_sdk.maps import Mechanics, OverwatchCode, OverwatchMap, PlaytestStatus, Restrictions, Tags
 from litestar.datastructures import State
 
 from .base import BaseRepository
@@ -296,6 +296,46 @@ class AutocompleteRepository(BaseRepository):
         if not res:
             return None
         return [(r["user_id"], r["name"]) for r in res]
+
+    async def get_similar_map_tags(
+        self, search: str, limit: int = 5, *, conn: Connection | None = None
+    ) -> list[Tags] | None:
+        """Get similar map tags.
+
+        Args:
+            search (str): Input string to compare.
+            limit (int, optional): Maximum number of results. Defaults to 5.
+            conn: Database connection.
+
+        Returns:
+            list[Tags] | None: Matching restriction names, or `None` if no matches are found.
+
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT name FROM maps.tags ORDER BY similarity(name, $1::text) DESC LIMIT $2;"
+        res = await _conn.fetch(query, search, limit)
+        if not res:
+            return None
+        return [r["name"] for r in res]
+
+    async def transform_map_tags(self, search: str, *, conn: Connection | None = None) -> Tags | None:
+        """Transform a map name into a Tag.
+
+        Args:
+            search (str): Input string to transform.
+            conn: Database connection.
+
+        Returns:
+            Tags | None: The closest matching restriction, or `None` if no matches are found.
+
+        """
+        _conn = self._get_connection(conn)
+
+        query = "SELECT name FROM maps.tags ORDER BY similarity(name, $1::text) DESC LIMIT 1;"
+        res = cast("Restrictions", await _conn.fetchval(query, search))
+        if res is None:
+            return None
+        return f'"{res}"'  # type: ignore
 
 
 async def provide_autocomplete_repository(state: State) -> AutocompleteRepository:
