@@ -468,3 +468,4 @@ class FailedAutoverifyEvent(Struct):
     code_match: bool
     time_match: bool
     user_match: bool
+    screenshot: str
