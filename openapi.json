@@ -2277,7 +2277,8 @@
                     "enum": [
                       "Other Heroes",
                       "XP Based",
-                      "Custom Grav/Speed"
+                      "Custom Grav/Speed",
+                      "Aim Parkour"
                     ]
                   },
                   "type": "array"
@@ -14256,7 +14257,8 @@
               "enum": [
                 "Other Heroes",
                 "XP Based",
-                "Custom Grav/Speed"
+                "Custom Grav/Speed",
+                "Aim Parkour"
               ]
             },
             "type": "array"
@@ -14590,7 +14592,8 @@
                   "enum": [
                     "Other Heroes",
                     "XP Based",
-                    "Custom Grav/Speed"
+                    "Custom Grav/Speed",
+                    "Aim Parkour"
                   ]
                 },
                 "type": "array"
@@ -15615,7 +15618,8 @@
                   "enum": [
                     "Other Heroes",
                     "XP Based",
-                    "Custom Grav/Speed"
+                    "Custom Grav/Speed",
+                    "Aim Parkour"
                   ]
                 },
                 "type": "array"
@@ -16018,7 +16022,8 @@
               "enum": [
                 "Other Heroes",
                 "XP Based",
-                "Custom Grav/Speed"
+                "Custom Grav/Speed",
+                "Aim Parkour"
               ]
             },
             "type": "array"
