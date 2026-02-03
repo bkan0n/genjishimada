@@ -587,16 +587,18 @@ class TextInputModal(ui.Modal):
 
     value_input: ui.TextInput
 
-    def __init__(self, field: EditableField, current_value: FieldValue) -> None:
+    def __init__(self, field: EditableField, current_value: FieldValue, original_map_code: str | None = None) -> None:
         """Initialize the text input modal.
 
         Args:
             field: The field being edited.
             current_value: The current value of the field.
+            original_map_code: The original map code (used for duplicate detection when editing CODE field).
         """
         super().__init__(title=f"Edit {field.display_name}")
         self.field = field
         self.submitted_value: str | int | None = None
+        self.original_map_code = original_map_code
 
         # Configure based on field type
         style = TextStyle.paragraph if field == EditableField.DESCRIPTION else TextStyle.short
@@ -623,11 +625,28 @@ class TextInputModal(ui.Modal):
             try:
                 self.submitted_value = int(raw_value) if raw_value else None
             except ValueError:
+                self.stop()
                 raise UserFacingError("Checkpoints must be a number.")
         elif self.field == EditableField.CODE:
             if raw_value and not raw_value.isalnum():
+                self.stop()
                 raise UserFacingError("Code must be alphanumeric.")
-            self.submitted_value = raw_value.upper() if raw_value else None
+            new_code = raw_value.upper() if raw_value else None
+
+            # Check if the new code already exists (and is different from the original)
+            if new_code and new_code != self.original_map_code:
+                try:
+                    existing_map = await itx.client.api.get_map(code=new_code)
+                    if existing_map:
+                        self.stop()
+                        raise UserFacingError(f"Map code `{new_code}` already exists. Please choose a different code.")
+                except APIHTTPError as e:
+                    # If we get a 404, the code doesn't exist - this is fine
+                    if e.status != HTTPStatus.NOT_FOUND:
+                        self.stop()
+                        raise
+
+            self.submitted_value = new_code
         else:
             self.submitted_value = raw_value if raw_value else None
 
@@ -1056,7 +1075,7 @@ class OpenModalButton(ui.Button["MapEditWizardView"]):
             if medals_modal.submitted_medals is not None or current is not None:
                 self.view.state.set_change(self.field, medals_modal.submitted_medals)
         else:
-            text_modal = TextInputModal(self.field, current)
+            text_modal = TextInputModal(self.field, current, original_map_code=self.view.state.map_data.code)
             await itx.response.send_modal(text_modal)
             await text_modal.wait()
             if text_modal.submitted_value is not None or current is not None:
