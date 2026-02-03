@@ -23,5 +23,7 @@ VALUES (
     'XP Based', 2
 ), (
     'Custom Grav/Speed', 3
+), (
+    'Aim Parkour', 4
 )
 ON CONFLICT (name) DO NOTHING;
