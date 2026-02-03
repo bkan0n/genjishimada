@@ -643,6 +643,11 @@ class TextInputModal(ui.Modal):
             self.submitted_value = raw_value if raw_value else None
 
         self.stop()
+        self.stop()
+
+    async def on_error(self, itx: GenjiItx, error: Exception) -> None:
+        """Handle errors."""
+        await itx.client.tree.on_error(itx, cast("app_commands.AppCommandError", error))
 
 
 class MedalsModal(ui.Modal):
