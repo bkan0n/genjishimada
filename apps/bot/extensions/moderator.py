@@ -620,7 +620,6 @@ class TextInputModal(ui.Modal):
         await itx.response.defer()
         raw_value = self.value_input.value.strip()
 
-        # Type conversion based on field
         if self.field == EditableField.CHECKPOINTS:
             try:
                 self.submitted_value = int(raw_value) if raw_value else None
@@ -635,17 +634,10 @@ class TextInputModal(ui.Modal):
 
             # Check if the new code already exists (and is different from the original)
             if new_code and new_code != self.original_map_code:
-                try:
-                    existing_map = await itx.client.api.get_map(code=new_code)
-                    if existing_map:
-                        self.stop()
-                        raise UserFacingError(f"Map code `{new_code}` already exists. Please choose a different code.")
-                except APIHTTPError as e:
-                    # If we get a 404, the code doesn't exist - this is fine
-                    if e.status != HTTPStatus.NOT_FOUND:
-                        self.stop()
-                        raise
-
+                existing_map = await itx.client.api.map_exists(code=new_code)
+                if existing_map:
+                    self.stop()
+                    raise UserFacingError(f"Map code `{new_code}` already exists. Please choose a different code.")
             self.submitted_value = new_code
         else:
             self.submitted_value = raw_value if raw_value else None
