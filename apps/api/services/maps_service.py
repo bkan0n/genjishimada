@@ -7,7 +7,7 @@ import datetime as dt
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Iterable, Literal, overload
 from uuid import UUID
 
 import aiohttp
@@ -1786,6 +1786,28 @@ class MapsService(BaseService):
             rejection_reason=row["rejection_reason"],
         )
 
+    @staticmethod
+    def _normalize_list_for_comparison(value: Iterable | None) -> set[str]:
+        """Normalize list values for order-independent comparison.
+
+        Converts list to set to enable comparison regardless of order.
+        Used for mechanics, restrictions, and tags fields.
+
+        Args:
+            value: List of strings or None.
+
+        Returns:
+            Set of strings for comparison.
+        """
+        if value is None:
+            return set()
+
+        if not isinstance(value, list):
+            return set()
+
+            # Convert all items to strings and use set for order-independent comparison
+        return {str(item) for item in value}
+
     async def _build_field_changes(
         self,
         current_map: dict[str, Any],
@@ -1821,8 +1843,13 @@ class MapsService(BaseService):
                 new_normalized = self._normalize_creators_for_comparison(new_value)
                 if old_normalized == new_normalized:
                     continue  # Skip unchanged creators
+            elif field_name in ("mechanics", "restrictions", "tags"):
+                old_normalized = self._normalize_list_for_comparison(old_value)
+                new_normalized = self._normalize_list_for_comparison(new_value)
+                if old_normalized == new_normalized:
+                    continue
             elif old_value == new_value:
-                continue  # Skip unchanged values
+                continue
 
             # Format for display
             if field_name == "creators":
@@ -1969,8 +1996,8 @@ class MapsService(BaseService):
 
         return MapPatchRequest(**kwargs)
 
+    @staticmethod
     async def _send_edit_resolution_notification(
-        self,
         notification_service: NotificationsService,
         edit_request: MapEditResponse,
         accepted: bool,
