@@ -282,7 +282,10 @@ class StoreService(BaseService):
         """
         async with self._pool.acquire() as conn, conn.transaction():
             rotation_item = await self._store_repo.fetch_rotation_item(
-                item_name, item_type, key_type, conn=conn  # type: ignore[arg-type]
+                item_name,
+                item_type,
+                key_type,
+                conn=conn,  # type: ignore[arg-type]
             )
             if not rotation_item:
                 raise ItemNotInRotationError(item_name)
@@ -291,7 +294,11 @@ class StoreService(BaseService):
                 raise RotationExpiredError()
 
             already_owned = await self._lootbox_repo.check_user_has_reward(
-                user_id, item_type, key_type, item_name, conn=conn  # type: ignore[arg-type]
+                user_id,
+                item_type,
+                key_type,
+                item_name,
+                conn=conn,  # type: ignore[arg-type]
             )
             if already_owned:
                 raise AlreadyOwnedError(item_name)
@@ -305,7 +312,11 @@ class StoreService(BaseService):
             await self._lootbox_repo.add_user_coins(user_id, -price, conn=conn)  # type: ignore[arg-type]
 
             await self._lootbox_repo.insert_user_reward(
-                user_id, item_type, key_type, item_name, conn=conn  # type: ignore[arg-type]
+                user_id,
+                item_type,
+                key_type,
+                item_name,
+                conn=conn,  # type: ignore[arg-type]
             )
 
             await self._store_repo.insert_purchase(
