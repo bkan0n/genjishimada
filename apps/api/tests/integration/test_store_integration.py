@@ -714,3 +714,88 @@ class TestGenerateRotation:
         assert rarity_counts.get("legendary", 0) == 1
         assert rarity_counts.get("epic", 0) >= 1
         assert rarity_counts.get("rare", 0) >= 1
+
+
+class TestGetConfig:
+    """GET /api/v3/store/admin/config"""
+
+    async def test_happy_path(self, test_client):
+        """Get config returns current configuration."""
+        response = await test_client.get("/api/v3/store/admin/config")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "rotation_period_days" in data
+        assert "last_rotation_at" in data
+        assert "next_rotation_at" in data
+        assert "active_key_type" in data
+        assert data["rotation_period_days"] == 7  # Default from migration
+        assert data["active_key_type"] in ["Classic", "Winter"]
+
+
+class TestUpdateConfig:
+    """PUT /api/v3/store/admin/config"""
+
+    async def test_update_rotation_period(self, test_client):
+        """Update rotation period changes config."""
+        response = await test_client.put(
+            "/api/v3/store/admin/config",
+            json={"rotation_period_days": 14}
+        )
+
+        assert response.status_code == 200
+
+        # Verify via get config
+        get_response = await test_client.get("/api/v3/store/admin/config")
+        data = get_response.json()
+        assert data["rotation_period_days"] == 14
+
+        # Reset back to 7 for other tests
+        await test_client.put(
+            "/api/v3/store/admin/config",
+            json={"rotation_period_days": 7}
+        )
+
+    async def test_update_active_key_type(self, test_client):
+        """Update active key type changes config."""
+        # Get current active key
+        get_response = await test_client.get("/api/v3/store/admin/config")
+        original_key = get_response.json()["active_key_type"]
+
+        # Switch to the other key
+        new_key = "Winter" if original_key == "Classic" else "Classic"
+
+        response = await test_client.put(
+            "/api/v3/store/admin/config",
+            json={"active_key_type": new_key}
+        )
+
+        assert response.status_code == 200
+
+        # Verify change
+        get_response = await test_client.get("/api/v3/store/admin/config")
+        data = get_response.json()
+        assert data["active_key_type"] == new_key
+
+        # Verify pricing reflects change
+        pricing_response = await test_client.get("/api/v3/store/keys")
+        pricing_data = pricing_response.json()
+        assert pricing_data["active_key_type"] == new_key
+
+        # Reset back
+        await test_client.put(
+            "/api/v3/store/admin/config",
+            json={"active_key_type": original_key}
+        )
+
+    async def test_invalid_key_type_returns_500(self, test_client):
+        """Update with invalid key type returns 500 (FK constraint violation).
+
+        TODO: Service should validate key_type exists and return 404 instead.
+        """
+        response = await test_client.put(
+            "/api/v3/store/admin/config",
+            json={"active_key_type": "InvalidKey"}
+        )
+
+        assert response.status_code == 500
