@@ -148,3 +148,97 @@ class TestGetKeyPricing:
             assert inactive_key["is_active"] is False
             inactive_price_1x = [p for p in inactive_key["prices"] if p["quantity"] == 1][0]
             assert inactive_price_1x["price"] == 1000
+
+
+class TestPurchaseKeys:
+    """POST /api/v3/store/purchase/keys"""
+
+    async def test_purchase_single_key(self, test_client, create_test_user, grant_user_coins, asyncpg_pool):
+        """Purchase single key deducts coins and grants key."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 1000)
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "Classic",
+                "quantity": 1,
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["keys_purchased"] == 1
+        assert data["price_paid"] == 500  # Active key price
+        assert data["remaining_coins"] == 500
+
+        # Verify key was granted
+        async with asyncpg_pool.acquire() as conn:
+            key_count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM lootbox.user_keys
+                WHERE user_id = $1 AND key_type = $2
+                """,
+                user_id,
+                "Classic",
+            )
+        assert key_count == 1
+
+        # Verify coins were deducted
+        async with asyncpg_pool.acquire() as conn:
+            coins = await conn.fetchval(
+                "SELECT coins FROM core.users WHERE id = $1",
+                user_id,
+            )
+        assert coins == 500
+
+    @pytest.mark.parametrize(
+        "quantity,expected_price,expected_discount",
+        [
+            (3, 1275, 15),  # 500 * 3 * 0.85
+            (5, 1750, 30),  # 500 * 5 * 0.70
+        ]
+    )
+    async def test_purchase_bulk_keys(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+        asyncpg_pool,
+        quantity,
+        expected_price,
+        expected_discount,
+    ):
+        """Purchase bulk keys applies correct discount."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 3000)
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "Classic",
+                "quantity": quantity,
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["keys_purchased"] == quantity
+        assert data["price_paid"] == expected_price
+        assert data["remaining_coins"] == 3000 - expected_price
+
+        # Verify correct number of keys granted
+        async with asyncpg_pool.acquire() as conn:
+            key_count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM lootbox.user_keys
+                WHERE user_id = $1 AND key_type = $2
+                """,
+                user_id,
+                "Classic",
+            )
+        assert key_count == quantity
