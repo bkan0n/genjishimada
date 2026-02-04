@@ -6,6 +6,8 @@ import json
 import os
 import pprint
 import re
+from collections.abc import Awaitable, Callable
+from functools import partial
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Sequence, cast, get_args
 
@@ -68,7 +70,7 @@ from utilities.emojis import REJECTED, generate_all_star_rating_strings
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.extra import poll_job_until_complete
 from utilities.formatter import FilteredFormatter
-from utilities.paginator import PaginatorView
+from utilities.paginator import ApiPaginatorView, PaginatorView
 
 if TYPE_CHECKING:
     from aio_pika.abc import AbstractIncomingMessage
@@ -674,7 +676,6 @@ class CompletionHandler(BaseHandler):
         with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
             await (self.verification_channel.get_partial_message(event.verification_id)).delete()
 
-        # Remove from verification_views if exists
         stoppable_view = self.verification_views.pop(event.verification_id, None)
         if stoppable_view:
             stoppable_view.stop()
@@ -911,23 +912,23 @@ class CompletionMessageLink(ui.Button):
         )
 
 
-class CompletionsLeaderboardPaginator(PaginatorView[CompletionLeaderboardFormattable]):
+class CompletionsLeaderboardPaginator(ApiPaginatorView[CompletionLeaderboardFormattable]):
     def __init__(
         self,
         code: OverwatchCode,
-        data: list[CompletionLeaderboardFormattable],
+        fetch_func: Callable[..., Awaitable[list[CompletionLeaderboardFormattable]]],
         *,
         guild_id: int,
         channel_id: int,
     ) -> None:
-        """Initialize a completions leaderboard paginator.
+        """Initialize a completions leaderboard paginator with API pagination.
 
         Sets up a paginated view of completion leaderboard entries for a map,
         including links back to the original submission messages.
 
         Args:
             code: Overwatch map code the leaderboard belongs to.
-            data: List of leaderboard entries to display.
+            fetch_func: Partial-bound API method that accepts page_number and page_size.
             guild_id: Discord guild ID for constructing message links.
             channel_id: Channel ID for constructing message links.
         """
@@ -935,8 +936,9 @@ class CompletionsLeaderboardPaginator(PaginatorView[CompletionLeaderboardFormatt
         self.channel_id = channel_id
         super().__init__(
             f"Completions - {code}",
-            data,
+            fetch_func,
             page_size=10,
+            empty_message="There are no completions for this map.",
         )
 
     def build_page_body(self) -> Sequence[ui.Item]:
@@ -950,7 +952,7 @@ class CompletionsLeaderboardPaginator(PaginatorView[CompletionLeaderboardFormatt
             Sequence[ui.Item]: UI components representing the page.
         """
         sections = []
-        for completion in self.current_page:
+        for completion in self.get_current_page_data():
             ordinal = make_ordinal(completion.rank) if completion.rank else ""
             title = f"{ordinal} - " if ordinal else ""
             formatted = FilteredFormatter(completion).format()
@@ -963,43 +965,48 @@ class CompletionsLeaderboardPaginator(PaginatorView[CompletionLeaderboardFormatt
         return sections
 
 
-class CompletionsUserPaginator(PaginatorView[CompletionUserFormattable]):
+class CompletionsUserPaginator(ApiPaginatorView[CompletionUserFormattable]):
     def __init__(
         self,
         username: str,
-        data: list[CompletionUserFormattable],
+        fetch_func: Callable[..., Awaitable[list[CompletionUserFormattable]]],
         *,
         guild_id: int,
         channel_id: int,
     ) -> None:
-        """Initialize a user completions paginator.
+        """Initialize a user completions paginator with API pagination.
 
         Sets up a paginated view showing all completions by a user,
-        including their “also known as” names and links to the
+        including their "also known as" names and links to the
         original submission messages.
 
         Args:
             username: The display name of the user whose completions are shown.
-            data: List of completion entries for the user.
+            fetch_func: Partial-bound API method that accepts page_number and page_size.
             guild_id: Discord guild ID for constructing message links.
             channel_id: Channel ID for constructing message links.
         """
         self.guild_id = guild_id
         self.channel_id = channel_id
-        super().__init__(f"Completions - {username}", data, page_size=6)
+        super().__init__(
+            f"Completions - {username}",
+            fetch_func,
+            page_size=6,
+            empty_message="There are no completions for this user.",
+        )
 
     def build_page_body(self) -> Sequence[ui.Item]:
         """Build the UI page body for the current user's completions.
 
         Renders the user's completions as sections with formatted
         details and links to submission messages, prefixed with
-        their “also known as” names.
+        their "also known as" names.
 
         Returns:
             Sequence[ui.Item]: UI components representing the page.
         """
         sections = []
-        for completion in self.current_page:
+        for completion in self.get_current_page_data():
             section = ui.Section(
                 ui.TextDisplay(FilteredFormatter(completion).format()),
                 accessory=CompletionMessageLink(self.guild_id, self.channel_id, completion.message_id),
@@ -1183,16 +1190,18 @@ class CompletionsCog(BaseCog):
             UserFacingError: If the user has no completions.
         """
         await itx.response.defer(ephemeral=True)
-        data = await self.bot.api.get_completions_for_user(user, difficulty)
-        if not data:
-            raise UserFacingError("There are no completions for this user.")
         username = getattr(await self.bot.api.get_user(user), "coalesced_name", None) or "Unknown User"
         view = CompletionsUserPaginator(
             username,
-            data,
+            fetch_func=partial(
+                self.bot.api.get_completions_for_user,
+                user_id=user,
+                difficulty=difficulty,
+            ),
             guild_id=self.bot.config.guild,
             channel_id=self.bot.config.channels.submission.completions,
         )
+        await view.initialize()
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
@@ -1216,17 +1225,19 @@ class CompletionsCog(BaseCog):
             UserFacingError: If the user has no world records.
         """
         await itx.response.defer(ephemeral=True)
-        data = await self.bot.api.get_world_records_for_user(user)
-        if not data:
-            raise UserFacingError("There are no world records for this user.")
         username = getattr(await self.bot.api.get_user(user), "coalesced_name", None) or "Unknown User"
         view = CompletionsUserPaginator(
             username,
-            data,
+            fetch_func=partial(
+                self.bot.api.get_world_records_for_user,
+                user_id=user,
+            ),
             guild_id=self.bot.config.guild,
             channel_id=self.bot.config.channels.submission.completions,
         )
+        await view.initialize()
         await itx.edit_original_response(view=view)
+        view.original_interaction = itx
 
     @app_commands.command(name="completions")
     @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
@@ -1242,15 +1253,16 @@ class CompletionsCog(BaseCog):
             code (OverwatchCode): The code being submitted.
         """
         await itx.response.defer(ephemeral=True)
-        data = await self.bot.api.get_completions(code)
-        if not data:
-            raise UserFacingError("There are no completions for this map.")
         view = CompletionsLeaderboardPaginator(
             code,
-            data,
+            fetch_func=partial(
+                self.bot.api.get_completions,
+                code=code,
+            ),
             guild_id=self.bot.config.guild,
             channel_id=self.bot.config.channels.submission.completions,
         )
+        await view.initialize()
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 

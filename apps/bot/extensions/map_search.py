@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Awaitable, Callable
+from functools import partial
 from logging import getLogger
 from typing import TYPE_CHECKING, Literal, Sequence, cast, get_args
 
@@ -15,7 +17,7 @@ from utilities.emojis import generate_all_star_rating_strings
 from utilities.errors import UserFacingError
 from utilities.formatter import FilteredFormatter, FormattableProtocol
 from utilities.maps import MapModel
-from utilities.paginator import PaginatorView
+from utilities.paginator import ApiPaginatorView, PaginatorView
 from utilities.views.mod_guides_view import FormattableGuide
 
 if TYPE_CHECKING:
@@ -192,24 +194,34 @@ class CNTranslatedFilteredFormatter(FilteredFormatter):
         return super().format()
 
 
-class MapSearchView(PaginatorView[MapModel]):
-    def __init__(self, data: Sequence[MapModel], *, page_size: int = 5, enable_cn_translation: bool = False) -> None:
-        """Initialize MapSearchView Paginator.
+class MapSearchView(ApiPaginatorView[MapModel]):
+    def __init__(
+        self,
+        fetch_func: Callable[..., Awaitable[list[MapModel]]],
+        *,
+        page_size: int = 5,
+        enable_cn_translation: bool = False,
+    ) -> None:
+        """Initialize MapSearchView Paginator with API pagination.
 
         Args:
-            data: A list of MapModel.
+            fetch_func: Partial-bound API method that accepts page_number and page_size.
             page_size: Amount of Models on a single page.
             enable_cn_translation (bool, defaults to False): Enable Chinese translations.
         """
         self.enable_cn_translation = enable_cn_translation
-        super().__init__("Map Search", data, page_size=page_size)
+        super().__init__(
+            "Map Search",
+            fetch_func,
+            page_size=page_size,
+            empty_message="There are no maps with the selected filters.",
+        )
 
     def build_completion_text(self, _map: MapModel) -> str:
         """Return a 'Completed' string with optional medal, based on time + medal thresholds."""
         if _map.time is None:
             return ""
 
-        # Always at least "Completed"
         res = "🗸 Completed"
 
         medal_label = None
@@ -218,12 +230,11 @@ class MapSearchView(PaginatorView[MapModel]):
         if medals:
             t = _map.time
 
-            # Adjust < vs <= if your thresholds are meant to be inclusive
-            if medals.gold is not None and t <= medals.gold:
+            if medals.gold is not None and t < medals.gold:
                 medal_label = "Gold"
-            elif medals.silver is not None and t <= medals.silver:
+            elif medals.silver is not None and t < medals.silver:
                 medal_label = "Silver"
-            elif medals.bronze is not None and t <= medals.bronze:
+            elif medals.bronze is not None and t < medals.bronze:
                 medal_label = "Bronze"
 
         if medal_label:
@@ -233,7 +244,7 @@ class MapSearchView(PaginatorView[MapModel]):
 
     def build_page_body(self) -> Sequence[ui.Item]:
         """Build page body for MapSearchView."""
-        data = self.current_page
+        data = self.get_current_page_data()
         res = []
         for _map in data:
             completion_text = self.build_completion_text(_map)
@@ -356,33 +367,31 @@ class MapSearchCog(BaseCog):
             official_val = True
         else:
             official_val = False
-        try:
-            if code:
-                maps = [await self.bot.api.get_map(code=code, user_id=itx.user.id)]
-            else:
-                maps = await self.bot.api.get_maps(
-                    map_name=[map_name] if map_name else None,
-                    official=official_val,
-                    restrictions=restrictions,
-                    mechanics=mechanics,
-                    tags=tags,
-                    difficulty_exact=cast("DifficultyTop", difficulty.value) if difficulty else None,
-                    minimum_quality=minimum_quality.value if minimum_quality else None,
-                    creator_ids=[creator] if creator else None,
-                    playtest_filter=playtest_filter,
-                    medal_filter=medal_filter,
-                    completion_filter=completion_filter,
-                    category=[category] if category else None,
-                    return_all=True,
-                    user_id=itx.user.id,
-                    archived=False,
-                    hidden=False,
-                )
-        except ValueError:
-            raise UserFacingError("There are no maps with the selected filters.")
-        if not maps:
-            raise UserFacingError("There are no maps with the selected filters.")
-        view = MapSearchView(maps)
+
+        view = MapSearchView(
+            fetch_func=partial(
+                self.bot.api.get_maps,
+                map_name=[map_name] if map_name else None,
+                code=code,
+                official=official_val,
+                restrictions=restrictions,
+                mechanics=mechanics,
+                tags=tags,
+                difficulty_exact=cast("DifficultyTop", difficulty.value) if difficulty else None,
+                minimum_quality=minimum_quality.value if minimum_quality else None,
+                creator_ids=[creator] if creator else None,
+                playtest_filter=playtest_filter,
+                medal_filter=medal_filter,
+                completion_filter=completion_filter,
+                category=[category] if category else None,
+                return_all=False,
+                user_id=itx.user.id,
+                archived=False,
+                hidden=False,
+            ),
+            page_size=5,
+        )
+        await view.initialize()
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
@@ -472,33 +481,32 @@ class MapSearchCog(BaseCog):
             official_val = True
         else:
             official_val = False
-        try:
-            if code:
-                maps = [await self.bot.api.get_map(code=code)]
-            else:
-                maps = await self.bot.api.get_maps(
-                    map_name=[map_name] if map_name else None,
-                    official=official_val,
-                    restrictions=restrictions,
-                    mechanics=mechanics,
-                    tags=tags,
-                    difficulty_exact=cast("DifficultyTop", difficulty.value) if difficulty else None,
-                    minimum_quality=minimum_quality.value if minimum_quality else None,
-                    creator_ids=[creator] if creator else None,
-                    playtest_filter=CN_FILTER_3_TRANSLATION_TEMP[playtest_filter],
-                    medal_filter=CN_FILTER_TRANSLATIONS_TEMP[medal_filter],
-                    completion_filter=CN_FILTER_TRANSLATIONS_TEMP[completion_filter],
-                    category=[category] if category else None,
-                    return_all=True,
-                    user_id=itx.user.id,
-                    archived=False,
-                    hidden=False,
-                )
-        except ValueError:
-            raise UserFacingError("根据所选筛选条件，未找到匹配的地图。")  # noqa: RUF001
-        if not maps:
-            raise UserFacingError("根据所选筛选条件，未找到匹配的地图。")  # noqa: RUF001
-        view = MapSearchView(maps, enable_cn_translation=True)
+
+        view = MapSearchView(
+            fetch_func=partial(
+                self.bot.api.get_maps,
+                map_name=[map_name] if map_name else None,
+                code=code,
+                official=official_val,
+                restrictions=restrictions,
+                mechanics=mechanics,
+                tags=tags,
+                difficulty_exact=cast("DifficultyTop", difficulty.value) if difficulty else None,
+                minimum_quality=minimum_quality.value if minimum_quality else None,
+                creator_ids=[creator] if creator else None,
+                playtest_filter=CN_FILTER_3_TRANSLATION_TEMP[playtest_filter],
+                medal_filter=CN_FILTER_TRANSLATIONS_TEMP[medal_filter],
+                completion_filter=CN_FILTER_TRANSLATIONS_TEMP[completion_filter],
+                category=[category] if category else None,
+                return_all=False,
+                user_id=itx.user.id,
+                archived=False,
+                hidden=False,
+            ),
+            page_size=5,
+            enable_cn_translation=True,
+        )
+        await view.initialize()
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
