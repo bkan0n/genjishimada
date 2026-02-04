@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from uuid import UUID
 
+import asyncpg
 from asyncpg import Connection, Pool
 from litestar.datastructures import State
 
 from repository.base import BaseRepository
+from repository.exceptions import (
+    ForeignKeyViolationError,
+    extract_constraint_name,
+)
 
 
 class StoreRepository(BaseRepository):
@@ -120,6 +125,9 @@ class StoreRepository(BaseRepository):
             item_type: Item type (for item purchases).
             rotation_id: Rotation UUID (for item purchases).
             conn: Optional connection for transaction support.
+
+        Raises:
+            ForeignKeyViolationError: If user_id or key_type doesn't exist.
         """
         _conn = self._get_connection(conn)
         query = """
@@ -129,17 +137,25 @@ class StoreRepository(BaseRepository):
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         """
-        await _conn.execute(
-            query,
-            user_id,
-            purchase_type,
-            item_name,
-            item_type,
-            key_type,
-            quantity,
-            price_paid,
-            rotation_id,
-        )
+        try:
+            await _conn.execute(
+                query,
+                user_id,
+                purchase_type,
+                item_name,
+                item_type,
+                key_type,
+                quantity,
+                price_paid,
+                rotation_id,
+            )
+        except asyncpg.ForeignKeyViolationError as e:
+            constraint = extract_constraint_name(e)
+            raise ForeignKeyViolationError(
+                constraint_name=constraint or "unknown",
+                table="store.purchases",
+                detail=str(e),
+            ) from e
 
     async def fetch_user_purchases(
         self,
