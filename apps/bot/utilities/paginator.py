@@ -460,14 +460,14 @@ class ApiPaginatorView(BasePaginatorView[TP]):
             initial_page (int, optional): Initial page number (1-based). Defaults to 1.
             empty_message (str, optional): Message to show when no results found.
         """
-        super().__init__(title, page_size=page_size)
-
         self._fetch_func = fetch_func
         self._empty_message = empty_message
         self._current_page: list[TP] = []
         self._page_cache: OrderedDict[int, list[TP]] = OrderedDict()
         self._total_results: int | None = None
         self._prefetch_task: asyncio.Task | None = None
+
+        super().__init__(title, page_size=page_size)
 
         self._previous_button = _PreviousButton()
         self._page_number_button = _PageNumberButton(1)
