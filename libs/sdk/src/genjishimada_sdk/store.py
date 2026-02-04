@@ -3,23 +3,24 @@
 from __future__ import annotations
 
 import datetime as dt
+from typing import Literal
 from uuid import UUID
 
 from msgspec import Struct
 
 __all__ = (
-    "StoreConfigResponse",
-    "RotationItemResponse",
-    "RotationResponse",
+    "GenerateRotationRequest",
+    "ItemPurchaseRequest",
+    "ItemPurchaseResponse",
     "KeyPriceInfo",
     "KeyPricingResponse",
     "KeyPurchaseRequest",
     "KeyPurchaseResponse",
-    "ItemPurchaseRequest",
-    "ItemPurchaseResponse",
     "PurchaseHistoryItem",
     "PurchaseHistoryResponse",
-    "GenerateRotationRequest",
+    "RotationItemResponse",
+    "RotationResponse",
+    "StoreConfigResponse",
     "UpdateConfigRequest",
 )
 
@@ -108,12 +109,12 @@ class KeyPurchaseRequest(Struct):
     Attributes:
         user_id: User making purchase.
         key_type: Type of key to purchase.
-        quantity: Number of keys (1, 3, or 5).
+        quantity: Number of keys (must be 1, 3, or 5).
     """
 
     user_id: int
     key_type: str
-    quantity: int
+    quantity: Literal[1, 3, 5]
 
 
 class KeyPurchaseResponse(Struct):
@@ -171,7 +172,7 @@ class PurchaseHistoryItem(Struct):
 
     Attributes:
         id: Purchase ID.
-        purchase_type: Either 'key' or 'item'.
+        purchase_type: Type of purchase (must be 'key' or 'item').
         item_name: Name of item (if item purchase).
         item_type: Type of item (if item purchase).
         key_type: Key type.
@@ -181,7 +182,7 @@ class PurchaseHistoryItem(Struct):
     """
 
     id: int
-    purchase_type: str
+    purchase_type: Literal["key", "item"]
     item_name: str | None
     item_type: str | None
     key_type: str
