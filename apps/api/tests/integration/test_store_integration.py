@@ -75,3 +75,76 @@ class TestGetRotation:
         # Verify our test item is marked owned
         owned_item = [i for i in owned_items if i["item_name"] == test_item["item_name"]]
         assert len(owned_item) == 1
+
+
+class TestGetKeyPricing:
+    """GET /api/v3/store/keys"""
+
+    async def test_happy_path(self, test_client):
+        """Get key pricing returns all key types with pricing tiers."""
+        response = await test_client.get("/api/v3/store/keys")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "active_key_type" in data
+        assert "keys" in data
+        assert isinstance(data["keys"], list)
+        assert len(data["keys"]) >= 2  # Classic and Winter at minimum
+
+        # Validate key structure
+        key = data["keys"][0]
+        assert "key_type" in key
+        assert "is_active" in key
+        assert "prices" in key
+        assert len(key["prices"]) == 3  # 1x, 3x, 5x
+
+        # Validate price structure
+        price = key["prices"][0]
+        assert "quantity" in price
+        assert "price" in price
+        assert "discount_percent" in price
+
+    async def test_pricing_structure_validation(self, test_client):
+        """Validate bulk discounts are applied correctly."""
+        response = await test_client.get("/api/v3/store/keys")
+        data = response.json()
+
+        for key in data["keys"]:
+            prices = {p["quantity"]: p for p in key["prices"]}
+
+            # Validate quantities
+            assert 1 in prices
+            assert 3 in prices
+            assert 5 in prices
+
+            # 1x should have no discount
+            assert prices[1]["discount_percent"] == 0
+
+            # 3x should have 15% discount
+            assert prices[3]["discount_percent"] == 15
+
+            # 5x should have 30% discount
+            assert prices[5]["discount_percent"] == 30
+
+    async def test_active_vs_inactive_pricing(self, test_client):
+        """Active keys should be cheaper than inactive keys."""
+        response = await test_client.get("/api/v3/store/keys")
+        data = response.json()
+
+        active_key_type = data["active_key_type"]
+        keys_by_type = {k["key_type"]: k for k in data["keys"]}
+
+        active_key = keys_by_type[active_key_type]
+        inactive_keys = [k for k in data["keys"] if k["key_type"] != active_key_type]
+
+        assert active_key["is_active"] is True
+
+        # Active 1x price should be 500
+        active_price_1x = [p for p in active_key["prices"] if p["quantity"] == 1][0]
+        assert active_price_1x["price"] == 500
+
+        # Inactive 1x price should be 1000
+        for inactive_key in inactive_keys:
+            assert inactive_key["is_active"] is False
+            inactive_price_1x = [p for p in inactive_key["prices"] if p["quantity"] == 1][0]
+            assert inactive_price_1x["price"] == 1000
