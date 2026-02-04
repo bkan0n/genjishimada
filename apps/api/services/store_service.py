@@ -9,6 +9,7 @@ from uuid import UUID
 import msgspec
 from asyncpg import Pool
 from genjishimada_sdk.store import (
+    GenerateRotationResponse,
     ItemPurchaseResponse,
     KeyPriceInfo,
     KeyPricingResponse,
@@ -369,7 +370,7 @@ class StoreService(BaseService):
         total, purchases = await self._store_repo.fetch_user_purchases(user_id, limit, offset)
         return msgspec.convert({"total": total, "purchases": purchases}, PurchaseHistoryResponse)
 
-    async def generate_rotation(self, item_count: int = 5) -> dict:
+    async def generate_rotation(self, item_count: int = 5) -> GenerateRotationResponse:
         """Generate a new store rotation.
 
         Args:
@@ -378,7 +379,8 @@ class StoreService(BaseService):
         Returns:
             Rotation generation result.
         """
-        return await self._store_repo.generate_rotation(item_count)
+        result = await self._store_repo.generate_rotation(item_count)
+        return msgspec.convert(result, GenerateRotationResponse)
 
     async def update_config(
         self,

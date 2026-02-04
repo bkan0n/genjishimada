@@ -229,12 +229,7 @@ class StoreController(litestar.Controller):
             Generation result with rotation details.
         """
         item_count = data.item_count if data else 5
-        result = await store_service.generate_rotation(item_count)
-        return GenerateRotationResponse(
-            rotation_id=result["rotation_id"],
-            items_generated=result["items_generated"],
-            available_until=result["available_until"],
-        )
+        return await store_service.generate_rotation(item_count)
 
     @litestar.get(
         path="/admin/config",
