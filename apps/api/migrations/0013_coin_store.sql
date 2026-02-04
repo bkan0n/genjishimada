@@ -1,6 +1,17 @@
 -- Migration 0013: Coin Store
 -- Creates store schema, tables, and PL/pgSQL functions for rotation management
 
+-- Enable pg_cron extension for automatic rotation scheduling
+-- NOTE: Requires shared_preload_libraries = 'pg_cron' in postgresql.conf
+-- Silently ignore if extension is not available (e.g., in test environments)
+DO $$
+BEGIN
+    CREATE EXTENSION IF NOT EXISTS pg_cron;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'pg_cron extension not available, skipping cron scheduling';
+END $$;
+
 -- Create store schema
 CREATE SCHEMA IF NOT EXISTS store;
 
@@ -92,6 +103,7 @@ DECLARE
     v_legendary_count int;
     v_epic_count int;
     v_rare_count int;
+    v_temp_count int;
 BEGIN
     v_rotation_id := gen_random_uuid();
 
@@ -168,7 +180,8 @@ BEGIN
     ORDER BY random()
     LIMIT v_epic_count;
 
-    v_items_generated := v_items_generated + ROW_COUNT;
+    GET DIAGNOSTICS v_temp_count = ROW_COUNT;
+    v_items_generated := v_items_generated + v_temp_count;
 
     -- Rare items
     INSERT INTO store.rotations (
@@ -197,7 +210,8 @@ BEGIN
     ORDER BY random()
     LIMIT v_rare_count;
 
-    v_items_generated := v_items_generated + ROW_COUNT;
+    GET DIAGNOSTICS v_temp_count = ROW_COUNT;
+    v_items_generated := v_items_generated + v_temp_count;
 
     UPDATE store.config
     SET last_rotation_at = now(),
@@ -260,3 +274,27 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Generate initial rotation
 SELECT * FROM store.generate_rotation();
+
+-- Schedule automatic rotation check to run every hour
+-- Only if pg_cron extension is available
+DO $body$
+BEGIN
+    -- Check if pg_cron extension is available
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+        -- Unschedule any existing job first to avoid duplicates on migration re-run
+        PERFORM cron.unschedule('store-rotation-check') WHERE EXISTS (
+            SELECT 1 FROM cron.job WHERE jobname = 'store-rotation-check'
+        );
+
+        -- Schedule the rotation check
+        PERFORM cron.schedule(
+            'store-rotation-check',
+            '0 * * * *',
+            'SELECT store.check_and_rotate()'
+        );
+
+        RAISE NOTICE 'Scheduled pg_cron job: store-rotation-check';
+    ELSE
+        RAISE NOTICE 'pg_cron extension not available, skipping cron scheduling';
+    END IF;
+END $body$;
