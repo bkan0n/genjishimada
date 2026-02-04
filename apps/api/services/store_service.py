@@ -82,7 +82,7 @@ class StoreService(BaseService):
         elif quantity == 5:
             return int(base_price * 5 * BULK_DISCOUNT_5X)
         else:
-            return base_price
+            raise ValueError(f"Invalid quantity: {quantity}")
 
     async def get_config(self) -> StoreConfigResponse:
         """Get store configuration.
@@ -241,6 +241,14 @@ class StoreService(BaseService):
 
             remaining_coins = user_coins - price
 
+        log.info(
+            "User %s purchased %s %s key(s) for %s coins",
+            user_id,
+            quantity,
+            key_type,
+            price,
+        )
+
         return KeyPurchaseResponse(
             success=True,
             keys_purchased=quantity,
@@ -313,6 +321,15 @@ class StoreService(BaseService):
             )
 
             remaining_coins = user_coins - price
+
+        log.info(
+            "User %s purchased item '%s' (%s, %s) for %s coins",
+            user_id,
+            item_name,
+            item_type,
+            key_type,
+            price,
+        )
 
         return ItemPurchaseResponse(
             success=True,
