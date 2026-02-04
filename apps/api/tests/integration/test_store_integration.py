@@ -242,3 +242,108 @@ class TestPurchaseKeys:
                 "Classic",
             )
         assert key_count == quantity
+
+    async def test_insufficient_coins_returns_402(self, test_client, create_test_user, grant_user_coins):
+        """Purchase with insufficient coins returns 402."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 100)  # Not enough for 500 coin key
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "Classic",
+                "quantity": 1,
+            }
+        )
+
+        assert response.status_code == 402
+
+    @pytest.mark.parametrize("invalid_quantity", [0, 2, 4, 6, 10])
+    async def test_invalid_quantity_returns_400(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+        invalid_quantity,
+    ):
+        """Purchase with invalid quantity returns 400."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 5000)
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "Classic",
+                "quantity": invalid_quantity,
+            }
+        )
+
+        assert response.status_code == 400
+
+    async def test_invalid_key_type_returns_500(self, test_client, create_test_user, grant_user_coins):
+        """Purchase with invalid key type returns 500 (FK constraint violation).
+
+        TODO: Service should validate key_type and return 400 instead.
+        """
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 1000)
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "InvalidKey",
+                "quantity": 1,
+            }
+        )
+
+        assert response.status_code == 500
+
+    async def test_multiple_purchases_stack_keys(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+        asyncpg_pool,
+    ):
+        """Multiple key purchases stack correctly."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 2000)
+
+        # First purchase
+        response1 = await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "Classic",
+                "quantity": 1,
+            }
+        )
+        assert response1.status_code == 200
+        assert response1.json()["remaining_coins"] == 1500
+
+        # Second purchase
+        response2 = await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "Classic",
+                "quantity": 1,
+            }
+        )
+        assert response2.status_code == 200
+        assert response2.json()["remaining_coins"] == 1000
+
+        # Verify total keys
+        async with asyncpg_pool.acquire() as conn:
+            key_count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM lootbox.user_keys
+                WHERE user_id = $1 AND key_type = $2
+                """,
+                user_id,
+                "Classic",
+            )
+        assert key_count == 2
