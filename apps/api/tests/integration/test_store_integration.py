@@ -637,3 +637,80 @@ class TestGetUserPurchases:
         purchase_types = {p["purchase_type"] for p in data["purchases"]}
         assert "key" in purchase_types
         assert "item" in purchase_types
+
+
+class TestGenerateRotation:
+    """POST /api/v3/store/admin/rotation/generate"""
+
+    async def test_generate_default_rotation(self, test_client, asyncpg_pool):
+        """Generate rotation with default parameters creates 5 items."""
+        response = await test_client.post("/api/v3/store/admin/rotation/generate")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "rotation_id" in data
+        assert "items_generated" in data
+        assert "available_until" in data
+        assert data["items_generated"] == 5
+
+        # Verify items exist in database
+        async with asyncpg_pool.acquire() as conn:
+            count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM store.rotations
+                WHERE rotation_id = $1
+                """,
+                data["rotation_id"],
+            )
+        assert count == 5
+
+    async def test_generate_custom_item_count(self, test_client, asyncpg_pool):
+        """Generate rotation with custom item count."""
+        response = await test_client.post(
+            "/api/v3/store/admin/rotation/generate",
+            json={"item_count": 3}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["items_generated"] == 3
+
+        # Verify count in database
+        async with asyncpg_pool.acquire() as conn:
+            count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM store.rotations
+                WHERE rotation_id = $1
+                """,
+                data["rotation_id"],
+            )
+        assert count == 3
+
+    async def test_rarity_distribution_correct(self, test_client, asyncpg_pool):
+        """Generated rotation has correct rarity distribution."""
+        response = await test_client.post(
+            "/api/v3/store/admin/rotation/generate",
+            json={"item_count": 5}
+        )
+
+        assert response.status_code == 200
+        rotation_id = response.json()["rotation_id"]
+
+        # Check rarity distribution
+        async with asyncpg_pool.acquire() as conn:
+            rarities = await conn.fetch(
+                """
+                SELECT rarity, COUNT(*) as count
+                FROM store.rotations
+                WHERE rotation_id = $1
+                GROUP BY rarity
+                """,
+                rotation_id,
+            )
+
+        rarity_counts = {r["rarity"]: r["count"] for r in rarities}
+
+        # Should have 1 legendary, 1-2 epic, rest rare
+        assert rarity_counts.get("legendary", 0) == 1
+        assert rarity_counts.get("epic", 0) >= 1
+        assert rarity_counts.get("rare", 0) >= 1
