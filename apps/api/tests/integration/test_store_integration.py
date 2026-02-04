@@ -347,3 +347,62 @@ class TestPurchaseKeys:
                 "Classic",
             )
         assert key_count == 2
+
+
+class TestPurchaseItem:
+    """POST /api/v3/store/purchase/item"""
+
+    async def test_purchase_item_success(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+        asyncpg_pool,
+    ):
+        """Purchase item deducts coins and grants reward."""
+        user_id = await create_test_user()
+
+        # Get current rotation to find an item
+        rotation_response = await test_client.get("/api/v3/store/rotation")
+        items = rotation_response.json()["items"]
+        test_item = items[0]
+
+        # Grant user enough coins for the item
+        await grant_user_coins(user_id, test_item["price"] + 100)
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/item",
+            json={
+                "user_id": user_id,
+                "item_name": test_item["item_name"],
+                "item_type": test_item["item_type"],
+                "key_type": test_item["key_type"],
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["item_name"] == test_item["item_name"]
+        assert data["item_type"] == test_item["item_type"]
+        assert data["price_paid"] == test_item["price"]
+        assert data["remaining_coins"] == 100
+
+        # Verify item was granted
+        async with asyncpg_pool.acquire() as conn:
+            reward_exists = await conn.fetchval(
+                """
+                SELECT EXISTS(
+                    SELECT 1 FROM lootbox.user_rewards
+                    WHERE user_id = $1
+                    AND reward_name = $2
+                    AND reward_type = $3
+                    AND key_type = $4
+                )
+                """,
+                user_id,
+                test_item["item_name"],
+                test_item["item_type"],
+                test_item["key_type"],
+            )
+        assert reward_exists is True
