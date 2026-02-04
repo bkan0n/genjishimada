@@ -44,6 +44,7 @@ def pytest_configure(config: Any) -> None:
     config.addinivalue_line("markers", "domain_jobs: Tests for jobs domain")
     config.addinivalue_line("markers", "domain_newsfeed: Tests for newsfeed domain")
     config.addinivalue_line("markers", "domain_utilities: Tests for utilities domain")
+    config.addinivalue_line("markers", "domain_store: Tests for store domain")
 
 
 MIGRATIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "migrations"))
@@ -505,6 +506,34 @@ async def create_test_user(asyncpg_pool: asyncpg.Pool, global_user_id_tracker: s
         return user_id
 
     return _create
+
+
+@pytest.fixture
+async def grant_user_coins(asyncpg_pool: asyncpg.Pool):
+    """Factory fixture for granting coins to users.
+
+    Returns a function that adds coins to a user's balance.
+
+    Usage:
+        balance = await grant_user_coins(user_id, 1000)
+        balance = await grant_user_coins(user_id, 500)
+    """
+
+    async def _grant(user_id: int, amount: int) -> int:
+        async with asyncpg_pool.acquire() as conn:
+            result = await conn.fetchval(
+                """
+                UPDATE core.users
+                SET coins = coins + $2
+                WHERE id = $1
+                RETURNING coins
+                """,
+                user_id,
+                amount,
+            )
+        return result
+
+    return _grant
 
 
 @pytest.fixture
