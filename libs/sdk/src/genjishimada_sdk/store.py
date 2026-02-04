@@ -10,9 +10,11 @@ from msgspec import Struct
 
 __all__ = (
     "GenerateRotationRequest",
+    "GenerateRotationResponse",
     "ItemPurchaseRequest",
     "ItemPurchaseResponse",
     "KeyPriceInfo",
+    "KeyPricingListResponse",
     "KeyPricingResponse",
     "KeyPurchaseRequest",
     "KeyPurchaseResponse",
@@ -101,6 +103,18 @@ class KeyPricingResponse(Struct):
     key_type: str
     is_active: bool
     prices: list[KeyPriceInfo]
+
+
+class KeyPricingListResponse(Struct):
+    """Response containing key pricing for all key types.
+
+    Attributes:
+        active_key_type: Currently active key type.
+        keys: List of pricing information for each key type.
+    """
+
+    active_key_type: str
+    keys: list[KeyPricingResponse]
 
 
 class KeyPurchaseRequest(Struct):
@@ -211,6 +225,20 @@ class GenerateRotationRequest(Struct):
     """
 
     item_count: int = 5
+
+
+class GenerateRotationResponse(Struct):
+    """Response from rotation generation.
+
+    Attributes:
+        rotation_id: UUID of the newly generated rotation.
+        items_generated: Number of items included in rotation.
+        available_until: When this rotation expires.
+    """
+
+    rotation_id: UUID
+    items_generated: int
+    available_until: dt.datetime
 
 
 class UpdateConfigRequest(Struct):

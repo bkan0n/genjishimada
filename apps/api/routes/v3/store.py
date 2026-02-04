@@ -7,9 +7,10 @@ from typing import Annotated
 import litestar
 from genjishimada_sdk.store import (
     GenerateRotationRequest,
+    GenerateRotationResponse,
     ItemPurchaseRequest,
     ItemPurchaseResponse,
-    KeyPricingResponse,
+    KeyPricingListResponse,
     KeyPurchaseRequest,
     KeyPurchaseResponse,
     PurchaseHistoryResponse,
@@ -47,6 +48,7 @@ class StoreController(litestar.Controller):
         path="/rotation",
         summary="Get Current Rotation",
         description="Get currently available items in the rotating store.",
+        opt={"required_scopes": {"store:read"}},
     )
     async def get_rotation(
         self,
@@ -68,11 +70,12 @@ class StoreController(litestar.Controller):
         path="/keys",
         summary="Get Key Pricing",
         description="Get key pricing for all key types with bulk discounts.",
+        opt={"required_scopes": {"store:read"}},
     )
     async def get_key_pricing(
         self,
         store_service: StoreService,
-    ) -> dict[str, str | list[KeyPricingResponse]]:
+    ) -> KeyPricingListResponse:
         """Get key pricing.
 
         Args:
@@ -84,16 +87,17 @@ class StoreController(litestar.Controller):
         config = await store_service.get_config()
         pricing = await store_service.get_key_pricing()
 
-        return {
-            "active_key_type": config.active_key_type,
-            "keys": pricing,
-        }
+        return KeyPricingListResponse(
+            active_key_type=config.active_key_type,
+            keys=pricing,
+        )
 
     @litestar.post(
         path="/purchase/keys",
         summary="Purchase Keys",
         description="Purchase lootbox keys with coins.",
         status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:write"}},
     )
     async def purchase_keys(
         self,
@@ -134,6 +138,7 @@ class StoreController(litestar.Controller):
         summary="Purchase Item",
         description="Purchase an item from the current rotation.",
         status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:write"}},
     )
     async def purchase_item(
         self,
@@ -180,6 +185,7 @@ class StoreController(litestar.Controller):
         path="/users/{user_id:int}/purchases",
         summary="Get Purchase History",
         description="Get user's store purchase history.",
+        opt={"required_scopes": {"store:read"}},
     )
     async def get_purchase_history(
         self,
@@ -206,12 +212,13 @@ class StoreController(litestar.Controller):
         summary="Generate New Rotation (Admin)",
         description="Manually trigger new rotation generation.",
         status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:admin"}},
     )
     async def generate_rotation(
         self,
         store_service: StoreService,
         data: Annotated[GenerateRotationRequest, Body()] | None = None,
-    ) -> dict:
+    ) -> GenerateRotationResponse:
         """Generate new rotation.
 
         Args:
@@ -219,15 +226,21 @@ class StoreController(litestar.Controller):
             data: Optional generation parameters.
 
         Returns:
-            Generation result.
+            Generation result with rotation details.
         """
         item_count = data.item_count if data else 5
-        return await store_service.generate_rotation(item_count)
+        result = await store_service.generate_rotation(item_count)
+        return GenerateRotationResponse(
+            rotation_id=result["rotation_id"],
+            items_generated=result["items_generated"],
+            available_until=result["available_until"],
+        )
 
     @litestar.get(
         path="/admin/config",
         summary="Get Store Config (Admin)",
         description="View current store configuration.",
+        opt={"required_scopes": {"store:admin"}},
     )
     async def get_config(
         self,
@@ -248,6 +261,7 @@ class StoreController(litestar.Controller):
         summary="Update Store Config (Admin)",
         description="Update store configuration.",
         status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:admin"}},
     )
     async def update_config(
         self,
