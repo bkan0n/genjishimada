@@ -1130,48 +1130,92 @@ class APIService:
         r = Route("PUT", "/completions/{record_id}/moderate", record_id=record_id)
         return self._request(r, data=data, response_model=None)
 
-    def get_completions(self, code: OverwatchCode) -> Response[list[CompletionLeaderboardFormattable]]:
+    def get_completions(
+        self,
+        code: OverwatchCode,
+        *,
+        page_number: int | None = None,
+        page_size: int | None = None,
+    ) -> Response[list[CompletionLeaderboardFormattable]]:
         """Fetch the completions leaderboard for a specific map code.
 
         Args:
             code (OverwatchCode): The map code to check.
+            page_number (int | None): Optional page number for pagination (1-based).
+            page_size (int | None): Optional page size for pagination. If None, returns all results.
 
         Returns:
             Response[list[CompletionLeaderboardFormattable]]: The completions leaderboard data.
         """
         r = Route("GET", "/completions/{code}", code=code)
-        return self._request(r, response_model=list[CompletionLeaderboardFormattable], params={"page_size": 0})
+        params: dict[str, int] = {}
+        if page_number is not None:
+            params["page_number"] = page_number
+        if page_size is not None:
+            params["page_size"] = page_size
+        else:
+            params["page_size"] = 0  # Return all results by default
+        return self._request(r, response_model=list[CompletionLeaderboardFormattable], params=params)
 
     def get_completions_for_user(
-        self, user_id: int, difficulty: DifficultyTop | None
+        self,
+        user_id: int,
+        difficulty: DifficultyTop | None,
+        *,
+        page_number: int | None = None,
+        page_size: int | None = None,
     ) -> Response[list[CompletionUserFormattable]]:
         """Fetch the completions for a specific user id.
 
         Args:
             user_id (int): The user_id to filter by.
             difficulty (DifficultyTop): The difficulty to filter by.
+            page_number (int | None): Optional page number for pagination (1-based).
+            page_size (int | None): Optional page size for pagination. If None, returns all results.
 
         Returns:
             Response[list[CompletionUserFormattable]]: The completions data for a specific user.
         """
         r = Route("GET", "/completions")
+        params: dict[str, int | str] = {"user_id": user_id}
+        if difficulty is not None:
+            params["difficulty"] = difficulty
+        if page_number is not None:
+            params["page_number"] = page_number
+        if page_size is not None:
+            params["page_size"] = page_size
+        else:
+            params["page_size"] = 100000  # Return all results by default
         return self._request(
             r,
             response_model=list[CompletionUserFormattable],
-            params={"user_id": user_id, "difficulty": difficulty, "page_size": 100000},
+            params=params,
         )
 
-    def get_world_records_for_user(self, user_id: int) -> Response[list[CompletionUserFormattable]]:
+    def get_world_records_for_user(
+        self,
+        user_id: int,
+        *,
+        page_number: int | None = None,
+        page_size: int | None = None,
+    ) -> Response[list[CompletionUserFormattable]]:
         """Fetch the world record completions for a specific user id.
 
         Args:
             user_id (int): The user_id to filter by.
+            page_number (int | None): Optional page number for pagination (1-based).
+            page_size (int | None): Optional page size for pagination. If None, returns all results.
 
         Returns:
             Response[list[CompletionUserFormattable]]: The completions data for a specific user.
         """
         r = Route("GET", "/completions/world-records")
-        return self._request(r, response_model=list[CompletionUserFormattable], params={"user_id": user_id})
+        params: dict[str, int] = {"user_id": user_id}
+        if page_number is not None:
+            params["page_number"] = page_number
+        if page_size is not None:
+            params["page_size"] = page_size
+        return self._request(r, response_model=list[CompletionUserFormattable], params=params)
 
     def create_newsfeed(self, event: NewsfeedEvent) -> Response[PublishNewsfeedJobResponse]:
         """Create a newsfeed event and return its ID.
