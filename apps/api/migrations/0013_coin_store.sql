@@ -7,13 +7,13 @@ CREATE SCHEMA IF NOT EXISTS store;
 -- Store configuration (singleton table)
 CREATE TABLE store.config (
     id                    int GENERATED ALWAYS AS IDENTITY PRIMARY KEY CHECK (id = 1),
-    rotation_period_days  int NOT NULL DEFAULT 7,
+    rotation_period_days  int NOT NULL DEFAULT 7 CHECK (rotation_period_days > 0),
     last_rotation_at      timestamptz NOT NULL DEFAULT now(),
     next_rotation_at      timestamptz NOT NULL DEFAULT now() + interval '7 days',
     active_key_type       text NOT NULL DEFAULT 'Classic',
 
     CONSTRAINT fk_active_key_type FOREIGN KEY (active_key_type)
-        REFERENCES lootbox.key_types(name) ON DELETE CASCADE
+        REFERENCES lootbox.key_types(name) ON DELETE RESTRICT
 );
 
 COMMENT ON TABLE store.config IS 'Store configuration (singleton)';
@@ -57,7 +57,13 @@ CREATE TABLE store.purchases (
     rotation_id    uuid,
     purchased_at   timestamptz NOT NULL DEFAULT now(),
 
-    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES core.users(id) ON DELETE CASCADE
+    CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES core.users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_key_type FOREIGN KEY (key_type) REFERENCES lootbox.key_types(name) ON DELETE RESTRICT,
+    -- Ensure item purchases have item details, key purchases don't need them
+    CONSTRAINT check_item_purchase_fields CHECK (
+        (purchase_type = 'item' AND item_name IS NOT NULL AND item_type IS NOT NULL) OR
+        (purchase_type = 'key' AND item_name IS NULL AND item_type IS NULL)
+    )
 );
 
 CREATE INDEX idx_purchases_user ON store.purchases (user_id, purchased_at DESC);
@@ -99,6 +105,12 @@ BEGIN
     v_epic_count := (random() * 2)::int;
     IF v_epic_count = 0 THEN v_epic_count := 1; END IF;
     v_rare_count := p_item_count - v_legendary_count - v_epic_count;
+
+    -- Validate we have enough items
+    IF v_rare_count < 0 THEN
+        RAISE EXCEPTION 'Insufficient item_count (%): need at least % items (1 legendary + % epic)',
+            p_item_count, v_legendary_count + v_epic_count, v_epic_count;
+    END IF;
 
     -- Legendary items
     INSERT INTO store.rotations (
@@ -204,15 +216,35 @@ AS $$
 DECLARE
     v_config record;
     v_result record;
+    v_lock_acquired boolean;
 BEGIN
-    SELECT * INTO v_config FROM store.config WHERE id = 1;
+    -- Acquire advisory lock to prevent concurrent rotation
+    -- Lock ID: 1234567890 (arbitrary unique number for store rotation)
+    v_lock_acquired := pg_try_advisory_lock(1234567890);
 
-    IF now() >= v_config.next_rotation_at THEN
-        SELECT * INTO v_result FROM store.generate_rotation();
-
-        RAISE NOTICE 'Generated new rotation % with % items, expires %',
-            v_result.rotation_id, v_result.items_generated, v_result.available_until;
+    IF NOT v_lock_acquired THEN
+        RAISE NOTICE 'Store rotation already in progress, skipping';
+        RETURN;
     END IF;
+
+    BEGIN
+        SELECT * INTO v_config FROM store.config WHERE id = 1;
+
+        IF now() >= v_config.next_rotation_at THEN
+            SELECT * INTO v_result FROM store.generate_rotation();
+
+            RAISE NOTICE 'Generated new rotation % with % items, expires %',
+                v_result.rotation_id, v_result.items_generated, v_result.available_until;
+        END IF;
+
+        -- Release lock
+        PERFORM pg_advisory_unlock(1234567890);
+    EXCEPTION
+        WHEN OTHERS THEN
+            -- Ensure lock is released even on error
+            PERFORM pg_advisory_unlock(1234567890);
+            RAISE;
+    END;
 END;
 $$;
 
