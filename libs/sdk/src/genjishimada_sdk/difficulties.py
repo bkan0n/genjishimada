@@ -127,6 +127,9 @@ def _convert_raw_difficulty(mapping: dict[D, tuple[float, float]], raw_difficult
     for key, (low, high) in mapping.items():
         if low <= raw_difficulty < high:
             return key
+    hell_upper_bound = 10.0
+    if raw_difficulty == hell_upper_bound:
+        return "Hell"  # type: ignore
     raise ValueError("Unknown difficulty")
 
 
