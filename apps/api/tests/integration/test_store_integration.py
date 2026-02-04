@@ -406,3 +406,95 @@ class TestPurchaseItem:
                 test_item["key_type"],
             )
         assert reward_exists is True
+
+    async def test_insufficient_coins_returns_402(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+    ):
+        """Purchase item with insufficient coins returns 402."""
+        user_id = await create_test_user()
+
+        # Get an item from rotation
+        rotation_response = await test_client.get("/api/v3/store/rotation")
+        test_item = rotation_response.json()["items"][0]
+
+        # Grant insufficient coins
+        await grant_user_coins(user_id, test_item["price"] - 100)
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/item",
+            json={
+                "user_id": user_id,
+                "item_name": test_item["item_name"],
+                "item_type": test_item["item_type"],
+                "key_type": test_item["key_type"],
+            }
+        )
+
+        assert response.status_code == 402
+
+    async def test_already_owned_returns_409(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+        asyncpg_pool,
+    ):
+        """Purchase already owned item returns 409."""
+        user_id = await create_test_user()
+
+        # Get an item from rotation
+        rotation_response = await test_client.get("/api/v3/store/rotation")
+        test_item = rotation_response.json()["items"][0]
+
+        # Grant the item directly
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO lootbox.user_rewards (user_id, reward_name, reward_type, key_type)
+                VALUES ($1, $2, $3, $4)
+                """,
+                user_id,
+                test_item["item_name"],
+                test_item["item_type"],
+                test_item["key_type"],
+            )
+
+        # Grant coins
+        await grant_user_coins(user_id, test_item["price"])
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/item",
+            json={
+                "user_id": user_id,
+                "item_name": test_item["item_name"],
+                "item_type": test_item["item_type"],
+                "key_type": test_item["key_type"],
+            }
+        )
+
+        assert response.status_code == 409
+
+    async def test_item_not_in_rotation_returns_400(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+    ):
+        """Purchase item not in current rotation returns 400."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 5000)
+
+        response = await test_client.post(
+            "/api/v3/store/purchase/item",
+            json={
+                "user_id": user_id,
+                "item_name": "NonexistentItem",
+                "item_type": "skin",
+                "key_type": "Classic",
+            }
+        )
+
+        assert response.status_code == 400
