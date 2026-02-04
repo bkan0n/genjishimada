@@ -14,6 +14,7 @@ from . import (
     newsfeed,
     notifications,
     rank_card,
+    store,
     users,
     xp,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "newsfeed",
     "notifications",
     "rank_card",
+    "store",
     "users",
     "xp",
 ]
