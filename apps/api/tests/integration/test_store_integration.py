@@ -498,3 +498,142 @@ class TestPurchaseItem:
         )
 
         assert response.status_code == 400
+
+
+class TestGetUserPurchases:
+    """GET /api/v3/store/users/{user_id}/purchases"""
+
+    async def test_happy_path(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+    ):
+        """Get purchase history returns valid structure."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 2000)
+
+        # Make a purchase
+        await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "Classic",
+                "quantity": 1,
+            }
+        )
+
+        response = await test_client.get(f"/api/v3/store/users/{user_id}/purchases")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data
+        assert "purchases" in data
+        assert data["total"] == 1
+        assert len(data["purchases"]) == 1
+
+        # Validate purchase structure
+        purchase = data["purchases"][0]
+        assert "id" in purchase
+        assert "purchase_type" in purchase
+        assert purchase["purchase_type"] == "key"
+        assert "key_type" in purchase
+        assert "quantity" in purchase
+        assert "price_paid" in purchase
+        assert "purchased_at" in purchase
+
+    async def test_pagination_works(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+    ):
+        """Pagination with limit and offset works correctly."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 5000)
+
+        # Make 3 purchases
+        for _ in range(3):
+            await test_client.post(
+                "/api/v3/store/purchase/keys",
+                json={
+                    "user_id": user_id,
+                    "key_type": "Classic",
+                    "quantity": 1,
+                }
+            )
+
+        # Get first 2
+        response1 = await test_client.get(
+            f"/api/v3/store/users/{user_id}/purchases",
+            params={"limit": 2, "offset": 0}
+        )
+        assert response1.status_code == 200
+        data1 = response1.json()
+        assert data1["total"] == 3
+        assert len(data1["purchases"]) == 2
+
+        # Get next 2 (should only get 1)
+        response2 = await test_client.get(
+            f"/api/v3/store/users/{user_id}/purchases",
+            params={"limit": 2, "offset": 2}
+        )
+        assert response2.status_code == 200
+        data2 = response2.json()
+        assert data2["total"] == 3
+        assert len(data2["purchases"]) == 1
+
+    async def test_empty_history_for_new_user(self, test_client, create_test_user):
+        """User with no purchases returns empty list."""
+        user_id = await create_test_user()
+
+        response = await test_client.get(f"/api/v3/store/users/{user_id}/purchases")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 0
+        assert data["purchases"] == []
+
+    async def test_shows_both_key_and_item_purchases(
+        self,
+        test_client,
+        create_test_user,
+        grant_user_coins,
+    ):
+        """Purchase history shows both key and item purchases."""
+        user_id = await create_test_user()
+        await grant_user_coins(user_id, 5000)
+
+        # Purchase keys
+        await test_client.post(
+            "/api/v3/store/purchase/keys",
+            json={
+                "user_id": user_id,
+                "key_type": "Classic",
+                "quantity": 1,
+            }
+        )
+
+        # Purchase item
+        rotation_response = await test_client.get("/api/v3/store/rotation")
+        test_item = rotation_response.json()["items"][0]
+
+        await test_client.post(
+            "/api/v3/store/purchase/item",
+            json={
+                "user_id": user_id,
+                "item_name": test_item["item_name"],
+                "item_type": test_item["item_type"],
+                "key_type": test_item["key_type"],
+            }
+        )
+
+        response = await test_client.get(f"/api/v3/store/users/{user_id}/purchases")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 2
+
+        purchase_types = {p["purchase_type"] for p in data["purchases"]}
+        assert "key" in purchase_types
+        assert "item" in purchase_types
