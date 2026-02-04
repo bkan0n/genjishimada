@@ -222,7 +222,7 @@ class MapSearchView(ApiPaginatorView[MapModel]):
         if _map.time is None:
             return ""
 
-        res = "🗸 Completed"
+        res = " ✓ Completed"
 
         medal_label = None
         medals = _map.medals
