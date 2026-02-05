@@ -282,11 +282,8 @@ class TestPurchaseKeys:
 
         assert response.status_code == 400
 
-    async def test_invalid_key_type_returns_500(self, test_client, create_test_user, grant_user_coins):
-        """Purchase with invalid key type returns 500 (FK constraint violation).
-
-        TODO: Service should validate key_type and return 400 instead.
-        """
+    async def test_invalid_key_type_returns_404(self, test_client, create_test_user, grant_user_coins):
+        """Purchase with invalid key type returns 404."""
         user_id = await create_test_user()
         await grant_user_coins(user_id, 1000)
 
@@ -299,7 +296,7 @@ class TestPurchaseKeys:
             }
         )
 
-        assert response.status_code == 500
+        assert response.status_code == 404
 
     async def test_multiple_purchases_stack_keys(
         self,
@@ -782,6 +779,20 @@ class TestGenerateRotation:
         assert current_set
         assert current_set.isdisjoint(recent_set)
 
+    async def test_generate_rotation_invalid_item_count_returns_400(self, test_client):
+        """Reject rotation requests outside 3-5 items."""
+        response = await test_client.post(
+            "/api/v3/store/admin/rotation/generate",
+            json={"item_count": 2}
+        )
+        assert response.status_code == 400
+
+        response = await test_client.post(
+            "/api/v3/store/admin/rotation/generate",
+            json={"item_count": 6}
+        )
+        assert response.status_code == 400
+
 
 class TestGetConfig:
     """GET /api/v3/store/admin/config"""
@@ -855,17 +866,14 @@ class TestUpdateConfig:
             json={"active_key_type": original_key}
         )
 
-    async def test_invalid_key_type_returns_500(self, test_client):
-        """Update with invalid key type returns 500 (FK constraint violation).
-
-        TODO: Service should validate key_type exists and return 404 instead.
-        """
+    async def test_invalid_key_type_returns_404(self, test_client):
+        """Update with invalid key type returns 404."""
         response = await test_client.put(
             "/api/v3/store/admin/config",
             json={"active_key_type": "InvalidKey"}
         )
 
-        assert response.status_code == 500
+        assert response.status_code == 404
 
 
 class TestGetQuests:
