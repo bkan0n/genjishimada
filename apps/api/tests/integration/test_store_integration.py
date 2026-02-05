@@ -715,6 +715,36 @@ class TestGenerateRotation:
         assert rarity_counts.get("epic", 0) >= 1
         assert rarity_counts.get("rare", 0) >= 1
 
+    async def test_generate_rotation_replaces_active_rotation(self, test_client, asyncpg_pool):
+        """Manual rotation expires previous active rotation."""
+        # Capture current rotation id
+        current = await test_client.get("/api/v3/store/rotation")
+        assert current.status_code == 200
+        old_rotation_id = current.json()["rotation_id"]
+
+        # Generate a new rotation
+        response = await test_client.post("/api/v3/store/admin/rotation/generate")
+        assert response.status_code == 200
+        new_rotation_id = response.json()["rotation_id"]
+
+        # API should now return the new rotation_id
+        latest = await test_client.get("/api/v3/store/rotation")
+        assert latest.status_code == 200
+        assert latest.json()["rotation_id"] == new_rotation_id
+
+        # DB should have only one active rotation_id
+        async with asyncpg_pool.acquire() as conn:
+            active_ids = await conn.fetch(
+                """
+                SELECT DISTINCT rotation_id
+                FROM store.rotations
+                WHERE available_from <= now() AND available_until > now()
+                """
+            )
+        active_ids = {row["rotation_id"] for row in active_ids}
+        assert active_ids == {new_rotation_id}
+        assert old_rotation_id != new_rotation_id
+
 
 class TestGetConfig:
     """GET /api/v3/store/admin/config"""
@@ -799,3 +829,166 @@ class TestUpdateConfig:
         )
 
         assert response.status_code == 500
+
+
+class TestGetQuests:
+    """GET /api/v3/store/quests"""
+
+    async def test_happy_path_includes_progress_id(self, test_client, create_test_user):
+        """Get quests returns progress_id for each quest."""
+        user_id = await create_test_user()
+
+        response = await test_client.get("/api/v3/store/quests", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "rotation_id" in data
+        assert "available_until" in data
+        assert "quests" in data
+        assert isinstance(data["quests"], list)
+        assert len(data["quests"]) == 6
+
+        for quest in data["quests"]:
+            assert "progress_id" in quest
+            assert "progress" in quest
+            assert "percentage" in quest["progress"]
+
+
+class TestClaimQuest:
+    """POST /api/v3/store/quests/{progress_id}/claim"""
+
+    async def test_claim_completed_quest(self, test_client, create_test_user, asyncpg_pool):
+        """Claiming a completed quest grants rewards."""
+        user_id = await create_test_user()
+
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute("SELECT store.check_and_generate_quest_rotation()")
+            rotation_id = await conn.fetchval(
+                "SELECT current_rotation_id FROM store.quest_config WHERE id = 1",
+            )
+            progress_id = await conn.fetchval(
+                """
+                INSERT INTO store.user_quest_progress (user_id, rotation_id, quest_data, progress, completed_at)
+                VALUES ($1, $2, $3::jsonb, $4::jsonb, now())
+                RETURNING id
+                """,
+                user_id,
+                rotation_id,
+                '{"name":"Claim Quest","description":"Claim rewards","difficulty":"easy","coin_reward":50,"xp_reward":10,"requirements":{"type":"complete_map","map_id":1,"target":"complete"}}',
+                '{"completed": true}',
+            )
+
+        response = await test_client.post(
+            f"/api/v3/store/quests/{progress_id}/claim",
+            json={"user_id": user_id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["coins_earned"] == 50
+        assert data["xp_earned"] == 10
+
+
+class TestQuestHistory:
+    """GET /api/v3/store/users/{user_id}/quest-history"""
+
+    async def test_returns_completed_quests(self, test_client, create_test_user, asyncpg_pool):
+        """Quest history returns completed quest entries."""
+        user_id = await create_test_user()
+
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute("SELECT store.check_and_generate_quest_rotation()")
+            rotation_id = await conn.fetchval(
+                "SELECT current_rotation_id FROM store.quest_config WHERE id = 1",
+            )
+            await conn.execute(
+                """
+                INSERT INTO store.user_quest_progress (user_id, rotation_id, quest_data, progress, completed_at)
+                VALUES ($1, $2, $3::jsonb, $4::jsonb, now())
+                """,
+                user_id,
+                rotation_id,
+                '{"name":"History Quest","description":"Completed quest","difficulty":"easy","coin_reward":25,"xp_reward":5,"requirements":{"type":"complete_map","map_id":1,"target":"complete"}}',
+                '{"completed": true}',
+            )
+
+        response = await test_client.get(f"/api/v3/store/users/{user_id}/quest-history")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 1
+        assert len(data["quests"]) >= 1
+
+
+class TestQuestAdminConfig:
+    """Admin quest config endpoints."""
+
+    async def test_get_quest_config(self, test_client):
+        """Get quest config returns configuration fields."""
+        response = await test_client.get("/api/v3/store/admin/quests/config")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "rotation_day" in data
+        assert "rotation_hour" in data
+        assert "current_rotation_id" in data
+        assert "last_rotation_at" in data
+        assert "next_rotation_at" in data
+        assert "easy_quest_count" in data
+        assert "medium_quest_count" in data
+        assert "hard_quest_count" in data
+
+    async def test_update_quest_config(self, test_client):
+        """Update quest config recomputes next_rotation_at."""
+        response = await test_client.put(
+            "/api/v3/store/admin/quests/config",
+            json={"rotation_day": 2, "rotation_hour": 3, "easy_quest_count": 3},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "next_rotation_at" in data
+        assert "rotation_day" in data["updated_fields"]
+        assert "rotation_hour" in data["updated_fields"]
+
+
+class TestQuestAdminRotation:
+    """POST /api/v3/store/admin/quests/rotation/generate"""
+
+    async def test_generate_rotation_returns_fields(self, test_client):
+        """Manual quest rotation returns generation details."""
+        response = await test_client.post("/api/v3/store/admin/quests/rotation/generate")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "rotation_id" in data
+        assert "generated" in data
+        assert "auto_claimed_quests" in data
+        assert "global_quests_generated" in data
+
+
+class TestQuestAdminPatch:
+    """PATCH /api/v3/store/admin/quests/{quest_id}"""
+
+    async def test_patch_quest_updates_fields(self, test_client, asyncpg_pool):
+        """Patch quest updates and returns updated_fields."""
+        async with asyncpg_pool.acquire() as conn:
+            quest_id = await conn.fetchval(
+                """
+                INSERT INTO store.quests (name, description, quest_type, difficulty, coin_reward, xp_reward, requirements)
+                VALUES ('Patch Quest', 'Update me', 'global', 'easy', 10, 5, '{}'::jsonb)
+                RETURNING id
+                """,
+            )
+
+        response = await test_client.patch(
+            f"/api/v3/store/admin/quests/{quest_id}",
+            json={"is_active": False, "coin_reward": 99},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "updated_fields" in data
