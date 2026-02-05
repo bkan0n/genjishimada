@@ -17,16 +17,14 @@ def _encode_jsonb(data: dict) -> str:
     return msgspec.json.encode(data).decode()
 
 
-def _decode_jsonb(value):
+def _decode_jsonb(value: object) -> object:
     if value is None:
         return {}
     if isinstance(value, (dict, list)):
         return value
-    if isinstance(value, (bytes, bytearray)):
+    if isinstance(value, (bytes, bytearray, str)):
         return msgspec.json.decode(value)
-    if isinstance(value, str):
-        return msgspec.json.decode(value)
-    return msgspec.json.decode(value)
+    return value
 
 
 def _initial_progress(requirements: dict) -> dict:
@@ -247,10 +245,7 @@ class StoreRepository(BaseRepository):
             """,
             rotation_id,
         )
-        return [
-            {"quest_id": row["quest_id"], "quest_data": _decode_jsonb(row["quest_data"])}
-            for row in rows
-        ]
+        return [{"quest_id": row["quest_id"], "quest_data": _decode_jsonb(row["quest_data"])} for row in rows]
 
     async def get_bounty_for_user(
         self,
@@ -440,6 +435,18 @@ class StoreRepository(BaseRepository):
             UPDATE store.user_quest_progress
             SET completed_at = now()
             WHERE id = $1 AND completed_at IS NULL
+            """,
+            progress_id,
+        )
+
+    async def unmark_quest_complete(self, progress_id: int, *, conn: Connection | None = None) -> None:
+        """Clear quest completion if it has not been claimed."""
+        _conn = self._get_connection(conn)
+        await _conn.execute(
+            """
+            UPDATE store.user_quest_progress
+            SET completed_at = NULL
+            WHERE id = $1 AND claimed_at IS NULL
             """,
             progress_id,
         )
@@ -644,7 +651,10 @@ class StoreRepository(BaseRepository):
                     base_difficulty AS difficulty,
                     md.user_id,
                     coalesce(sum(CASE WHEN md.base_difficulty IS NOT NULL THEN 1 ELSE 0 END), 0) AS completions,
-                    coalesce(sum(CASE WHEN md.base_difficulty IS NOT NULL THEN 1 ELSE 0 END), 0) >= t.threshold AS rank_met
+                    coalesce(
+                        sum(CASE WHEN md.base_difficulty IS NOT NULL THEN 1 ELSE 0 END),
+                        0
+                    ) >= t.threshold AS rank_met
                 FROM map_data md
                 LEFT JOIN thresholds t ON base_difficulty=t.name
                 GROUP BY base_difficulty, t.threshold, md.user_id
@@ -962,7 +972,7 @@ class StoreRepository(BaseRepository):
             else:
                 set_clauses.append(f"{field} = ${idx}")
                 values.append(value)
-        query = f"UPDATE store.quests SET {', '.join(set_clauses)} WHERE id = ${len(values)+1}"
+        query = f"UPDATE store.quests SET {', '.join(set_clauses)} WHERE id = ${len(values) + 1}"
         values.append(quest_id)
         await _conn.execute(query, *values)
         return list(updates.keys())

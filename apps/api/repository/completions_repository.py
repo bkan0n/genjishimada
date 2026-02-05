@@ -1443,6 +1443,24 @@ class CompletionsRepository(BaseRepository):
         query = "SELECT EXISTS(SELECT 1 FROM core.maps WHERE code=$1 and archived=FALSE);"
         return await _conn.fetchval(query, code)
 
+    async def fetch_map_metadata_by_code(
+        self,
+        code: str,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch map metadata for quest progress updates."""
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT id AS map_id, difficulty, category
+            FROM core.maps
+            WHERE code = $1
+            """,
+            code,
+        )
+        return dict(row) if row else None
+
     def build_completion_patch_query(
         self,
         record_id: int,
@@ -1686,6 +1704,26 @@ class CompletionsRepository(BaseRepository):
         """
         row = await _conn.fetchrow(query, completion_id)
         return dict(row) if row else None
+
+    async def fetch_verified_times_for_user_map(
+        self,
+        user_id: int,
+        map_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[float]:
+        """Fetch verified completion times for a user on a map."""
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            """
+            SELECT time
+            FROM core.completions
+            WHERE user_id = $1 AND map_id = $2 AND verified = TRUE
+            """,
+            user_id,
+            map_id,
+        )
+        return [float(row["time"]) for row in rows]
 
     async def update_completion_time(
         self,

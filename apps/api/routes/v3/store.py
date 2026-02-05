@@ -258,7 +258,7 @@ class StoreController(litestar.Controller):
         try:
             return await store_service.claim_quest(user_id=user_id, progress_id=progress_id)
         except QuestNotFoundError as e:
-            raise CustomHTTPException(status_code=litestar.status_codes.HTTP_404_NOT_FOUND, detail=str(e)) from e
+            raise CustomHTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         except QuestNotCompletedError as e:
             raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
         except QuestAlreadyClaimedError as e:

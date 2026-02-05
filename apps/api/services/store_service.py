@@ -9,7 +9,8 @@ from typing import cast
 from uuid import UUID
 
 import msgspec
-from asyncpg import Pool
+from asyncpg import Connection, Pool
+from asyncpg.pool import PoolConnectionProxy
 from genjishimada_sdk.lootbox import LootboxKeyType
 from genjishimada_sdk.store import (
     GenerateRotationResponse,
@@ -52,13 +53,52 @@ BULK_DISCOUNT_5X = 0.70  # 30% off
 BULK_QUANTITY_3X = 3
 BULK_QUANTITY_5X = 5
 
+# Rotation item count limits
+ROTATION_ITEM_MIN = 3
+ROTATION_ITEM_MAX = 5
 
-def _decode_jsonb(value):
+
+def _decode_jsonb(value: object) -> object:
     if value is None:
         return {}
     if isinstance(value, (dict, list)):
         return value
-    return msgspec.json.decode(value)
+    if isinstance(value, (bytes, bytearray, str)):
+        return msgspec.json.decode(value)
+    return value
+
+
+def _decode_jsonb_dict(value: object) -> dict[str, object]:
+    decoded = _decode_jsonb(value)
+    if isinstance(decoded, dict):
+        return decoded
+    return {}
+
+
+def _coerce_int(value: object | None, default: int) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return default
+
+
+def _coerce_float(value: object | None, default: float) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _decode_requirements(quest_data: dict[str, object]) -> dict[str, object]:
+    requirements = quest_data.get("requirements")
+    if isinstance(requirements, dict):
+        return requirements
+    return {}
 
 
 class StoreService(BaseService):
@@ -83,7 +123,9 @@ class StoreService(BaseService):
         self._store_repo = store_repo
         self._lootbox_repo = lootbox_repo
 
-    async def _ensure_key_type_exists(self, key_type: str, *, conn=None) -> None:
+    async def _ensure_key_type_exists(
+        self, key_type: str, *, conn: Connection | PoolConnectionProxy | None = None
+    ) -> None:
         rows = await self._lootbox_repo.fetch_all_key_types(
             cast(LootboxKeyType, key_type),
             conn=conn,  # type: ignore[arg-type]
@@ -93,7 +135,7 @@ class StoreService(BaseService):
 
     @staticmethod
     def _validate_rotation_item_count(item_count: int) -> None:
-        if item_count < 3 or item_count > 5:
+        if item_count < ROTATION_ITEM_MIN or item_count > ROTATION_ITEM_MAX:
             raise InvalidRotationItemCountError(item_count)
 
     @staticmethod
@@ -438,16 +480,16 @@ class StoreService(BaseService):
         }
 
         for row in quest_rows:
-            quest_data = _decode_jsonb(row.get("quest_data"))
-            progress = _decode_jsonb(row.get("progress"))
+            quest_data = _decode_jsonb_dict(row.get("quest_data"))
+            progress = _decode_jsonb_dict(row.get("progress"))
 
             completed = row.get("completed_at") is not None
             claimed = row.get("claimed_at") is not None
 
             percentage = 0
-            target_val = progress.get("target")
-            if isinstance(target_val, (int, float)) and target_val:
-                current_val = progress.get("current", 0)
+            target_val = _coerce_float(progress.get("target"), 0.0)
+            if target_val:
+                current_val = _coerce_float(progress.get("current"), 0.0)
                 percentage = min(100, int((current_val / target_val) * 100))
             elif completed:
                 percentage = 100
@@ -470,14 +512,14 @@ class StoreService(BaseService):
             )
 
             summary["total_quests"] += 1
-            summary["potential_coins"] += quest_data.get("coin_reward", 0) or 0
-            summary["potential_xp"] += quest_data.get("xp_reward", 0) or 0
+            summary["potential_coins"] += _coerce_int(quest_data.get("coin_reward"), 0)
+            summary["potential_xp"] += _coerce_int(quest_data.get("xp_reward"), 0)
             if completed:
                 summary["completed"] += 1
             if claimed:
                 summary["claimed"] += 1
-            summary["earned_coins"] += row.get("coins_rewarded") or 0
-            summary["earned_xp"] += row.get("xp_rewarded") or 0
+            summary["earned_coins"] += _coerce_int(row.get("coins_rewarded"), 0)
+            summary["earned_xp"] += _coerce_int(row.get("xp_rewarded"), 0)
 
         return {
             "rotation_id": rotation_id,
@@ -491,7 +533,7 @@ class StoreService(BaseService):
         total, rows = await self._store_repo.fetch_quest_history(user_id, limit, offset)
         quests: list[dict] = []
         for row in rows:
-            quest_data = _decode_jsonb(row.get("quest_data"))
+            quest_data = _decode_jsonb_dict(row.get("quest_data"))
             quests.append(
                 {
                     "progress_id": row["progress_id"],
@@ -723,51 +765,66 @@ class StoreService(BaseService):
             },
         }
 
+    def _match_complete_maps(self, requirements: dict, event_type: str, event_data: dict) -> bool:
+        if event_type != "completion":
+            return False
+        req_difficulty = requirements.get("difficulty")
+        if req_difficulty and req_difficulty != "any":
+            event_difficulty = (event_data.get("difficulty") or "").lower()
+            if event_difficulty != str(req_difficulty).lower():
+                return False
+        req_category = requirements.get("category")
+        if req_category:
+            event_category = (event_data.get("category") or "").lower()
+            if event_category != str(req_category).lower():
+                return False
+        return True
+
+    def _match_earn_medals(self, requirements: dict, event_type: str, event_data: dict) -> bool:
+        if event_type != "completion":
+            return False
+        event_medal = event_data.get("medal")
+        if not event_medal:
+            return False
+        req_medal = requirements.get("medal_type")
+        if req_medal and str(req_medal).lower() != "any":
+            return str(event_medal).lower() == str(req_medal).lower()
+        return True
+
+    def _match_complete_difficulty_range(self, requirements: dict, event_type: str, event_data: dict) -> bool:
+        if event_type != "completion":
+            return False
+        event_difficulty = (event_data.get("difficulty") or "").lower()
+        req_difficulty = (requirements.get("difficulty") or "").lower()
+        return event_difficulty == req_difficulty
+
+    def _match_map_specific(self, requirements: dict, event_type: str, event_data: dict) -> bool:
+        if event_type != "completion":
+            return False
+        return event_data.get("map_id") == requirements.get("map_id")
+
     def _event_matches_quest(self, requirements: dict, event_type: str, event_data: dict) -> bool:
         req_type = requirements.get("type")
-        if req_type == "complete_maps":
-            if event_type != "completion":
-                return False
-            req_difficulty = requirements.get("difficulty")
-            if req_difficulty and req_difficulty != "any":
-                event_difficulty = (event_data.get("difficulty") or "").lower()
-                if event_difficulty != str(req_difficulty).lower():
-                    return False
-            req_category = requirements.get("category")
-            if req_category:
-                event_category = (event_data.get("category") or "").lower()
-                if event_category != str(req_category).lower():
-                    return False
-            return True
-
-        if req_type == "earn_medals":
-            if event_type != "completion":
-                return False
-            event_medal = event_data.get("medal")
-            if not event_medal:
-                return False
-            req_medal = requirements.get("medal_type")
-            if req_medal and str(req_medal).lower() != "any":
-                return str(event_medal).lower() == str(req_medal).lower()
-            return True
-
-        if req_type == "complete_difficulty_range":
-            if event_type != "completion":
-                return False
-            event_difficulty = (event_data.get("difficulty") or "").lower()
-            req_difficulty = (requirements.get("difficulty") or "").lower()
-            return event_difficulty == req_difficulty
-
-        if req_type in {"beat_time", "beat_rival", "complete_map"}:
-            if event_type != "completion":
-                return False
-            return event_data.get("map_id") == requirements.get("map_id")
-
-        return False
+        if not isinstance(req_type, str):
+            return False
+        handlers = {
+            "complete_maps": self._match_complete_maps,
+            "earn_medals": self._match_earn_medals,
+            "complete_difficulty_range": self._match_complete_difficulty_range,
+            "beat_time": self._match_map_specific,
+            "beat_rival": self._match_map_specific,
+            "complete_map": self._match_map_specific,
+        }
+        handler = handlers.get(req_type)
+        if not handler:
+            return False
+        return handler(requirements, event_type, event_data)
 
     def _calculate_new_progress(self, progress: dict, requirements: dict, event_data: dict) -> dict:
-        req_type = requirements.get("type")
         current_progress = dict(progress)
+        req_type = requirements.get("type")
+        if not isinstance(req_type, str):
+            return current_progress
 
         if req_type == "complete_maps":
             map_id = event_data.get("map_id")
@@ -804,7 +861,10 @@ class StoreService(BaseService):
             current_progress["current"] = current_progress.get("current", 0) + 1
 
         elif req_type in {"beat_time", "beat_rival"}:
-            new_time = float(event_data.get("time"))
+            time_value = event_data.get("time")
+            if time_value is None:
+                return current_progress
+            new_time = float(time_value)
             current_progress["last_attempt"] = new_time
             best_attempt = current_progress.get("best_attempt")
             best_value = float(best_attempt) if best_attempt is not None else float("inf")
@@ -817,38 +877,152 @@ class StoreService(BaseService):
 
         return current_progress
 
+    def _revert_complete_maps(
+        self,
+        current_progress: dict,
+        event_data: dict,
+        has_remaining_completion: bool,
+    ) -> dict:
+        map_id = event_data.get("map_id")
+        if map_id is None:
+            return current_progress
+        completed = set(current_progress.get("completed_map_ids", []))
+        if map_id not in completed or has_remaining_completion:
+            return current_progress
+        completed.remove(map_id)
+        current_progress["completed_map_ids"] = list(completed)
+        current_progress["current"] = max(0, current_progress.get("current", 0) - 1)
+        details = current_progress.get("details") or {}
+        difficulty = (event_data.get("difficulty") or "").lower()
+        if difficulty:
+            details[difficulty] = max(0, details.get(difficulty, 0) - 1)
+            if details[difficulty] <= 0:
+                details.pop(difficulty, None)
+        if details:
+            current_progress["details"] = details
+        else:
+            current_progress.pop("details", None)
+        return current_progress
+
+    def _revert_earn_medals(
+        self,
+        current_progress: dict,
+        requirements: dict,
+        event_data: dict,
+        remaining_medals: list[str],
+    ) -> dict:
+        map_id = event_data.get("map_id")
+        if map_id is None:
+            return current_progress
+        counted = set(current_progress.get("counted_map_ids", []))
+        if map_id not in counted:
+            return current_progress
+        req_medal = requirements.get("medal_type")
+        if req_medal and str(req_medal).lower() != "any":
+            still_counts = any(str(m).lower() == str(req_medal).lower() for m in remaining_medals)
+        else:
+            still_counts = len(remaining_medals) > 0
+        if still_counts:
+            return current_progress
+        counted.remove(map_id)
+        current_progress["counted_map_ids"] = list(counted)
+        current_progress["current"] = max(0, current_progress.get("current", 0) - 1)
+        medals = current_progress.get("medals") or []
+        medals = [m for m in medals if m.get("map_id") != map_id]
+        if medals:
+            current_progress["medals"] = medals
+        else:
+            current_progress.pop("medals", None)
+        return current_progress
+
+    def _revert_complete_difficulty_range(
+        self,
+        current_progress: dict,
+        event_data: dict,
+        has_remaining_completion: bool,
+    ) -> dict:
+        map_id = event_data.get("map_id")
+        if map_id is None:
+            return current_progress
+        completed = set(current_progress.get("completed_map_ids", []))
+        if map_id not in completed or has_remaining_completion:
+            return current_progress
+        completed.remove(map_id)
+        current_progress["completed_map_ids"] = list(completed)
+        current_progress["current"] = max(0, current_progress.get("current", 0) - 1)
+        return current_progress
+
+    def _revert_best_time(self, current_progress: dict, remaining_times: list[float]) -> dict:
+        best_time = min(remaining_times) if remaining_times else None
+        if best_time is None:
+            current_progress.pop("best_attempt", None)
+            current_progress.pop("last_attempt", None)
+        else:
+            current_progress["best_attempt"] = best_time
+            current_progress["last_attempt"] = best_time
+        return current_progress
+
+    def _revert_complete_map(self, current_progress: dict, has_remaining_completion: bool) -> dict:
+        if has_remaining_completion:
+            return current_progress
+        current_progress["completed"] = False
+        current_progress.pop("medal_earned", None)
+        return current_progress
+
+    def _calculate_reverted_progress(
+        self,
+        progress: dict,
+        requirements: dict,
+        event_data: dict,
+        remaining_times: list[float],
+        remaining_medals: list[str],
+    ) -> dict:
+        current_progress = dict(progress)
+        has_remaining_completion = len(remaining_times) > 0
+        req_type = requirements.get("type")
+        if not isinstance(req_type, str):
+            return current_progress
+        handlers = {
+            "complete_maps": lambda: self._revert_complete_maps(current_progress, event_data, has_remaining_completion),
+            "earn_medals": lambda: self._revert_earn_medals(
+                current_progress, requirements, event_data, remaining_medals
+            ),
+            "complete_difficulty_range": lambda: self._revert_complete_difficulty_range(
+                current_progress, event_data, has_remaining_completion
+            ),
+            "beat_time": lambda: self._revert_best_time(current_progress, remaining_times),
+            "beat_rival": lambda: self._revert_best_time(current_progress, remaining_times),
+            "complete_map": lambda: self._revert_complete_map(current_progress, has_remaining_completion),
+        }
+        handler = handlers.get(req_type)
+        if not handler:
+            return current_progress
+        return handler()
+
+    def _is_complete_time_target(self, progress: dict, requirements: dict) -> bool:
+        target_time = requirements.get("target_time")
+        if target_time is None:
+            return False
+        best_attempt = progress.get("best_attempt")
+        best_value = float(best_attempt) if best_attempt is not None else float("inf")
+        return best_value < float(target_time)
+
     def _is_quest_complete(self, progress: dict, requirements: dict) -> bool:
         req_type = requirements.get("type")
-
-        if req_type == "complete_maps":
-            return progress.get("current", 0) >= requirements.get("count", 0)
-
-        if req_type == "earn_medals":
-            return progress.get("current", 0) >= requirements.get("count", 0)
-
-        if req_type == "complete_difficulty_range":
-            return progress.get("current", 0) >= requirements.get("min_count", 0)
-
-        if req_type == "beat_time":
-            target_time = requirements.get("target_time")
-            if target_time is None:
-                return False
-            best_attempt = progress.get("best_attempt")
-            best_value = float(best_attempt) if best_attempt is not None else float("inf")
-            return best_value < float(target_time)
-
-        if req_type == "beat_rival":
-            target_time = requirements.get("target_time")
-            if target_time is None:
-                return False
-            best_attempt = progress.get("best_attempt")
-            best_value = float(best_attempt) if best_attempt is not None else float("inf")
-            return best_value < float(target_time)
-
-        if req_type == "complete_map":
-            return progress.get("completed", False) is True
-
-        return False
+        if not isinstance(req_type, str):
+            return False
+        handlers = {
+            "complete_maps": lambda: progress.get("current", 0) >= requirements.get("count", 0),
+            "earn_medals": lambda: progress.get("current", 0) >= requirements.get("count", 0),
+            "complete_difficulty_range": lambda: progress.get("current", 0) >= requirements.get("min_count", 0),
+            "beat_time": lambda: self._is_complete_time_target(progress, requirements),
+            "beat_rival": lambda: self._is_complete_time_target(progress, requirements),
+            "complete_map": lambda: progress.get("completed", False) is True,
+        }
+        handler = handlers.get(req_type)
+        if not handler:
+            return False
+        return handler()
 
     async def update_quest_progress(
         self,
@@ -871,9 +1045,9 @@ class StoreService(BaseService):
                 if quest.get("completed_at"):
                     continue
 
-                quest_data = _decode_jsonb(quest.get("quest_data"))
-                progress = _decode_jsonb(quest.get("progress"))
-                requirements = quest_data.get("requirements", {})
+                quest_data = _decode_jsonb_dict(quest.get("quest_data"))
+                progress = _decode_jsonb_dict(quest.get("progress"))
+                requirements = _decode_requirements(quest_data)
 
                 if not self._event_matches_quest(requirements, event_type, event_data):
                     continue
@@ -893,6 +1067,52 @@ class StoreService(BaseService):
                     completed_quests.append({"progress_id": quest["progress_id"], **quest_data})
 
         return completed_quests
+
+    async def revert_quest_progress(
+        self,
+        *,
+        user_id: int,
+        event_type: str,
+        event_data: dict,
+        remaining_times: list[float],
+        remaining_medals: list[str],
+    ) -> None:
+        """Revert quest progress and un-complete quests when a completion is unverified."""
+        await self.ensure_user_quests_for_rotation(user_id)
+
+        async with self._pool.acquire() as conn, conn.transaction():
+            quests = await self._store_repo.get_active_user_quests(
+                user_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            for quest in quests:
+                quest_data = _decode_jsonb_dict(quest.get("quest_data"))
+                progress = _decode_jsonb_dict(quest.get("progress"))
+                requirements = _decode_requirements(quest_data)
+
+                if quest.get("completed_at") is not None:
+                    continue
+
+                if not self._event_matches_quest(requirements, event_type, event_data):
+                    continue
+
+                new_progress = self._calculate_reverted_progress(
+                    progress,
+                    requirements,
+                    event_data,
+                    remaining_times,
+                    remaining_medals,
+                )
+
+                if new_progress == progress:
+                    continue
+
+                await self._store_repo.update_quest_progress(
+                    quest["progress_id"],
+                    new_progress,
+                    conn=conn,  # type: ignore[arg-type]
+                )
 
     async def claim_quest(self, *, user_id: int, progress_id: int) -> dict:
         """Claim a completed quest and grant rewards."""
@@ -929,7 +1149,7 @@ class StoreService(BaseService):
                     raise QuestAlreadyClaimedError(progress_id)
                 raise QuestNotCompletedError(progress_id)
 
-            quest_data = _decode_jsonb(row["quest_data"])
+            quest_data = _decode_jsonb_dict(row["quest_data"])
             coin_reward = row["coins_rewarded"] or 0
             xp_reward = row["xp_rewarded"] or 0
 
@@ -1014,12 +1234,12 @@ class StoreService(BaseService):
             updates["hard_quest_count"] = hard_quest_count
 
         if "rotation_day" in updates or "rotation_hour" in updates:
-            new_day = updates.get("rotation_day", config.get("rotation_day"))
-            new_hour = updates.get("rotation_hour", config.get("rotation_hour"))
+            new_day = _coerce_int(updates.get("rotation_day", config.get("rotation_day")), 1)
+            new_hour = _coerce_int(updates.get("rotation_hour", config.get("rotation_hour")), 0)
             now = datetime.datetime.now(datetime.timezone.utc)
-            candidate = now.replace(hour=int(new_hour), minute=0, second=0, microsecond=0)
+            candidate = now.replace(hour=new_hour, minute=0, second=0, microsecond=0)
             weekday = candidate.isoweekday()
-            shift_days = (int(new_day) - weekday) % 7
+            shift_days = (new_day - weekday) % 7
             candidate = candidate + datetime.timedelta(days=shift_days)
             if candidate <= now:
                 candidate = candidate + datetime.timedelta(days=7)

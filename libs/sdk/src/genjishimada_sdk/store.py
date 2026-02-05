@@ -20,6 +20,10 @@ __all__ = (
     "KeyPurchaseResponse",
     "PurchaseHistoryItem",
     "PurchaseHistoryResponse",
+    "QuestData",
+    "QuestProgress",
+    "QuestRequirements",
+    "QuestResponse",
     "RotationItemResponse",
     "RotationResponse",
     "StoreConfigResponse",
@@ -251,3 +255,69 @@ class UpdateConfigRequest(Struct):
 
     rotation_period_days: int | None = None
     active_key_type: str | None = None
+
+
+class QuestRequirements(Struct):
+    """Quest requirement specification."""
+
+    type: str
+    count: int | None = None
+    difficulty: str | None = None
+    category: str | None = None
+    medal_type: str | None = None
+    map_id: int | None = None
+    target_time: float | None = None
+    target_type: str | None = None
+    rival_user_id: int | None = None
+    rival_time: float | None = None
+    target: str | None = None
+    min_count: int | None = None
+
+
+class QuestData(Struct):
+    """Quest metadata and configuration."""
+
+    name: str
+    description: str
+    difficulty: str
+    coin_reward: int
+    xp_reward: int
+    requirements: dict
+    bounty_type: str | None = None
+
+
+class QuestProgress(Struct):
+    """User progress on a quest."""
+
+    current: int | None = None
+    target: int | None = None
+    percentage: int | None = None
+    details: dict | None = None
+    completed_map_ids: list[int] | None = None
+    counted_map_ids: list[int] | None = None
+    medals: list[dict] | None = None
+    map_id: int | None = None
+    target_time: float | None = None
+    target_type: str | None = None
+    best_attempt: float | None = None
+    last_attempt: float | None = None
+    rival_user_id: int | None = None
+    rival_time: float | None = None
+    completed: bool | None = None
+    medal_earned: str | None = None
+
+
+class QuestResponse(Struct):
+    """Quest with progress for API responses."""
+
+    progress_id: int
+    quest_id: int | None
+    name: str
+    description: str
+    difficulty: str
+    coin_reward: int
+    xp_reward: int
+    progress: QuestProgress
+    completed: bool
+    claimed: bool
+    bounty_type: str | None = None

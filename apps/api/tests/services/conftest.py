@@ -21,10 +21,17 @@ from repository.newsfeed_repository import NewsfeedRepository
 from repository.notifications_repository import NotificationsRepository
 from repository.playtest_repository import PlaytestRepository
 from repository.rank_card_repository import RankCardRepository
+from repository.store_repository import StoreRepository
 from repository.users_repository import UsersRepository
 from repository.utilities_repository import UtilitiesRepository
 from services.image_storage_service import ImageStorageService
 from services.notifications_service import NotificationsService
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_db() -> None:
+    """Skip database setup for service unit tests."""
+    return None
 
 
 @pytest.fixture
@@ -123,7 +130,10 @@ def mock_community_repo(mocker):
 @pytest.fixture
 def mock_completions_repo(mocker):
     """Mock CompletionsRepository."""
-    return mocker.AsyncMock(spec=CompletionsRepository)
+    repo = mocker.AsyncMock(spec=CompletionsRepository)
+    repo.fetch_map_metadata_by_code.return_value = None
+    repo.fetch_verified_times_for_user_map.return_value = []
+    return repo
 
 
 @pytest.fixture
@@ -160,6 +170,12 @@ def mock_notifications_repo(mocker):
 def mock_playtest_repo(mocker):
     """Mock PlaytestRepository."""
     return mocker.AsyncMock(spec=PlaytestRepository)
+
+
+@pytest.fixture
+def mock_store_repo(mocker):
+    """Mock StoreRepository."""
+    return mocker.AsyncMock(spec=StoreRepository)
 
 
 @pytest.fixture
