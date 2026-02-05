@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import random
 from typing import cast
 from uuid import UUID
 
@@ -31,6 +32,9 @@ from services.exceptions.store import (
     InsufficientCoinsError,
     InvalidQuantityError,
     ItemNotInRotationError,
+    QuestAlreadyClaimedError,
+    QuestNotCompletedError,
+    QuestNotFoundError,
     RotationExpiredError,
 )
 
@@ -45,6 +49,14 @@ BULK_DISCOUNT_5X = 0.70  # 30% off
 # Bulk purchase quantities
 BULK_QUANTITY_3X = 3
 BULK_QUANTITY_5X = 5
+
+
+def _decode_jsonb(value):
+    if value is None:
+        return {}
+    if isinstance(value, (dict, list)):
+        return value
+    return msgspec.json.decode(value)
 
 
 class StoreService(BaseService):
@@ -228,11 +240,17 @@ class StoreService(BaseService):
         price = self._calculate_key_price(quantity, is_active)
 
         async with self._pool.acquire() as conn, conn.transaction():
-            user_coins = await self._lootbox_repo.fetch_user_coins(user_id, conn=conn)  # type: ignore[arg-type]
-            if user_coins < price:
+            new_balance = await self._lootbox_repo.deduct_user_coins(
+                user_id,
+                price,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if new_balance is None:
+                user_coins = await self._lootbox_repo.fetch_user_coins(
+                    user_id,
+                    conn=conn,  # type: ignore[arg-type]
+                )
                 raise InsufficientCoinsError(user_coins, price)
-
-            await self._lootbox_repo.add_user_coins(user_id, -price, conn=conn)  # type: ignore[arg-type]
 
             for _ in range(quantity):
                 await self._lootbox_repo.insert_user_key(user_id, key_type, conn=conn)  # type: ignore[arg-type]
@@ -246,7 +264,7 @@ class StoreService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
 
-            remaining_coins = user_coins - price
+            remaining_coins = new_balance
 
         log.info(
             "User %s purchased %s %s key(s) for %s coins",
@@ -312,11 +330,17 @@ class StoreService(BaseService):
 
             price = rotation_item["price"]
 
-            user_coins = await self._lootbox_repo.fetch_user_coins(user_id, conn=conn)  # type: ignore[arg-type]
-            if user_coins < price:
+            new_balance = await self._lootbox_repo.deduct_user_coins(
+                user_id,
+                price,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if new_balance is None:
+                user_coins = await self._lootbox_repo.fetch_user_coins(
+                    user_id,
+                    conn=conn,  # type: ignore[arg-type]
+                )
                 raise InsufficientCoinsError(user_coins, price)
-
-            await self._lootbox_repo.add_user_coins(user_id, -price, conn=conn)  # type: ignore[arg-type]
 
             await self._lootbox_repo.insert_user_reward(
                 user_id,
@@ -338,7 +362,7 @@ class StoreService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
 
-            remaining_coins = user_coins - price
+            remaining_coins = new_balance
 
         log.info(
             "User %s purchased item '%s' (%s, %s) for %s coins",
@@ -376,6 +400,100 @@ class StoreService(BaseService):
         total, purchases = await self._store_repo.fetch_user_purchases(user_id, limit, offset)
         return msgspec.convert({"total": total, "purchases": purchases}, PurchaseHistoryResponse)
 
+    async def get_user_quests(self, user_id: int) -> dict:
+        """Get active quests for a user with progress and summary."""
+        rotation_id = await self.ensure_user_quests_for_rotation(user_id)
+        rotation = await self._store_repo.get_active_rotation()
+        available_until = rotation.get("available_until")
+
+        quest_rows = await self._store_repo.get_active_user_quests(user_id)
+
+        quests = []
+        summary = {
+            "total_quests": 0,
+            "completed": 0,
+            "claimed": 0,
+            "potential_coins": 0,
+            "potential_xp": 0,
+            "earned_coins": 0,
+            "earned_xp": 0,
+        }
+
+        for row in quest_rows:
+            quest_data = _decode_jsonb(row.get("quest_data"))
+            progress = _decode_jsonb(row.get("progress"))
+
+            completed = row.get("completed_at") is not None
+            claimed = row.get("claimed_at") is not None
+
+            percentage = 0
+            target_val = progress.get("target")
+            if isinstance(target_val, (int, float)) and target_val:
+                current_val = progress.get("current", 0)
+                percentage = min(100, int((current_val / target_val) * 100))
+            elif completed:
+                percentage = 100
+            progress["percentage"] = percentage
+
+            quests.append(
+                {
+                    "progress_id": row["progress_id"],
+                    "quest_id": row.get("quest_id"),
+                    "name": quest_data.get("name"),
+                    "description": quest_data.get("description"),
+                    "difficulty": quest_data.get("difficulty"),
+                    "coin_reward": quest_data.get("coin_reward"),
+                    "xp_reward": quest_data.get("xp_reward"),
+                    "progress": progress,
+                    "completed": completed,
+                    "claimed": claimed,
+                    "bounty_type": quest_data.get("bounty_type"),
+                }
+            )
+
+            summary["total_quests"] += 1
+            summary["potential_coins"] += quest_data.get("coin_reward", 0) or 0
+            summary["potential_xp"] += quest_data.get("xp_reward", 0) or 0
+            if completed:
+                summary["completed"] += 1
+            if claimed:
+                summary["claimed"] += 1
+            summary["earned_coins"] += row.get("coins_rewarded") or 0
+            summary["earned_xp"] += row.get("xp_rewarded") or 0
+
+        return {
+            "rotation_id": rotation_id,
+            "available_until": available_until,
+            "quests": quests,
+            "summary": summary,
+        }
+
+    async def get_user_quest_history(self, user_id: int, limit: int = 20, offset: int = 0) -> dict:
+        """Get completed quest history for a user."""
+        total, rows = await self._store_repo.fetch_quest_history(user_id, limit, offset)
+        quests: list[dict] = []
+        for row in rows:
+            quest_data = _decode_jsonb(row.get("quest_data"))
+            quests.append(
+                {
+                    "progress_id": row["progress_id"],
+                    "quest_id": row.get("quest_id"),
+                    "name": quest_data.get("name"),
+                    "description": quest_data.get("description"),
+                    "difficulty": quest_data.get("difficulty"),
+                    "coin_reward": quest_data.get("coin_reward"),
+                    "xp_reward": quest_data.get("xp_reward"),
+                    "completed_at": row.get("completed_at"),
+                    "claimed_at": row.get("claimed_at"),
+                    "coins_rewarded": row.get("coins_rewarded"),
+                    "xp_rewarded": row.get("xp_rewarded"),
+                    "rotation_id": row.get("rotation_id"),
+                    "bounty_type": quest_data.get("bounty_type"),
+                }
+            )
+
+        return {"total": total, "quests": quests}
+
     async def generate_rotation(self, item_count: int = 5) -> GenerateRotationResponse:
         """Generate a new store rotation.
 
@@ -387,6 +505,446 @@ class StoreService(BaseService):
         """
         result = await self._store_repo.generate_rotation(item_count)
         return msgspec.convert(result, GenerateRotationResponse)
+
+    async def ensure_user_quests_for_rotation(self, user_id: int) -> UUID:
+        """Ensure quest rows exist for this user and current rotation."""
+        async with self._pool.acquire() as conn:
+            await conn.execute("SELECT store.check_and_generate_quest_rotation()")
+            rotation = await self._store_repo.get_active_rotation(conn=conn)  # type: ignore[arg-type]
+            rotation_id = rotation.get("rotation_id")
+            if not rotation_id:
+                raise RuntimeError("Quest rotation not available.")
+
+            async with conn.transaction():
+                await conn.execute(
+                    "SELECT pg_advisory_xact_lock(hashtext($1))",
+                    f"quest_provision:{user_id}:{rotation_id}",
+                )
+
+                if await self._store_repo.has_progress_rows(
+                    user_id,
+                    rotation_id,
+                    conn=conn,  # type: ignore[arg-type]
+                ):
+                    return rotation_id
+
+                global_quests = await self._store_repo.get_global_quests(
+                    rotation_id,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                await self._store_repo.seed_global_progress(
+                    user_id,
+                    rotation_id,
+                    global_quests,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+
+                existing_bounty = await self._store_repo.get_bounty_for_user(
+                    rotation_id,
+                    user_id,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if not existing_bounty:
+                    bounty = await self.generate_bounty_for_user(user_id, rotation_id)
+                    await self._store_repo.insert_bounty(
+                        rotation_id,
+                        user_id,
+                        bounty["quest_data"],
+                        conn=conn,  # type: ignore[arg-type]
+                    )
+                    await self._store_repo.seed_bounty_progress(
+                        user_id,
+                        rotation_id,
+                        bounty["quest_data"],
+                        conn=conn,  # type: ignore[arg-type]
+                    )
+
+        return rotation_id
+
+    async def generate_bounty_for_user(self, user_id: int, rotation_id: UUID) -> dict:
+        """Generate personalized bounty for a user."""
+        bounty_type = random.choices(
+            ["personal_improvement", "rival_challenge", "gap_filling"],
+            weights=[0.33, 0.33, 0.33],
+        )[0]
+
+        if bounty_type == "personal_improvement":
+            return await self._generate_personal_improvement_bounty(user_id, rotation_id)
+        if bounty_type == "rival_challenge":
+            return await self._generate_rival_challenge_bounty(user_id, rotation_id)
+        return await self._generate_gap_filling_bounty(user_id, rotation_id)
+
+    async def _generate_personal_improvement_bounty(self, user_id: int, rotation_id: UUID) -> dict:
+        """Generate personal improvement bounty: beat your own PB or upgrade medal."""
+        completions = await self._store_repo.get_user_completions(user_id)
+        if not completions:
+            return await self._generate_gap_filling_bounty(user_id, rotation_id)
+
+        completion = random.choice(completions)
+        medal_thresholds = await self._store_repo.get_medal_thresholds(completion["map_id"])
+        percentile_target = await self._store_repo.get_percentile_target_time(
+            completion["map_id"],
+            0.6,
+        )
+        if percentile_target is not None:
+            percentile_target = float(percentile_target)
+
+        medal_target = None
+        if medal_thresholds:
+            for medal_name in ("gold", "silver", "bronze"):
+                threshold = medal_thresholds.get(medal_name)
+                if threshold and completion["time"] > float(threshold):
+                    medal_target = float(threshold)
+                    break
+
+        if medal_target and percentile_target:
+            target_time = max(medal_target, percentile_target)
+            target_type = "medal_threshold" if target_time == medal_target else "percentile"
+        elif medal_target:
+            target_time = medal_target
+            target_type = "medal_threshold"
+        elif percentile_target:
+            target_time = percentile_target
+            target_type = "percentile"
+        else:
+            target_time = completion["time"] * 0.9
+            target_type = "percentile"
+
+        return {
+            "user_id": user_id,
+            "rotation_id": rotation_id,
+            "quest_data": {
+                "name": "Beat Your Best",
+                "description": f"Improve your time on {completion['map_name']}",
+                "difficulty": "bounty",
+                "coin_reward": 300,
+                "xp_reward": 50,
+                "bounty_type": "personal_improvement",
+                "requirements": {
+                    "type": "beat_time",
+                    "map_id": completion["map_id"],
+                    "target_time": target_time,
+                    "target_type": target_type,
+                },
+            },
+        }
+
+    async def _generate_rival_challenge_bounty(self, user_id: int, rotation_id: UUID) -> dict:
+        """Generate rival challenge bounty: beat another player's time."""
+        skill_rank = await self._store_repo.get_user_skill_rank(user_id)
+        rivals = await self._store_repo.find_rivals(user_id, skill_rank)
+        if not rivals:
+            return await self._generate_personal_improvement_bounty(user_id, rotation_id)
+
+        rival = random.choice(rivals)
+        target_map = await self._store_repo.find_beatable_rival_map(user_id, rival["user_id"])
+        if not target_map:
+            return await self._generate_personal_improvement_bounty(user_id, rotation_id)
+
+        rival_time = float(target_map["rival_time"])
+
+        return {
+            "user_id": user_id,
+            "rotation_id": rotation_id,
+            "quest_data": {
+                "name": "Rival Challenge",
+                "description": f"Beat {rival['username']}'s time on {target_map['map_name']}",
+                "difficulty": "bounty",
+                "coin_reward": 300,
+                "xp_reward": 50,
+                "bounty_type": "rival_challenge",
+                "requirements": {
+                    "type": "beat_rival",
+                    "map_id": target_map["map_id"],
+                    "rival_user_id": rival["user_id"],
+                    "rival_time": rival_time,
+                    "target_time": rival_time,
+                },
+            },
+        }
+
+    async def _generate_gap_filling_bounty(self, user_id: int, rotation_id: UUID) -> dict:
+        """Generate gap filling bounty: complete an unplayed map."""
+        uncompleted = await self._store_repo.get_uncompleted_maps(user_id)
+        if not uncompleted:
+            return {
+                "user_id": user_id,
+                "rotation_id": rotation_id,
+                "quest_data": {
+                    "name": "Explore New Territory",
+                    "description": "Complete a new map",
+                    "difficulty": "bounty",
+                    "coin_reward": 300,
+                    "xp_reward": 50,
+                    "bounty_type": "gap_filling",
+                    "requirements": {
+                        "type": "complete_map",
+                        "map_id": 0,
+                        "target": "complete",
+                    },
+                },
+            }
+
+        target_map = random.choice(uncompleted)
+        return {
+            "user_id": user_id,
+            "rotation_id": rotation_id,
+            "quest_data": {
+                "name": "Explore New Territory",
+                "description": f"Complete {target_map['map_name']}",
+                "difficulty": "bounty",
+                "coin_reward": 300,
+                "xp_reward": 50,
+                "bounty_type": "gap_filling",
+                "requirements": {
+                    "type": "complete_map",
+                    "map_id": target_map["map_id"],
+                    "target": "complete",
+                },
+            },
+        }
+
+    def _event_matches_quest(self, requirements: dict, event_type: str, event_data: dict) -> bool:
+        req_type = requirements.get("type")
+        if req_type == "complete_maps":
+            if event_type != "completion":
+                return False
+            req_difficulty = requirements.get("difficulty")
+            if req_difficulty and req_difficulty != "any":
+                event_difficulty = (event_data.get("difficulty") or "").lower()
+                if event_difficulty != str(req_difficulty).lower():
+                    return False
+            req_category = requirements.get("category")
+            if req_category:
+                event_category = (event_data.get("category") or "").lower()
+                if event_category != str(req_category).lower():
+                    return False
+            return True
+
+        if req_type == "earn_medals":
+            if event_type != "completion":
+                return False
+            event_medal = event_data.get("medal")
+            if not event_medal:
+                return False
+            req_medal = requirements.get("medal_type")
+            if req_medal and str(req_medal).lower() != "any":
+                return str(event_medal).lower() == str(req_medal).lower()
+            return True
+
+        if req_type == "complete_difficulty_range":
+            if event_type != "completion":
+                return False
+            event_difficulty = (event_data.get("difficulty") or "").lower()
+            req_difficulty = (requirements.get("difficulty") or "").lower()
+            return event_difficulty == req_difficulty
+
+        if req_type in {"beat_time", "beat_rival", "complete_map"}:
+            if event_type != "completion":
+                return False
+            return event_data.get("map_id") == requirements.get("map_id")
+
+        return False
+
+    def _calculate_new_progress(self, progress: dict, requirements: dict, event_data: dict) -> dict:
+        req_type = requirements.get("type")
+        current_progress = dict(progress)
+
+        if req_type == "complete_maps":
+            map_id = event_data.get("map_id")
+            completed = set(current_progress.get("completed_map_ids", []))
+            if map_id in completed:
+                return current_progress
+            completed.add(map_id)
+            current_progress["completed_map_ids"] = list(completed)
+            current_progress["current"] = current_progress.get("current", 0) + 1
+            details = current_progress.get("details") or {}
+            difficulty = (event_data.get("difficulty") or "").lower()
+            details[difficulty] = details.get(difficulty, 0) + 1
+            current_progress["details"] = details
+
+        elif req_type == "earn_medals":
+            map_id = event_data.get("map_id")
+            counted = set(current_progress.get("counted_map_ids", []))
+            if map_id in counted:
+                return current_progress
+            counted.add(map_id)
+            current_progress["counted_map_ids"] = list(counted)
+            current_progress["current"] = current_progress.get("current", 0) + 1
+            medals = current_progress.get("medals") or []
+            medals.append({"map_id": map_id, "medal_type": event_data.get("medal")})
+            current_progress["medals"] = medals
+
+        elif req_type == "complete_difficulty_range":
+            map_id = event_data.get("map_id")
+            completed = set(current_progress.get("completed_map_ids", []))
+            if map_id in completed:
+                return current_progress
+            completed.add(map_id)
+            current_progress["completed_map_ids"] = list(completed)
+            current_progress["current"] = current_progress.get("current", 0) + 1
+
+        elif req_type in {"beat_time", "beat_rival"}:
+            new_time = float(event_data.get("time"))
+            current_progress["last_attempt"] = new_time
+            best_attempt = current_progress.get("best_attempt")
+            best_value = float(best_attempt) if best_attempt is not None else float("inf")
+            current_progress["best_attempt"] = min(best_value, new_time)
+
+        elif req_type == "complete_map":
+            current_progress["completed"] = True
+            if event_data.get("medal"):
+                current_progress["medal_earned"] = event_data.get("medal")
+
+        return current_progress
+
+    def _is_quest_complete(self, progress: dict, requirements: dict) -> bool:
+        req_type = requirements.get("type")
+
+        if req_type == "complete_maps":
+            return progress.get("current", 0) >= requirements.get("count", 0)
+
+        if req_type == "earn_medals":
+            return progress.get("current", 0) >= requirements.get("count", 0)
+
+        if req_type == "complete_difficulty_range":
+            return progress.get("current", 0) >= requirements.get("min_count", 0)
+
+        if req_type == "beat_time":
+            target_time = requirements.get("target_time")
+            if target_time is None:
+                return False
+            best_attempt = progress.get("best_attempt")
+            best_value = float(best_attempt) if best_attempt is not None else float("inf")
+            return best_value < float(target_time)
+
+        if req_type == "beat_rival":
+            target_time = requirements.get("target_time")
+            if target_time is None:
+                return False
+            best_attempt = progress.get("best_attempt")
+            best_value = float(best_attempt) if best_attempt is not None else float("inf")
+            return best_value < float(target_time)
+
+        if req_type == "complete_map":
+            return progress.get("completed", False) is True
+
+        return False
+
+    async def update_quest_progress(
+        self,
+        *,
+        user_id: int,
+        event_type: str,
+        event_data: dict,
+    ) -> list[dict]:
+        """Update quest progress and return newly completed quests."""
+        await self.ensure_user_quests_for_rotation(user_id)
+
+        completed_quests: list[dict] = []
+        async with self._pool.acquire() as conn, conn.transaction():
+            quests = await self._store_repo.get_active_user_quests(
+                user_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            for quest in quests:
+                if quest.get("completed_at"):
+                    continue
+
+                quest_data = _decode_jsonb(quest.get("quest_data"))
+                progress = _decode_jsonb(quest.get("progress"))
+                requirements = quest_data.get("requirements", {})
+
+                if not self._event_matches_quest(requirements, event_type, event_data):
+                    continue
+
+                new_progress = self._calculate_new_progress(progress, requirements, event_data)
+                await self._store_repo.update_quest_progress(
+                    quest["progress_id"],
+                    new_progress,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+
+                if self._is_quest_complete(new_progress, requirements):
+                    await self._store_repo.mark_quest_complete(
+                        quest["progress_id"],
+                        conn=conn,  # type: ignore[arg-type]
+                    )
+                    completed_quests.append({"progress_id": quest["progress_id"], **quest_data})
+
+        return completed_quests
+
+    async def claim_quest(self, *, user_id: int, progress_id: int) -> dict:
+        """Claim a completed quest and grant rewards."""
+        async with self._pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                """
+                UPDATE store.user_quest_progress
+                SET claimed_at = now(),
+                    coins_rewarded = (quest_data->>'coin_reward')::int,
+                    xp_rewarded = (quest_data->>'xp_reward')::int
+                WHERE id = $1
+                  AND user_id = $2
+                  AND completed_at IS NOT NULL
+                  AND claimed_at IS NULL
+                RETURNING quest_data, coins_rewarded, xp_rewarded
+                """,
+                progress_id,
+                user_id,
+            )
+
+            if not row:
+                status = await conn.fetchrow(
+                    """
+                    SELECT completed_at, claimed_at
+                    FROM store.user_quest_progress
+                    WHERE id = $1 AND user_id = $2
+                    """,
+                    progress_id,
+                    user_id,
+                )
+                if not status:
+                    raise QuestNotFoundError(progress_id)
+                if status["claimed_at"] is not None:
+                    raise QuestAlreadyClaimedError(progress_id)
+                raise QuestNotCompletedError(progress_id)
+
+            quest_data = _decode_jsonb(row["quest_data"])
+            coin_reward = row["coins_rewarded"] or 0
+            xp_reward = row["xp_rewarded"] or 0
+
+            new_coins = await conn.fetchval(
+                """
+                UPDATE core.users
+                SET coins = coins + $2
+                WHERE id = $1
+                RETURNING coins
+                """,
+                user_id,
+                coin_reward,
+            )
+
+            new_xp = await conn.fetchval(
+                """
+                INSERT INTO lootbox.xp (user_id, amount)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id) DO UPDATE
+                    SET amount = lootbox.xp.amount + EXCLUDED.amount
+                RETURNING amount
+                """,
+                user_id,
+                xp_reward,
+            )
+
+        return {
+            "success": True,
+            "quest_name": quest_data.get("name"),
+            "coins_earned": coin_reward,
+            "xp_earned": xp_reward,
+            "new_coin_balance": new_coins,
+            "new_xp": new_xp,
+        }
 
     async def update_config(
         self,
@@ -404,6 +962,66 @@ class StoreService(BaseService):
             rotation_period_days=rotation_period_days,
             active_key_type=active_key_type,
         )
+
+    async def get_quest_config(self) -> dict:
+        """Get quest configuration."""
+        return await self._store_repo.fetch_quest_config()
+
+    async def update_quest_config(
+        self,
+        *,
+        rotation_day: int | None = None,
+        rotation_hour: int | None = None,
+        easy_quest_count: int | None = None,
+        medium_quest_count: int | None = None,
+        hard_quest_count: int | None = None,
+    ) -> dict:
+        """Update quest configuration and recompute next_rotation_at if needed."""
+        config = await self._store_repo.fetch_quest_config()
+        updates: dict[str, object] = {}
+
+        if rotation_day is not None:
+            updates["rotation_day"] = rotation_day
+        if rotation_hour is not None:
+            updates["rotation_hour"] = rotation_hour
+        if easy_quest_count is not None:
+            updates["easy_quest_count"] = easy_quest_count
+        if medium_quest_count is not None:
+            updates["medium_quest_count"] = medium_quest_count
+        if hard_quest_count is not None:
+            updates["hard_quest_count"] = hard_quest_count
+
+        if "rotation_day" in updates or "rotation_hour" in updates:
+            new_day = updates.get("rotation_day", config.get("rotation_day"))
+            new_hour = updates.get("rotation_hour", config.get("rotation_hour"))
+            now = datetime.datetime.now(datetime.timezone.utc)
+            candidate = now.replace(hour=int(new_hour), minute=0, second=0, microsecond=0)
+            weekday = candidate.isoweekday()
+            shift_days = (int(new_day) - weekday) % 7
+            candidate = candidate + datetime.timedelta(days=shift_days)
+            if candidate <= now:
+                candidate = candidate + datetime.timedelta(days=7)
+            updates["next_rotation_at"] = candidate
+
+        await self._store_repo.update_quest_config(updates)
+        return {
+            "success": True,
+            "updated_fields": list(updates.keys()),
+            "next_rotation_at": updates.get("next_rotation_at", config.get("next_rotation_at")),
+        }
+
+    async def generate_quest_rotation(self) -> dict:
+        """Manually trigger quest rotation generation."""
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM store.check_and_generate_quest_rotation()")
+        if not row:
+            raise RuntimeError("Quest rotation generation failed.")
+        return {
+            "rotation_id": row["rotation_id"],
+            "generated": row["generated"],
+            "auto_claimed_quests": row["auto_claimed"],
+            "global_quests_generated": row["global_quests_generated"],
+        }
 
 
 async def provide_store_service(state: State) -> StoreService:
