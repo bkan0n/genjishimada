@@ -20,14 +20,25 @@ from genjishimada_sdk.store import (
 )
 from litestar.di import Provide
 from litestar.params import Body
-from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_402_PAYMENT_REQUIRED, HTTP_409_CONFLICT
+from litestar.status_codes import (
+    HTTP_200_OK,
+    HTTP_400_BAD_REQUEST,
+    HTTP_402_PAYMENT_REQUIRED,
+    HTTP_404_NOT_FOUND,
+    HTTP_409_CONFLICT,
+)
 
-from repository.store_repository import provide_store_repository
+from repository.store_repository import StoreRepository, provide_store_repository
 from services.exceptions.store import (
     AlreadyOwnedError,
     InsufficientCoinsError,
+    InvalidKeyTypeError,
     InvalidQuantityError,
+    InvalidRotationItemCountError,
     ItemNotInRotationError,
+    QuestAlreadyClaimedError,
+    QuestNotCompletedError,
+    QuestNotFoundError,
     RotationExpiredError,
 )
 from services.store_service import StoreService, provide_store_service
@@ -127,6 +138,11 @@ class StoreController(litestar.Controller):
                 status_code=HTTP_400_BAD_REQUEST,
                 detail=str(e),
             ) from e
+        except InvalidKeyTypeError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
         except InsufficientCoinsError as e:
             raise CustomHTTPException(
                 status_code=HTTP_402_PAYMENT_REQUIRED,
@@ -207,6 +223,63 @@ class StoreController(litestar.Controller):
         """
         return await store_service.get_user_purchases(user_id, limit, offset)
 
+    @litestar.get(
+        path="/quests",
+        summary="Get Weekly Quests",
+        description="Get current weekly quests with progress.",
+        opt={"required_scopes": {"store:read"}},
+    )
+    async def get_quests(
+        self,
+        store_service: StoreService,
+        user_id: int,
+    ) -> dict:
+        """Get weekly quests for a user."""
+        return await store_service.get_user_quests(user_id)
+
+    @litestar.post(
+        path="/quests/{progress_id:int}/claim",
+        summary="Claim Quest Rewards",
+        description="Claim rewards for a completed quest.",
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:write"}},
+    )
+    async def claim_quest(
+        self,
+        store_service: StoreService,
+        progress_id: int,
+        data: Annotated[dict, Body()],
+    ) -> dict:
+        """Claim a completed quest."""
+        user_id = data.get("user_id")
+        if not user_id:
+            raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail="user_id required")
+
+        try:
+            return await store_service.claim_quest(user_id=user_id, progress_id=progress_id)
+        except QuestNotFoundError as e:
+            raise CustomHTTPException(status_code=litestar.status_codes.HTTP_404_NOT_FOUND, detail=str(e)) from e
+        except QuestNotCompletedError as e:
+            raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except QuestAlreadyClaimedError as e:
+            raise CustomHTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
+
+    @litestar.get(
+        path="/users/{user_id:int}/quest-history",
+        summary="Get Quest History",
+        description="Get user's completed quest history.",
+        opt={"required_scopes": {"store:read"}},
+    )
+    async def get_quest_history(
+        self,
+        store_service: StoreService,
+        user_id: int,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        """Get completed quest history."""
+        return await store_service.get_user_quest_history(user_id, limit, offset)
+
     @litestar.post(
         path="/admin/rotation/generate",
         summary="Generate New Rotation (Admin)",
@@ -227,9 +300,18 @@ class StoreController(litestar.Controller):
 
         Returns:
             Generation result with rotation details.
+
+        Raises:
+            CustomHTTPException: On validation errors.
         """
-        item_count = data.item_count if data else 5
-        return await store_service.generate_rotation(item_count)
+        try:
+            item_count = data.item_count if data else 5
+            return await store_service.generate_rotation(item_count)
+        except InvalidRotationItemCountError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
 
     @litestar.get(
         path="/admin/config",
@@ -271,9 +353,87 @@ class StoreController(litestar.Controller):
 
         Returns:
             Updated configuration.
+
+        Raises:
+            CustomHTTPException: On validation errors.
         """
-        await store_service.update_config(
-            rotation_period_days=data.rotation_period_days,
-            active_key_type=data.active_key_type,
+        try:
+            await store_service.update_config(
+                rotation_period_days=data.rotation_period_days,
+                active_key_type=data.active_key_type,
+            )
+            return await store_service.get_config()
+        except InvalidKeyTypeError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+
+    @litestar.get(
+        path="/admin/quests/config",
+        summary="Get Quest Config (Admin)",
+        description="View current quest configuration.",
+        opt={"required_scopes": {"store:admin"}},
+    )
+    async def get_quest_config(
+        self,
+        store_service: StoreService,
+    ) -> dict:
+        """Get quest configuration."""
+        return await store_service.get_quest_config()
+
+    @litestar.put(
+        path="/admin/quests/config",
+        summary="Update Quest Config (Admin)",
+        description="Update quest configuration.",
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:admin"}},
+    )
+    async def update_quest_config(
+        self,
+        store_service: StoreService,
+        data: Annotated[dict, Body()],
+    ) -> dict:
+        """Update quest configuration."""
+        return await store_service.update_quest_config(
+            rotation_day=data.get("rotation_day"),
+            rotation_hour=data.get("rotation_hour"),
+            easy_quest_count=data.get("easy_quest_count"),
+            medium_quest_count=data.get("medium_quest_count"),
+            hard_quest_count=data.get("hard_quest_count"),
         )
-        return await store_service.get_config()
+
+    @litestar.post(
+        path="/admin/quests/rotation/generate",
+        summary="Generate Quest Rotation (Admin)",
+        description="Manually trigger quest rotation generation.",
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:admin"}},
+    )
+    async def generate_quest_rotation(
+        self,
+        store_service: StoreService,
+    ) -> dict:
+        """Generate a new quest rotation."""
+        return await store_service.generate_quest_rotation()
+
+    @litestar.patch(
+        path="/admin/quests/{quest_id:int}",
+        summary="Update Quest (Admin)",
+        description="Update or deactivate a quest in the pool.",
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:admin"}},
+    )
+    async def update_quest(
+        self,
+        store_repo: StoreRepository,
+        quest_id: int,
+        data: Annotated[dict, Body()],
+    ) -> dict:
+        """Update quest pool entry."""
+        allowed = {"name", "description", "difficulty", "coin_reward", "xp_reward", "requirements", "is_active"}
+        updates = {k: v for k, v in data.items() if k in allowed}
+        if not updates:
+            raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail="No valid fields to update")
+        updated_fields = await store_repo.update_quest(quest_id, updates)
+        return {"success": True, "updated_fields": updated_fields}
