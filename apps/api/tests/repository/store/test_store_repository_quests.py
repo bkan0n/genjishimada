@@ -210,9 +210,19 @@ class TestBountyDataSources:
             "INSERT INTO core.users (id, nickname, global_name) VALUES ($1, 'User', 'User')",
             unique_user_id,
         )
-        map_id = await create_test_map()
+        completed_map_id = await create_test_map()
+        await create_test_map()
+
+        await asyncpg_conn.execute(
+            """
+            INSERT INTO core.completions (map_id, user_id, time, screenshot, verified, legacy)
+            VALUES ($1, $2, 50.0, 'u.png', true, false)
+            """,
+            completed_map_id,
+            unique_user_id,
+        )
 
         uncompleted = await repository.get_uncompleted_maps(unique_user_id)
 
         assert uncompleted
-        assert map_id in {row["map_id"] for row in uncompleted}
+        assert completed_map_id not in {row["map_id"] for row in uncompleted}
