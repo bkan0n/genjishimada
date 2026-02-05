@@ -30,7 +30,9 @@ from services.base import BaseService
 from services.exceptions.store import (
     AlreadyOwnedError,
     InsufficientCoinsError,
+    InvalidKeyTypeError,
     InvalidQuantityError,
+    InvalidRotationItemCountError,
     ItemNotInRotationError,
     QuestAlreadyClaimedError,
     QuestNotCompletedError,
@@ -80,6 +82,19 @@ class StoreService(BaseService):
         super().__init__(pool, state)
         self._store_repo = store_repo
         self._lootbox_repo = lootbox_repo
+
+    async def _ensure_key_type_exists(self, key_type: str, *, conn=None) -> None:
+        rows = await self._lootbox_repo.fetch_all_key_types(
+            cast(LootboxKeyType, key_type),
+            conn=conn,  # type: ignore[arg-type]
+        )
+        if not rows:
+            raise InvalidKeyTypeError(key_type)
+
+    @staticmethod
+    def _validate_rotation_item_count(item_count: int) -> None:
+        if item_count < 3 or item_count > 5:
+            raise InvalidRotationItemCountError(item_count)
 
     @staticmethod
     def _calculate_key_price(quantity: int, is_active: bool) -> int:
@@ -229,6 +244,7 @@ class StoreService(BaseService):
 
         Raises:
             InvalidQuantityError: If quantity is not 1, 3, or 5.
+            InvalidKeyTypeError: If key type does not exist.
             InsufficientCoinsError: If user doesn't have enough coins.
         """
         if quantity not in [1, 3, 5]:
@@ -240,6 +256,8 @@ class StoreService(BaseService):
         price = self._calculate_key_price(quantity, is_active)
 
         async with self._pool.acquire() as conn, conn.transaction():
+            await self._ensure_key_type_exists(key_type, conn=conn)
+
             new_balance = await self._lootbox_repo.deduct_user_coins(
                 user_id,
                 price,
@@ -503,6 +521,7 @@ class StoreService(BaseService):
         Returns:
             Rotation generation result.
         """
+        self._validate_rotation_item_count(item_count)
         result = await self._store_repo.generate_rotation(item_count)
         return msgspec.convert(result, GenerateRotationResponse)
 
@@ -958,6 +977,9 @@ class StoreService(BaseService):
             rotation_period_days: New rotation period.
             active_key_type: New active key type.
         """
+        if active_key_type is not None:
+            await self._ensure_key_type_exists(active_key_type)
+
         await self._store_repo.update_config(
             rotation_period_days=rotation_period_days,
             active_key_type=active_key_type,
