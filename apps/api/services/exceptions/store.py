@@ -68,3 +68,38 @@ class AlreadyOwnedError(StoreError):
             item_name: Name of already-owned item.
         """
         super().__init__(f"User already owns this item: {item_name}", item_name=item_name)
+
+
+class QuestNotFoundError(StoreError):
+    """Raised when quest progress row cannot be found for claim."""
+
+    def __init__(self, progress_id: int) -> None:
+        super().__init__(f"Quest progress not found: {progress_id}", progress_id=progress_id)
+
+
+class QuestNotCompletedError(StoreError):
+    """Raised when quest is not yet completed."""
+
+    def __init__(self, progress_id: int) -> None:
+        super().__init__(f"Quest not completed: {progress_id}", progress_id=progress_id)
+
+
+class QuestAlreadyClaimedError(StoreError):
+    """Raised when quest has already been claimed."""
+
+    def __init__(self, progress_id: int) -> None:
+        super().__init__(f"Quest already claimed: {progress_id}", progress_id=progress_id)
+
+
+class InvalidKeyTypeError(StoreError):
+    """Raised when key type does not exist."""
+
+    def __init__(self, key_type: str) -> None:
+        super().__init__(f"Invalid key type: {key_type}", key_type=key_type)
+
+
+class InvalidRotationItemCountError(StoreError):
+    """Raised when rotation item_count is outside allowed range."""
+
+    def __init__(self, item_count: int) -> None:
+        super().__init__("Invalid item_count: must be between 3 and 5", item_count=item_count)
