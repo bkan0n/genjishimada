@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import datetime
 import logging
+from typing import cast
 from uuid import UUID
 
 import msgspec
 from asyncpg import Pool
+from genjishimada_sdk.lootbox import LootboxKeyType
 from genjishimada_sdk.store import (
     GenerateRotationResponse,
     ItemPurchaseResponse,
@@ -39,6 +41,10 @@ ACTIVE_KEY_BASE_PRICE = 500
 INACTIVE_KEY_BASE_PRICE = 1000
 BULK_DISCOUNT_3X = 0.85  # 15% off
 BULK_DISCOUNT_5X = 0.70  # 30% off
+
+# Bulk purchase quantities
+BULK_QUANTITY_3X = 3
+BULK_QUANTITY_5X = 5
 
 
 class StoreService(BaseService):
@@ -78,10 +84,10 @@ class StoreService(BaseService):
 
         if quantity == 1:
             return base_price
-        elif quantity == 3:
-            return int(base_price * 3 * BULK_DISCOUNT_3X)
-        elif quantity == 5:
-            return int(base_price * 5 * BULK_DISCOUNT_5X)
+        elif quantity == BULK_QUANTITY_3X:
+            return int(base_price * BULK_QUANTITY_3X * BULK_DISCOUNT_3X)
+        elif quantity == BULK_QUANTITY_5X:
+            return int(base_price * BULK_QUANTITY_5X * BULK_DISCOUNT_5X)
         else:
             raise ValueError(f"Invalid quantity: {quantity}")
 
@@ -297,7 +303,7 @@ class StoreService(BaseService):
             already_owned = await self._lootbox_repo.check_user_has_reward(
                 user_id,
                 item_type,
-                key_type,
+                cast(LootboxKeyType, key_type),
                 item_name,
                 conn=conn,  # type: ignore[arg-type]
             )
@@ -315,7 +321,7 @@ class StoreService(BaseService):
             await self._lootbox_repo.insert_user_reward(
                 user_id,
                 item_type,
-                key_type,
+                cast(LootboxKeyType, key_type),
                 item_name,
                 conn=conn,  # type: ignore[arg-type]
             )
