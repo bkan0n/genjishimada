@@ -745,6 +745,43 @@ class TestGenerateRotation:
         assert active_ids == {new_rotation_id}
         assert old_rotation_id != new_rotation_id
 
+    async def test_rotation_avoids_last_two_rotations(self, test_client, asyncpg_pool):
+        """New rotation does not repeat items from the last two rotations."""
+        r1 = await test_client.post("/api/v3/store/admin/rotation/generate")
+        r2 = await test_client.post("/api/v3/store/admin/rotation/generate")
+        r3 = await test_client.post("/api/v3/store/admin/rotation/generate")
+
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+        assert r3.status_code == 200
+
+        rotation_ids = [r1.json()["rotation_id"], r2.json()["rotation_id"]]
+        new_rotation_id = r3.json()["rotation_id"]
+
+        async with asyncpg_pool.acquire() as conn:
+            recent = await conn.fetch(
+                """
+                SELECT item_name, item_type, key_type
+                FROM store.rotations
+                WHERE rotation_id = ANY($1::uuid[])
+                """,
+                rotation_ids,
+            )
+            current = await conn.fetch(
+                """
+                SELECT item_name, item_type, key_type
+                FROM store.rotations
+                WHERE rotation_id = $1
+                """,
+                new_rotation_id,
+            )
+
+        recent_set = {(r["item_name"], r["item_type"], r["key_type"]) for r in recent}
+        current_set = {(r["item_name"], r["item_type"], r["key_type"]) for r in current}
+
+        assert current_set
+        assert current_set.isdisjoint(recent_set)
+
 
 class TestGetConfig:
     """GET /api/v3/store/admin/config"""
