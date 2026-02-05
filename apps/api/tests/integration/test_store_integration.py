@@ -738,7 +738,7 @@ class TestGenerateRotation:
                 WHERE available_from <= now() AND available_until > now()
                 """
             )
-        active_ids = {row["rotation_id"] for row in active_ids}
+        active_ids = {str(row["rotation_id"]) for row in active_ids}
         assert active_ids == {new_rotation_id}
         assert old_rotation_id != new_rotation_id
 
