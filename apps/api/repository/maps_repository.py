@@ -96,10 +96,11 @@ class MapsRepository(BaseRepository):
                 m.map_name,
                 m.checkpoints,
                 pm.initial_difficulty AS difficulty,
-                array_agg(DISTINCT u.nickname) AS creator_names
+                array_agg(DISTINCT coalesce(ou.username, u.nickname, u.global_name, 'Unknown User')) AS creator_names
             FROM core.maps AS m
             LEFT JOIN maps.creators AS c ON c.map_id = m.id AND c.is_primary
             LEFT JOIN core.users AS u ON c.user_id = u.id
+            LEFT JOIN users.overwatch_usernames ou ON c.user_id = ou.user_id AND ou.is_primary
             LEFT JOIN playtests.meta AS pm ON m.id = pm.map_id
             WHERE m.code = $1
             GROUP BY m.id,
