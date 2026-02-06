@@ -1,0 +1,87 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please provide as much detail as possible to help us understand your idea.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing feature requests and issues
+          required: true
+        - label: I have checked the documentation and roadmap at https://docs.genji.pk
+          required: false
+        - label: This feature would benefit the broader community, not just my specific use case
+          required: false
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Description
+      description: What problem does this feature solve? What's the use case?
+      placeholder: I'm frustrated when..., It would be helpful if..., Currently there's no way to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like to see this problem solved?
+      placeholder: Add a command that..., Implement a system that..., Change the behavior to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other solutions or approaches have you thought about?
+      placeholder: I considered..., Another option would be..., We could also...
+    validations:
+      required: false
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: Benefits
+      description: How would this feature benefit users or the community?
+      placeholder: This would allow users to..., It would improve..., The community could...
+    validations:
+      required: false
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Ideas
+      description: Do you have ideas about how this could be implemented technically?
+      placeholder: This could be implemented by..., It might require changes to..., A possible approach is...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, mockups, or examples
+      placeholder: Similar to how X does it..., Here's a mockup..., Other communities have...
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to help implement this feature?
+      options:
+        - label: I'd like to work on implementing this feature myself
+          required: false
+        - label: I can help test this feature once implemented
+          required: false

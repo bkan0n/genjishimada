@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.genji.pk
+    about: Check the comprehensive documentation for guides, API reference, and architecture details
+  - name: Community Discord
+    url: https://dsc.gg/genjiparkour
+    about: Join our Discord community for general questions, discussions, and support
