@@ -1438,3 +1438,43 @@ INSERT INTO lootbox.reward_types (
 VALUES (
     '1000', 'coins', 'legendary', 'Winter'
 );
+
+
+
+INSERT INTO lootbox.reward_types (
+    name, type, rarity, key_type
+)
+VALUES (
+    'The Dragon Becomes Me', 'background', 'rare', 'Classic'
+);
+
+INSERT INTO lootbox.reward_types (
+    name, type, rarity, key_type
+)
+VALUES (
+    'Moody', 'background', 'rare', 'Classic'
+);
+INSERT INTO lootbox.reward_types (
+    name, type, rarity, key_type
+)
+VALUES (
+    'Speed', 'background', 'epic', 'Classic'
+);
+INSERT INTO lootbox.reward_types (
+    name, type, rarity, key_type
+)
+VALUES (
+    'Close Up', 'background', 'rare', 'Classic'
+);
+INSERT INTO lootbox.reward_types (
+    name, type, rarity, key_type
+)
+VALUES (
+    'Neon Lights', 'background', 'epic', 'Classic'
+);
+INSERT INTO lootbox.reward_types (
+    name, type, rarity, key_type
+)
+VALUES (
+    'Ramen Time', 'background', 'epic', 'Classic'
+);
