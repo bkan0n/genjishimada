@@ -15,7 +15,7 @@ __all__ = (
     "UserRewardResponse",
 )
 
-LootboxKeyType = Literal["Classic", "Winter"]
+LootboxKeyType = Literal["Classic", "Winter", "Summer", "Halloween", "Spring", "Autumn"]
 
 
 class RewardTypeResponse(Struct):
