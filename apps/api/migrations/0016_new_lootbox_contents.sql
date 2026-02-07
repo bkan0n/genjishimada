@@ -1458,7 +1458,7 @@ INSERT INTO lootbox.reward_types (
     name, type, rarity, key_type
 )
 VALUES (
-    'Speed', 'background', 'epic', 'Classic'
+    'Speedy', 'background', 'epic', 'Classic'
 );
 INSERT INTO lootbox.reward_types (
     name, type, rarity, key_type
