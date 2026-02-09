@@ -4,6 +4,7 @@ import asyncio
 import math
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Generic, Literal, Protocol, Sequence, TypeVar, cast
 
 import discord
@@ -186,7 +187,16 @@ class BasePaginatorView(ABC, BaseView, Generic[T]):
         self._page_number_button: _PageNumberButton = _PageNumberButton(1)
         self._next_button: _NextButton = _NextButton()
 
-        super().__init__(timeout=600)
+        # Call discord.ui.LayoutView.__init__ directly to skip BaseView's rebuild_components()
+        # We'll call rebuild_components() after subclasses initialize their data
+        discord.ui.LayoutView.__init__(self, timeout=600)
+
+        # Manually set up BaseView attributes
+        assert self.timeout
+        timeout_dt = discord.utils.format_dt(discord.utils.utcnow() + timedelta(seconds=self.timeout), "R")
+        self._end_time_string = f"-# ⚠️ This message will expire and become inactive {timeout_dt}."
+        self.original_interaction: GenjiItx | None = None
+        # Note: rebuild_components() will be called by subclasses after data is initialized
 
     @property
     def current_page_index(self) -> int:
@@ -333,6 +343,8 @@ class StaticPaginatorView(BasePaginatorView[T]):
         """
         super().__init__(title, page_size=page_size)
         self.rebuild_data(data)
+        # Now that _pages is initialized, rebuild components
+        self.rebuild_components()
 
     @property
     def pages(self) -> list[list[T]]:
