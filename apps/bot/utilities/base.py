@@ -10,7 +10,7 @@ from uuid import UUID
 
 import discord
 from aio_pika.abc import AbstractIncomingMessage
-from discord import ButtonStyle, MediaGalleryItem, NotFound, ui
+from discord import ButtonStyle, HTTPException, MediaGalleryItem, NotFound, ui
 from discord.app_commands import AppCommandError
 from discord.ext import commands
 
@@ -68,11 +68,10 @@ class BaseView(ui.LayoutView):
         self.rebuild_components()
         self.disable_children()
         if self.original_interaction:
-            with contextlib.suppress(NotFound):
-                with contextlib.suppress(discord.NotFound):
-                    resp = await self.original_interaction.original_response()
-                    await resp.edit(view=self)
-                return
+            with contextlib.suppress(NotFound, HTTPException):
+                resp = await self.original_interaction.original_response()
+                await resp.edit(view=self)
+            return
         cls = type(self)
         raise RuntimeWarning(f"No original_interaction was associated with {cls.__module__}.{cls.__qualname__}.")
 
