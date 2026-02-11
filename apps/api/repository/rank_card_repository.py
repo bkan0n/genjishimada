@@ -381,9 +381,9 @@ class RankCardRepository(BaseRepository):
 
         query = """
             SELECT count(*)
-            FROM core.maps m
-            LEFT JOIN maps.creators mc ON m.id = mc.map_id
-            WHERE user_id = $1 AND official = TRUE
+            FROM maps.creators
+            WHERE user_id = $1
+            GROUP BY user_id;
         """
         return await _conn.fetchval(query, user_id) or 0
 
@@ -404,7 +404,13 @@ class RankCardRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        query = "SELECT count(*) FROM playtests.votes WHERE user_id=$1"
+        query = """
+            SELECT count(*) + dc.count
+            FROM playtests.votes pv
+            LEFT JOIN playtests.deprecated_count dc ON pv.user_id = dc.user_id
+            WHERE pv.user_id=$1
+            GROUP BY pv.user_id, dc.count;
+        """
         return await _conn.fetchval(query, user_id) or 0
 
     async def fetch_community_rank_xp(
