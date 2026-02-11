@@ -66,10 +66,11 @@ class TestMapsServiceErrorTranslation:
         # Mock newsfeed service
         mock_newsfeed_service = mocker.AsyncMock()
         mock_headers = Headers()
+        mock_lootbox_service = mocker.AsyncMock()
 
         # Act & Assert
         with pytest.raises(MapCodeExistsError) as exc_info:
-            await service.create_map(data, mock_headers, mock_newsfeed_service)
+            await service.create_map(data, mock_headers, mock_newsfeed_service, mock_lootbox_service)
 
         assert exc_info.value.context["code"] == "ABCDE"
 
@@ -100,9 +101,10 @@ class TestMapsServiceErrorTranslation:
 
         mock_newsfeed_service = mocker.AsyncMock()
         mock_headers = Headers()
+        mock_lootbox_service = mocker.AsyncMock()
 
         with pytest.raises(DuplicateMechanicError):
-            await service.create_map(data, mock_headers, mock_newsfeed_service)
+            await service.create_map(data, mock_headers, mock_newsfeed_service, mock_lootbox_service)
 
     async def test_create_map_duplicate_restriction_constraint(
         self, mock_pool, mock_state, mock_maps_repo, mocker
@@ -128,9 +130,10 @@ class TestMapsServiceErrorTranslation:
 
         mock_newsfeed_service = mocker.AsyncMock()
         mock_headers = Headers()
+        mock_lootbox_service = mocker.AsyncMock()
 
         with pytest.raises(DuplicateRestrictionError):
-            await service.create_map(data, mock_headers, mock_newsfeed_service)
+            await service.create_map(data, mock_headers, mock_newsfeed_service, mock_lootbox_service)
 
     async def test_create_map_duplicate_creator_constraint(
         self, mock_pool, mock_state, mock_maps_repo, mocker
@@ -158,9 +161,10 @@ class TestMapsServiceErrorTranslation:
 
         mock_newsfeed_service = mocker.AsyncMock()
         mock_headers = Headers()
+        mock_lootbox_service = mocker.AsyncMock()
 
         with pytest.raises(DuplicateCreatorError):
-            await service.create_map(data, mock_headers, mock_newsfeed_service)
+            await service.create_map(data, mock_headers, mock_newsfeed_service, mock_lootbox_service)
 
     async def test_create_map_creator_foreign_key_violation(
         self, mock_pool, mock_state, mock_maps_repo, mocker
@@ -185,9 +189,10 @@ class TestMapsServiceErrorTranslation:
 
         mock_newsfeed_service = mocker.AsyncMock()
         mock_headers = Headers()
+        mock_lootbox_service = mocker.AsyncMock()
 
         with pytest.raises(CreatorNotFoundError):
-            await service.create_map(data, mock_headers, mock_newsfeed_service)
+            await service.create_map(data, mock_headers, mock_newsfeed_service, mock_lootbox_service)
 
     async def test_create_guide_duplicate_constraint(
         self, mock_pool, mock_state, mock_maps_repo
@@ -327,12 +332,13 @@ class TestMapsServiceBusinessLogic:
 
         mock_newsfeed_service = mocker.AsyncMock()
         mock_headers = Headers()
+        mock_lootbox_service = mocker.AsyncMock()
 
         with pytest.raises(
             LinkedMapError,
             match="At least one of official_code or unofficial_code must refer to an existing map",
         ):
-            await service.link_map_codes(data, mock_headers, mock_newsfeed_service)
+            await service.link_map_codes(data, mock_headers, mock_newsfeed_service, mock_lootbox_service)
 
     async def test_fetch_partial_map_not_found(
         self, mock_pool, mock_state, mock_maps_repo

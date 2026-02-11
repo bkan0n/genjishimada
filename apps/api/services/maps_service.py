@@ -55,6 +55,7 @@ from genjishimada_sdk.newsfeed import (
     NewsfeedUnlinkedMap,
 )
 from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
+from genjishimada_sdk.xp import XP_AMOUNTS, XpGrantRequest
 from litestar.datastructures import Headers, State
 from litestar.exceptions import HTTPException
 from litestar.response import Stream
@@ -87,6 +88,7 @@ from utilities.map_search import MapSearchFilters
 from .base import BaseService
 
 if TYPE_CHECKING:
+    from services.lootbox_service import LootboxService
     from services.newsfeed_service import NewsfeedService
     from services.notifications_service import NotificationsService
     from services.users_service import UsersService
@@ -116,6 +118,7 @@ class MapsService(BaseService):
         data: MapCreateRequest,
         headers: Headers,
         newsfeed_service: NewsfeedService,
+        lootbox_service: LootboxService,
     ) -> MapCreationJobResponse:
         """Create a map.
 
@@ -127,6 +130,7 @@ class MapsService(BaseService):
             data: Map creation request.
             headers: Request headers for idempotency.
             newsfeed_service: Newsfeed service for event publishing.
+            lootbox_service: Lootbox service for XP granting.
 
         Returns:
             Map creation response with optional job status.
@@ -183,6 +187,11 @@ class MapsService(BaseService):
                         data.guide_url,
                         data.primary_creator_id,
                         conn=conn,  # type: ignore[arg-type]
+                    )
+                    await lootbox_service.grant_user_xp(
+                        headers,
+                        data.primary_creator_id,
+                        XpGrantRequest(XP_AMOUNTS["Guide"], "Guide"),
                     )
 
                 # Mechanics
@@ -1050,6 +1059,7 @@ class MapsService(BaseService):
         data: LinkMapsCreateRequest,
         headers: Headers,
         newsfeed_service: NewsfeedService,
+        lootbox_service: LootboxService,
     ) -> JobStatusResponse | None:
         """Link official and unofficial map codes, cloning as needed.
 
@@ -1066,6 +1076,7 @@ class MapsService(BaseService):
             data: Link request with official and unofficial codes.
             headers: Request headers for idempotency.
             newsfeed_service: Newsfeed service for event publishing.
+            lootbox_service: Lootbox service for playtest creation.
 
         Returns:
             Job status if a clone operation was performed, None otherwise.
@@ -1114,7 +1125,12 @@ class MapsService(BaseService):
                     code=data.unofficial_code,
                     is_official=False,
                 )
-                creation_response = await self.create_map(payload, headers, newsfeed_service)
+                creation_response = await self.create_map(
+                    payload,
+                    headers,
+                    newsfeed_service,
+                    lootbox_service,
+                )
                 await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
                 job_status = creation_response.job_status
                 in_playtest = False
@@ -1126,7 +1142,12 @@ class MapsService(BaseService):
                     code=data.official_code,
                     is_official=True,
                 )
-                creation_response = await self.create_map(payload, headers, newsfeed_service)
+                creation_response = await self.create_map(
+                    payload,
+                    headers,
+                    newsfeed_service,
+                    lootbox_service,
+                )
                 await self._maps_repo.link_map_codes(data.official_code, data.unofficial_code)
                 job_status = creation_response.job_status
                 in_playtest = True

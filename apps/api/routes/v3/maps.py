@@ -236,6 +236,7 @@ class MapsController(Controller):
         data: Annotated[MapCreateRequest, Body(title="Map creation request")],
         maps_service: MapsService,
         newsfeed_service: NewsfeedService,
+        lootbox_service: LootboxService,
         request: Request,
     ) -> MapCreationJobResponse:
         """Create a new map.
@@ -244,6 +245,7 @@ class MapsController(Controller):
             data: Map creation request.
             maps_service: Maps service.
             newsfeed_service: Newsfeed service.
+            lootbox_service: Lootbox service.
             request: Request object.
 
         Returns:
@@ -253,7 +255,12 @@ class MapsController(Controller):
             CustomHTTPException: On validation or business rule errors.
         """
         try:
-            return await maps_service.create_map(data, request.headers, newsfeed_service)
+            return await maps_service.create_map(
+                data,
+                request.headers,
+                newsfeed_service,
+                lootbox_service,
+            )
 
         except MapCodeExistsError as e:
             raise CustomHTTPException(
@@ -893,6 +900,7 @@ class MapsController(Controller):
         data: Annotated[LinkMapsCreateRequest, Body(title="Link request")],
         maps_service: MapsService,
         newsfeed_service: NewsfeedService,
+        lootbox_service: LootboxService,
         request: Request,
     ) -> JobStatusResponse | None:
         """Link official and unofficial map codes.
@@ -904,6 +912,7 @@ class MapsController(Controller):
             data: Link request.
             maps_service: Maps service.
             newsfeed_service: Newsfeed service.
+            lootbox_service: Lootbox service.
             request: Request object.
 
         Returns:
@@ -913,7 +922,12 @@ class MapsController(Controller):
             CustomHTTPException: On error.
         """
         try:
-            return await maps_service.link_map_codes(data, request.headers, newsfeed_service)
+            return await maps_service.link_map_codes(
+                data,
+                request.headers,
+                newsfeed_service,
+                lootbox_service,
+            )
 
         except MapNotFoundError as e:
             raise CustomHTTPException(
