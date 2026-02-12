@@ -406,7 +406,7 @@ class AuthRepository(BaseRepository):
         *,
         conn: Connection | None = None,
     ) -> str | None:
-        """Read session payload if not expired.
+        """Read session payload if not expired and refresh last activity.
 
         Args:
             session_id: The session ID.
@@ -418,11 +418,14 @@ class AuthRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        query = f"""
-            SELECT payload FROM users.sessions
-            WHERE id = $1 AND last_activity > now() - INTERVAL '{session_lifetime_minutes} minutes'
+        query = """
+            UPDATE users.sessions
+            SET last_activity = now()
+            WHERE id = $1
+              AND last_activity > now() - ($2 * INTERVAL '1 minute')
+            RETURNING payload
         """
-        return await _conn.fetchval(query, session_id)
+        return await _conn.fetchval(query, session_id, session_lifetime_minutes)
 
     async def write_session(  # noqa: PLR0913
         self,

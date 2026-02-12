@@ -690,6 +690,16 @@ class TestAuthServicePasswordReset:
 class TestAuthServiceSessionManagement:
     """Test session management methods."""
 
+    async def test_session_read_uses_90_day_lifetime(self, mock_pool, mock_state, mock_auth_repo):
+        """session_read passes 90-day lifetime (129600 min) to repository."""
+        service = AuthService(mock_pool, mock_state, mock_auth_repo)
+
+        mock_auth_repo.read_session.return_value = None
+
+        await service.session_read("session123")
+
+        mock_auth_repo.read_session.assert_called_once_with("session123", 129600)
+
     async def test_session_read_with_payload(self, mock_pool, mock_state, mock_auth_repo):
         """session_read returns payload and is_mod flag."""
         service = AuthService(mock_pool, mock_state, mock_auth_repo)
@@ -702,7 +712,7 @@ class TestAuthServiceSessionManagement:
         assert result.payload == "session_payload_data"
         assert result.is_mod is True
 
-        mock_auth_repo.read_session.assert_called_once_with("session123", 120)
+        mock_auth_repo.read_session.assert_called_once_with("session123", 129600)
         mock_auth_repo.check_is_mod.assert_called_once_with("session123")
 
     async def test_session_read_no_payload(self, mock_pool, mock_state, mock_auth_repo):
@@ -758,7 +768,7 @@ class TestAuthServiceSessionManagement:
 
         assert result.deleted_count == 42
 
-        mock_auth_repo.delete_expired_sessions.assert_called_once_with(120)
+        mock_auth_repo.delete_expired_sessions.assert_called_once_with(129600)
 
     async def test_session_get_user_sessions(self, mock_pool, mock_state, mock_auth_repo):
         """session_get_user_sessions returns list of sessions."""
@@ -778,7 +788,7 @@ class TestAuthServiceSessionManagement:
         assert len(result.sessions) == 1
         assert result.sessions[0].id == "session1"
 
-        mock_auth_repo.get_user_sessions.assert_called_once_with(1, 120)
+        mock_auth_repo.get_user_sessions.assert_called_once_with(1, 129600)
 
     async def test_session_destroy_all_for_user(
         self, mock_pool, mock_state, mock_auth_repo

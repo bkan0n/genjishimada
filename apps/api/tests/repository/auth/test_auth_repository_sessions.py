@@ -240,6 +240,64 @@ class TestReadSession:
         # Assert - Not expired yet
         assert result is not None
 
+    async def test_read_session_refreshes_last_activity(
+        self,
+        repository: AuthRepository,
+        create_test_session,
+        create_test_user,
+        asyncpg_conn,
+    ):
+        """Test that reading an active session refreshes last_activity timestamp."""
+        user_id = await create_test_user()
+        session_id = await create_test_session(user_id=user_id)
+
+        await asyncpg_conn.execute(
+            "UPDATE users.sessions SET last_activity = now() - INTERVAL '20 minutes' WHERE id = $1",
+            session_id,
+        )
+        old_activity = await asyncpg_conn.fetchval(
+            "SELECT last_activity FROM users.sessions WHERE id = $1",
+            session_id,
+        )
+
+        result = await repository.read_session(session_id, session_lifetime_minutes=30)
+        assert result is not None
+
+        new_activity = await asyncpg_conn.fetchval(
+            "SELECT last_activity FROM users.sessions WHERE id = $1",
+            session_id,
+        )
+        assert new_activity > old_activity
+
+    async def test_read_session_does_not_refresh_expired_session(
+        self,
+        repository: AuthRepository,
+        create_test_session,
+        create_test_user,
+        asyncpg_conn,
+    ):
+        """Test that expired sessions are not refreshed when read."""
+        user_id = await create_test_user()
+        session_id = await create_test_session(user_id=user_id)
+
+        await asyncpg_conn.execute(
+            "UPDATE users.sessions SET last_activity = now() - INTERVAL '2 hours' WHERE id = $1",
+            session_id,
+        )
+        old_activity = await asyncpg_conn.fetchval(
+            "SELECT last_activity FROM users.sessions WHERE id = $1",
+            session_id,
+        )
+
+        result = await repository.read_session(session_id, session_lifetime_minutes=30)
+        assert result is None
+
+        new_activity = await asyncpg_conn.fetchval(
+            "SELECT last_activity FROM users.sessions WHERE id = $1",
+            session_id,
+        )
+        assert new_activity == old_activity
+
 
 # ==============================================================================
 # delete_session TESTS
