@@ -95,7 +95,15 @@ if TYPE_CHECKING:
 
 # Module-level constants and logging
 _PREVIEW_MAX_LENGTH = 50
+_ASSET_BANNER_PATH = "/assets/map_banners/"
 log = logging.getLogger(__name__)
+
+
+def _normalize_custom_banner(url: str | None) -> str | None:
+    """Return None if the URL is a generated asset banner rather than a truly custom one."""
+    if url and _ASSET_BANNER_PATH in url:
+        return None
+    return url
 
 
 class MapsService(BaseService):
@@ -159,7 +167,7 @@ class MapsService(BaseService):
             "difficulty": data.difficulty,
             "raw_difficulty": DIFFICULTY_MIDPOINTS[data.difficulty],
             "description": data.description,
-            "custom_banner": data.custom_banner,
+            "custom_banner": _normalize_custom_banner(data.custom_banner),
             "title": data.title,
         }
 
@@ -352,7 +360,7 @@ class MapsService(BaseService):
         if data.description is not msgspec.UNSET:
             core_updates["description"] = data.description
         if data.custom_banner is not msgspec.UNSET:
-            core_updates["custom_banner"] = data.custom_banner
+            core_updates["custom_banner"] = _normalize_custom_banner(data.custom_banner)
         if data.title is not msgspec.UNSET:
             core_updates["title"] = data.title
         if data.hidden is not msgspec.UNSET:
