@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "")
 S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "genji-parkour-images")
-S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL", "https://cdn.bkan0n.com")
+S3_PUBLIC_URL = os.getenv("S3_PUBLIC_URL", "https://cdn.genji.pk")
 
 
 _content_type_ext = {
@@ -32,8 +32,6 @@ def _ext_from_content_type(ct: str) -> str:
 class ImageStorageService:
     def __init__(self) -> None:
         """Initialize the ImageStorageService."""
-        # Use custom S3 endpoint if provided (e.g., MinIO for local dev),
-        # otherwise fall back to R2
         endpoint_url = S3_ENDPOINT_URL or f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
         self.client = boto3.client(
@@ -50,13 +48,11 @@ class ImageStorageService:
             image (bytes): THe image in bytes form.
             content_type (str): The content type of the image.
         """
-        # 1) Build a stable, unique key
         digest = hashlib.blake2b(image, digest_size=16).hexdigest()  # short but collision-resistant
         today = dt.datetime.now(dt.timezone.utc).strftime("%Y/%m/%d")
         ext = _ext_from_content_type(content_type)
         key = f"screenshots/{today}/{digest}.{ext}"
 
-        # 2) Upload to S3-compatible storage with proper headers
         fileobj = io.BytesIO(image)
         self.client.upload_fileobj(
             fileobj,
@@ -67,9 +63,6 @@ class ImageStorageService:
                 "CacheControl": "public, max-age=31536000, immutable",
             },
         )
-
-        # 3) Return the PUBLIC URL (CDN for production, direct S3 URL for local dev)
-        #    Example result: https://cdn.bkan0n.com/screenshots/2025/09/07/abcd1234.webp
         return f"{S3_PUBLIC_URL}/{key}"
 
 
