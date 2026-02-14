@@ -5,7 +5,7 @@ import logging
 import os
 import traceback
 from http import HTTPStatus
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 import discord
 import sentry_sdk
@@ -30,13 +30,38 @@ class APIUnavailableError(Exception):
 
 
 class APIHTTPError(Exception):
-    def __init__(self, status: int, message: str | None, error: str | None, extra: dict | None) -> None:
+    def __init__(  # noqa: PLR0913
+        self,
+        status: int,
+        message: str | None,
+        error: str | None,
+        extra: dict | None,
+        *,
+        method: str | None = None,
+        route: str | None = None,
+        url: str | None = None,
+        request_mode: Literal["json", "multipart"] | None = None,
+        request_params: dict[str, Any] | None = None,
+        request_file_field: str | None = None,
+        request_filename: str | None = None,
+        request_content_type: str | None = None,
+        response_preview: str | None = None,
+    ) -> None:
         """Init API Error."""
         super().__init__(f"{status}: {message}")
         self.status = status
         self.message = message
         self.error = error
         self.extra = extra
+        self.method = method
+        self.route = route
+        self.url = url
+        self.request_mode = request_mode
+        self.request_params = request_params
+        self.request_file_field = request_file_field
+        self.request_filename = request_filename
+        self.request_content_type = request_content_type
+        self.response_preview = response_preview
 
 
 class ReportIssueModal(ui.Modal):
@@ -166,9 +191,24 @@ class ErrorView(BaseView):
         self.add_item(container)
 
 
-async def on_command_error(itx: GenjiItx, error: Exception) -> None:
+async def on_command_error(itx: GenjiItx, error: Exception) -> None:  # noqa: PLR0912
     """Handle application command errors."""
     exception = getattr(error, "original", error)
+    is_user_facing = False
+    description = "Unknown error."
+    missing_api_error_text = False
+
+    if isinstance(exception, UserFacingError):
+        is_user_facing = True
+        description = str(exception)
+    elif isinstance(exception, APIHTTPError):
+        if HTTPStatus.BAD_REQUEST.value <= exception.status < HTTPStatus.INTERNAL_SERVER_ERROR.value:
+            is_user_facing = True
+            description = (exception.error or "").strip() or "Error"
+            missing_api_error_text = description == "Error"
+    elif isinstance(exception, APIUnavailableError):
+        is_user_facing = True
+        description = "We are having trouble connecting to some backend services. Please try again later."
 
     # Set user context before capturing the exception
     with sentry_sdk.isolation_scope() as scope:
@@ -180,10 +220,39 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
         )
         scope.set_tag("command", itx.command.name if itx.command else "unknown")
 
-        # Tag UserFacingErrors so they can be filtered out in Sentry
-        if isinstance(exception, UserFacingError):
+        # Tag user-facing errors so they can be filtered out in Sentry.
+        if is_user_facing:
             scope.set_tag("user_facing", True)
-            scope.set_level("info")  # Set as info level instead of error
+            scope.set_level("info")
+
+        if isinstance(exception, APIHTTPError):
+            scope.set_tag("api_status", str(exception.status))
+            if exception.method:
+                scope.set_tag("api_method", exception.method)
+            if exception.route:
+                scope.set_tag("api_route", exception.route)
+
+            scope.set_context(
+                "API Error",
+                {
+                    "status": exception.status,
+                    "message": exception.message,
+                    "error": exception.error,
+                    "extra": exception.extra,
+                    "method": exception.method,
+                    "route": exception.route,
+                    "url": exception.url,
+                    "request_mode": exception.request_mode,
+                    "request_params": exception.request_params,
+                    "request_file_field": exception.request_file_field,
+                    "request_filename": exception.request_filename,
+                    "request_content_type": exception.request_content_type,
+                    "response_preview": exception.response_preview,
+                },
+            )
+
+            if missing_api_error_text:
+                scope.set_tag("api_missing_error_text", True)
 
         if itx.namespace:
             scope.set_context("Command Args", {"Args": dict(itx.namespace.__dict__.items())})
@@ -191,15 +260,17 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
         # Capture the exception with all the context
         event_id = sentry_sdk.capture_exception(exception)
 
-    if isinstance(exception, UserFacingError):
-        view = ErrorView(event_id, exception, itx, description=str(exception))
-        view.original_interaction = itx
-    else:
-        description = None
-        if isinstance(exception, APIUnavailableError):
-            description = "We are having trouble connecting to some backend services. Please try again later."
-        view = ErrorView(event_id, exception, itx, description=description or "Unknown error.", unknown_error=True)
-        view.original_interaction = itx
+        if missing_api_error_text:
+            sentry_sdk.capture_message("Missing API error text for 4xx response", level="warning")
+
+    view = ErrorView(
+        event_id,
+        exception,
+        itx,
+        description=description,
+        unknown_error=not is_user_facing,
+    )
+    view.original_interaction = itx
 
     log.debug(traceback.format_exception(None, exception, exception.__traceback__))
 
@@ -209,5 +280,5 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
         else:
             await itx.response.send_message(view=view, ephemeral=True)
 
-    if not isinstance(exception, UserFacingError):
+    if not is_user_facing:
         raise exception

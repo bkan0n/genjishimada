@@ -41,7 +41,7 @@ from genjishimada_sdk.notifications import NotificationChannel, NotificationEven
 from extensions._queue_registry import queue_consumer
 from utilities import BaseCog, BaseHandler
 from utilities.base import ConfirmationView
-from utilities.errors import APIHTTPError, UserFacingError
+from utilities.errors import UserFacingError
 from utilities.formatter import FilteredFormatter
 from utilities.maps import MapModel
 
@@ -851,20 +851,13 @@ class DifficultyRatingSelect(discord.ui.Select["PlaytestComponentsV2View"]):
             raise UserFacingError("Vote failed. You cannot vote for your own map.")
 
         if choice == "Remove Vote":
-            try:
-                await itx.client.api.delete_playtest_vote(thread_id, user_id)
-            except APIHTTPError as e:
-                raise UserFacingError(e.error)
-
+            await itx.client.api.delete_playtest_vote(thread_id, user_id)
             return
 
         vote = PlaytestVote(
             difficulty=DIFFICULTY_MIDPOINTS[choice],  # type: ignore[arg-type]
         )
-        try:
-            await itx.client.api.cast_playtest_vote(thread_id, user_id, vote=vote)
-        except APIHTTPError as e:
-            raise UserFacingError(e.error)
+        await itx.client.api.cast_playtest_vote(thread_id, user_id, vote=vote)
         await itx.edit_original_response(content=f"You voted **{choice}**. Updating...")
 
 

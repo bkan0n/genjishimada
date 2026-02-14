@@ -67,7 +67,7 @@ from utilities.completions import (
     make_ordinal,
 )
 from utilities.emojis import REJECTED, generate_all_star_rating_strings
-from utilities.errors import APIHTTPError, UserFacingError
+from utilities.errors import UserFacingError
 from utilities.extra import poll_job_until_complete
 from utilities.formatter import FilteredFormatter
 from utilities.paginator import ApiPaginatorView, PaginatorView
@@ -1332,10 +1332,7 @@ class CompletionsCog(BaseCog):
             content_type=screenshot.content_type or "image/png",
         )
         data.screenshot = screenshot_url
-        try:
-            _data_with_job_status = await itx.client.api.submit_completion(data)
-        except APIHTTPError as e:
-            raise UserFacingError(e.error)
+        _data_with_job_status = await itx.client.api.submit_completion(data)
         await itx.client.api.set_quality_vote(data.code, QualityUpdateRequest(data.user_id, quality.value))
         data = await self.bot.api.get_completion_submission(_data_with_job_status.completion_id)
 

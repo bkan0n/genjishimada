@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 from enum import Enum
-from http import HTTPStatus
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Literal, Sequence, cast, get_args
 
@@ -40,7 +39,7 @@ from extensions.completions import CompletionLeaderboardFormattable
 from utilities import transformers
 from utilities.base import BaseCog, BaseHandler, BaseView, ConfirmationView
 from utilities.emojis import generate_all_star_rating_strings, stars_rating_string
-from utilities.errors import APIHTTPError, UserFacingError
+from utilities.errors import UserFacingError
 from utilities.formatter import FilteredFormatter
 from utilities.paginator import PaginatorView
 from utilities.views.mod_creator_view import MapCreatorModView
@@ -211,12 +210,7 @@ class ModeratorCog(BaseCog):
         )
 
         async def callback() -> None:
-            try:
-                await itx.client.api.link_map_codes(data)
-            except APIHTTPError as e:
-                if e.status == HTTPStatus.BAD_REQUEST:
-                    raise UserFacingError()
-                raise e
+            await itx.client.api.link_map_codes(data)
 
         view = ConfirmationView(message, callback)
         await itx.response.send_message(view=view, ephemeral=True)
@@ -246,12 +240,7 @@ class ModeratorCog(BaseCog):
         )
 
         async def callback() -> None:
-            try:
-                await itx.client.api.unlink_map_codes(data)
-            except APIHTTPError as e:
-                if e.status == HTTPStatus.BAD_REQUEST:
-                    raise UserFacingError()
-                raise
+            await itx.client.api.unlink_map_codes(data)
 
         view = ConfirmationView(message, callback)
         await itx.response.send_message(view=view, ephemeral=True)
@@ -1245,10 +1234,7 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
         else:
             # Submit for approval
             request = self._build_edit_request(state, itx.user.id)
-            try:
-                await itx.client.api.create_map_edit_request(request)
-            except APIHTTPError as e:
-                raise UserFacingError(e.error or "Failed to submit the edit request.")
+            await itx.client.api.create_map_edit_request(request)
             view = LayoutView()
             view.add_item(
                 ui.Container(

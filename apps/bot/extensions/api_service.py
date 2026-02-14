@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import json
 import mimetypes
@@ -240,6 +241,59 @@ class APIService:
             return "true" if v else "false"
         return str(v)
 
+    def _flatten_params(
+        self, params: Mapping[str, Any] | None
+    ) -> tuple[MultiDict | None, dict[str, str | list[str]] | None]:
+        if not params:
+            return None, None
+
+        flat_params = MultiDict()
+        metadata: dict[str, list[str]] = {}
+        for key, value in params.items():
+            if value is None:
+                continue
+            if isinstance(value, list):
+                for item in value:
+                    serialized = str(item)
+                    flat_params.add(key, serialized)
+                    metadata.setdefault(key, []).append(serialized)
+            else:
+                serialized = str(value)
+                flat_params.add(key, serialized)
+                metadata.setdefault(key, []).append(serialized)
+
+        normalized_metadata: dict[str, str | list[str]] = {}
+        for key, values in metadata.items():
+            normalized_metadata[key] = values[0] if len(values) == 1 else values
+
+        return flat_params, normalized_metadata or None
+
+    def _parse_api_error_payload(self, raw: bytes) -> tuple[str | None, dict | None]:
+        if not raw:
+            return None, None
+
+        decoded: Any | None = None
+        with contextlib.suppress(json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            decoded = json.loads(raw)
+
+        if not isinstance(decoded, dict):
+            return None, None
+
+        error_value = decoded.get("error")
+        extra_value = decoded.get("extra")
+        error = error_value if isinstance(error_value, str) else None
+        extra = extra_value if isinstance(extra_value, dict) else None
+        return error, extra
+
+    def _response_preview(self, raw: bytes, *, limit: int = 1000) -> str | None:
+        if not raw:
+            return None
+
+        preview = raw.decode("utf-8", errors="replace")
+        if len(preview) > limit:
+            return f"{preview[:limit]}...(truncated)"
+        return preview
+
     async def _request_multipart(  # noqa: PLR0913
         self,
         route: Route,
@@ -288,14 +342,29 @@ class APIService:
         )
         try:
             async with self.__session.request(route.method, route.url, headers=headers, data=form) as resp:
-                resp.raise_for_status()
+                raw = await resp.read()
+                if resp.status >= HTTPStatus.BAD_REQUEST:
+                    error, extra = self._parse_api_error_payload(raw)
+                    raise APIHTTPError(
+                        resp.status,
+                        resp.reason,
+                        error,
+                        extra,
+                        method=route.method,
+                        route=route.path,
+                        url=route.url,
+                        request_mode="multipart",
+                        request_file_field=file_field,
+                        request_filename=filename,
+                        request_content_type=content_type,
+                        response_preview=self._response_preview(raw),
+                    )
 
                 if resp.status == HTTPStatus.NO_CONTENT:
                     if response_model:
                         raise ValueError(f"Expected JSON but got no content from {route.url}")
                     return None
 
-                raw = await resp.read()
                 if response_model is None:
                     return raw
                 if raw is None:
@@ -304,11 +373,17 @@ class APIService:
                     return raw.decode()
                 return get_decoder(response_model).decode(raw)
 
-        except aiohttp.ClientConnectorError:
+        except (
+            aiohttp.ClientConnectionError,
+            aiohttp.ClientPayloadError,
+            aiohttp.ServerDisconnectedError,
+            aiohttp.ServerTimeoutError,
+            asyncio.TimeoutError,
+        ):
             self._is_available = False
             raise APIUnavailableError("Connection error; API marked unavailable.")
 
-    async def _request(  # noqa: PLR0912
+    async def _request(
         self,
         route: Route,
         *,
@@ -342,31 +417,28 @@ class APIService:
         if data is not None:
             kwargs["data"] = self._encoder.encode(data)
 
-        if params:
-            flat_params = MultiDict()
-            for k, v in params.items():
-                if v is None:
-                    continue
-                elif isinstance(v, list):
-                    for item in v:
-                        flat_params.add(k, str(item))
-                else:
-                    flat_params.add(k, str(v))
-            params = flat_params
+        request_params, request_params_metadata = self._flatten_params(params)
 
         try:
             async with self.__session.request(
-                route.method, route.url, headers=headers, params=params, **kwargs
+                route.method, route.url, headers=headers, params=request_params, **kwargs
             ) as resp:
-                log.debug(f"The params inside of _request show as {params}")
+                log.debug(f"The params inside of _request show as {request_params}")
                 raw = await resp.read()
-                try:
-                    resp.raise_for_status()
-                except Exception:
-                    decoded = json.loads(raw) if raw else {}
-                    error = decoded.get("error")
-                    extra = decoded.get("extra")
-                    raise APIHTTPError(resp.status, resp.reason, error, extra)
+                if resp.status >= HTTPStatus.BAD_REQUEST:
+                    error, extra = self._parse_api_error_payload(raw)
+                    raise APIHTTPError(
+                        resp.status,
+                        resp.reason,
+                        error,
+                        extra,
+                        method=route.method,
+                        route=route.path,
+                        url=route.url,
+                        request_mode="json",
+                        request_params=request_params_metadata,
+                        response_preview=self._response_preview(raw),
+                    )
                 if resp.status == HTTPStatus.NO_CONTENT:
                     if response_model:
                         raise ValueError(f"Expected JSON but got no content from {route.url}")
@@ -378,7 +450,13 @@ class APIService:
                     return None
                 return get_decoder(response_model).decode(raw)
 
-        except aiohttp.ClientConnectorError:
+        except (
+            aiohttp.ClientConnectionError,
+            aiohttp.ClientPayloadError,
+            aiohttp.ServerDisconnectedError,
+            aiohttp.ServerTimeoutError,
+            asyncio.TimeoutError,
+        ):
             self._is_available = False
             raise APIUnavailableError("Connection error; API marked unavailable.")
 
