@@ -39,6 +39,7 @@ from genjishimada_sdk.maps import (
     OverwatchMap,
     PendingMapEditResponse,
     PlaytestCreatedEvent,
+    PlaytestForceDeniedEvent,
     QualityValueRequest,
     SendToPlaytestRequest,
     TrendingMapResponse,
@@ -96,6 +97,8 @@ if TYPE_CHECKING:
 # Module-level constants and logging
 _PREVIEW_MAX_LENGTH = 50
 _ASSET_BANNER_PATH = "/assets/map_banners/"
+ARCHIVE_PLAYTEST_CANCEL_REASON = "This map has been archived so the playtest has been cancelled."
+ARCHIVE_FORCE_DENY_VERIFIER_ID = 969632729643753482
 log = logging.getLogger(__name__)
 
 
@@ -771,7 +774,20 @@ class MapsService(BaseService):
 
             # Update archive status
             is_archiving = data.status == "Archive"
-            await self._maps_repo.set_archive_status(data.codes, is_archiving)
+            affected_threads = await self._maps_repo.set_archive_status(data.codes, is_archiving)
+
+            # Publish force-deny events for any playtests cancelled by archiving
+            for affected in affected_threads:
+                await self.publish_message(
+                    routing_key="api.playtest.force_deny",
+                    data=PlaytestForceDeniedEvent(
+                        thread_id=affected["thread_id"],
+                        verifier_id=ARCHIVE_FORCE_DENY_VERIFIER_ID,
+                        reason=ARCHIVE_PLAYTEST_CANCEL_REASON,
+                    ),
+                    headers=headers,
+                    idempotency_key=f"archive:force_deny:{affected['thread_id']}",
+                )
 
             # Publish newsfeed event
             if len(data.codes) == 1:
