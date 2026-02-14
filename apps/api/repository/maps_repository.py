@@ -811,25 +811,63 @@ class MapsRepository(BaseRepository):
         archived: bool,
         *,
         conn: Connection | None = None,
-    ) -> None:
+    ) -> list[dict[str, Any]]:
         """Set archive status for one or more maps.
+
+        When archiving maps that are currently ``In Progress``, this also
+        sets ``playtesting='Rejected'`` and marks active ``playtests.meta``
+        rows as ``completed=TRUE``.
 
         Args:
             codes: List of map codes.
             archived: Archive status to set.
             conn: Optional connection.
+
+        Returns:
+            List of dicts with ``code`` and ``thread_id`` for playtests
+            cancelled by this archive action (empty when unarchiving or
+            when no active playtests exist).
         """
         _conn = self._get_connection(conn)
 
-        await _conn.execute(
+        if not archived:
+            await _conn.execute(
+                """
+                UPDATE core.maps
+                SET archived = FALSE
+                WHERE code = ANY($1::text[])
+                """,
+                codes,
+            )
+            return []
+
+        # Archive + reject active playtests atomically
+        rows = await _conn.fetch(
             """
-            UPDATE core.maps
-            SET archived = $2
-            WHERE code = ANY($1::text[])
+            WITH to_archive AS (
+                UPDATE core.maps
+                SET archived = TRUE,
+                    playtesting = CASE
+                        WHEN playtesting = 'In Progress' THEN 'Rejected'
+                        ELSE playtesting
+                    END
+                WHERE code = ANY($1::text[])
+                RETURNING id, code, playtesting
+            ),
+            completed_playtests AS (
+                UPDATE playtests.meta pm
+                SET completed = TRUE
+                FROM to_archive ta
+                WHERE pm.map_id = ta.id
+                  AND pm.completed = FALSE
+                  AND ta.playtesting = 'Rejected'
+                RETURNING ta.code, pm.thread_id
+            )
+            SELECT code, thread_id FROM completed_playtests
             """,
             codes,
-            archived,
         )
+        return [dict(row) for row in rows]
 
     # Mastery operations
 
