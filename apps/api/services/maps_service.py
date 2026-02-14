@@ -1670,36 +1670,13 @@ class MapsService(BaseService):
             if has_archive_change:
                 archived_value = edit_request.proposed_changes["archived"]
 
-                # Perform archive/unarchive via repository
-                await self._maps_repo.set_archive_status([edit_request.code], bool(archived_value))
-
-                if archived_value:
-                    payload = NewsfeedArchive(
-                        code=edit_request.code,
-                        map_name=original_map.map_name,
-                        creators=[c.name for c in original_map.creators],
-                        difficulty=original_map.difficulty,
-                        reason=edit_request.reason,
-                    )
-                    event_type = "archive"
-                else:
-                    payload = NewsfeedUnarchive(  # type: ignore[assignment]
-                        code=edit_request.code,
-                        map_name=original_map.map_name,
-                        creators=[c.name for c in original_map.creators],
-                        difficulty=original_map.difficulty,
-                        reason=edit_request.reason,
-                    )
-                    event_type = "unarchive"
-
-                # Publish newsfeed
-                event = NewsfeedEvent(
-                    id=None,
-                    timestamp=dt.datetime.now(dt.timezone.utc),
-                    payload=payload,
-                    event_type=event_type,
+                # Route through shared archive logic (handles force-deny + newsfeed)
+                archive_status = "Archive" if archived_value else "Unarchived"
+                await self.set_archive_status(
+                    ArchivalStatusPatchRequest(status=archive_status, codes=[edit_request.code]),
+                    headers,
+                    newsfeed_service,
                 )
-                await newsfeed_service.create_and_publish(event=event, headers=headers)
 
                 # Remaining changes (without archived)
                 remaining_changes = {k: v for k, v in edit_request.proposed_changes.items() if k != "archived"}
