@@ -132,7 +132,7 @@ class PlaytestHandler(BaseHandler):
         file = await self.bot.api.get_plot_file(code=playtest_data.code)
 
         cog: "PlaytestCog" = self.bot.cogs["PlaytestCog"]  # pyright: ignore[reportAssignmentType]
-        previous_view = cog.playtest_views.get(playtest_id, None)
+        previous_view = cog.playtest_views.get(thread.id, None)
         if previous_view:
             previous_view.stop()
 
