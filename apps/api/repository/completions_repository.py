@@ -1481,7 +1481,7 @@ class CompletionsRepository(BaseRepository):
         set_clauses = []
         values = [record_id]
 
-        index = 2  # Start at $2 because $1 is id
+        index = 2
         for field_name, value in patch_data.items():
             set_clauses.append(f"{field_name.lower()} = ${index}")
             values.append(value)

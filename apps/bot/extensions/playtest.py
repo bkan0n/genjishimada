@@ -199,7 +199,6 @@ class PlaytestHandler(BaseHandler):
             discord_message=message,
             metadata=metadata,
         )
-        # Check if user has DMs enabled to determine fallback behavior
         return await self.bot.notifications.should_deliver_new(
             creator_user_id,
             NotificationEventType.PLAYTEST_UPDATE,

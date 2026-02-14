@@ -125,7 +125,6 @@ class PlaytestService(BaseService):
                 "Vote failed. You do not have a verified, non-completion submission associated with this map."
             ) from e
 
-        # Publish vote event
         payload = PlaytestVoteCastEvent(
             thread_id=thread_id,
             voter_id=user_id,
@@ -156,15 +155,12 @@ class PlaytestService(BaseService):
         Raises:
             VoteNotFoundError: If user has no vote.
         """
-        # Check vote exists
         exists = await self._playtest_repo.check_vote_exists(thread_id, user_id)
         if not exists:
             raise VoteNotFoundError(thread_id, user_id)
 
-        # Delete vote
         await self._playtest_repo.delete_vote(thread_id, user_id)
 
-        # Publish removal event
         payload = PlaytestVoteRemovedEvent(thread_id=thread_id, voter_id=user_id)
         return await self.publish_message(
             routing_key="api.playtest.vote.remove",
@@ -194,7 +190,6 @@ class PlaytestService(BaseService):
         Raises:
             InvalidPatchError: If all fields are UNSET.
         """
-        # Filter out UNSET fields
         cleaned = {k: v for k, v in msgspec.structs.asdict(data).items() if v is not msgspec.UNSET}
 
         if not cleaned:
@@ -222,7 +217,6 @@ class PlaytestService(BaseService):
             data.thread_id,
         )
 
-        # Fetch and return updated playtest
         row = await self._playtest_repo.fetch_playtest(data.thread_id)
         if row is None:
             raise PlaytestNotFoundError(data.thread_id)
@@ -252,7 +246,6 @@ class PlaytestService(BaseService):
             PlaytestNotFoundError: If playtest doesn't exist.
         """
         async with self._pool.acquire() as conn, conn.transaction():
-            # Get map ID
             map_id = await self._playtest_repo.get_map_id_from_thread(
                 thread_id,
                 conn=conn,  # type: ignore[arg-type]
@@ -260,7 +253,6 @@ class PlaytestService(BaseService):
             if map_id is None:
                 raise PlaytestNotFoundError(thread_id)
 
-            # Calculate average difficulty
             difficulty = await self._playtest_repo.get_average_difficulty(
                 thread_id,
                 conn=conn,  # type: ignore[arg-type]
@@ -268,7 +260,6 @@ class PlaytestService(BaseService):
             if difficulty is None:
                 raise PlaytestStateError("Cannot approve playtest with no votes.")
 
-            # Approve playtest
             await self._playtest_repo.approve_playtest(
                 map_id,
                 thread_id,
@@ -276,7 +267,6 @@ class PlaytestService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
 
-            # Get additional data for event
             primary_creator_id = await self._playtest_repo.get_primary_creator(
                 map_id,
                 conn=conn,  # type: ignore[arg-type]
@@ -291,7 +281,6 @@ class PlaytestService(BaseService):
         if primary_creator_id is None:
             raise PlaytestStateError("Primary creator not found for map.")
 
-        # Publish approval event
         payload = PlaytestApprovedEvent(
             code=code,
             thread_id=thread_id,
@@ -329,7 +318,6 @@ class PlaytestService(BaseService):
             PlaytestNotFoundError: If playtest doesn't exist.
         """
         async with self._pool.acquire() as conn, conn.transaction():
-            # Get map ID
             map_id = await self._playtest_repo.get_map_id_from_thread(
                 thread_id,
                 conn=conn,  # type: ignore[arg-type]
@@ -337,10 +325,8 @@ class PlaytestService(BaseService):
             if map_id is None:
                 raise PlaytestNotFoundError(thread_id)
 
-            # Get raw difficulty from tier
             raw_difficulty = DIFFICULTY_MIDPOINTS[difficulty]
 
-            # Force accept
             await self._playtest_repo.force_accept_playtest(
                 map_id,
                 thread_id,
@@ -348,7 +334,6 @@ class PlaytestService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
 
-        # Publish force accept event
         payload = PlaytestForceAcceptedEvent(
             thread_id=thread_id,
             difficulty=difficulty,
@@ -384,7 +369,6 @@ class PlaytestService(BaseService):
             PlaytestNotFoundError: If playtest doesn't exist.
         """
         async with self._pool.acquire() as conn, conn.transaction():
-            # Get map ID
             map_id = await self._playtest_repo.get_map_id_from_thread(
                 thread_id,
                 conn=conn,  # type: ignore[arg-type]
@@ -392,14 +376,12 @@ class PlaytestService(BaseService):
             if map_id is None:
                 raise PlaytestNotFoundError(thread_id)
 
-            # Force deny
             await self._playtest_repo.force_deny_playtest(
                 map_id,
                 thread_id,
                 conn=conn,  # type: ignore[arg-type]
             )
 
-        # Publish force deny event
         payload = PlaytestForceDeniedEvent(
             thread_id=thread_id,
             verifier_id=verifier_id,
@@ -450,7 +432,6 @@ class PlaytestService(BaseService):
                     conn=conn,  # type: ignore[arg-type]
                 )
 
-        # Publish reset event
         payload = PlaytestResetEvent(
             thread_id=thread_id,
             verifier_id=verifier_id,

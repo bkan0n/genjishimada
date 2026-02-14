@@ -1,4 +1,3 @@
-# apps/bot/extensions/notifications.py
 """Notification service for processing and delivering notifications.
 
 This service:
@@ -60,7 +59,6 @@ class NotificationHandler(BaseHandler):
             f"event_id={event.event_id}, user_id={event.user_id}, type={event.event_type}"
         )
 
-        # Skip non-Discord users
         if event.user_id < DISCORD_USER_ID_LOWER_LIMIT:
             logger.debug(f"Skipping non-Discord user {event.user_id}")
             return
@@ -79,8 +77,6 @@ class NotificationHandler(BaseHandler):
                         error = "Failed to send DM"
 
                 elif channel == NotificationChannel.DISCORD_PING.value:
-                    # Channel pings are handled at call-site since they need
-                    # the specific channel. Mark as skipped here.
                     status = "skipped"
                     error = "Channel pings handled at trigger site"
 
@@ -89,7 +85,6 @@ class NotificationHandler(BaseHandler):
                 status = "failed"
                 error = str(e)
 
-            # Report delivery result back to API
             await self._report_delivery_result(event.event_id, channel, status, error)
 
     async def _report_delivery_result(
@@ -168,7 +163,6 @@ class NotificationHandler(BaseHandler):
             fallback_message: Message to send without ping if disabled.
             **kwargs: Additional arguments for channel.send().
         """
-        # Create notification via API (stores for web, triggers DM via RabbitMQ)
         await self.bot.api.create_notification(
             user_id=user_id,
             event_type=event_type.value,
@@ -177,9 +171,7 @@ class NotificationHandler(BaseHandler):
             metadata=metadata,
         )
 
-        # Handle channel ping directly (since we have the channel object)
         if user_id < DISCORD_USER_ID_LOWER_LIMIT:
-            # Email user - just send without mention
             await channel.send(fallback_message, **kwargs)
             return
 

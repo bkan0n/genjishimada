@@ -73,7 +73,6 @@ class TierChangeResponse(Struct):
     new_sub_tier_name: str
     old_prestige_level: int
     new_prestige_level: int
-    # "Main Tier Rank Up" | "Sub-Tier Rank Up" | None
     rank_change_type: str | None
     prestige_change: bool
 

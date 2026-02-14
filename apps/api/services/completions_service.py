@@ -248,7 +248,6 @@ class CompletionsService(BaseService):
             user_match = extracted.name in user_names
 
             if code_match and time_match and user_match:
-                # Auto-verification succeeded
                 verification_data = CompletionVerificationUpdateRequest(
                     verified_by=BOT_USER_ID,
                     verified=True,
@@ -259,7 +258,6 @@ class CompletionsService(BaseService):
                 )
                 return
 
-            # Autoverification failed validation, send failure details and fall back to manual
             await self.publish_message(
                 routing_key="api.completion.autoverification.failed",
                 data=FailedAutoverifyEvent(
@@ -283,7 +281,6 @@ class CompletionsService(BaseService):
                 idempotency_key=idempotency_key,
             )
 
-            # Notify user that auto-verification failed
             if notifications:
                 await notifications.create_and_dispatch(
                     data=NotificationCreateRequest(
@@ -300,7 +297,6 @@ class CompletionsService(BaseService):
                 )
 
         except Exception as e:
-            # ANY error = fall back to manual verification
             log.exception(
                 "OCR auto-verification failed for completion_id=%s: %s",
                 completion_id,
@@ -315,7 +311,6 @@ class CompletionsService(BaseService):
                 idempotency_key=idempotency_key,
             )
 
-            # Notify user that auto-verification failed
             if notifications:
                 await notifications.create_and_dispatch(
                     data=NotificationCreateRequest(
@@ -351,28 +346,21 @@ class CompletionsService(BaseService):
             SlowerThanPendingError: If new time is slower than pending verification.
             CompletionNotFoundError: If referenced completion not found (FK violation).
         """
-        # Service checks map exists
         map_exists = await self._completions_repo.check_map_exists(data.code)
         if not map_exists:
             raise MapNotFoundError(data.code)
 
-        # Service orchestrates business logic with transaction
         async with self._pool.acquire() as conn, conn.transaction():
-            # 1. Check for pending verification
             pending = await self._completions_repo.get_pending_verification(data.user_id, data.code, conn=conn)  # type: ignore
-
             verification_id_to_delete = None
 
-            # 2. Business logic: compare times
             if pending:
                 if data.time >= pending["time"]:
                     raise SlowerThanPendingError(new_time=data.time, pending_time=pending["time"])
 
-                # 3. Business decision: supersede pending with faster time
                 await self._completions_repo.reject_completion(pending["id"], BOT_USER_ID, conn=conn)  # type: ignore
                 verification_id_to_delete = pending["verification_id"]
 
-            # 4. Insert new completion
             try:
                 completion_id = await self._completions_repo.insert_completion(
                     code=data.code,
@@ -385,12 +373,10 @@ class CompletionsService(BaseService):
             except UniqueConstraintViolationError:
                 raise DuplicateCompletionError(user_id=data.user_id, map_code=data.code)
             except ForeignKeyViolationError as e:
-                # Translate FK violations to domain exceptions
                 if "user_id" in e.constraint_name:
                     raise CompletionNotFoundError(data.user_id)
                 raise MapNotFoundError(data.code)
 
-        # Delete superseded verification message if needed
         if verification_id_to_delete:
             delete_event = VerificationMessageDeleteEvent(verification_id_to_delete)
             await self.publish_message(
@@ -406,7 +392,6 @@ class CompletionsService(BaseService):
         suspicious_flags = await self.get_suspicious_flags(data.user_id)
 
         if not (data.video or suspicious_flags):
-            # Emit event for background OCR processing
             request.app.emit(
                 "completion.ocr.requested",
                 OcrVerificationRequestedEvent(
@@ -420,7 +405,6 @@ class CompletionsService(BaseService):
                 users=users,
                 notifications=notifications,
             )
-            # Return immediately - OCR happens in background
             return CompletionSubmissionJobResponse(None, completion_id)
 
         idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
@@ -472,7 +456,6 @@ class CompletionsService(BaseService):
             CompletionNotFoundError: If completion or user not found.
         """
         _ = state
-        # Check existence first
         exists = await self._completions_repo.check_completion_exists(record_id)
         if not exists:
             raise CompletionNotFoundError(record_id)
@@ -530,7 +513,6 @@ class CompletionsService(BaseService):
             DuplicateVerificationError: If verification record already exists.
             CompletionNotFoundError: If completion or user not found.
         """
-        # Check existence first
         exists = await self._completions_repo.check_completion_exists(record_id, conn=conn)
         if not exists:
             raise CompletionNotFoundError(record_id)
@@ -700,7 +682,6 @@ class CompletionsService(BaseService):
             MapNotFoundError: If map not found.
             CompletionNotFoundError: If user not found.
         """
-        # Check map exists first (upsert silently succeeds with 0 rows if map doesn't exist)
         map_exists = await self._completions_repo.check_map_exists(code)
         if not map_exists:
             raise MapNotFoundError(code)
@@ -708,7 +689,6 @@ class CompletionsService(BaseService):
         try:
             await self._completions_repo.upsert_quality_vote(code, user_id, quality)
         except UniqueConstraintViolationError:
-            # Note: This should not happen with upsert, but keeping for safety
             raise DuplicateQualityVoteError(user_id, 0)
         except ForeignKeyViolationError as e:
             if "map" in e.constraint_name.lower():
@@ -759,7 +739,6 @@ class CompletionsService(BaseService):
 
         notification_messages: list[str] = []
 
-        # Handle time change
         if data.time is not msgspec.UNSET:
             if data.time_change_reason is msgspec.UNSET:
                 raise ValueError("time_change_reason is required when changing time")
@@ -774,7 +753,6 @@ class CompletionsService(BaseService):
                 f"Reason: {data.time_change_reason}"
             )
 
-        # Handle verification change
         if data.verified is not msgspec.UNSET:
             verified = cast(bool, data.verified)
             await self._run_repo_write(
@@ -806,7 +784,6 @@ class CompletionsService(BaseService):
                         f"Your completion on **{map_code}** has been unverified by a moderator.{reason_msg}"
                     )
 
-        # Handle suspicious flag
         if data.mark_suspicious:
             if data.suspicious_context is msgspec.UNSET or data.suspicious_flag_type is msgspec.UNSET:
                 raise ValueError("suspicious_context and suspicious_flag_type are required when marking as suspicious")
@@ -836,7 +813,6 @@ class CompletionsService(BaseService):
                     f"The suspicious flag on your completion for **{map_code}** has been removed."
                 )
 
-        # Send notification if any changes were made
         if notification_messages and notification_service is not None and headers is not None:
             notification_body = "\n\n".join(notification_messages)
 

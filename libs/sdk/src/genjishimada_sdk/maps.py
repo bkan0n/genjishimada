@@ -1023,7 +1023,6 @@ class MapEditCreateRequest(Struct, kw_only=True):
     reason: str
     created_by: int
 
-    # All optional - only include fields being changed
     new_code: OverwatchCode | UnsetType = UNSET
     map_name: OverwatchMap | UnsetType = UNSET
     category: MapCategory | UnsetType = UNSET
@@ -1064,7 +1063,6 @@ class MapEditCreateRequest(Struct, kw_only=True):
         ]:
             value = getattr(self, field_name)
             if value is not UNSET:
-                # Rename new_code to code for storage
                 key = "code" if field_name == "new_code" else field_name
                 changes[key] = msgspec.to_builtins(value)
         return changes
@@ -1074,8 +1072,8 @@ class MapEditFieldChange(Struct):
     """Represents a single field change for display."""
 
     field: str
-    old_value: str  # Human-readable
-    new_value: str  # Human-readable
+    old_value: str
+    new_value: str
 
 
 class MapEditResponse(Struct, kw_only=True):
@@ -1084,7 +1082,7 @@ class MapEditResponse(Struct, kw_only=True):
     id: int
     map_id: int
     code: OverwatchCode
-    proposed_changes: dict[str, Any]  # Raw JSONB
+    proposed_changes: dict[str, Any]
     reason: str
     created_by: int
     created_at: dt.datetime
@@ -1103,7 +1101,6 @@ class MapEditSubmissionResponse(Struct):
     map_name: OverwatchMap
     difficulty: DifficultyAll
 
-    # Current vs proposed shown as readable changes
     changes: list[MapEditFieldChange]
 
     reason: str
@@ -1136,7 +1133,6 @@ class PendingMapEditResponse(Struct):
     message_id: int | None
 
 
-# Events for RabbitMQ
 class MapEditCreatedEvent(Struct):
     """Event emitted when a map edit request is created."""
 

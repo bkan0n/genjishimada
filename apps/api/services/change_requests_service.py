@@ -67,7 +67,6 @@ class ChangeRequestsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             ChangeRequestAlreadyExistsError: If change request already exists for this thread.
         """
-        # Check if map exists first
         map_exists = await self._maps_repo.check_code_exists(data.code)
         if not map_exists:
             raise MapNotFoundError(data.code)
@@ -82,12 +81,10 @@ class ChangeRequestsService(BaseService):
                 creator_mentions=data.creator_mentions,
             )
         except UniqueConstraintViolationError as e:
-            # thread_id is primary key, so this means duplicate thread
             if "thread_id" in e.constraint_name or "pkey" in e.constraint_name:
                 raise ChangeRequestAlreadyExistsError(data.thread_id) from e
             raise
         except ForeignKeyViolationError as e:
-            # This shouldn't happen since we checked map exists, but handle anyway
             if "code" in e.constraint_name:
                 raise MapNotFoundError(data.code) from e
             raise

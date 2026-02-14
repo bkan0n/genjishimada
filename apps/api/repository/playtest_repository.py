@@ -15,8 +15,6 @@ from .exceptions import CheckConstraintViolationError, extract_constraint_name
 class PlaytestRepository(BaseRepository):
     """Repository for playtest data access."""
 
-    # Playtest metadata operations
-
     async def fetch_playtest(
         self,
         thread_id: int,
@@ -99,8 +97,6 @@ class PlaytestRepository(BaseRepository):
             playtest_id,
             thread_id,
         )
-
-    # Vote operations
 
     async def fetch_playtest_votes(
         self,
@@ -285,8 +281,6 @@ class PlaytestRepository(BaseRepository):
             thread_id,
         )
 
-    # Helper queries
-
     async def get_map_id_from_thread(
         self,
         thread_id: int,
@@ -352,8 +346,6 @@ class PlaytestRepository(BaseRepository):
             "SELECT code FROM core.maps WHERE id = $1",
             map_id,
         )
-
-    # State transition operations
 
     async def approve_playtest(
         self,

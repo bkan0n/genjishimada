@@ -43,17 +43,14 @@ from services.exceptions.store import (
 
 log = logging.getLogger(__name__)
 
-# Key pricing constants
 ACTIVE_KEY_BASE_PRICE = 500
 INACTIVE_KEY_BASE_PRICE = 1000
 BULK_DISCOUNT_3X = 0.85  # 15% off
 BULK_DISCOUNT_5X = 0.70  # 30% off
 
-# Bulk purchase quantities
 BULK_QUANTITY_3X = 3
 BULK_QUANTITY_5X = 5
 
-# Rotation item count limits
 ROTATION_ITEM_MIN = 3
 ROTATION_ITEM_MAX = 5
 
@@ -193,7 +190,6 @@ class StoreService(BaseService):
         rotation_id = items[0]["rotation_id"]
         available_until = items[0]["available_until"]
 
-        # Check ownership for each item if user_id provided
         rotation_items = []
         for item in items:
             owned = False
@@ -232,7 +228,6 @@ class StoreService(BaseService):
         config = await self._store_repo.fetch_config()
         active_key_type = config["active_key_type"]
 
-        # Get all key types
         key_types = await self._lootbox_repo.fetch_all_key_types()
 
         pricing_list = []

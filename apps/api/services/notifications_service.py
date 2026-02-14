@@ -74,7 +74,6 @@ class NotificationsService(BaseService):
         Raises:
             UserNotFoundError: If user does not exist.
         """
-        # 1. Store notification in database
         try:
             event_id = await self._notifications_repo.insert_event(
                 user_id=data.user_id,
@@ -88,16 +87,13 @@ class NotificationsService(BaseService):
                 raise UserNotFoundError(data.user_id) from e
             raise
 
-        # Fetch the created event to return
         event_row = await self._notifications_repo.fetch_event_by_id(event_id)
         if not event_row:
             raise RuntimeError(f"Failed to fetch newly created notification event {event_id}")
         event = self._row_to_event_response(event_row)
 
-        # 2. Determine which channels should receive this notification
         channels_to_deliver = await self._get_enabled_channels(data.user_id, data.event_type)
 
-        # 3. If Discord delivery is needed, publish to RabbitMQ
         discord_channels: list[NOTIFICATION_CHANNEL] = [
             c
             for c in channels_to_deliver
@@ -120,7 +116,6 @@ class NotificationsService(BaseService):
                 routing_key="api.notification.delivery",
                 data=delivery_event,
                 headers=headers,
-                # No idempotency key needed - notifications can be duplicated safely
             )
 
         return event
@@ -242,14 +237,12 @@ class NotificationsService(BaseService):
         """
         rows = await self._notifications_repo.fetch_preferences(user_id)
 
-        # Build a map of existing preferences
         existing: dict[str, dict[str, bool]] = {}
         for row in rows:
             if row["event_type"] not in existing:
                 existing[row["event_type"]] = {}
             existing[row["event_type"]][row["channel"]] = row["enabled"]
 
-        # Build response with defaults for missing preferences
         result = []
         for event_type in NotificationEventType:
             default_channels = EVENT_TYPE_DEFAULT_CHANNELS.get(event_type, [])
@@ -259,7 +252,6 @@ class NotificationsService(BaseService):
                 if event_type.value in existing and channel.value in existing[event_type.value]:
                     channels[channel.value] = existing[event_type.value][channel.value]
                 else:
-                    # Default: enabled if channel is in default list
                     channels[channel.value] = channel in default_channels
 
             result.append(
@@ -346,20 +338,17 @@ class NotificationsService(BaseService):
         """
         rows = await self._notifications_repo.fetch_preferences(user_id)
 
-        # Build preference map
         explicit_prefs = {}
         for row in rows:
             if row["event_type"] == event_type:
                 explicit_prefs[row["channel"]] = row["enabled"]
 
-        # Determine defaults
         try:
             event_enum = NotificationEventType(event_type)
             default_channels = EVENT_TYPE_DEFAULT_CHANNELS.get(event_enum, [])
         except ValueError:
             default_channels = []
 
-        # Build final channel list
         enabled = []
         for channel in NotificationChannel:
             if channel.value in explicit_prefs:

@@ -94,7 +94,6 @@ if TYPE_CHECKING:
     from services.notifications_service import NotificationsService
     from services.users_service import UsersService
 
-# Module-level constants and logging
 _PREVIEW_MAX_LENGTH = 50
 _ASSET_BANNER_PATH = "/assets/map_banners/"
 ARCHIVE_PLAYTEST_CANCEL_REASON = "This map has been archived so the playtest has been cancelled."
@@ -121,8 +120,6 @@ class MapsService(BaseService):
         """Initialize service."""
         super().__init__(pool, state)
         self._maps_repo = maps_repo
-
-    # Core CRUD operations
 
     async def create_map(  # noqa: PLR0912, PLR0915
         self,
@@ -153,11 +150,9 @@ class MapsService(BaseService):
             DuplicateCreatorError: If duplicate creator ID in request.
             CreatorNotFoundError: If creator user doesn't exist.
         """
-        # Auto-approve non-official maps
         if not data.official and data.playtesting != "Approved":
             data.playtesting = "Approved"
 
-        # Convert request to dict for repository
         map_data = {
             "code": data.code,
             "map_name": data.map_name,
@@ -174,16 +169,13 @@ class MapsService(BaseService):
             "title": data.title,
         }
 
-        # Transaction for multi-step operation
         async with self._pool.acquire() as conn, conn.transaction():
             try:
-                # Create core map
                 map_id = await self._maps_repo.create_core_map(
                     map_data,
                     conn=conn,  # type: ignore[arg-type]
                 )
 
-                # Insert related data
                 creators_data = [{"user_id": c.id, "is_primary": c.is_primary} for c in (data.creators or [])]
                 await self._maps_repo.insert_creators(
                     map_id,
@@ -191,7 +183,6 @@ class MapsService(BaseService):
                     conn=conn,  # type: ignore[arg-type]
                 )
 
-                # Guide URL (if provided)
                 if data.guide_url:
                     await self._maps_repo.insert_guide(
                         map_id,
@@ -205,7 +196,6 @@ class MapsService(BaseService):
                         XpGrantRequest(XP_AMOUNTS["Guide"], "Guide"),
                     )
 
-                # Mechanics
                 if data.mechanics:
                     if len(set(data.mechanics)) != len(data.mechanics):
                         raise DuplicateMechanicError()
@@ -215,7 +205,6 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
-                # Restrictions
                 if data.restrictions:
                     if len(set(data.restrictions)) != len(data.restrictions):
                         raise DuplicateRestrictionError()
@@ -225,7 +214,6 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
-                # Tags
                 if data.tags:
                     if len(set(data.tags)) != len(data.tags):
                         raise DuplicateTagsError()
@@ -235,7 +223,6 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
-                # Medals
                 if data.medals:
                     medals_data = {
                         "gold": data.medals.gold,
@@ -248,7 +235,6 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
-                # Handle playtest creation if needed
                 job_status = None
                 if data.playtesting == "In Progress":
                     playtest_id = await self._maps_repo.create_playtest_meta_partial(
@@ -257,7 +243,6 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
-                    # Publish RabbitMQ message to bot
                     message_data = PlaytestCreatedEvent(data.code, playtest_id)
                     idempotency_key = f"map:submit:{map_id}"
                     job_status = await self.publish_message(
@@ -283,16 +268,13 @@ class MapsService(BaseService):
                     raise CreatorNotFoundError() from e
                 raise
 
-        # Fetch created map (outside transaction)
         map_data_result = await self._maps_repo.fetch_maps(
             single=True,
             code=data.code,
         )
 
-        # Convert to MapResponse
         map_response = msgspec.convert(map_data_result, MapResponse, from_attributes=True)
 
-        # Publish newsfeed event if approved
         if data.playtesting == "Approved":
             event_payload = NewsfeedNewMap(
                 code=map_response.code,
@@ -336,18 +318,15 @@ class MapsService(BaseService):
             DuplicateCreatorError: If duplicate creator ID in request.
             CreatorNotFoundError: If creator user doesn't exist.
         """
-        # Fetch original map for newsfeed comparison
         original_map_result = await self._maps_repo.fetch_maps(single=True, code=code)
         if not original_map_result:
             raise MapNotFoundError(code)
         original_map = msgspec.convert(original_map_result, MapResponse, from_attributes=True)
 
-        # Lookup map ID
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
 
-        # Build core map update dict
         core_updates = {}
         if data.code is not msgspec.UNSET:
             core_updates["code"] = data.code
@@ -373,10 +352,8 @@ class MapsService(BaseService):
         if data.playtesting is not msgspec.UNSET:
             core_updates["playtesting"] = data.playtesting
 
-        # Transaction for multi-step update
         async with self._pool.acquire() as conn, conn.transaction():
             try:
-                # Update core map
                 if core_updates:
                     await self._maps_repo.update_core_map(
                         code,
@@ -384,7 +361,6 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
-                # Update playtest initial_difficulty if difficulty changed during active playtest
                 if (
                     data.difficulty is not msgspec.UNSET
                     and original_map.playtesting == "In Progress"
@@ -396,7 +372,6 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
-                # Replace related data if provided
                 if data.creators is not msgspec.UNSET:
                     await self._maps_repo.delete_creators(map_id, conn=conn)  # type: ignore[arg-type]
                     if data.creators:
@@ -471,11 +446,10 @@ class MapsService(BaseService):
                     raise CreatorNotFoundError() from e
                 raise
 
-        # Fetch and return updated map with original for comparison
         final_code = data.code if data.code is not msgspec.UNSET else code
         map_data_result = await self._maps_repo.fetch_maps(single=True, code=final_code)
         updated_map = msgspec.convert(map_data_result, MapResponse, from_attributes=True)
-        return (updated_map, original_map)
+        return updated_map, original_map
 
     @overload
     async def fetch_maps(self, *, single: Literal[True], filters: MapSearchFilters) -> MapResponse: ...
@@ -539,8 +513,6 @@ class MapsService(BaseService):
         """
         return await self._maps_repo.check_code_exists(code)
 
-    # Guide operations
-
     async def get_guides(
         self,
         code: OverwatchCode,
@@ -558,7 +530,6 @@ class MapsService(BaseService):
         Raises:
             MapNotFoundError: If map doesn't exist.
         """
-        # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
@@ -588,7 +559,6 @@ class MapsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             DuplicateGuideError: If user already has guide for this map.
         """
-        # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
@@ -604,11 +574,9 @@ class MapsService(BaseService):
                 raise DuplicateGuideError(code, data.user_id) from e
             raise
 
-        # Fetch map to check if official (needed for XP grant)
         map_data_result = await self._maps_repo.fetch_maps(single=True, code=code)
         map_data = msgspec.convert(map_data_result, MapResponse, from_attributes=True)
 
-        # Return guide + context for controller
         return (
             data,
             {
@@ -639,12 +607,10 @@ class MapsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             GuideNotFoundError: If guide doesn't exist for this user.
         """
-        # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
 
-        # Check guide exists
         try:
             guide_exists = await self._maps_repo.check_guide_exists(map_id, user_id)
             if not guide_exists:
@@ -673,12 +639,10 @@ class MapsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             GuideNotFoundError: If guide doesn't exist for this user.
         """
-        # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
 
-        # Check guide exists
         try:
             guide_exists = await self._maps_repo.check_guide_exists(map_id, user_id)
             if not guide_exists:
@@ -690,8 +654,6 @@ class MapsService(BaseService):
         except Exception as e:
             log.error(f"Unexpected error deleting guide for {code}: {e}", exc_info=True)
             raise
-
-    # Additional operations
 
     async def get_affected_users(self, code: OverwatchCode) -> list[int]:
         """Get IDs of users affected by a map change.
@@ -705,7 +667,6 @@ class MapsService(BaseService):
         Raises:
             MapNotFoundError: If map doesn't exist.
         """
-        # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
@@ -766,17 +727,14 @@ class MapsService(BaseService):
             MapNotFoundError: If any map code doesn't exist.
         """
         try:
-            # Validate all codes exist
             for code in data.codes:
                 map_id = await self._maps_repo.lookup_map_id(code)
                 if map_id is None:
                     raise MapNotFoundError(code)
 
-            # Update archive status
             is_archiving = data.status == "Archive"
             affected_threads = await self._maps_repo.set_archive_status(data.codes, is_archiving)
 
-            # Publish force-deny events for any playtests cancelled by archiving
             for affected in affected_threads:
                 await self.publish_message(
                     routing_key="api.playtest.force_deny",
@@ -789,9 +747,7 @@ class MapsService(BaseService):
                     idempotency_key=f"archive:force_deny:{affected['thread_id']}",
                 )
 
-            # Publish newsfeed event
             if len(data.codes) == 1:
-                # Single map archive/unarchive
                 map_data = await self._maps_repo.fetch_maps(single=True, code=data.codes[0])
                 map_response = msgspec.convert(map_data, MapResponse, from_attributes=True)
 
@@ -858,7 +814,6 @@ class MapsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             MapValidationError: If pending verifications exist.
         """
-        # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
@@ -894,22 +849,18 @@ class MapsService(BaseService):
         Returns:
             Number of completions converted.
         """
-        # Check for pending verifications
         has_pending = await self._maps_repo.check_pending_verifications(
             code,
             conn=conn,  # type: ignore[arg-type]
         )
         if has_pending:
-            # V3 raises exception (strict behavior)
             raise MapValidationError("Pending verifications exist for this map code.", field="code")
 
-        # Remove medal entries
         await self._maps_repo.remove_map_medal_entries(
             code,
             conn=conn,  # type: ignore[arg-type]
         )
 
-        # Convert completions to legacy
         return await self._maps_repo.convert_completions_to_legacy(
             code,
             conn=conn,  # type: ignore[arg-type]
@@ -930,13 +881,11 @@ class MapsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             ValueError: If quality value is out of range (1-6).
         """
-        # Validate quality value range
         min_quality = 1
         max_quality = 6
         if not min_quality <= data.value <= max_quality:
             raise ValueError(f"Quality must be between {min_quality} and {max_quality} (inclusive).")
 
-        # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
@@ -990,7 +939,6 @@ class MapsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             AlreadyInPlaytestError: If map is already in playtest.
         """
-        # Validate map exists and get current state
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
@@ -1001,26 +949,20 @@ class MapsService(BaseService):
             if current_map_response.playtesting == "In Progress":
                 raise AlreadyInPlaytestError(code)
 
-            # Transaction for multi-step operation
             async with self._pool.acquire() as conn, conn.transaction():
-                # Convert to legacy
                 await self._convert_to_legacy_internal(code, conn)
-
-                # Update playtesting status
                 await self._maps_repo.update_core_map(
                     code,
                     {"playtesting": "In Progress"},
                     conn=conn,  # type: ignore[arg-type]
                 )
 
-                # Create playtest metadata
                 playtest_id = await self._maps_repo.create_playtest_meta_partial(
                     code,
                     DIFFICULTY_MIDPOINTS[data.initial_difficulty],
                     conn=conn,  # type: ignore[arg-type]
                 )
 
-            # Publish RabbitMQ message
             message_data = PlaytestCreatedEvent(code, playtest_id)
             idempotency_key = f"map:send-to-playtest:{map_id}:{playtest_id}"
             return await self.publish_message(
@@ -1109,7 +1051,6 @@ class MapsService(BaseService):
             LinkedMapError: If neither map exists or if maps are already linked.
         """
         try:
-            # Fetch both maps (may be None)
             official_map_dict = await self._maps_repo.fetch_maps(single=True, code=data.official_code)
             unofficial_map_dict = await self._maps_repo.fetch_maps(single=True, code=data.unofficial_code)
 
@@ -1120,11 +1061,9 @@ class MapsService(BaseService):
                 msgspec.convert(unofficial_map_dict, MapResponse, from_attributes=True) if unofficial_map_dict else None
             )
 
-            # Validate at least one map exists
             if not official_map and not unofficial_map:
                 raise LinkedMapError("At least one of official_code or unofficial_code must refer to an existing map.")
 
-            # Check if already linked
             if official_map and official_map.linked_code:
                 raise LinkedMapError(
                     f"Official map {data.official_code} is already linked to {official_map.linked_code}"
@@ -1134,7 +1073,6 @@ class MapsService(BaseService):
                     f"Unofficial map {data.unofficial_code} is already linked to {unofficial_map.linked_code}"
                 )
 
-            # Determine operation type
             needs_clone_only = official_map and not unofficial_map
             needs_clone_and_playtest = not official_map and unofficial_map
             needs_link_only = official_map and unofficial_map
@@ -1182,7 +1120,6 @@ class MapsService(BaseService):
                 job_status = None
                 in_playtest = False
 
-            # Create newsfeed event
             event_payload = NewsfeedLinkedMap(
                 official_code=data.official_code,
                 unofficial_code=data.unofficial_code,
@@ -1194,9 +1131,7 @@ class MapsService(BaseService):
                 event_type="linked_map",
             )
 
-            # Handle newsfeed publishing
             if in_playtest and job_status:
-                # Spawn background task to wait for job completion before publishing
                 task = asyncio.create_task(
                     self._wait_and_publish_linked_map_newsfeed(
                         job_status=job_status,
@@ -1206,10 +1141,8 @@ class MapsService(BaseService):
                         official_code=data.official_code,
                     )
                 )
-                # Store reference to prevent premature garbage collection
                 task.add_done_callback(lambda t: None)
             else:
-                # Publish immediately
                 await newsfeed_service.create_and_publish(event=event, headers=headers)
 
             return job_status
@@ -1239,7 +1172,6 @@ class MapsService(BaseService):
             official_code: The official map code (to fetch playtest info).
         """
         try:
-            # Wait for job completion
             final_status = await wait_for_job_completion(
                 job_id=job_status.id,
                 fetch_status=self._get_job_status_using_pool,
@@ -1247,17 +1179,14 @@ class MapsService(BaseService):
             )
 
             if final_status.status == "succeeded":
-                # Fetch map to get playtest ID (using connection pool)
                 async with self._pool.acquire() as conn:
                     map_data_dict = await self._maps_repo.fetch_maps(single=True, code=official_code, conn=conn)  # type: ignore[arg-type]
                     map_data = msgspec.convert(map_data_dict, MapResponse, from_attributes=True)
 
-                    # Add playtest ID to event if available
                     if map_data.playtest:
                         assert isinstance(event.payload, NewsfeedLinkedMap)
                         event.payload.playtest_id = map_data.playtest.thread_id
 
-                    # Publish newsfeed event
                     await newsfeed_service.create_and_publish(event=event, headers=headers)
             else:
                 log.warning(
@@ -1268,7 +1197,6 @@ class MapsService(BaseService):
 
         except Exception:
             log.exception("Error while waiting for job completion for linked map newsfeed")
-            # Don't re-raise - this is a background task
 
     async def _get_job_status_using_pool(self, job_id: UUID) -> JobStatusResponse | None:
         """Fetch job status using the connection pool.
@@ -1309,7 +1237,6 @@ class MapsService(BaseService):
             MapNotFoundError: If either map doesn't exist.
         """
         try:
-            # Validate both maps exist
             official_id = await self._maps_repo.lookup_map_id(data.official_code)
             if official_id is None:
                 raise MapNotFoundError(data.official_code)
@@ -1318,10 +1245,8 @@ class MapsService(BaseService):
             if unofficial_id is None:
                 raise MapNotFoundError(data.unofficial_code)
 
-            # Unlink the codes (uses official_code to find and remove link)
             await self._maps_repo.unlink_map_codes(data.official_code)
 
-            # Publish newsfeed event
             event_payload = NewsfeedUnlinkedMap(
                 official_code=data.official_code,
                 unofficial_code=data.unofficial_code,
@@ -1363,10 +1288,8 @@ class MapsService(BaseService):
             ValueError: If neither thread_id nor code provided.
             HTTPException: 503 if plotter service unavailable.
         """
-        # Fetch difficulty data based on input
         async with self._pool.acquire() as conn:
             if code and not thread_id:
-                # Fetch initial difficulty for new playtest
                 rows = await conn.fetch(
                     """
                     WITH target_map AS (
@@ -1381,7 +1304,6 @@ class MapsService(BaseService):
                     code,
                 )
             elif thread_id:
-                # Fetch votes + initial difficulty
                 rows = await conn.fetch(
                     """
                     SELECT difficulty, count(*) AS amount
@@ -1404,12 +1326,10 @@ class MapsService(BaseService):
             if not rows:
                 raise MapNotFoundError(code or str(thread_id))
 
-            # Convert to votes dict for plotter API
             votes: dict[str, int] = {
                 str(convert_raw_difficulty_to_difficulty_all(row["difficulty"])): row["amount"] for row in rows
             }
 
-        # Call external plotter service
         plotter_url = "http://genjishimada-playtest-plotter:8080/chart"
         try:
             async with (
@@ -1434,7 +1354,6 @@ class MapsService(BaseService):
                 detail="Chart generation service unavailable",
             ) from e
 
-        # Return Stream with headers
         return Stream(
             iter([image_bytes]),
             headers={
@@ -1442,8 +1361,6 @@ class MapsService(BaseService):
                 "content-disposition": 'attachment; filename="playtest.webp"',
             },
         )
-
-    # Edit request operations
 
     async def create_edit_request(
         self,
@@ -1469,17 +1386,14 @@ class MapsService(BaseService):
             MapNotFoundError: If map doesn't exist.
             PendingEditRequestExistsError: If map already has pending request.
         """
-        # Validate map exists
         map_id = await self._maps_repo.lookup_map_id(code)
         if map_id is None:
             raise MapNotFoundError(code)
 
-        # Check for existing pending request
         existing_id = await self._maps_repo.check_pending_edit_request(map_id)
         if existing_id is not None:
             raise PendingEditRequestExistsError(code, existing_id)
 
-        # Create edit request
         try:
             row = await self._maps_repo.create_edit_request(
                 map_id=map_id,
@@ -1489,15 +1403,12 @@ class MapsService(BaseService):
                 created_by=created_by,
             )
         except ForeignKeyViolationError as e:
-            # Should not happen since we validated map_id, but handle gracefully
             if "created_by" in e.constraint_name:
                 raise CreatorNotFoundError() from e
             raise
 
-        # Convert to response
         edit_response = self._row_to_edit_response(row)
 
-        # Publish RabbitMQ event for bot
         await self.publish_message(
             routing_key="api.map_edit.created",
             data=MapEditCreatedEvent(edit_request_id=edit_response.id),
@@ -1568,16 +1479,13 @@ class MapsService(BaseService):
         current_medals = data["current_medals"]
         submitter_name = data["submitter_name"]
 
-        # Parse proposed changes
         proposed_changes = edit_req["proposed_changes"]
         if isinstance(proposed_changes, str):
             proposed_changes = msgspec.json.decode(proposed_changes)
 
-        # Build current map data dict for comparison
         map_data = dict(current_map)
         map_data["creators"] = [{"id": c["user_id"], "is_primary": c["is_primary"]} for c in current_creators]
 
-        # Build human-readable changes
         changes = await self._build_field_changes(
             map_data,
             current_medals,
@@ -1608,7 +1516,6 @@ class MapsService(BaseService):
         Raises:
             EditRequestNotFoundError: If edit request doesn't exist.
         """
-        # Validate exists
         row = await self._maps_repo.fetch_edit_request(edit_id)
         if row is None:
             raise EditRequestNotFoundError(edit_id)
@@ -1652,25 +1559,20 @@ class MapsService(BaseService):
             EditRequestNotFoundError: If edit request doesn't exist.
             MapNotFoundError: If map doesn't exist.
         """
-        # Get edit request
         edit_request = await self.get_edit_request(edit_id)
 
         if accepted:
-            # Get original map for newsfeed comparison
             original_map = msgspec.convert(
                 await self._maps_repo.fetch_maps(single=True, code=edit_request.code),
                 MapResponse,
                 from_attributes=True,
             )
 
-            # Handle archive change separately
             has_archive_change = "archived" in edit_request.proposed_changes
-            remaining_changes: dict = {}
 
             if has_archive_change:
                 archived_value = edit_request.proposed_changes["archived"]
 
-                # Route through shared archive logic (handles force-deny + newsfeed)
                 archive_status = "Archive" if archived_value else "Unarchived"
                 await self.set_archive_status(
                     ArchivalStatusPatchRequest(status=archive_status, codes=[edit_request.code]),
@@ -1678,20 +1580,16 @@ class MapsService(BaseService):
                     newsfeed_service,
                 )
 
-                # Remaining changes (without archived)
                 remaining_changes = {k: v for k, v in edit_request.proposed_changes.items() if k != "archived"}
 
-                # Apply remaining changes if any
                 if remaining_changes:
                     patch_data = self.convert_changes_to_patch(remaining_changes)
                     await self.update_map(edit_request.code, patch_data)
             else:
-                # No archive change, apply all changes
                 patch_data = self.convert_changes_to_patch(edit_request.proposed_changes)
                 await self.update_map(edit_request.code, patch_data)
                 remaining_changes = edit_request.proposed_changes
 
-            # Generate newsfeed for non-archive changes
             if remaining_changes:
 
                 async def _get_user_coalesced_name(user_id: int) -> str:
@@ -1709,7 +1607,6 @@ class MapsService(BaseService):
                     get_creator_name=_get_user_coalesced_name,
                 )
 
-        # Mark as resolved
         await self._maps_repo.resolve_edit_request(
             edit_id=edit_id,
             accepted=accepted,
@@ -1717,10 +1614,8 @@ class MapsService(BaseService):
             rejection_reason=rejection_reason,
         )
 
-        # Send to playtest if requested and accepted
         if accepted and send_to_playtest:
             try:
-                # Get difficulty from proposed changes or use original
                 playtest_difficulty = edit_request.proposed_changes.get("difficulty")
                 if not playtest_difficulty:
                     original_map = msgspec.convert(
@@ -1736,13 +1631,11 @@ class MapsService(BaseService):
                     headers=headers,
                 )
             except Exception as e:
-                # Log but don't fail resolution
                 log.error(
                     f"Failed to send map {edit_request.code} to playtest after edit: {e}",
                     exc_info=True,
                 )
 
-        # Send notification to submitter
         await self._send_edit_resolution_notification(
             notification_service,
             edit_request,
@@ -1751,7 +1644,6 @@ class MapsService(BaseService):
             headers,
         )
 
-        # Publish RabbitMQ cleanup event
         await self.publish_message(
             routing_key="api.map_edit.resolved",
             data=MapEditResolvedEvent(
@@ -1783,8 +1675,6 @@ class MapsService(BaseService):
             include_resolved,
         )
         return [self._row_to_edit_response(row) for row in rows]
-
-    # Edit request helper methods
 
     @staticmethod
     def _row_to_edit_response(row: dict) -> MapEditResponse:
@@ -1827,7 +1717,6 @@ class MapsService(BaseService):
         if not isinstance(value, list):
             return set()
 
-            # Convert all items to strings and use set for order-independent comparison
         return {str(item) for item in value}
 
     async def _build_field_changes(
@@ -1858,13 +1747,11 @@ class MapsService(BaseService):
             else:
                 old_value = current_map.get(field_name)
 
-            # Check if value actually changed (using same logic as newsfeed service)
             if field_name == "creators":
-                # Compare only id and is_primary, ignoring name field
                 old_normalized = self._normalize_creators_for_comparison(old_value)
                 new_normalized = self._normalize_creators_for_comparison(new_value)
                 if old_normalized == new_normalized:
-                    continue  # Skip unchanged creators
+                    continue
             elif field_name in ("mechanics", "restrictions", "tags"):
                 old_normalized = self._normalize_list_for_comparison(old_value)
                 new_normalized = self._normalize_list_for_comparison(new_value)
@@ -1873,7 +1760,6 @@ class MapsService(BaseService):
             elif old_value == new_value:
                 continue
 
-            # Format for display
             if field_name == "creators":
                 old_display = await self._format_creators_for_display(
                     old_value,
@@ -1887,7 +1773,6 @@ class MapsService(BaseService):
                 old_display = self._format_value_for_display(field_name, old_value)
                 new_display = self._format_value_for_display(field_name, new_value)
 
-            # Convert field name to display name
             display_name = field_name.replace("_", " ").title()
 
             changes.append(
@@ -1988,15 +1873,12 @@ class MapsService(BaseService):
         if value is None:
             return "Not set"
 
-        # Boolean fields
         if field in ("hidden", "archived", "official"):
             return "Yes" if value else "No"
 
-        # Medal fields
         if field == "medals" and isinstance(value, dict):
             return f"🥇 {value.get('gold')} | 🥈 {value.get('silver')} | 🥉 {value.get('bronze')}"
 
-        # List fields
         if isinstance(value, list):
             return ", ".join(str(v) for v in value) if value else "None"
 

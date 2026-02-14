@@ -308,7 +308,6 @@ class LootboxRepository(BaseRepository):
                   AND key_type = $2::text \
                 """
         result = await _conn.execute(query, user_id, key_type)
-        # Result is like "DELETE 1" or "DELETE 0"
         return result != "DELETE 0"
 
     async def check_user_has_reward(

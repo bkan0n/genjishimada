@@ -54,12 +54,10 @@ class MapEditorCog(BaseCog):
         """
         await itx.response.defer(ephemeral=True)
 
-        # Fetch map data
         map_data = await itx.client.api.get_map(code=code)
         if not map_data:
             raise UserFacingError(f"Map `{code}` not found.")
 
-        # Start wizard - for this command, always queue (user path)
         view = MapEditWizardView(map_data, is_mod=False)
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
