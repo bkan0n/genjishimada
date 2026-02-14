@@ -4,6 +4,8 @@ Tests HTTP interface: request/response serialization,
 error translation, and full stack flow through real database.
 """
 
+from typing import get_args
+from genjishimada_sdk.lootbox import LootboxKeyType
 import pytest
 
 pytestmark = [
@@ -43,7 +45,7 @@ class TestViewAllKeys:
         assert len(data) > 0  # Should have Classic and Winter at minimum
         for key in data:
             assert "name" in key
-            assert key["name"] in ["Classic", "Winter"]
+            assert key["name"] in get_args(LootboxKeyType)
 
 
 class TestViewUserRewards:

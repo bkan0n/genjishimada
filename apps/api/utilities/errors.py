@@ -96,7 +96,6 @@ def handle_db_exceptions(
                         extra=parse_pg_detail(e.detail),
                     ) from e
 
-                # Log unhandled constraint violations for developer awareness
                 log.warning(
                     "Unhandled UniqueViolationError - constraint: %s, detail: %s",
                     e.constraint_name,
@@ -118,7 +117,6 @@ def handle_db_exceptions(
                         extra=parse_pg_detail(e.detail),
                     ) from e
 
-                # Log unhandled foreign key violations
                 log.warning(
                     "Unhandled ForeignKeyViolationError - constraint: %s, detail: %s",
                     e.constraint_name,
@@ -132,7 +130,6 @@ def handle_db_exceptions(
                 ) from e
 
             except asyncpg.exceptions.CheckViolationError as e:
-                # Handle check constraint violations (already present in some modules)
                 log.warning(
                     "CheckViolationError - constraint: %s, detail: %s",
                     e.constraint_name,

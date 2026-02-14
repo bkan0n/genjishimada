@@ -952,6 +952,83 @@ class TestSetArchiveStatus:
 
         assert response.status_code == 404
 
+    async def test_archive_in_progress_map_rejects_playtest(
+        self,
+        test_client,
+        create_test_map,
+        create_test_playtest,
+        unique_map_code,
+        unique_thread_id,
+        asyncpg_pool,
+    ):
+        """Archiving an in-progress map sets playtesting=Rejected and completes playtest."""
+        code = unique_map_code
+        thread_id = unique_thread_id
+        map_id = await create_test_map(code=code, playtesting="In Progress")
+        await create_test_playtest(map_id, thread_id=thread_id)
+
+        response = await test_client.patch(
+            "/api/v3/maps/archive",
+            json={"codes": [code], "status": "Archive"},
+        )
+        assert response.status_code == 200
+
+        # Verify map state
+        async with asyncpg_pool.acquire() as conn:
+            map_row = await conn.fetchrow(
+                "SELECT archived, playtesting FROM core.maps WHERE code = $1",
+                code,
+            )
+        assert map_row["archived"] is True
+        assert map_row["playtesting"] == "Rejected"
+
+        # Verify playtest completed
+        playtest_response = await test_client.get(f"/api/v3/maps/playtests/{thread_id}")
+        assert playtest_response.status_code == 200
+        assert playtest_response.json()["completed"] is True
+
+    async def test_unarchive_does_not_revert_rejected_playtest(
+        self,
+        test_client,
+        create_test_map,
+        create_test_playtest,
+        unique_map_code,
+        unique_thread_id,
+        asyncpg_pool,
+    ):
+        """Unarchiving a previously archived in-progress map leaves Rejected/completed unchanged."""
+        code = unique_map_code
+        thread_id = unique_thread_id
+        map_id = await create_test_map(code=code, playtesting="In Progress")
+        await create_test_playtest(map_id, thread_id=thread_id)
+
+        # Archive first
+        await test_client.patch(
+            "/api/v3/maps/archive",
+            json={"codes": [code], "status": "Archive"},
+        )
+
+        # Unarchive
+        response = await test_client.patch(
+            "/api/v3/maps/archive",
+            json={"codes": [code], "status": "Unarchived"},
+        )
+        assert response.status_code == 200
+
+        # Verify map state: unarchived but still Rejected
+        async with asyncpg_pool.acquire() as conn:
+            map_row = await conn.fetchrow(
+                "SELECT archived, playtesting FROM core.maps WHERE code = $1",
+                code,
+            )
+        assert map_row["archived"] is False
+        assert map_row["playtesting"] == "Rejected"
+
+        # Verify playtest still completed
+        playtest_response = await test_client.get(f"/api/v3/maps/playtests/{thread_id}")
+        assert playtest_response.status_code == 200
+        assert playtest_response.json()["completed"] is True
+
 
 class TestConvertToLegacy:
     """POST /api/v3/maps/{code}/legacy"""

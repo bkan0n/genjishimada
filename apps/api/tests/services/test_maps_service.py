@@ -571,3 +571,116 @@ class TestMapsServiceDataTransformation:
     def test_format_value_for_display_empty_list(self):
         """_format_value_for_display returns 'None' for empty list."""
         assert MapsService._format_value_for_display("mechanics", []) == "None"
+
+
+class TestSetArchiveStatusForceDeny:
+    """Test archive-triggered playtest force-deny event publishing."""
+
+    async def test_publishes_force_deny_for_affected_threads(
+        self, mock_pool, mock_state, mock_maps_repo, mocker
+    ):
+        """Publish PlaytestForceDeniedEvent for each affected thread when archiving."""
+        from genjishimada_sdk.maps import ArchivalStatusPatchRequest, PlaytestForceDeniedEvent
+
+        service = MapsService(mock_pool, mock_state, mock_maps_repo)
+
+        mock_maps_repo.lookup_map_id.return_value = 1
+        mock_maps_repo.set_archive_status.return_value = [
+            {"code": "ABCDE", "thread_id": 111111111111111111},
+        ]
+        mock_maps_repo.fetch_maps.return_value = {
+            "id": 1,
+            "code": "ABCDE",
+            "map_name": "Workshop Island",
+            "category": "Classic",
+            "checkpoints": 5,
+            "difficulty": "Medium",
+            "official": True,
+            "playtesting": "Rejected",
+            "hidden": False,
+            "archived": True,
+            "created_at": dt.datetime.now(dt.timezone.utc),
+            "updated_at": dt.datetime.now(dt.timezone.utc),
+            "ratings": None,
+            "playtest": None,
+            "raw_difficulty": 5.0,
+            "time": None,
+            "total_results": None,
+            "linked_code": None,
+            "creators": [],
+            "mechanics": [],
+            "restrictions": [],
+            "description": None,
+            "medals": None,
+            "guides": [],
+            "title": None,
+            "map_banner": None,
+            "tags": [],
+        }
+
+        mock_newsfeed_service = mocker.AsyncMock()
+        mock_headers = Headers({"x-pytest-enabled": "1"})
+
+        mocker.patch.object(service, "publish_message", new_callable=mocker.AsyncMock)
+
+        data = ArchivalStatusPatchRequest(codes=["ABCDE"], status="Archive")
+        await service.set_archive_status(data, mock_headers, mock_newsfeed_service)
+
+        service.publish_message.assert_called_once()
+        call_kwargs = service.publish_message.call_args.kwargs
+        assert call_kwargs["routing_key"] == "api.playtest.force_deny"
+        payload = call_kwargs["data"]
+        assert isinstance(payload, PlaytestForceDeniedEvent)
+        assert payload.thread_id == 111111111111111111
+        assert payload.reason == "This map has been archived so the playtest has been cancelled."
+        assert payload.verifier_id == 969632729643753482
+
+    async def test_no_publish_when_no_affected_threads(
+        self, mock_pool, mock_state, mock_maps_repo, mocker
+    ):
+        """Skip force-deny publish when archiving a map with no active playtest."""
+        from genjishimada_sdk.maps import ArchivalStatusPatchRequest
+
+        service = MapsService(mock_pool, mock_state, mock_maps_repo)
+
+        mock_maps_repo.lookup_map_id.return_value = 1
+        mock_maps_repo.set_archive_status.return_value = []
+        mock_maps_repo.fetch_maps.return_value = {
+            "id": 1,
+            "code": "ABCDE",
+            "map_name": "Workshop Island",
+            "category": "Classic",
+            "checkpoints": 5,
+            "difficulty": "Medium",
+            "official": True,
+            "playtesting": "Approved",
+            "hidden": False,
+            "archived": True,
+            "created_at": dt.datetime.now(dt.timezone.utc),
+            "updated_at": dt.datetime.now(dt.timezone.utc),
+            "ratings": None,
+            "playtest": None,
+            "raw_difficulty": 5.0,
+            "time": None,
+            "total_results": None,
+            "linked_code": None,
+            "creators": [],
+            "mechanics": [],
+            "restrictions": [],
+            "description": None,
+            "medals": None,
+            "guides": [],
+            "title": None,
+            "map_banner": None,
+            "tags": [],
+        }
+
+        mock_newsfeed_service = mocker.AsyncMock()
+        mock_headers = Headers({"x-pytest-enabled": "1"})
+
+        mocker.patch.object(service, "publish_message", new_callable=mocker.AsyncMock)
+
+        data = ArchivalStatusPatchRequest(codes=["ABCDE"], status="Archive")
+        await service.set_archive_status(data, mock_headers, mock_newsfeed_service)
+
+        service.publish_message.assert_not_called()

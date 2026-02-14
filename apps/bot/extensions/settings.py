@@ -33,18 +33,13 @@ def bool_string(value: bool) -> str:
 ENABLED_EMOJI = "🔔"
 DISABLED_EMOJI = "🔕"
 
-
-# Mapping from UI labels to (event_type, channel) pairs
-# This defines what each toggle in the settings UI controls
 NOTIFICATION_SETTINGS = {
-    # DM notifications
     "dm_on_verification": (NotificationEventType.VERIFICATION_APPROVED, NotificationChannel.DISCORD_DM),
     "dm_on_skill_role_update": (NotificationEventType.SKILL_ROLE_UPDATE, NotificationChannel.DISCORD_DM),
     "dm_on_lootbox_gain": (NotificationEventType.LOOTBOX_EARNED, NotificationChannel.DISCORD_DM),
     "dm_on_records_removal": (NotificationEventType.RECORD_REMOVED, NotificationChannel.DISCORD_DM),
     "dm_on_playtest_alerts": (NotificationEventType.PLAYTEST_UPDATE, NotificationChannel.DISCORD_DM),
     "dm_on_auto_verify_failed": (NotificationEventType.AUTO_VERIFY_FAILED, NotificationChannel.DISCORD_DM),
-    # Channel ping notifications
     "ping_on_xp_gain": (NotificationEventType.XP_GAIN, NotificationChannel.DISCORD_PING),
     "ping_on_mastery": (NotificationEventType.MASTERY_EARNED, NotificationChannel.DISCORD_PING),
     "ping_on_community_rank_update": (NotificationEventType.RANK_UP, NotificationChannel.DISCORD_PING),
@@ -65,7 +60,6 @@ class SettingsView(BaseView):
         """
         self.preferences = preferences
         self.current_usernames = current_usernames
-        # Build a lookup dict for quick access: (event_type, channel) -> enabled
         self._pref_lookup: dict[tuple[str, str], bool] = {}
         for pref in preferences:
             for channel, enabled in pref.channels.items():
@@ -78,7 +72,6 @@ class SettingsView(BaseView):
         if setting_key not in NOTIFICATION_SETTINGS:
             return False
         event_type, channel = NOTIFICATION_SETTINGS[setting_key]
-        # Default to True if preference not found (matches DEFAULT_CHANNELS behavior)
         return self._pref_lookup.get((event_type.value, channel.value), True)
 
     def update_pref_lookup(self, setting_key: str, enabled: bool) -> None:
@@ -201,20 +194,15 @@ class NotificationButton(ui.Button["SettingsView"]):
 
     async def callback(self, itx: GenjiItx) -> None:
         """Notification button callback."""
-        # Toggle the state
         self.enabled = not self.enabled
         self._edit_button(self.enabled)
 
-        # Update local lookup so rebuild works correctly
         self.view.update_pref_lookup(self.setting_key, self.enabled)
 
-        # Update the view
         await itx.response.edit_message(view=self.view)
 
-        # Get the event_type and channel for this setting
         if self.setting_key in NOTIFICATION_SETTINGS:
             event_type, channel = NOTIFICATION_SETTINGS[self.setting_key]
-            # Call the new preferences API
             await itx.client.api.update_notification_preference(
                 itx.user.id,
                 event_type.value,
@@ -324,7 +312,6 @@ class SettingsCog(BaseCog):
     async def settings(self, itx: GenjiItx) -> None:
         """Change various settings like notifications and your display name."""
         await itx.response.defer(ephemeral=True)
-        # Fetch preferences from the new API
         preferences = await self.bot.api.get_notification_preferences(itx.user.id)
         current_usernames = await self.bot.api.get_overwatch_usernames(itx.user.id)
         view = SettingsView(preferences, current_usernames)

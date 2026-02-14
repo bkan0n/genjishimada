@@ -37,8 +37,8 @@ class ImageStorageService:
         self.client = boto3.client(
             service_name="s3",
             endpoint_url=endpoint_url,
-            region_name="auto",  # R2 region is 'auto' (or wnam/enam/weur/eeur/apac)
-            config=Config(s3={"addressing_style": "path"}),  # path-style works well with R2 endpoint
+            region_name="auto",
+            config=Config(s3={"addressing_style": "path"}),
         )
 
     def upload_screenshot(self, image: bytes, content_type: str) -> str:
@@ -48,7 +48,7 @@ class ImageStorageService:
             image (bytes): THe image in bytes form.
             content_type (str): The content type of the image.
         """
-        digest = hashlib.blake2b(image, digest_size=16).hexdigest()  # short but collision-resistant
+        digest = hashlib.blake2b(image, digest_size=16).hexdigest()
         today = dt.datetime.now(dt.timezone.utc).strftime("%Y/%m/%d")
         ext = _ext_from_content_type(content_type)
         key = f"screenshots/{today}/{digest}.{ext}"

@@ -50,5 +50,5 @@ async def wait_for_job_completion(
         if asyncio.get_running_loop().time() - start_time >= timeout:
             raise TimeoutError(f"Timed out waiting for job {job_id}")
 
-        await asyncio.sleep(interval * (1.0 + random.random() * 0.2))  # jitter
+        await asyncio.sleep(interval * (1.0 + random.random() * 0.2))
         interval = min(interval * 1.5, max_interval)

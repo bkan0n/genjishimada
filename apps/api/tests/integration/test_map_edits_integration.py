@@ -406,6 +406,60 @@ class TestResolveEditRequest:
 
         assert response.status_code == 404
 
+    async def test_archive_via_edit_cancels_in_progress_playtest(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        create_test_playtest,
+        unique_map_code,
+        unique_thread_id,
+        asyncpg_pool,
+    ):
+        """Resolving an edit request with archived=True on in-playtest map rejects playtest."""
+        user_id = await create_test_user()
+        resolver_id = await create_test_user()
+        code = unique_map_code
+        thread_id = unique_thread_id
+
+        map_id = await create_test_map(code=code, playtesting="In Progress")
+        await create_test_playtest(map_id, thread_id=thread_id)
+
+        # Create edit request with archived=True
+        payload = {
+            "code": code,
+            "reason": "Map is being archived",
+            "created_by": user_id,
+            "archived": True,
+        }
+        create_response = await test_client.post("/api/v3/maps/map-edits/", json=payload)
+        assert create_response.status_code == 201
+        edit_id = create_response.json()["id"]
+
+        # Resolve the request (accept)
+        resolve_payload = {
+            "accepted": True,
+            "resolved_by": resolver_id,
+            "send_to_playtest": False,
+        }
+        response = await test_client.put(f"/api/v3/maps/map-edits/{edit_id}/resolve", json=resolve_payload)
+        assert response.status_code == 204
+
+        # Verify map is archived and playtesting is Rejected
+        async with asyncpg_pool.acquire() as conn:
+            map_row = await conn.fetchrow(
+                "SELECT archived, playtesting FROM core.maps WHERE code = $1",
+                code,
+            )
+        assert map_row["archived"] is True
+        assert map_row["playtesting"] == "Rejected"
+
+        # Verify playtest is completed
+        playtest_response = await test_client.get(f"/api/v3/maps/playtests/{thread_id}")
+        assert playtest_response.status_code == 200
+        playtest_data = playtest_response.json()
+        assert playtest_data["completed"] is True
+
 
 class TestGetUserEditRequests:
     """GET /api/v3/maps/map-edits/user/{user_id}"""

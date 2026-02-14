@@ -61,6 +61,14 @@ from .playtest import (
     VoteConstraintError,
     VoteNotFoundError,
 )
+from .store import (
+    AlreadyOwnedError,
+    InsufficientCoinsError,
+    InvalidQuantityError,
+    ItemNotInRotationError,
+    RotationExpiredError,
+    StoreError,
+)
 from .users import (
     InvalidUserIdError,
     UserAlreadyExistsError,
@@ -70,6 +78,7 @@ from .users import (
 
 __all__ = [
     "AlreadyInPlaytestError",
+    "AlreadyOwnedError",
     "AuthError",
     "ChangeRequestAlreadyExistsError",
     "ChangeRequestsError",
@@ -93,11 +102,14 @@ __all__ = [
     "EmailAlreadyVerifiedError",
     "EmailValidationError",
     "GuideNotFoundError",
+    "InsufficientCoinsError",
     "InsufficientKeysError",
     "InvalidCredentialsError",
     "InvalidEditResolutionError",
     "InvalidPatchError",
+    "InvalidQuantityError",
     "InvalidUserIdError",
+    "ItemNotInRotationError",
     "LinkedMapError",
     "LootboxError",
     "MapCodeExistsError",
@@ -111,7 +123,9 @@ __all__ = [
     "PlaytestNotFoundError",
     "PlaytestStateError",
     "RateLimitExceededError",
+    "RotationExpiredError",
     "SlowerThanPendingError",
+    "StoreError",
     "TokenAlreadyUsedError",
     "TokenExpiredError",
     "TokenInvalidError",

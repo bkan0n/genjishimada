@@ -50,16 +50,11 @@ NewsfeedEventType = Literal[
 ]
 
 
-# Scalars for map_edit diffs, etc.
 NewsfeedScalar = str | int | float | bool | None
 
 
-# ---- Tagged base for all payload variants ----
 class _TaggedPayload(Struct, tag_field="type"):
     """All payloads inherit this so they're tagged with field 'type'."""
-
-
-# ---- Payload variants (NOTE: no normal 'type' attributes!) ----
 
 
 class NewsfeedRecord(_TaggedPayload, tag="record", kw_only=True):

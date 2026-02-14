@@ -1,23 +1,4 @@
 -- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
--- noinspection SpellCheckingInspectionForFile
-
 INSERT INTO lootbox.reward_types (
     name, type, rarity, key_type
 )

@@ -98,14 +98,12 @@ class MapsController(Controller):
     async def get_maps_endpoint(  # noqa: PLR0913
         self,
         maps_service: MapsService,
-        # Core filters
         code: Annotated[OverwatchCode | None, Parameter(description="Filter by map code")] = None,
         playtest_status: Annotated[PlaytestStatus | None, Parameter(description="Filter by playtest status")] = None,
         archived: Annotated[bool | None, Parameter(description="Filter by archived status")] = None,
         hidden: Annotated[bool | None, Parameter(description="Filter by hidden status")] = None,
         official: Annotated[bool | None, Parameter(description="Filter by official status")] = None,
         playtest_thread_id: Annotated[int | None, Parameter(description="Filter by playtest thread ID")] = None,
-        # Map attributes
         category: Annotated[list[MapCategory] | None, Parameter(description="Filter by category list")] = None,
         map_name: Annotated[list[OverwatchMap] | None, Parameter(description="Filter by map name list")] = None,
         difficulty_exact: Annotated[
@@ -117,7 +115,6 @@ class MapsController(Controller):
         difficulty_range_max: Annotated[
             DifficultyTop | None, Parameter(description="Filter by maximum difficulty")
         ] = None,
-        # Related data (AND semantics)
         mechanics: Annotated[
             list[Mechanics] | None, Parameter(description="Filter by mechanics (AND semantics)")
         ] = None,
@@ -125,24 +122,18 @@ class MapsController(Controller):
             list[Restrictions] | None, Parameter(description="Filter by restrictions (AND semantics)")
         ] = None,
         tags: Annotated[list[Tags] | None, Parameter(description="Filter by tags (AND semantics)")] = None,
-        # Creator filters
         creator_ids: Annotated[list[int] | None, Parameter(description="Filter by creator user IDs")] = None,
         creator_names: Annotated[list[str] | None, Parameter(description="Filter by creator names")] = None,
-        # User context
         user_id: Annotated[int | None, Parameter(description="User ID for completion/medal filtering")] = None,
         medal_filter: Annotated[MedalFilter, Parameter(description="Medal filter (All/With/Without)")] = "All",
         completion_filter: Annotated[
             CompletionFilter, Parameter(description="Completion filter (All/With/Without)")
         ] = "All",
         playtest_filter: Annotated[PlaytestFilter, Parameter(description="Playtest filter (All/Only/None)")] = "All",
-        # Quality
         minimum_quality: Annotated[int | None, Parameter(description="Minimum average quality rating")] = None,
-        # Pagination
         page_size: Annotated[int, Parameter(description="Results per page")] = 10,
         page_number: Annotated[int, Parameter(description="Page number (1-indexed)")] = 1,
-        # Sorting
         sort: Annotated[list[SortKey] | None, Parameter(description="List of 'field:direction' sort keys")] = None,
-        # Special
         finalized_playtests: Annotated[bool | None, Parameter(description="Filter finalized playtests")] = None,
         return_all: Annotated[bool, Parameter(description="Return all results without pagination")] = False,
         force_filters: Annotated[bool, Parameter(description="Force filters even with code param")] = False,
@@ -327,14 +318,12 @@ class MapsController(Controller):
         try:
             updated_map, original_map = await maps_service.update_map(code, data)
 
-            # Helper to get user name
             async def _get_user_coalesced_name(user_id: int) -> str:
                 user = await users_service.get_user(user_id)
                 if user:
                     return user.coalesced_name or "Unknown User"
                 return "Unknown User"
 
-            # Generate and publish newsfeed event
             await newsfeed_service.generate_map_edit_newsfeed(
                 original_map,
                 data,
@@ -403,8 +392,6 @@ class MapsController(Controller):
         Raises:
             CustomHTTPException: 400 if code format invalid.
         """
-        # Validate code format explicitly since this endpoint is designed
-        # to validate and check if a code exists
         if not re.match(r"^[A-Z0-9]{4,6}$", code):
             raise CustomHTTPException(
                 detail="Provided code is not valid. Must follow regex ^[A-Z0-9]{4,6}$",
@@ -514,7 +501,6 @@ class MapsController(Controller):
         try:
             guide, context = await maps_service.create_guide(code, data)
 
-            # Grant XP if map is official
             map_data = context["map_data"]
             if map_data.official:
                 xp_amount = XP_AMOUNTS["Guide"]
@@ -524,11 +510,9 @@ class MapsController(Controller):
                     XpGrantRequest(amount=xp_amount, type="Guide"),
                 )
 
-            # Get user name for newsfeed
             user = await users_service.get_user(user_id=data.user_id)
             user_name = (user.coalesced_name or "Unknown User") if user else "Unknown User"
 
-            # Create and publish newsfeed event
             event_payload = NewsfeedGuide(
                 code=code,
                 guide_url=data.url,
@@ -744,7 +728,6 @@ class MapsController(Controller):
         try:
             affected_count, _context = await maps_service.convert_to_legacy(code, reason)
 
-            # Create and publish newsfeed event
             event_payload = NewsfeedLegacyRecord(
                 code=code,
                 affected_count=affected_count,

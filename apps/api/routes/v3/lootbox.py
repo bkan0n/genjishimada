@@ -202,11 +202,9 @@ class LootboxController(litestar.Controller):
         """
         test_mode = bool(request.headers.get("x-test-mode"))
         if test_mode:
-            # In test mode, just grant the reward without key validation
             await lootbox_service.debug_grant_reward_no_key(
                 user_id=user_id, key_type=key_type, reward_type=reward_type, reward_name=reward_name
             )
-            # Return a minimal response
             return RewardTypeResponse(
                 name=reward_name,
                 key_type=key_type,
@@ -370,7 +368,6 @@ class LootboxController(litestar.Controller):
         Returns:
             XpGrantResponse with previous and new amounts.
         """
-        # Service handles RabbitMQ publishing internally
         return await lootbox_service.grant_user_xp(request.headers, user_id, data)
 
     @litestar.get(

@@ -24,13 +24,10 @@ from services.base import BaseService
 
 log = logging.getLogger(__name__)
 
-# Type alias for readability
 Friendly = str
 
-# Fields to skip entirely in the newsfeed
 _EXCLUDED_FIELDS = {"hidden", "official", "archived", "playtesting"}
 
-# Fields that are list-like and should be normalized/sorted for comparison
 _LIST_FIELDS = {"creators", "mechanics", "restrictions", "tags"}
 
 
@@ -91,7 +88,6 @@ def _list_norm(items: Iterable[Any]) -> list:
     try:
         return sorted((_to_builtin(x) for x in lst), key=str)
     except Exception:
-        # Ultra-conservative fallback if items are not directly comparable
         return sorted([str(_to_builtin(x)) for x in lst])
 
 
@@ -217,7 +213,6 @@ def _values_equal(field: str, old: Any, new: Any) -> bool:  # noqa: ANN401
         ``True`` if the values are semantically equal; otherwise ``False``.
     """
     if field == "creators":
-        # Special handling: compare only id and is_primary, ignoring name field
         old_normalized = sorted(_normalize_creator(c) for c in (old or []))
         new_normalized = sorted(_normalize_creator(c) for c in (new or []))
         return old_normalized == new_normalized
@@ -260,16 +255,13 @@ class NewsfeedService(BaseService):
         Returns:
             PublishNewsfeedJobResponse: The job status and newly created newsfeed event ID.
         """
-        # Convert payload to dict for storage
         payload_obj = msgspec.to_builtins(event.payload)
 
-        # Insert event into database
         new_id = await self._newsfeed_repo.insert_event(
             timestamp=event.timestamp,
             payload=payload_obj,
         )
 
-        # Publish to RabbitMQ
         idempotency_key = f"newsfeed:create:{new_id}"
         job_status = await self.publish_message(
             routing_key="api.newsfeed.create",

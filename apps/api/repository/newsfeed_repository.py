@@ -73,7 +73,6 @@ class NewsfeedRepository(BaseRepository):
         if not row:
             return None
         result = dict(row)
-        # Parse JSON string to dict if needed
         if isinstance(result["payload"], str):
             result["payload"] = json.loads(result["payload"])
         return result
@@ -109,7 +108,6 @@ class NewsfeedRepository(BaseRepository):
         result = []
         for row in rows:
             row_dict = dict(row)
-            # Parse JSON string to dict if needed
             if isinstance(row_dict["payload"], str):
                 row_dict["payload"] = json.loads(row_dict["payload"])
             result.append(row_dict)

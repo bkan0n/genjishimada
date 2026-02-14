@@ -64,7 +64,6 @@ from .exceptions.auth import (
 
 log = logging.getLogger(__name__)
 
-# Constants
 VERIFICATION_TOKEN_EXPIRY_HOURS = 24
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1
 SESSION_LIFETIME_MINUTES = 129600  # 90 days
@@ -93,7 +92,6 @@ USERNAME_PATTERN = re.compile(
 USERNAME_MIN_LENGTH = 1
 USERNAME_MAX_LENGTH = 20
 
-# Constraint mappings for repository exception translation
 UNIQUE_CONSTRAINT_MESSAGES = {
     "email_auth_email_key": "An account with this email already exists.",
     "sessions_pkey": "Session already exists.",
@@ -120,8 +118,6 @@ class AuthService(BaseService):
         """
         super().__init__(pool, state)
         self._auth_repo = auth_repo
-
-    # ===== Validation Methods =====
 
     @staticmethod
     def validate_email(email: str) -> None:
@@ -182,8 +178,6 @@ class AuthService(BaseService):
         if not username.strip():
             raise UsernameValidationError("Username cannot be empty or only whitespace.")
 
-    # ===== Cryptographic Helpers =====
-
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt.
@@ -233,8 +227,6 @@ class AuthService(BaseService):
         """
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    # ===== Rate Limiting =====
-
     async def check_rate_limit(self, identifier: str, action: str) -> None:
         """Check if an action is rate-limited.
 
@@ -255,8 +247,6 @@ class AuthService(BaseService):
 
         if count >= max_attempts:
             raise RateLimitExceededError(action)
-
-    # ===== Registration =====
 
     async def register(
         self,
@@ -281,27 +271,22 @@ class AuthService(BaseService):
         """
         identifier = data.email.lower()
 
-        # Rate limiting
         await self.check_rate_limit(identifier, "register")
         if client_ip:
             await self.check_rate_limit(client_ip, "register")
 
-        # Validation
         self.validate_email(data.email)
         self.validate_password(data.password)
         self.validate_username(data.username)
 
-        # Check if email exists
         if await self._auth_repo.check_email_exists(data.email):
             await self._auth_repo.record_attempt(identifier, "register", success=False)
             raise EmailAlreadyExistsError(data.email)
 
-        # Pre-compute hashes and tokens
         password_hash = self.hash_password(data.password)
         token, token_hash = self.generate_token()
         expires_at = datetime.now(timezone.utc) + timedelta(hours=VERIFICATION_TOKEN_EXPIRY_HOURS)
 
-        # Transactional user creation
         async with self._pool.acquire() as conn, conn.transaction():
             try:
                 user_id = await self._auth_repo.generate_next_user_id(conn=conn)  # type: ignore[arg-type]
@@ -309,14 +294,12 @@ class AuthService(BaseService):
                 await self._auth_repo.create_email_auth(user_id, data.email, password_hash, conn=conn)  # type: ignore[arg-type]
                 await self._auth_repo.insert_email_token(user_id, token_hash, "verification", expires_at, conn=conn)  # type: ignore[arg-type]
             except UniqueConstraintViolationError as e:
-                # Translate repository exception to domain exception
                 log.warning(f"Unique constraint violation during registration: {e.constraint_name}")
                 raise EmailAlreadyExistsError(data.email) from e
             except ForeignKeyViolationError as e:
                 log.error(f"Foreign key violation during registration: {e.constraint_name}")
                 raise EmailAlreadyExistsError(data.email) from e
 
-        # Record successful attempt
         await self._auth_repo.record_attempt(identifier, "register", success=True)
 
         return (
@@ -331,8 +314,6 @@ class AuthService(BaseService):
             ),
             VerificationEmailEvent(email=data.email, username=data.username, token=token),
         )
-
-    # ===== Login =====
 
     async def login(
         self,
@@ -354,23 +335,19 @@ class AuthService(BaseService):
         """
         identifier = data.email.lower()
 
-        # Rate limiting
         await self.check_rate_limit(identifier, "login")
         if client_ip:
             await self.check_rate_limit(client_ip, "login")
 
-        # Fetch user
         user_data = await self._auth_repo.get_user_by_email(data.email)
         if not user_data:
             await self._auth_repo.record_attempt(identifier, "login", success=False)
             raise InvalidCredentialsError(identifier)
 
-        # Verify password
         if not self.verify_password(data.password, user_data["password_hash"]):
             await self._auth_repo.record_attempt(identifier, "login", success=False)
             raise InvalidCredentialsError(identifier)
 
-        # Record success
         await self._auth_repo.record_attempt(identifier, "login", success=True)
 
         return LoginResponse(
@@ -383,8 +360,6 @@ class AuthService(BaseService):
                 is_mod=user_data["is_mod"],
             )
         )
-
-    # ===== Email Verification =====
 
     async def verify_email(self, data: EmailVerifyRequest) -> VerifyEmailResponse:
         """Verify user's email address.
@@ -407,23 +382,18 @@ class AuthService(BaseService):
         if not token_data:
             raise TokenInvalidError("verification")
 
-        # Check if already used
         if token_data["used_at"] is not None:
             raise TokenAlreadyUsedError("verification")
 
-        # Check if expired
         if token_data["expires_at"] < datetime.now(timezone.utc):
             raise TokenExpiredError("verification")
 
-        # Check if already verified
         if token_data["email_verified_at"] is not None:
             raise EmailAlreadyVerifiedError()
 
-        # Transactional verification
         async with self._pool.acquire() as conn, conn.transaction():
             await self._auth_repo.mark_token_used(token_hash, conn=conn)  # type: ignore[arg-type]
             await self._auth_repo.mark_email_verified(token_data["user_id"], conn=conn)  # type: ignore[arg-type]
-            # Invalidate any other verification tokens
             await self._auth_repo.invalidate_user_tokens(token_data["user_id"], "verification", conn=conn)  # type: ignore[arg-type]
 
         return VerifyEmailResponse(
@@ -456,29 +426,22 @@ class AuthService(BaseService):
         """
         identifier = email.lower()
 
-        # Rate limiting
         await self.check_rate_limit(identifier, "verification_resend")
         if client_ip:
             await self.check_rate_limit(client_ip, "verification_resend")
 
-        # Fetch user
         user_data = await self._auth_repo.get_user_by_email(email)
         if not user_data:
             raise UserNotFoundError(email)
 
-        # Check if already verified
         if user_data["email_verified_at"] is not None:
             raise EmailAlreadyVerifiedError()
 
-        # Generate new token
         token, token_hash = self.generate_token()
         expires_at = datetime.now(timezone.utc) + timedelta(hours=VERIFICATION_TOKEN_EXPIRY_HOURS)
 
-        # Transactional token creation
         async with self._pool.acquire() as conn, conn.transaction():
-            # Invalidate old tokens
             await self._auth_repo.invalidate_user_tokens(user_data["user_id"], "verification", conn=conn)  # type: ignore[arg-type]
-            # Create new token
             await self._auth_repo.insert_email_token(
                 user_data["user_id"],
                 token_hash,
@@ -487,7 +450,6 @@ class AuthService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
 
-        # Record attempt
         await self._auth_repo.record_attempt(identifier, "verification_resend", success=True)
 
         return (
@@ -496,8 +458,6 @@ class AuthService(BaseService):
             ),
             VerificationEmailEvent(email=email, username=user_data["nickname"], token=token),
         )
-
-    # ===== Password Reset =====
 
     async def request_password_reset(
         self, data: PasswordResetRequest, client_ip: str | None = None
@@ -516,15 +476,12 @@ class AuthService(BaseService):
         """
         identifier = data.email.lower()
 
-        # Rate limiting
         await self.check_rate_limit(identifier, "password_reset")
         if client_ip:
             await self.check_rate_limit(client_ip, "password_reset")
 
-        # Fetch user (silently fail if not found)
         user_data = await self._auth_repo.get_user_by_email(data.email)
         if not user_data:
-            # Still record the attempt to prevent enumeration timing attacks
             await self._auth_repo.record_attempt(identifier, "password_reset", success=False)
             return (
                 PasswordResetRequestResponse(
@@ -533,15 +490,11 @@ class AuthService(BaseService):
                 None,
             )
 
-        # Generate token
         token, token_hash = self.generate_token()
         expires_at = datetime.now(timezone.utc) + timedelta(hours=PASSWORD_RESET_TOKEN_EXPIRY_HOURS)
 
-        # Transactional token creation
         async with self._pool.acquire() as conn, conn.transaction():
-            # Invalidate old tokens
             await self._auth_repo.invalidate_user_tokens(user_data["user_id"], "password_reset", conn=conn)  # type: ignore[arg-type]
-            # Create new token
             await self._auth_repo.insert_email_token(
                 user_data["user_id"],
                 token_hash,
@@ -550,7 +503,6 @@ class AuthService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
 
-        # Record attempt
         await self._auth_repo.record_attempt(identifier, "password_reset", success=True)
 
         return (
@@ -579,7 +531,6 @@ class AuthService(BaseService):
             TokenAlreadyUsedError: If token has already been used.
             PasswordValidationError: If new password doesn't meet requirements.
         """
-        # Validate new password
         self.validate_password(data.password)
 
         token_hash = self.hash_token(data.token)
@@ -588,24 +539,18 @@ class AuthService(BaseService):
         if not token_data:
             raise TokenInvalidError("password_reset")
 
-        # Check if already used
         if token_data["used_at"] is not None:
             raise TokenAlreadyUsedError("password_reset")
 
-        # Check if expired
         if token_data["expires_at"] < datetime.now(timezone.utc):
             raise TokenExpiredError("password_reset")
 
-        # Hash new password
         password_hash = self.hash_password(data.password)
 
-        # Transactional password update
         async with self._pool.acquire() as conn, conn.transaction():
             await self._auth_repo.mark_token_used(token_hash, conn=conn)  # type: ignore[arg-type]
             await self._auth_repo.update_password(token_data["user_id"], password_hash, conn=conn)  # type: ignore[arg-type]
-            # Invalidate any other password reset tokens
             await self._auth_repo.invalidate_user_tokens(token_data["user_id"], "password_reset", conn=conn)  # type: ignore[arg-type]
-            # Revoke all remember tokens for security
             await self._auth_repo.revoke_remember_tokens(token_data["user_id"], conn=conn)  # type: ignore[arg-type]
 
         return PasswordResetConfirmResponse(
@@ -618,8 +563,6 @@ class AuthService(BaseService):
                 is_mod=token_data["is_mod"],
             ),
         )
-
-    # ===== Session Management =====
 
     async def session_read(self, session_id: str) -> SessionReadResponse:
         """Read session payload.
@@ -705,8 +648,6 @@ class AuthService(BaseService):
         count = await self._auth_repo.delete_user_sessions(user_id, except_session_id)
         return DestroyUserSessionsResponse(destroyed_count=count)
 
-    # ===== Remember Token Management =====
-
     async def create_remember_token(
         self,
         user_id: int,
@@ -763,8 +704,6 @@ class AuthService(BaseService):
         count = await self._auth_repo.revoke_remember_tokens(user_id)
         model = RevokeRememberTokensResponse(revoked_count=count)
         return model
-
-    # ===== User Status =====
 
     async def get_auth_status(self, user_id: int) -> EmailAuthStatus:
         """Get email authentication status for a user.

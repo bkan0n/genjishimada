@@ -56,7 +56,6 @@ class NotificationsRepository(BaseRepository):
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id
         """
-        # Convert metadata dict to JSON string for asyncpg
         metadata_json = json.dumps(metadata) if metadata is not None else None
         try:
             event_id = await _conn.fetchval(query, user_id, event_type, title, body, metadata_json)

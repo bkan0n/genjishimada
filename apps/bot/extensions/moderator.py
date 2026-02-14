@@ -89,7 +89,6 @@ class ModeratorCog(BaseCog):
         """
         await itx.response.defer(ephemeral=True)
 
-        # Check mod permissions
         assert isinstance(itx.user, discord.Member) and itx.guild
         is_mod = (
             itx.user.get_role(itx.client.config.roles.admin.mod) is not None
@@ -99,12 +98,10 @@ class ModeratorCog(BaseCog):
         if not is_mod:
             raise UserFacingError("This command is for moderators only. Use `/suggest-edit` instead.")
 
-        # Fetch map data
         map_data = await itx.client.api.get_map(code=code)
         if not map_data:
             raise UserFacingError(f"Map `{code}` not found.")
 
-        # Start wizard in mod mode
         view = MapEditWizardView(map_data, is_mod=True)
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
@@ -328,9 +325,7 @@ class ModeratorCog(BaseCog):
     async def manage_records(
         self,
         itx: GenjiItx,
-        # optional code <- lists all records for code or optionally filtered by a single user
         code: app_commands.Transform[OverwatchCode, transformers.CodeAllTransformer] | None,
-        # optional user <- lists all records for user or optionally filtered by a single code
         user: app_commands.Transform[int, transformers.UserTransformer] | None,
         verification_status: Literal["Unverified", "Verified", "All"] = "All",
         latest_only: bool = True,
@@ -346,20 +341,18 @@ class ModeratorCog(BaseCog):
         """
         await itx.response.defer(ephemeral=True)
 
-        # Fetch all records with filters
         records = await itx.client.api.get_records_filtered(
             code=code,
             user_id=user,
             verification_status=verification_status,
             latest_only=latest_only,
-            page_size=0,  # Fetch all records
+            page_size=0,
             page_number=1,
         )
 
         if not records:
             raise UserFacingError("No records found matching the specified filters.")
 
-        # Create and show the mod record view
         view = ModRecordManagementView(records, code, user, verification_status, latest_only)
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
@@ -399,7 +392,6 @@ class EditableField(str, Enum):
     TAGS = "tags"
     MEDALS = "medals"
     CUSTOM_BANNER = "custom_banner"
-    # Mod-only fields (still editable but typically mod-controlled)
     HIDDEN = "hidden"
     ARCHIVED = "archived"
     OFFICIAL = "official"
@@ -556,7 +548,7 @@ class FieldSelectionSelect(ui.Select["MapEditWizardView"]):
             placeholder="Select fields to edit...",
             min_values=1,
             max_values=len(options),
-            options=options[:25],  # Discord limit
+            options=options[:25],
         )
 
     @staticmethod
@@ -600,7 +592,6 @@ class TextInputModal(ui.Modal):
         self.submitted_value: str | int | None = None
         self.original_map_code = original_map_code
 
-        # Configure based on field type
         style = TextStyle.paragraph if field == EditableField.DESCRIPTION else TextStyle.short
         max_length = 1000 if field == EditableField.DESCRIPTION else 100
 
@@ -611,7 +602,7 @@ class TextInputModal(ui.Modal):
             style=style,
             max_length=max_length,
             default=default,
-            required=False,  # Allow clearing
+            required=False,
         )
         self.add_item(self.value_input)
 
@@ -632,7 +623,6 @@ class TextInputModal(ui.Modal):
                 raise UserFacingError("Code must be alphanumeric.")
             new_code = raw_value.upper() if raw_value else None
 
-            # Check if the new code already exists (and is different from the original)
             if new_code and new_code != self.original_map_code:
                 existing_map = await itx.client.api.map_exists(code=new_code)
                 if existing_map:
@@ -692,13 +682,11 @@ class MedalsModal(ui.Modal):
         silver_str = self.silver_input.value.strip()
         bronze_str = self.bronze_input.value.strip()
 
-        # If all empty, clear medals
         if not any([gold_str, silver_str, bronze_str]):
             self.submitted_medals = None
             self.stop()
             return
 
-        # All must be provided
         if not all([gold_str, silver_str, bronze_str]):
             raise UserFacingError("All three medal thresholds must be provided, or all must be empty.")
 
@@ -778,7 +766,7 @@ class MapNameSelect(ui.Select["MapEditWizardView"]):
             page: The current page (0-indexed).
         """
         all_maps = list(get_args(OverwatchMap))
-        all_maps.sort()  # Sort alphabetically for easier navigation
+        all_maps.sort()
 
         start_idx = page * _PAGINATED_SELECT_PAGE_SIZE
         end_idx = start_idx + _PAGINATED_SELECT_PAGE_SIZE
@@ -795,7 +783,6 @@ class MapNameSelect(ui.Select["MapEditWizardView"]):
         self.view.state.set_change(EditableField.MAP_NAME, self.values[0])
         if not self.view.state.advance_field():
             self.view.state.current_step = "reason" if not self.view.state.is_mod else "review"
-        # Reset page state when selection is made
         self.view.map_name_page = 0
         view = self.view
         self.view.rebuild()
@@ -1008,7 +995,6 @@ class ModBooleanToggleButton(ui.Button["MapEditWizardView"]):
             itx: The interaction context.
         """
         new_value = not self.current_value
-        # One-way semantics are enforced at submit-time: only act when True.
         self.view.state.set_mod_action(self.field, new_value)
         if not self.view.state.advance_field():
             self.view.state.current_step = "review"
@@ -1200,7 +1186,6 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
         state = self.view.state
 
         if self.is_mod:
-            # Apply mod-only actions (not patch fields)
             playtest_difficulty = cast(
                 DifficultyAll | None,
                 state.get_mod_action(EditableField.SEND_TO_PLAYTEST),
@@ -1219,7 +1204,6 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
                     state.map_data.code,
                     QualityValueRequest(value=override_rating),
                 )
-            # Handle archive separately - use dedicated endpoint for newsfeed
             if "archived" in state.pending_changes:
                 archived_value = state.pending_changes["archived"]
                 if archived_value:
@@ -1227,23 +1211,19 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
                 else:
                     await itx.client.api.unarchive_map(state.map_data.code)
 
-                # Remove archived from pending changes so it's not sent to patch
                 remaining_changes = {k: v for k, v in state.pending_changes.items() if k != "archived"}
 
-                # Apply remaining changes if any
                 if remaining_changes:
                     state.pending_changes = remaining_changes
                     patch = self._build_patch_request(state)
                     await itx.client.api.edit_map(state.map_data.code, patch)
             else:
-                # No archive change, apply normally
                 patch = self._build_patch_request(state)
                 await itx.client.api.edit_map(state.map_data.code, patch)
             view = LayoutView()
             view.add_item(ui.Container(ui.TextDisplay(f"✅ Changes applied to **{state.map_data.code}**!")))
             await itx.edit_original_response(view=view)
         else:
-            # Submit for approval
             request = self._build_edit_request(state, itx.user.id)
             try:
                 await itx.client.api.create_map_edit_request(request)
@@ -1304,7 +1284,7 @@ class MapEditWizardView(BaseView):
         self.state = MapEditWizardState(map_data, is_mod)
         self.submitted = False
         self.cancelled = False
-        self.map_name_page = 0  # Track current page for map name pagination
+        self.map_name_page = 0
         self.rebuild()
 
     def rebuild(self) -> None:  # noqa: PLR0912, PLR0915
@@ -1314,7 +1294,6 @@ class MapEditWizardView(BaseView):
         state = self.state
         step = state.current_step
 
-        # Build container based on step
         container = ui.Container()
 
         if step == "select_fields":
@@ -1332,7 +1311,6 @@ class MapEditWizardView(BaseView):
         elif step == "edit_field":
             field = state.current_field
             if field is None:
-                # Shouldn't happen, but handle gracefully
                 state.current_step = "reason" if not state.is_mod else "review"
                 self.rebuild()
                 return
@@ -1348,19 +1326,16 @@ class MapEditWizardView(BaseView):
             )
             container.add_item(ui.Separator())
 
-            # Add appropriate editor based on field type
             if field == EditableField.DIFFICULTY:
                 container.add_item(ui.ActionRow(DifficultySelect(cast(DifficultyAll | None, current_value))))
             elif field == EditableField.CATEGORY:
                 container.add_item(ui.ActionRow(CategorySelect(cast(MapCategory | None, current_value))))
             elif field == EditableField.MAP_NAME:
-                # Paginated map name select
                 map_select = MapNameSelect(
                     cast(OverwatchMap | None, current_value),
                     page=self.map_name_page,
                 )
                 container.add_item(ui.ActionRow(map_select))
-                # Add pagination buttons
                 prev_disabled = self.map_name_page <= 0
                 next_disabled = self.map_name_page >= map_select.total_pages - 1
                 container.add_item(
@@ -1459,7 +1434,6 @@ class MapEditWizardView(BaseView):
                 lines.append(f"  ~~{self._format_value(old_value)}~~ → {self._format_value(new_value)}")
                 lines.append("")
 
-        # Mod-only actions review
         if state.is_mod and state.mod_actions:
             playtest = cast(DifficultyAll | None, state.get_mod_action(EditableField.SEND_TO_PLAYTEST))
             if playtest is not None:
@@ -1560,7 +1534,6 @@ class MapEditRejectButton(_MapEditVerificationButton):
 
     async def callback(self, itx: GenjiItx) -> None:
         """Handle reject button click to deny the edit request."""
-        # Open modal for rejection reason
         modal = ReasonModal()
         modal.reason_input.label = "Rejection Reason"
         modal.reason_input.placeholder = "Explain why this edit was rejected..."
@@ -1635,9 +1608,6 @@ class MapEditVerificationView(ui.LayoutView):
             accent_color=0x5865F2,
         )
         self.add_item(container)
-
-
-# === Moderation Record Management Views ===
 
 
 class TimeChangeModal(ui.Modal):
@@ -1766,7 +1736,6 @@ class ChangeTimeButton(ModRecordButton):
             ephemeral=True,
         )
 
-        # Refresh the view
         await self.view.refresh_records(itx)
 
 
@@ -1793,7 +1762,6 @@ class VerifyButton(ModRecordButton):
             content=f"✅ Verified {self.record.name}'s run on {self.record.code}.",
         )
 
-        # Refresh the view
         await self.view.refresh_records(itx)
 
 
@@ -1820,7 +1788,6 @@ class UnverifyButton(ModRecordButton):
             content=f"❌ Unverified {self.record.name}'s run on {self.record.code}.",
         )
 
-        # Refresh the view
         await self.view.refresh_records(itx)
 
 
@@ -1856,7 +1823,6 @@ class MarkSuspiciousButton(ModRecordButton):
             ephemeral=True,
         )
 
-        # Refresh the view
         await self.view.refresh_records(itx)
 
 
@@ -1883,7 +1849,6 @@ class UnmarkSuspiciousButton(ModRecordButton):
             content=f"✅ Unmarked {self.record.name}'s run on {self.record.code} as suspicious.",
         )
 
-        # Refresh the view
         await self.view.refresh_records(itx)
 
 
@@ -1920,7 +1885,7 @@ class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
             user_id=self.user_filter,
             verification_status=self.verification_filter,
             latest_only=self.latest_only,
-            page_size=0,  # Fetch all records
+            page_size=0,
             page_number=1,
         )
 
@@ -1946,7 +1911,6 @@ class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
         res = []
 
         for record in records:
-            # Build record info text
             status_emoji = "✅" if record.verified else "❌"
             suspicious_emoji = "⚠️" if record.suspicious else ""
             info_text = (
@@ -1959,7 +1923,6 @@ class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
                 f"**Legacy:** {record.legacy}"
             )
 
-            # Build action buttons for this record
             action_buttons: list[ui.Button] = [ChangeTimeButton(record)]
 
             if record.verified:
@@ -1972,7 +1935,6 @@ class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
             else:
                 action_buttons.append(MarkSuspiciousButton(record))
 
-            # Add text display and action row for this record
             section = (
                 ui.TextDisplay(info_text),
                 ui.ActionRow(*action_buttons),
@@ -1999,15 +1961,12 @@ class MapEditHandler(BaseHandler):
         """Handle new map edit request - post to verification queue."""
         log.debug(f"[RabbitMQ] Processing map edit created: {event.edit_request_id}")
 
-        # Fetch the full submission data
         data = await self.bot.api.get_map_edit_submission(event.edit_request_id)
         original_map_data = await self.bot.api.get_map(code=data.code)
 
-        # Create and send the verification view
         view = MapEditVerificationView(data, original_map_data)
         message = await self.verification_channel.send(view=view)
 
-        # Store message ID
         await self.bot.api.set_map_edit_message_id(
             event.edit_request_id,
             MapEditSetMessageIdRequest(message_id=message.id),
@@ -2024,10 +1983,8 @@ class MapEditHandler(BaseHandler):
         """
         log.debug(f"[RabbitMQ] Processing map edit resolved: {event.edit_request_id}")
 
-        # Get the edit request details for the message_id
         edit_data = await self.bot.api.get_map_edit_request(event.edit_request_id)
 
-        # Delete verification queue message
         if edit_data.message_id:
             try:
                 msg = self.verification_channel.get_partial_message(edit_data.message_id)

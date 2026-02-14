@@ -8,9 +8,11 @@ Test Coverage:
 - Archive affects queries (1 test)
 - Updated_at changes (1 test)
 - Transaction commit (1 test)
-- Archive returns count (1 test)
+- Archive in-progress playtest sets rejected + completed (1 test)
+- Archive in-progress playtest returns affected thread IDs (1 test)
+- Unarchive does not revert rejected/completed (1 test)
 
-Total: 8 tests (reduced from 18)
+Total: 10 tests
 """
 
 import asyncpg
@@ -84,6 +86,7 @@ async def create_test_map(
     code: str,
     *,
     archived: bool = False,
+    playtesting: str = "Approved",
 ) -> int:
     """Helper to create a test map."""
     async with db_pool.acquire() as conn:
@@ -101,12 +104,35 @@ async def create_test_map(
             "Classic",
             10,
             True,
-            "Approved",
+            playtesting,
             "Medium",
             5.0,
             archived,
         )
     return map_id
+
+
+async def create_test_playtest(
+    db_pool: asyncpg.Pool,
+    map_id: int,
+    thread_id: int,
+    *,
+    completed: bool = False,
+) -> int:
+    """Helper to create a playtest meta row."""
+    async with db_pool.acquire() as conn:
+        playtest_id = await conn.fetchval(
+            """
+            INSERT INTO playtests.meta (thread_id, map_id, initial_difficulty, completed)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id
+            """,
+            thread_id,
+            map_id,
+            5.0,
+            completed,
+        )
+    return playtest_id
 
 
 # ==============================================================================
@@ -276,3 +302,90 @@ class TestSetArchiveStatusCore:
             result = await conn.fetchrow("SELECT archived FROM core.maps WHERE code = $1", unique_map_code)
 
         assert result["archived"] is True
+
+
+# ==============================================================================
+# PLAYTEST CANCELLATION ON ARCHIVE TESTS
+# ==============================================================================
+
+
+class TestArchiveInProgressPlaytest:
+    """Test that archiving a map with an active playtest cancels the playtest."""
+
+    @pytest.mark.asyncio
+    async def test_archive_in_progress_sets_rejected_and_completed(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Archiving an In Progress map sets playtesting=Rejected and completed=TRUE."""
+        thread_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+        map_id = await create_test_map(db_pool, unique_map_code, playtesting="In Progress")
+        await create_test_playtest(db_pool, map_id, thread_id)
+
+        await maps_repo.set_archive_status([unique_map_code], archived=True)
+
+        async with db_pool.acquire() as conn:
+            map_row = await conn.fetchrow(
+                "SELECT archived, playtesting FROM core.maps WHERE code = $1",
+                unique_map_code,
+            )
+            playtest_row = await conn.fetchrow(
+                "SELECT completed FROM playtests.meta WHERE thread_id = $1",
+                thread_id,
+            )
+
+        assert map_row["archived"] is True
+        assert map_row["playtesting"] == "Rejected"
+        assert playtest_row["completed"] is True
+
+    @pytest.mark.asyncio
+    async def test_archive_in_progress_returns_affected_threads(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Archiving an In Progress map returns affected thread IDs."""
+        thread_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+        map_id = await create_test_map(db_pool, unique_map_code, playtesting="In Progress")
+        await create_test_playtest(db_pool, map_id, thread_id)
+
+        result = await maps_repo.set_archive_status([unique_map_code], archived=True)
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["code"] == unique_map_code
+        assert result[0]["thread_id"] == thread_id
+
+    @pytest.mark.asyncio
+    async def test_unarchive_does_not_revert_rejected(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Unarchiving does not revert playtesting=Rejected or completed=TRUE."""
+        thread_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+        map_id = await create_test_map(db_pool, unique_map_code, playtesting="In Progress")
+        await create_test_playtest(db_pool, map_id, thread_id)
+
+        # Archive first (triggers rejection)
+        await maps_repo.set_archive_status([unique_map_code], archived=True)
+        # Unarchive
+        await maps_repo.set_archive_status([unique_map_code], archived=False)
+
+        async with db_pool.acquire() as conn:
+            map_row = await conn.fetchrow(
+                "SELECT archived, playtesting FROM core.maps WHERE code = $1",
+                unique_map_code,
+            )
+            playtest_row = await conn.fetchrow(
+                "SELECT completed FROM playtests.meta WHERE thread_id = $1",
+                thread_id,
+            )
+
+        assert map_row["archived"] is False
+        assert map_row["playtesting"] == "Rejected"
+        assert playtest_row["completed"] is True

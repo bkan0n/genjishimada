@@ -47,19 +47,15 @@ class TagsSearchFilters(Struct, omit_defaults=True):
     """
 
     guild_id: int
-    # filters
-    name: str | None = None  # raw name
-    fuzzy: bool = False  # fuzzy (pg_trgm)
+    name: str | None = None
+    fuzzy: bool = False
     include_aliases: bool = True
     only_aliases: bool = False
     owner_id: int | None = None
-    # special modes
-    random: bool = False  # random tag
-    by_id: int | None = None  # lookup by tag_id
-    # output controls
-    include_content: bool = False  # return content
+    random: bool = False
+    by_id: int | None = None
+    include_content: bool = False
     include_rank: bool = False
-    # sorting & paging
     sort_by: Literal["name", "uses", "created_at"] = "name"
     sort_dir: Literal["asc", "desc"] = "asc"
     limit: int = 20
@@ -102,8 +98,8 @@ class TagsSearchResponse(Struct):
     """
 
     items: list[TagRowDTO]
-    total: int | None = None  # optionally returned for paging UIs
-    suggestions: list[str] | None = None  # for fuzzy fallbacks
+    total: int | None = None
+    suggestions: list[str] | None = None
 
 
 class OpBase(Struct, tag_field="op"):

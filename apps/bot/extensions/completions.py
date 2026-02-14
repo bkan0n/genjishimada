@@ -1101,7 +1101,6 @@ class CompletionsCog(BaseCog):
             bot (Genji): The bot instance with access to the API and Discord.
         """
         await self.bot.rabbit.wait_until_drained()
-        await self.bot.rabbit.wait_until_drained()
         pending = await self.bot.api.get_pending_verifications()
         for p in pending:
             data = await self.bot.api.get_completion_submission(p.id)

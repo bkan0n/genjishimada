@@ -113,7 +113,6 @@ class XPHandler(BaseHandler):
         multiplier = await self.bot.api.get_xp_multiplier()
         amount = floor(event.amount * multiplier)
 
-        # XP Gain notification (channel ping + web tray + potential DM)
         await self.bot.notifications.notify_with_channel_ping(
             channel=self.xp_channel,
             user_id=event.user_id,
@@ -134,7 +133,6 @@ class XPHandler(BaseHandler):
             await self.bot.api.grant_active_key_to_user(event.user_id)
             await self._update_xp_roles_for_user(event.user_id, xp_data.old_main_tier_name, xp_data.new_main_tier_name)
 
-            # Lootbox earned DM notification
             await self.bot.notifications.notify_dm_only(
                 user_id=event.user_id,
                 event_type=NotificationEventType.LOOTBOX_EARNED,
@@ -147,7 +145,6 @@ class XPHandler(BaseHandler):
                 metadata={"old_rank": old_rank, "new_rank": new_rank, "reason": "rank_up"},
             )
 
-            # Rank up channel ping notification
             await self.bot.notifications.notify_with_channel_ping(
                 channel=self.xp_channel,
                 user_id=event.user_id,
@@ -175,7 +172,6 @@ class XPHandler(BaseHandler):
                 event.user_id, xp_data.old_prestige_level, xp_data.new_prestige_level
             )
 
-            # Prestige lootbox DM notification
             await self.bot.notifications.notify_dm_only(
                 user_id=event.user_id,
                 event_type=NotificationEventType.LOOTBOX_EARNED,
@@ -192,7 +188,6 @@ class XPHandler(BaseHandler):
                 },
             )
 
-            # Prestige channel ping notification
             await self.bot.notifications.notify_with_channel_ping(
                 channel=self.xp_channel,
                 user_id=event.user_id,

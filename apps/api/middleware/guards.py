@@ -4,8 +4,6 @@ from litestar.handlers import BaseRouteHandler
 
 from middleware.auth import AuthToken
 
-# Paths that should skip authentication entirely
-# Must match the exclude list in the auth middleware (app.py)
 AUTH_EXCLUDED_PATHS = frozenset({"/docs", "/schema", "/healthcheck"})
 
 

@@ -110,7 +110,7 @@ genjishimada/
 │   └── bot/          # Discord bot
 │       ├── core/     # Bot core (Genji class)
 │       ├── extensions/ # Feature modules (cogs)
-│       └── docs/     # Bot-specific docs (legacy)
+│       └── utilities/ # Shared bot utilities
 ├── libs/
 │   └── sdk/          # Shared msgspec models
 │       └── src/genjishimada_sdk/

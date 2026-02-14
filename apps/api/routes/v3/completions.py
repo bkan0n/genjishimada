@@ -176,12 +176,13 @@ class CompletionsController(Controller):
         self,
         svc: CompletionsService,
         request: Request,
+        notifications: NotificationsService,
         record_id: int,
         data: CompletionVerificationUpdateRequest,
     ) -> JobStatusResponse:
         """Verify or reject a completion."""
         try:
-            return await svc.verify_completion(request, record_id, data)
+            return await svc.verify_completion(request, record_id, data, notifications=notifications)
         except CompletionNotFoundError as e:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         except DuplicateVerificationError as e:

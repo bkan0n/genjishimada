@@ -308,7 +308,6 @@ class LootboxRepository(BaseRepository):
                   AND key_type = $2::text \
                 """
         result = await _conn.execute(query, user_id, key_type)
-        # Result is like "DELETE 1" or "DELETE 0"
         return result != "DELETE 0"
 
     async def check_user_has_reward(
@@ -402,6 +401,32 @@ class LootboxRepository(BaseRepository):
                 ON CONFLICT (id) DO UPDATE SET coins = users.coins + excluded.coins \
                 """
         await _conn.execute(query, user_id, amount)
+
+    async def deduct_user_coins(
+        self,
+        user_id: int,
+        amount: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int | None:
+        """Deduct coins if balance is sufficient, return new balance.
+
+        Args:
+            user_id: Target user ID.
+            amount: Amount to deduct.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            New balance, or None if insufficient.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+                UPDATE core.users
+                SET coins = coins - $2
+                WHERE id = $1 AND coins >= $2
+                RETURNING coins
+                """
+        return await _conn.fetchval(query, user_id, amount)
 
     async def insert_user_key(
         self,

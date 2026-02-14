@@ -170,7 +170,6 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
     """Handle application command errors."""
     exception = getattr(error, "original", error)
 
-    # Set user context before capturing the exception
     with sentry_sdk.isolation_scope() as scope:
         scope.set_user(
             {
@@ -180,7 +179,6 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
         )
         scope.set_tag("command", itx.command.name if itx.command else "unknown")
 
-        # Tag UserFacingErrors so they can be filtered out in Sentry
         if isinstance(exception, UserFacingError):
             scope.set_tag("user_facing", True)
             scope.set_level("info")  # Set as info level instead of error
@@ -188,7 +186,6 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
         if itx.namespace:
             scope.set_context("Command Args", {"Args": dict(itx.namespace.__dict__.items())})
 
-        # Capture the exception with all the context
         event_id = sentry_sdk.capture_exception(exception)
 
     if isinstance(exception, UserFacingError):

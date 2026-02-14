@@ -666,7 +666,6 @@ class AuthRepository(BaseRepository):
         if not row:
             return None
 
-        # Update last_used_at
         await _conn.execute(
             "UPDATE users.remember_tokens SET last_used_at = now() WHERE token_hash = $1",
             token_hash,

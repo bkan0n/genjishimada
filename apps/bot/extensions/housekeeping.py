@@ -142,8 +142,7 @@ class HousekeepingCog(BaseCog):
                 playtest_data = await self.bot.api.get_map(playtest_thread_id=thread_id)
                 file = await self.bot.api.get_plot_file(code=playtest_data.code)
                 view = PlaytestComponentsV2View(data=playtest_data, thread_id=thread_id)
-                playtest = await self.bot.api.get_playtest(thread_id)
-                cog.playtest_views[playtest.id] = view
+                cog.playtest_views[thread_id] = view
                 await message.edit(view=view, attachments=[file], content=None)
 
         await itx.edit_original_response(content="The view has been repaired.")
