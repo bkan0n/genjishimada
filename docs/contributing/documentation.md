@@ -120,3 +120,31 @@ def process(data):  # (1)!
 
 1. Multiply the input by 2
 ````
+
+## Documentation Workflow
+
+1. Create a branch from `main`.
+2. Commit documentation updates under `docs/` and update `mkdocs.yml` when navigation changes.
+3. Push your branch and open a pull request targeting `main`.
+4. Run a strict local build before requesting review:
+
+```bash
+uv run --project apps/api python scripts/generate_openapi.py
+uv run --project docs mkdocs build --strict
+```
+
+## Publishing to GitHub Pages
+
+Documentation deployment is automated by `.github/workflows/docs.yml`.
+
+- Trigger: Pushes to `main` that change `docs/**`, `mkdocs.yml`, or API files used by OpenAPI generation.
+- Build: Installs dependencies, generates `docs/openapi.json`, then runs `mkdocs build --strict`.
+- Deploy: Publishes the site with `mkdocs gh-deploy --force`.
+
+You can also trigger this workflow manually from GitHub Actions using `workflow_dispatch`.
+
+## Writing Guidelines
+
+- Keep content architecture-focused and link to source files when implementation detail matters.
+- Update queue, service, and operational tables when behavior changes.
+- Store documentation assets under `docs/assets/` and reference them with relative links.
