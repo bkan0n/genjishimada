@@ -8,6 +8,8 @@ from uuid import UUID
 
 from msgspec import Struct
 
+from .utilities import get_reward_url
+
 __all__ = (
     "GenerateRotationRequest",
     "GenerateRotationResponse",
@@ -65,6 +67,12 @@ class RotationItemResponse(Struct):
     rarity: str
     price: int
     owned: bool = False
+
+    url: str | None = None
+
+    def __post_init__(self) -> None:
+        """Compute the asset URL for the reward."""
+        self.url = get_reward_url(self.item_type, self.item_name)
 
 
 class RotationResponse(Struct):
