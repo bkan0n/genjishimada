@@ -13,6 +13,7 @@ from genjishimada_sdk.completions import (
     CompletionSubmissionJobResponse,
     CompletionSubmissionResponse,
     CompletionVerificationUpdateRequest,
+    DashboardCompletionResponse,
     PendingVerificationResponse,
     QualityUpdateRequest,
     SuspiciousCompletionCreateRequest,
@@ -264,6 +265,21 @@ class CompletionsController(Controller):
     ) -> list[CompletionResponse]:
         """Get all completions that are verified sorted by most recent."""
         return await svc.get_all_completions(page_size, page_number)
+
+    @get(
+        path="/dashboard",
+        summary="Get User Dashboard Completions",
+        description="Get a user's recent completions with verification status for the dashboard.",
+    )
+    async def get_dashboard_completions(
+        self,
+        svc: CompletionsService,
+        user_id: int,
+        page_size: int = 10,
+        page_number: int = 1,
+    ) -> list[DashboardCompletionResponse]:
+        """Get completions for a user's dashboard."""
+        return await svc.get_dashboard_completions(user_id, page_size, page_number)
 
     @get(path="/{code:str}/wr-xp-check", include_in_schema=False)
     async def check_for_previous_world_record_xp(
