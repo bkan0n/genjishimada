@@ -607,6 +607,9 @@ async def create_test_completion(asyncpg_pool: asyncpg.Pool):
             "time": 30.5,
             "screenshot": "https://example.com/screenshot.png",
             "completion": True,
+            "message_id": None,
+            "verified_by": None,
+            "reason": None,
         }
 
         # Apply overrides
@@ -616,9 +619,10 @@ async def create_test_completion(asyncpg_pool: asyncpg.Pool):
             completion_id = await conn.fetchval(
                 """
                 INSERT INTO core.completions (
-                    user_id, map_id, verified, legacy, time, screenshot, completion
+                    user_id, map_id, verified, legacy, time, screenshot,
+                    completion, message_id, verified_by, reason
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 RETURNING id
                 """,
                 user_id,
@@ -628,6 +632,9 @@ async def create_test_completion(asyncpg_pool: asyncpg.Pool):
                 data["time"],
                 data["screenshot"],
                 data["completion"],
+                data["message_id"],
+                data["verified_by"],
+                data["reason"],
             )
         return completion_id
 
