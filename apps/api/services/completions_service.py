@@ -20,6 +20,7 @@ from genjishimada_sdk.completions import (
     CompletionSubmissionJobResponse,
     CompletionSubmissionResponse,
     CompletionVerificationUpdateRequest,
+    DashboardCompletionResponse,
     FailedAutoverifyEvent,
     OcrResponse,
     PendingVerificationResponse,
@@ -673,6 +674,13 @@ class CompletionsService(BaseService):
         """Get all completions from most recent."""
         rows = await self._completions_repo.fetch_all_completions(page_size, page_number)
         return msgspec.convert(rows, list[CompletionResponse])
+
+    async def get_dashboard_completions(
+        self, user_id: int, page_size: int, page_number: int
+    ) -> list[DashboardCompletionResponse]:
+        """Get completions for a user's dashboard with verification status."""
+        rows = await self._completions_repo.fetch_dashboard_completions(user_id, page_size, page_number)
+        return msgspec.convert(rows, list[DashboardCompletionResponse])
 
     async def set_quality_vote_for_map_code(self, code: OverwatchCode, user_id: int, quality: int) -> None:
         """Set the quality vote for a map code per user.
