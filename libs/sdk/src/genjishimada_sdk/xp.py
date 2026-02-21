@@ -11,6 +11,7 @@ __all__ = (
     "XpGrantEvent",
     "XpGrantRequest",
     "XpGrantResponse",
+    "XpSummaryResponse",
 )
 
 XP_TYPES = Literal["Map Submission", "Playtest", "Guide", "Completion", "Record", "World Record", "Other"]
@@ -99,6 +100,42 @@ class PlayersPerSkillTierResponse(Struct):
 
     tier: str
     amount: int
+
+
+class XpSummaryResponse(Struct):
+    """Complete XP progression summary for a user.
+
+    Attributes:
+        xp: Current total XP.
+        raw_tier: Absolute tier count (xp / 100).
+        normalized_tier: Tier within current prestige ((xp / 100) % 100).
+        prestige_level: Prestige cycle count ((xp / 100) / 100).
+        current_main_tier_name: Current main tier label.
+        current_sub_tier_name: Current sub-tier label.
+        current_full_tier_name: Combined current tier label.
+        next_main_tier_name: Next main tier label.
+        next_sub_tier_name: Next sub-tier label.
+        next_full_tier_name: Combined next tier label.
+        next_sub_tier_xp_required: Remaining XP to reach next sub-tier.
+        next_sub_tier_xp_total: Absolute XP threshold for next sub-tier.
+        next_main_tier_xp_required: Remaining XP to reach next main tier.
+        next_main_tier_xp_total: Absolute XP threshold for next main tier.
+    """
+
+    xp: int
+    raw_tier: int
+    normalized_tier: int
+    prestige_level: int
+    current_main_tier_name: str
+    current_sub_tier_name: str
+    current_full_tier_name: str
+    next_main_tier_name: str
+    next_sub_tier_name: str
+    next_full_tier_name: str
+    next_sub_tier_xp_required: int
+    next_sub_tier_xp_total: int
+    next_main_tier_xp_required: int
+    next_main_tier_xp_total: int
 
 
 class XpGrantEvent(Struct):

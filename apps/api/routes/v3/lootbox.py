@@ -13,11 +13,11 @@ from genjishimada_sdk.lootbox import (
     UserRewardResponse,
 )
 from genjishimada_sdk.maps import XPMultiplierRequest
-from genjishimada_sdk.xp import TierChangeResponse, XpGrantRequest, XpGrantResponse
+from genjishimada_sdk.xp import TierChangeResponse, XpGrantRequest, XpGrantResponse, XpSummaryResponse
 from litestar.di import Provide
 from litestar.params import Body
 from litestar.response import Response
-from litestar.status_codes import HTTP_200_OK, HTTP_204_NO_CONTENT, HTTP_400_BAD_REQUEST
+from litestar.status_codes import HTTP_200_OK, HTTP_204_NO_CONTENT, HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from repository.lootbox_repository import provide_lootbox_repository
 from services.exceptions.lootbox import InsufficientKeysError
@@ -343,6 +343,36 @@ class LootboxController(litestar.Controller):
             Coin amount.
         """
         return await lootbox_service.view_user_coins(user_id=user_id)
+
+    @litestar.get(
+        path="/users/{user_id:int}/xp-summary",
+        summary="Get User XP Summary",
+        description="Get a user's complete XP progression including current tier, next tier, and XP requirements.",
+    )
+    async def view_user_xp_summary(
+        self,
+        lootbox_service: LootboxService,
+        user_id: int,
+    ) -> XpSummaryResponse:
+        """Get a user's XP progression summary.
+
+        Args:
+            lootbox_service: Lootbox service.
+            user_id: Target user ID.
+
+        Returns:
+            XP summary with current and next tier info.
+
+        Raises:
+            CustomHTTPException: 404 if user does not exist.
+        """
+        result = await lootbox_service.view_user_xp_summary(user_id=user_id)
+        if result is None:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail="User does not exist.",
+            )
+        return result
 
     @litestar.post(
         path="/users/{user_id:int}/xp",

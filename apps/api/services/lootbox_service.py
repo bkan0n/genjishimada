@@ -14,7 +14,7 @@ from genjishimada_sdk.lootbox import (
     UserLootboxKeyAmountResponse,
     UserRewardResponse,
 )
-from genjishimada_sdk.xp import TierChangeResponse, XpGrantEvent, XpGrantRequest, XpGrantResponse
+from genjishimada_sdk.xp import TierChangeResponse, XpGrantEvent, XpGrantRequest, XpGrantResponse, XpSummaryResponse
 from litestar.datastructures import State
 from litestar.datastructures.headers import Headers
 
@@ -161,6 +161,20 @@ class LootboxService(BaseService):
             Coin amount.
         """
         return await self._lootbox_repo.fetch_user_coins(user_id)
+
+    async def view_user_xp_summary(self, user_id: int) -> XpSummaryResponse | None:
+        """Get a user's complete XP progression summary.
+
+        Args:
+            user_id: Target user ID.
+
+        Returns:
+            XP summary response, or None if user does not exist.
+        """
+        row = await self._lootbox_repo.fetch_user_xp_summary(user_id)
+        if row is None:
+            return None
+        return msgspec.convert(row, XpSummaryResponse)
 
     async def view_xp_multiplier(self) -> float:
         """Get the current XP multiplier.

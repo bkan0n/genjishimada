@@ -316,6 +316,54 @@ class TestLootboxServiceGrantReward:
             mock_lootbox_repo.add_user_coins.assert_called_once_with(123456789, expected_coins, conn=ANY)
 
 
+class TestLootboxServiceViewXpSummary:
+    """Test view_user_xp_summary."""
+
+    async def test_returns_none_when_user_not_found(
+        self, mock_pool, mock_state, mock_lootbox_repo
+    ):
+        """Returns None when repository returns None (user doesn't exist)."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+        mock_lootbox_repo.fetch_user_xp_summary.return_value = None
+
+        result = await service.view_user_xp_summary(user_id=999999999)
+
+        assert result is None
+        mock_lootbox_repo.fetch_user_xp_summary.assert_called_once_with(999999999)
+
+    async def test_returns_xp_summary_response(
+        self, mock_pool, mock_state, mock_lootbox_repo
+    ):
+        """Returns XpSummaryResponse when user exists."""
+        from genjishimada_sdk.xp import XpSummaryResponse
+
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+        mock_lootbox_repo.fetch_user_xp_summary.return_value = {
+            "xp": 6850,
+            "raw_tier": 68,
+            "normalized_tier": 68,
+            "prestige_level": 0,
+            "current_main_tier_name": "Assassin",
+            "current_sub_tier_name": "IV",
+            "current_full_tier_name": "Assassin IV",
+            "next_main_tier_name": "Ronin",
+            "next_sub_tier_name": "V",
+            "next_full_tier_name": "Assassin V",
+            "next_sub_tier_xp_required": 50,
+            "next_sub_tier_xp_total": 6900,
+            "next_main_tier_xp_required": 150,
+            "next_main_tier_xp_total": 7000,
+        }
+
+        result = await service.view_user_xp_summary(user_id=123456789)
+
+        assert isinstance(result, XpSummaryResponse)
+        assert result.xp == 6850
+        assert result.current_full_tier_name == "Assassin IV"
+        assert result.next_full_tier_name == "Assassin V"
+        assert result.next_sub_tier_xp_required == 50
+
+
 class TestLootboxServiceDebugGrant:
     """Test debug_grant_reward_no_key conditional logic."""
 
