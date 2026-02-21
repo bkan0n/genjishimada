@@ -16,6 +16,7 @@ __all__ = (
     "CompletionSubmissionJobResponse",
     "CompletionSubmissionResponse",
     "CompletionVerificationUpdateRequest",
+    "DashboardCompletionResponse",
     "ExtractedResultResponse",
     "FailedAutoverifyEvent",
     "MapRecordProgressionResponse",
@@ -139,6 +140,50 @@ class CompletionResponse(Struct):
     legacy: bool
     legacy_medal: MedalType | None
     suspicious: bool
+    total_results: int | None = None
+    upvotes: int = 0
+    id: int | None = None
+
+
+class DashboardCompletionResponse(Struct):
+    """Completion entry for user dashboard with verification status.
+
+    Attributes:
+        code: Workshop code for the map.
+        user_id: Identifier for the completing user.
+        name: Display name of the runner.
+        also_known_as: Alternate display name if available.
+        time: Completion time in seconds.
+        screenshot: Screenshot URL for proof.
+        video: Optional video URL for proof.
+        completion: Whether the run qualifies as a completion.
+        rank: Leaderboard rank if verified, null otherwise.
+        medal: Awarded medal tier if verified, null otherwise.
+        map_name: Name of the Overwatch map.
+        difficulty: Difficulty rating for the map.
+        message_id: Discord message ID tied to the submission.
+        upvotes: Current upvote total for the submission.
+        id: Completion record identifier.
+        reason: Verification or rejection reason.
+        status: Three-state status: Pending, Verified, or Rejected.
+        total_results: Total number of records in the query, when paginated.
+    """
+
+    code: OverwatchCode
+    user_id: int
+    name: str
+    also_known_as: str | None
+    time: float
+    screenshot: str
+    video: GuideURL | None
+    completion: bool
+    rank: int | None
+    medal: MedalType | None
+    map_name: OverwatchMap
+    difficulty: DifficultyAll
+    message_id: int
+    reason: str | None
+    status: Literal["Pending", "Verified", "Rejected"]
     total_results: int | None = None
     upvotes: int = 0
     id: int | None = None
