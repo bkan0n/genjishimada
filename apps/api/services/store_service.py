@@ -19,9 +19,13 @@ from genjishimada_sdk.store import (
     KeyPricingResponse,
     KeyPurchaseResponse,
     PurchaseHistoryResponse,
+    QuestProgress,
+    QuestResponse,
+    QuestSummary,
     RotationItemResponse,
     RotationResponse,
     StoreConfigResponse,
+    UserQuestsResponse,
 )
 from litestar.datastructures import State
 
@@ -460,7 +464,7 @@ class StoreService(BaseService):
         total, purchases = await self._store_repo.fetch_user_purchases(user_id, limit, offset)
         return msgspec.convert({"total": total, "purchases": purchases}, PurchaseHistoryResponse)
 
-    async def get_user_quests(self, user_id: int) -> dict:
+    async def get_user_quests(self, user_id: int) -> UserQuestsResponse:
         """Get active quests for a user with progress and summary."""
         rotation_id = await self.ensure_user_quests_for_rotation(user_id)
         rotation = await self._store_repo.get_active_rotation()
@@ -468,65 +472,77 @@ class StoreService(BaseService):
 
         quest_rows = await self._store_repo.get_active_user_quests(user_id)
 
-        quests = []
-        summary = {
-            "total_quests": 0,
-            "completed": 0,
-            "claimed": 0,
-            "potential_coins": 0,
-            "potential_xp": 0,
-            "earned_coins": 0,
-            "earned_xp": 0,
-        }
+        quests: list[QuestResponse] = []
+        summary = QuestSummary(
+            total_quests=0,
+            completed=0,
+            claimed=0,
+            potential_coins=0,
+            potential_xp=0,
+            earned_coins=0,
+            earned_xp=0,
+        )
 
         for row in quest_rows:
             quest_data = _decode_jsonb_dict(row.get("quest_data"))
-            progress = _decode_jsonb_dict(row.get("progress"))
+            progress_raw = _decode_jsonb_dict(row.get("progress"))
 
             completed = row.get("completed_at") is not None
             claimed = row.get("claimed_at") is not None
 
+            # Compute percentage before struct conversion
             percentage = 0
-            target_val = _coerce_float(progress.get("target"), 0.0)
+            target_val = _coerce_float(progress_raw.get("target"), 0.0)
             if target_val:
-                current_val = _coerce_float(progress.get("current"), 0.0)
+                current_val = _coerce_float(progress_raw.get("current"), 0.0)
                 percentage = min(100, int((current_val / target_val) * 100))
             elif completed:
                 percentage = 100
-            progress["percentage"] = percentage
+            progress_raw["percentage"] = percentage
+
+            # Coerce JSONB string values to int for struct conversion
+            for field in ("current", "target"):
+                val = progress_raw.get(field)
+                if isinstance(val, str):
+                    progress_raw[field] = int(val) if val.isdigit() else None
+
+            progress = msgspec.convert(progress_raw, QuestProgress)
+
+            coin_reward = _coerce_int(quest_data.get("coin_reward"), 0)
+            xp_reward = _coerce_int(quest_data.get("xp_reward"), 0)
 
             quests.append(
-                {
-                    "progress_id": row["progress_id"],
-                    "quest_id": row.get("quest_id"),
-                    "name": quest_data.get("name"),
-                    "description": quest_data.get("description"),
-                    "difficulty": quest_data.get("difficulty"),
-                    "coin_reward": quest_data.get("coin_reward"),
-                    "xp_reward": quest_data.get("xp_reward"),
-                    "progress": progress,
-                    "completed": completed,
-                    "claimed": claimed,
-                    "bounty_type": quest_data.get("bounty_type"),
-                }
+                QuestResponse(
+                    progress_id=row["progress_id"],
+                    quest_id=row.get("quest_id"),
+                    name=quest_data.get("name", ""),
+                    description=quest_data.get("description", ""),
+                    difficulty=quest_data.get("difficulty", ""),
+                    coin_reward=coin_reward,
+                    xp_reward=xp_reward,
+                    progress=progress,
+                    completed=completed,
+                    claimed=claimed,
+                    bounty_type=quest_data.get("bounty_type"),
+                )
             )
 
-            summary["total_quests"] += 1
-            summary["potential_coins"] += _coerce_int(quest_data.get("coin_reward"), 0)
-            summary["potential_xp"] += _coerce_int(quest_data.get("xp_reward"), 0)
+            summary.total_quests += 1
+            summary.potential_coins += coin_reward
+            summary.potential_xp += xp_reward
             if completed:
-                summary["completed"] += 1
+                summary.completed += 1
             if claimed:
-                summary["claimed"] += 1
-            summary["earned_coins"] += _coerce_int(row.get("coins_rewarded"), 0)
-            summary["earned_xp"] += _coerce_int(row.get("xp_rewarded"), 0)
+                summary.claimed += 1
+            summary.earned_coins += _coerce_int(row.get("coins_rewarded"), 0)
+            summary.earned_xp += _coerce_int(row.get("xp_rewarded"), 0)
 
-        return {
-            "rotation_id": rotation_id,
-            "available_until": available_until,
-            "quests": quests,
-            "summary": summary,
-        }
+        return UserQuestsResponse(
+            rotation_id=rotation_id,
+            available_until=available_until,
+            quests=quests,
+            summary=summary,
+        )
 
     async def get_user_quest_history(self, user_id: int, limit: int = 20, offset: int = 0) -> dict:
         """Get completed quest history for a user."""
