@@ -341,11 +341,11 @@ async def test_claim_quest_updates_coin_and_xp(asyncpg_pool, create_test_user):
 
     result = await service.claim_quest(user_id=user_id, progress_id=progress_id)
 
-    assert result["success"] is True
-    assert result["coins_earned"] == 100
-    assert result["xp_earned"] == 25
-    assert result["new_coin_balance"] == 100
-    assert result["new_xp"] == 25
+    assert result.success is True
+    assert result.coins_earned == 100
+    assert result.xp_earned == 25
+    assert result.new_coin_balance == 100
+    assert result.new_xp == 25
 
     async with asyncpg_pool.acquire() as conn:
         coins = await conn.fetchval("SELECT coins FROM core.users WHERE id = $1", user_id)

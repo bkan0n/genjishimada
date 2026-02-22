@@ -521,15 +521,15 @@ class StoreService(BaseService):
                 QuestResponse(
                     progress_id=row["progress_id"],
                     quest_id=row.get("quest_id"),
-                    name=quest_data.get("name", ""),
-                    description=quest_data.get("description", ""),
-                    difficulty=quest_data.get("difficulty", ""),
+                    name=cast(str, quest_data.get("name", "")),
+                    description=cast(str, quest_data.get("description", "")),
+                    difficulty=cast(str, quest_data.get("difficulty", "")),
                     coin_reward=coin_reward,
                     xp_reward=xp_reward,
                     progress=progress,
                     completed=completed,
                     claimed=claimed,
-                    bounty_type=quest_data.get("bounty_type"),
+                    bounty_type=cast("str | None", quest_data.get("bounty_type")),
                 )
             )
 
@@ -560,9 +560,9 @@ class StoreService(BaseService):
                 QuestHistoryItem(
                     progress_id=row["progress_id"],
                     quest_id=row.get("quest_id"),
-                    name=quest_data.get("name"),
-                    description=quest_data.get("description"),
-                    difficulty=quest_data.get("difficulty"),
+                    name=cast("str | None", quest_data.get("name")),
+                    description=cast("str | None", quest_data.get("description")),
+                    difficulty=cast("str | None", quest_data.get("difficulty")),
                     coin_reward=_coerce_int(quest_data.get("coin_reward"), 0),
                     xp_reward=_coerce_int(quest_data.get("xp_reward"), 0),
                     completed_at=row.get("completed_at"),
@@ -570,7 +570,7 @@ class StoreService(BaseService):
                     coins_rewarded=row.get("coins_rewarded") or 0,
                     xp_rewarded=row.get("xp_rewarded") or 0,
                     rotation_id=row.get("rotation_id"),
-                    bounty_type=quest_data.get("bounty_type"),
+                    bounty_type=cast("str | None", quest_data.get("bounty_type")),
                 )
             )
         return QuestHistoryResponse(total=total or 0, quests=quests)
@@ -1199,7 +1199,7 @@ class StoreService(BaseService):
 
         return ClaimQuestResponse(
             success=True,
-            quest_name=quest_data.get("name"),
+            quest_name=cast("str | None", quest_data.get("name")),
             coins_earned=coin_reward,
             xp_earned=xp_reward,
             new_coin_balance=new_coins,
@@ -1271,7 +1271,10 @@ class StoreService(BaseService):
         return UpdateQuestConfigResponse(
             success=True,
             updated_fields=list(updates.keys()),
-            next_rotation_at=updates.get("next_rotation_at", config.get("next_rotation_at")),
+            next_rotation_at=cast(
+                "datetime.datetime | None",
+                updates.get("next_rotation_at", config.get("next_rotation_at")),
+            ),
         )
 
     async def generate_quest_rotation(self) -> GenerateQuestRotationResponse:
