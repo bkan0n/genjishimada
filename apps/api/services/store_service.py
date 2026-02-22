@@ -20,6 +20,8 @@ from genjishimada_sdk.store import (
     KeyPricingResponse,
     KeyPurchaseResponse,
     PurchaseHistoryResponse,
+    QuestHistoryItem,
+    QuestHistoryResponse,
     QuestProgress,
     QuestResponse,
     QuestSummary,
@@ -545,31 +547,30 @@ class StoreService(BaseService):
             summary=summary,
         )
 
-    async def get_user_quest_history(self, user_id: int, limit: int = 20, offset: int = 0) -> dict:
+    async def get_user_quest_history(self, user_id: int, limit: int = 20, offset: int = 0) -> QuestHistoryResponse:
         """Get completed quest history for a user."""
         total, rows = await self._store_repo.fetch_quest_history(user_id, limit, offset)
-        quests: list[dict] = []
+        quests: list[QuestHistoryItem] = []
         for row in rows:
             quest_data = _decode_jsonb_dict(row.get("quest_data"))
             quests.append(
-                {
-                    "progress_id": row["progress_id"],
-                    "quest_id": row.get("quest_id"),
-                    "name": quest_data.get("name"),
-                    "description": quest_data.get("description"),
-                    "difficulty": quest_data.get("difficulty"),
-                    "coin_reward": quest_data.get("coin_reward"),
-                    "xp_reward": quest_data.get("xp_reward"),
-                    "completed_at": row.get("completed_at"),
-                    "claimed_at": row.get("claimed_at"),
-                    "coins_rewarded": row.get("coins_rewarded"),
-                    "xp_rewarded": row.get("xp_rewarded"),
-                    "rotation_id": row.get("rotation_id"),
-                    "bounty_type": quest_data.get("bounty_type"),
-                }
+                QuestHistoryItem(
+                    progress_id=row["progress_id"],
+                    quest_id=row.get("quest_id"),
+                    name=quest_data.get("name"),
+                    description=quest_data.get("description"),
+                    difficulty=quest_data.get("difficulty"),
+                    coin_reward=_coerce_int(quest_data.get("coin_reward"), 0),
+                    xp_reward=_coerce_int(quest_data.get("xp_reward"), 0),
+                    completed_at=row.get("completed_at"),
+                    claimed_at=row.get("claimed_at"),
+                    coins_rewarded=row.get("coins_rewarded") or 0,
+                    xp_rewarded=row.get("xp_rewarded") or 0,
+                    rotation_id=row.get("rotation_id"),
+                    bounty_type=quest_data.get("bounty_type"),
+                )
             )
-
-        return {"total": total, "quests": quests}
+        return QuestHistoryResponse(total=total or 0, quests=quests)
 
     async def generate_rotation(self, item_count: int = 5) -> GenerateRotationResponse:
         """Generate a new store rotation.
