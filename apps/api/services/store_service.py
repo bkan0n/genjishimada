@@ -14,12 +14,14 @@ from asyncpg.pool import PoolConnectionProxy
 from genjishimada_sdk.lootbox import LootboxKeyType
 from genjishimada_sdk.store import (
     ClaimQuestResponse,
+    GenerateQuestRotationResponse,
     GenerateRotationResponse,
     ItemPurchaseResponse,
     KeyPriceInfo,
     KeyPricingResponse,
     KeyPurchaseResponse,
     PurchaseHistoryResponse,
+    QuestConfigResponse,
     QuestHistoryItem,
     QuestHistoryResponse,
     QuestProgress,
@@ -28,6 +30,7 @@ from genjishimada_sdk.store import (
     RotationItemResponse,
     RotationResponse,
     StoreConfigResponse,
+    UpdateQuestConfigResponse,
     UserQuestsResponse,
 )
 from litestar.datastructures import State
@@ -1223,9 +1226,10 @@ class StoreService(BaseService):
             active_key_type=active_key_type,
         )
 
-    async def get_quest_config(self) -> dict:
+    async def get_quest_config(self) -> QuestConfigResponse:
         """Get quest configuration."""
-        return await self._store_repo.fetch_quest_config()
+        config = await self._store_repo.fetch_quest_config()
+        return msgspec.convert(config, QuestConfigResponse)
 
     async def update_quest_config(
         self,
@@ -1235,7 +1239,7 @@ class StoreService(BaseService):
         easy_quest_count: int | None = None,
         medium_quest_count: int | None = None,
         hard_quest_count: int | None = None,
-    ) -> dict:
+    ) -> UpdateQuestConfigResponse:
         """Update quest configuration and recompute next_rotation_at if needed."""
         config = await self._store_repo.fetch_quest_config()
         updates: dict[str, object] = {}
@@ -1264,24 +1268,24 @@ class StoreService(BaseService):
             updates["next_rotation_at"] = candidate
 
         await self._store_repo.update_quest_config(updates)
-        return {
-            "success": True,
-            "updated_fields": list(updates.keys()),
-            "next_rotation_at": updates.get("next_rotation_at", config.get("next_rotation_at")),
-        }
+        return UpdateQuestConfigResponse(
+            success=True,
+            updated_fields=list(updates.keys()),
+            next_rotation_at=updates.get("next_rotation_at", config.get("next_rotation_at")),
+        )
 
-    async def generate_quest_rotation(self) -> dict:
+    async def generate_quest_rotation(self) -> GenerateQuestRotationResponse:
         """Manually trigger quest rotation generation."""
         async with self._pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM store.check_and_generate_quest_rotation()")
         if not row:
             raise RuntimeError("Quest rotation generation failed.")
-        return {
-            "rotation_id": row["rotation_id"],
-            "generated": row["generated"],
-            "auto_claimed_quests": row["auto_claimed"],
-            "global_quests_generated": row["global_quests_generated"],
-        }
+        return GenerateQuestRotationResponse(
+            rotation_id=row["rotation_id"],
+            generated=row["generated"],
+            auto_claimed_quests=row["auto_claimed"],
+            global_quests_generated=row["global_quests_generated"],
+        )
 
 
 async def provide_store_service(state: State) -> StoreService:
