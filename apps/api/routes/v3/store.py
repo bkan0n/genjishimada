@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Annotated
 
 import litestar
+import msgspec
 from genjishimada_sdk.store import (
+    ClaimQuestRequest,
+    ClaimQuestResponse,
+    GenerateQuestRotationResponse,
     GenerateRotationRequest,
     GenerateRotationResponse,
     ItemPurchaseRequest,
@@ -14,9 +18,16 @@ from genjishimada_sdk.store import (
     KeyPurchaseRequest,
     KeyPurchaseResponse,
     PurchaseHistoryResponse,
+    QuestConfigResponse,
+    QuestHistoryResponse,
     RotationResponse,
     StoreConfigResponse,
     UpdateConfigRequest,
+    UpdateQuestConfigRequest,
+    UpdateQuestConfigResponse,
+    UpdateQuestRequest,
+    UpdateQuestResponse,
+    UserQuestsResponse,
 )
 from litestar.di import Provide
 from litestar.params import Body
@@ -233,7 +244,7 @@ class StoreController(litestar.Controller):
         self,
         store_service: StoreService,
         user_id: int,
-    ) -> dict:
+    ) -> UserQuestsResponse:
         """Get weekly quests for a user."""
         return await store_service.get_user_quests(user_id)
 
@@ -248,15 +259,11 @@ class StoreController(litestar.Controller):
         self,
         store_service: StoreService,
         progress_id: int,
-        data: Annotated[dict, Body()],
-    ) -> dict:
+        data: Annotated[ClaimQuestRequest, Body()],
+    ) -> ClaimQuestResponse:
         """Claim a completed quest."""
-        user_id = data.get("user_id")
-        if not user_id:
-            raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail="user_id required")
-
         try:
-            return await store_service.claim_quest(user_id=user_id, progress_id=progress_id)
+            return await store_service.claim_quest(user_id=data.user_id, progress_id=progress_id)
         except QuestNotFoundError as e:
             raise CustomHTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         except QuestNotCompletedError as e:
@@ -276,7 +283,7 @@ class StoreController(litestar.Controller):
         user_id: int,
         limit: int = 20,
         offset: int = 0,
-    ) -> dict:
+    ) -> QuestHistoryResponse:
         """Get completed quest history."""
         return await store_service.get_user_quest_history(user_id, limit, offset)
 
@@ -378,7 +385,7 @@ class StoreController(litestar.Controller):
     async def get_quest_config(
         self,
         store_service: StoreService,
-    ) -> dict:
+    ) -> QuestConfigResponse:
         """Get quest configuration."""
         return await store_service.get_quest_config()
 
@@ -392,15 +399,15 @@ class StoreController(litestar.Controller):
     async def update_quest_config(
         self,
         store_service: StoreService,
-        data: Annotated[dict, Body()],
-    ) -> dict:
+        data: Annotated[UpdateQuestConfigRequest, Body()],
+    ) -> UpdateQuestConfigResponse:
         """Update quest configuration."""
         return await store_service.update_quest_config(
-            rotation_day=data.get("rotation_day"),
-            rotation_hour=data.get("rotation_hour"),
-            easy_quest_count=data.get("easy_quest_count"),
-            medium_quest_count=data.get("medium_quest_count"),
-            hard_quest_count=data.get("hard_quest_count"),
+            rotation_day=data.rotation_day,
+            rotation_hour=data.rotation_hour,
+            easy_quest_count=data.easy_quest_count,
+            medium_quest_count=data.medium_quest_count,
+            hard_quest_count=data.hard_quest_count,
         )
 
     @litestar.post(
@@ -413,7 +420,7 @@ class StoreController(litestar.Controller):
     async def generate_quest_rotation(
         self,
         store_service: StoreService,
-    ) -> dict:
+    ) -> GenerateQuestRotationResponse:
         """Generate a new quest rotation."""
         return await store_service.generate_quest_rotation()
 
@@ -428,12 +435,11 @@ class StoreController(litestar.Controller):
         self,
         store_repo: StoreRepository,
         quest_id: int,
-        data: Annotated[dict, Body()],
-    ) -> dict:
+        data: Annotated[UpdateQuestRequest, Body()],
+    ) -> UpdateQuestResponse:
         """Update quest pool entry."""
-        allowed = {"name", "description", "difficulty", "coin_reward", "xp_reward", "requirements", "is_active"}
-        updates = {k: v for k, v in data.items() if k in allowed}
+        updates = {k: v for k, v in msgspec.structs.asdict(data).items() if v is not None}
         if not updates:
             raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail="No valid fields to update")
         updated_fields = await store_repo.update_quest(quest_id, updates)
-        return {"success": True, "updated_fields": updated_fields}
+        return UpdateQuestResponse(success=True, updated_fields=updated_fields)
