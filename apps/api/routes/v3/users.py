@@ -196,6 +196,11 @@ class UsersController(litestar.Controller):
             log.debug("Set Overwatch usernames for user %s: %s", user_id, data.usernames)
             await svc.set_overwatch_usernames(user_id, data.usernames)
             return Response({"success": True}, status_code=HTTP_200_OK)
+        except UserNotFoundError as e:
+            raise HTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
         except DuplicateOverwatchUsernameError as e:
             raise HTTPException(
                 status_code=HTTP_400_BAD_REQUEST,

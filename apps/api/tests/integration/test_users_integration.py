@@ -356,8 +356,7 @@ class TestUpdateOverwatchUsernames:
             json=payload,
         )
 
-        # May succeed (upsert) or fail with 400, depending on FK constraint
-        assert response.status_code in [200, 400]
+        assert response.status_code == 404
 
 
 class TestGetOverwatchUsernames:
