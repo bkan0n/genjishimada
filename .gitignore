@@ -280,3 +280,4 @@ backups/*
 .env.local
 /docs/reviews
 /.complexipy_cache/
+.planning/
