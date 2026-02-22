@@ -34,3 +34,10 @@ class UserNotFoundError(UsersError):
 
     def __init__(self, user_id: int) -> None:
         super().__init__("User not found.", user_id=user_id)
+
+
+class DuplicateOverwatchUsernameError(UsersError):
+    """Duplicate Overwatch username for a user."""
+
+    def __init__(self, user_id: int, username: str) -> None:
+        super().__init__("Duplicate Overwatch username provided.", user_id=user_id, username=username)

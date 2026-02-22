@@ -23,7 +23,12 @@ from litestar.status_codes import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_404_NO
 from msgspec import UNSET
 
 from repository.users_repository import provide_users_repository
-from services.exceptions.users import InvalidUserIdError, UserAlreadyExistsError, UserNotFoundError
+from services.exceptions.users import (
+    DuplicateOverwatchUsernameError,
+    InvalidUserIdError,
+    UserAlreadyExistsError,
+    UserNotFoundError,
+)
 from services.users_service import UsersService, provide_users_service
 from utilities.errors import CustomHTTPException
 
@@ -191,9 +196,11 @@ class UsersController(litestar.Controller):
             log.debug("Set Overwatch usernames for user %s: %s", user_id, data.usernames)
             await svc.set_overwatch_usernames(user_id, data.usernames)
             return Response({"success": True}, status_code=HTTP_200_OK)
-        except Exception as e:
-            log.error("Error updating Overwatch usernames for user %s: %s", user_id, e)
-            return Response({"error": str(e)}, status_code=HTTP_400_BAD_REQUEST)
+        except DuplicateOverwatchUsernameError as e:
+            raise HTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            ) from e
 
     @litestar.get(
         path="/{user_id:int}/overwatch",

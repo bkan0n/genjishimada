@@ -228,7 +228,15 @@ class UsersRepository(BaseRepository):
             INSERT INTO users.overwatch_usernames (user_id, username, is_primary)
             VALUES ($1, $2, $3)
         """
-        await _conn.execute(query, user_id, username, is_primary)
+        try:
+            await _conn.execute(query, user_id, username, is_primary)
+        except UniqueViolationError as e:
+            constraint = extract_constraint_name(e)
+            raise UniqueConstraintViolationError(
+                constraint_name=constraint or "unknown",
+                table="users.overwatch_usernames",
+                detail=e.detail,
+            ) from e
 
     async def fetch_overwatch_usernames(
         self,
