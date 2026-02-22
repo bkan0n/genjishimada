@@ -13,6 +13,7 @@ from asyncpg import Connection, Pool
 from asyncpg.pool import PoolConnectionProxy
 from genjishimada_sdk.lootbox import LootboxKeyType
 from genjishimada_sdk.store import (
+    ClaimQuestResponse,
     GenerateRotationResponse,
     ItemPurchaseResponse,
     KeyPriceInfo,
@@ -1130,7 +1131,7 @@ class StoreService(BaseService):
                     conn=conn,  # type: ignore[arg-type]
                 )
 
-    async def claim_quest(self, *, user_id: int, progress_id: int) -> dict:
+    async def claim_quest(self, *, user_id: int, progress_id: int) -> ClaimQuestResponse:
         """Claim a completed quest and grant rewards."""
         async with self._pool.acquire() as conn, conn.transaction():
             row = await conn.fetchrow(
@@ -1192,14 +1193,14 @@ class StoreService(BaseService):
                 xp_reward,
             )
 
-        return {
-            "success": True,
-            "quest_name": quest_data.get("name"),
-            "coins_earned": coin_reward,
-            "xp_earned": xp_reward,
-            "new_coin_balance": new_coins,
-            "new_xp": new_xp,
-        }
+        return ClaimQuestResponse(
+            success=True,
+            quest_name=quest_data.get("name"),
+            coins_earned=coin_reward,
+            xp_earned=xp_reward,
+            new_coin_balance=new_coins,
+            new_xp=new_xp,
+        )
 
     async def update_config(
         self,
