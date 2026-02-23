@@ -32,7 +32,7 @@ from genjishimada_sdk.completions import (
     VerificationChangedEvent,
     VerificationMessageDeleteEvent,
 )
-from genjishimada_sdk.difficulties import DifficultyTop
+from genjishimada_sdk.difficulties import DifficultyTop, convert_extended_difficulty_to_top_level
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
 from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
@@ -120,7 +120,7 @@ class CompletionsService(BaseService):
             event_type="completion",
             event_data={
                 "map_id": map_meta["map_id"],
-                "difficulty": map_meta["difficulty"],
+                "difficulty": convert_extended_difficulty_to_top_level(map_meta["difficulty"]),
                 "category": map_meta["category"],
                 "time": float(time),
                 "medal": medal,
@@ -171,7 +171,7 @@ class CompletionsService(BaseService):
             event_type="completion",
             event_data={
                 "map_id": map_meta["map_id"],
-                "difficulty": map_meta["difficulty"],
+                "difficulty": convert_extended_difficulty_to_top_level(map_meta["difficulty"]),
                 "category": map_meta["category"],
                 "time": float(time),
             },
