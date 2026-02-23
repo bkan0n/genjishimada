@@ -35,11 +35,15 @@ def _initial_progress(requirements: dict) -> dict:
             "completed_map_ids": [],
         }
     if req_type in {"beat_time", "beat_rival"}:
-        return {
+        progress = {
             "map_id": requirements.get("map_id"),
             "target_time": requirements.get("target_time"),
             "target_type": requirements.get("target_type"),
         }
+        if req_type == "beat_rival":
+            progress["rival_user_id"] = requirements.get("rival_user_id")
+            progress["rival_time"] = requirements.get("rival_time")
+        return progress
     if req_type == "complete_map":
         return {
             "map_id": requirements.get("map_id"),

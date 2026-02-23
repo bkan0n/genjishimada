@@ -106,6 +106,7 @@ async def test_generate_rival_challenge_bounty(asyncpg_pool, create_test_user, c
     async def mock_find_beatable_rival_map(*args, **kwargs):
         return {
             "map_id": map_id,
+            "code": "TEST1",
             "map_name": "Test Map",
             "rival_time": 85.0,
             "user_time": 100.0,

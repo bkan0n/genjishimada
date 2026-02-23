@@ -472,6 +472,13 @@ class StoreService(BaseService):
                 if not isinstance(val, (int, float, type(None))):
                     progress_raw[field] = None
 
+            # Merge requirement fields that belong in progress but may not have been
+            # copied during initial seeding (backfill for existing rows)
+            requirements = quest_data.get("requirements") or {}
+            for field in ("rival_user_id", "rival_time"):
+                if requirements.get(field) is not None:
+                    progress_raw.setdefault(field, requirements[field])
+
             progress = msgspec.convert(progress_raw, QuestProgress)
 
             coin_reward = quest_data.get("coin_reward") or 0
