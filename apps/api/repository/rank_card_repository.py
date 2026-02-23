@@ -345,20 +345,20 @@ class RankCardRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-            WITH all_records AS (
+            WITH ranks AS (
                 SELECT
-                    user_id,
-                    m.code,
-                    time,
-                    rank() OVER (
-                        PARTITION BY m.code
-                        ORDER BY time
-                    ) as pos
-                FROM core.completions c
-                LEFT JOIN core.maps m on c.map_id = m.id
-                WHERE m.official = TRUE AND time < 99999999 AND video IS NOT NULL AND completion IS FALSE
+                    r.user_id,
+                    r.map_id,
+                    rank() OVER (PARTITION BY r.map_id ORDER BY time) AS rank_num
+                FROM core.completions r
+                JOIN core.users u ON r.user_id = u.id
+                WHERE u.id > 1000
+                  AND r.time < 99999999
+                  AND r.verified = TRUE
+            ), world_records AS (
+                SELECT r.user_id, count(r.user_id) AS amount FROM ranks r WHERE rank_num = 1 GROUP BY r.user_id
             )
-            SELECT count(*) FROM all_records WHERE user_id = $1 AND pos = 1
+            SELECT * FROM world_records WHERE user_id=$1;
         """
         return await _conn.fetchval(query, user_id) or 0
 
