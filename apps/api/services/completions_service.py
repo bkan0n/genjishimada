@@ -47,6 +47,7 @@ from repository.exceptions import (
 )
 from repository.lootbox_repository import LootboxRepository
 from repository.store_repository import StoreRepository
+from repository.users_repository import UsersRepository
 from services.exceptions.completions import (
     CompletionNotFoundError,
     DuplicateCompletionError,
@@ -129,16 +130,60 @@ class CompletionsService(BaseService):
 
         if notifications:
             for quest in completed_quests:
+                requirements = quest.get("requirements", {})
+                rival_user_id = requirements.get("rival_user_id")
+                rival_display_name = None
+                completer_display_name = None
+
+                if rival_user_id:
+                    users_repo = UsersRepository(self._pool)
+                    rival_user = await users_repo.fetch_user(rival_user_id)
+                    rival_display_name = rival_user["coalesced_name"] if rival_user else "Unknown User"
+                    completer_user = await users_repo.fetch_user(user_id)
+                    completer_display_name = completer_user["coalesced_name"] if completer_user else "Unknown User"
+
+                metadata = {
+                    "quest_id": quest.get("quest_id"),
+                    "progress_id": quest.get("progress_id"),
+                    "quest_name": quest["name"],
+                    "quest_difficulty": quest.get("difficulty"),
+                    "coin_reward": quest.get("coin_reward"),
+                    "xp_reward": quest.get("xp_reward"),
+                    "rival_user_id": rival_user_id,
+                    "rival_display_name": rival_display_name,
+                }
+
                 await notifications.create_and_dispatch(
                     data=NotificationCreateRequest(
                         user_id=user_id,
                         event_type=NotificationEventType.QUEST_COMPLETE,  # type: ignore
                         title="Quest Completed!",
-                        body=f"You completed '{quest['name']}' and earned rewards.",
-                        metadata={"quest_id": quest.get("quest_id"), "progress_id": quest.get("progress_id")},
+                        body=(
+                            f"You completed '{quest['name']}' and earned "
+                            f"{quest.get('coin_reward', 0)} coins + {quest.get('xp_reward', 0)} XP."
+                        ),
+                        metadata=metadata,
                     ),
                     headers=headers,
                 )
+
+                if rival_user_id:
+                    await notifications.create_and_dispatch(
+                        data=NotificationCreateRequest(
+                            user_id=rival_user_id,
+                            event_type=NotificationEventType.QUEST_RIVAL_MENTION,  # type: ignore
+                            title="Rival Quest Challenge",
+                            body=f"{completer_display_name} completed a rival quest against you!",
+                            discord_message=f"{completer_display_name} completed a rival quest against you!",
+                            metadata={
+                                "quest_name": quest["name"],
+                                "quest_difficulty": quest.get("difficulty"),
+                                "completer_user_id": user_id,
+                                "completer_display_name": completer_display_name,
+                            },
+                        ),
+                        headers=headers,
+                    )
 
     async def _revert_quest_progress_for_completion(
         self,

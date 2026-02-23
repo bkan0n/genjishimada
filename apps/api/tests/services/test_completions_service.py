@@ -2,6 +2,7 @@
 
 import msgspec
 import pytest
+from genjishimada_sdk.notifications import NotificationEventType
 from genjishimada_sdk.completions import (
     CompletionCreateRequest,
     CompletionModerateRequest,
@@ -413,6 +414,130 @@ class TestCompletionsServiceVerifyCompletion:
             remaining_times=[],
             remaining_medals=[],
         )
+
+
+class TestUpdateQuestProgressNotifications:
+    """Verify quest completion notification metadata enrichment."""
+
+    async def test_quest_complete_notification_includes_metadata(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """QUEST_COMPLETE notification includes quest_name, difficulty, rewards in metadata."""
+        service = CompletionsService(mock_pool, mock_state, mock_completions_repo)
+
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {
+            "map_id": 101,
+            "difficulty": "Hard",
+            "category": "Classic",
+        }
+
+        mock_store_repo = mocker.AsyncMock()
+        mock_store_repo.get_medal_thresholds.return_value = None
+        mocker.patch("services.completions_service.StoreRepository", return_value=mock_store_repo)
+        mocker.patch("services.completions_service.LootboxRepository", return_value=mocker.AsyncMock())
+
+        mock_store_service = mocker.Mock()
+        mock_store_service.update_quest_progress = mocker.AsyncMock(
+            return_value=[
+                {
+                    "name": "Complete 3 Maps",
+                    "difficulty": "easy",
+                    "quest_id": 5,
+                    "progress_id": 42,
+                    "coin_reward": 100,
+                    "xp_reward": 15,
+                    "requirements": {"type": "complete_maps", "count": 3},
+                }
+            ]
+        )
+        mocker.patch("services.completions_service.StoreService", return_value=mock_store_service)
+
+        mock_notifications = mocker.AsyncMock()
+
+        await service._update_quest_progress_for_completion(
+            user_id=123,
+            map_code="ABC123",
+            time=42.0,
+            notifications=mock_notifications,
+            headers={},
+        )
+
+        mock_notifications.create_and_dispatch.assert_called_once()
+        call_kwargs = mock_notifications.create_and_dispatch.call_args.kwargs
+        call_data = call_kwargs.get("data") or mock_notifications.create_and_dispatch.call_args[0][0]
+        assert call_data.event_type == NotificationEventType.QUEST_COMPLETE.value
+        assert call_data.metadata["quest_name"] == "Complete 3 Maps"
+        assert call_data.metadata["quest_difficulty"] == "easy"
+        assert call_data.metadata["coin_reward"] == 100
+        assert call_data.metadata["xp_reward"] == 15
+
+    async def test_rival_quest_dispatches_second_notification(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """Rival challenge quest dispatches QUEST_RIVAL_MENTION to rival user."""
+        service = CompletionsService(mock_pool, mock_state, mock_completions_repo)
+
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {
+            "map_id": 101,
+            "difficulty": "Hard",
+            "category": "Classic",
+        }
+
+        rival_user_id = 456789
+        mock_store_repo = mocker.AsyncMock()
+        mock_store_repo.get_medal_thresholds.return_value = None
+        mocker.patch("services.completions_service.StoreRepository", return_value=mock_store_repo)
+        mocker.patch("services.completions_service.LootboxRepository", return_value=mocker.AsyncMock())
+
+        mock_store_service = mocker.Mock()
+        mock_store_service.update_quest_progress = mocker.AsyncMock(
+            return_value=[
+                {
+                    "name": "Rival Challenge",
+                    "difficulty": "bounty",
+                    "quest_id": None,
+                    "progress_id": 99,
+                    "coin_reward": 300,
+                    "xp_reward": 50,
+                    "requirements": {
+                        "type": "beat_rival",
+                        "map_id": 101,
+                        "rival_user_id": rival_user_id,
+                        "target_time": 42.0,
+                    },
+                }
+            ]
+        )
+        mocker.patch("services.completions_service.StoreService", return_value=mock_store_service)
+
+        mock_users_repo_instance = mocker.AsyncMock()
+        mock_users_repo_instance.fetch_user.return_value = {"coalesced_name": "RivalPlayer"}
+        mocker.patch("services.completions_service.UsersRepository", return_value=mock_users_repo_instance)
+
+        mock_notifications = mocker.AsyncMock()
+
+        await service._update_quest_progress_for_completion(
+            user_id=123,
+            map_code="ABC123",
+            time=40.0,
+            notifications=mock_notifications,
+            headers={},
+        )
+
+        # Should have 2 calls: QUEST_COMPLETE for completer + QUEST_RIVAL_MENTION for rival
+        assert mock_notifications.create_and_dispatch.call_count == 2
+        calls = mock_notifications.create_and_dispatch.call_args_list
+
+        first_kwargs = calls[0].kwargs
+        first_data = first_kwargs.get("data") or calls[0][0][0]
+        assert first_data.event_type == NotificationEventType.QUEST_COMPLETE.value
+        assert first_data.user_id == 123
+        assert first_data.metadata["rival_user_id"] == rival_user_id
+
+        second_kwargs = calls[1].kwargs
+        second_data = second_kwargs.get("data") or calls[1][0][0]
+        assert second_data.event_type == NotificationEventType.QUEST_RIVAL_MENTION.value
+        assert second_data.user_id == rival_user_id
 
 
 class TestCompletionsServiceModerateCompletion:
