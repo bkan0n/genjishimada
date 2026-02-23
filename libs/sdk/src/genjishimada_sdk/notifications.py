@@ -54,6 +54,7 @@ class NotificationEventType(str, Enum):
 
     QUEST_COMPLETE = "quest_complete"
     QUEST_ROTATION = "quest_rotation"
+    QUEST_RIVAL_MENTION = "quest_rival_mention"
 
 
 NOTIFICATION_EVENT_TYPE = Literal[
@@ -73,6 +74,7 @@ NOTIFICATION_EVENT_TYPE = Literal[
     "map_edit_rejected",
     "quest_complete",
     "quest_rotation",
+    "quest_rival_mention",
 ]
 
 NOTIFICATION_CHANNEL = Literal["discord_dm", "discord_ping", "web"]
@@ -92,8 +94,13 @@ EVENT_TYPE_DEFAULT_CHANNELS: dict[NotificationEventType, list[NotificationChanne
     NotificationEventType.PLAYTEST_UPDATE: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.MAP_EDIT_APPROVED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.MAP_EDIT_REJECTED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
-    NotificationEventType.QUEST_COMPLETE: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
+    NotificationEventType.QUEST_COMPLETE: [
+        NotificationChannel.DISCORD_DM,
+        NotificationChannel.DISCORD_PING,
+        NotificationChannel.WEB,
+    ],
     NotificationEventType.QUEST_ROTATION: [NotificationChannel.WEB],
+    NotificationEventType.QUEST_RIVAL_MENTION: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
 }
 
 
