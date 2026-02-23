@@ -381,6 +381,7 @@ class LootboxService(BaseService):
             type=data.type,
             previous_amount=result["previous_amount"],
             new_amount=result["new_amount"],
+            reason=data.reason,
         )
 
         await self.publish_message(

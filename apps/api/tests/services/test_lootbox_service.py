@@ -1,8 +1,9 @@
 """Unit tests for LootboxService."""
 
-from unittest.mock import ANY
+from unittest.mock import ANY, AsyncMock
 
 import pytest
+from genjishimada_sdk.xp import XpGrantEvent, XpGrantRequest
 
 from services.exceptions.lootbox import InsufficientKeysError
 from services.lootbox_service import DUPLICATE_COIN_VALUES, GACHA_WEIGHTS, LootboxService
@@ -432,3 +433,49 @@ class TestLootboxServiceDebugGrant:
             reward_name="Test Banner",
             conn=ANY,
         )
+
+
+class TestGrantUserXpReason:
+    """Verify reason field is threaded from request to event."""
+
+    async def test_grant_user_xp_passes_reason_to_event(
+        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+    ):
+        """XpGrantEvent includes reason from XpGrantRequest."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.fetch_xp_multiplier.return_value = 1.0
+        mock_lootbox_repo.upsert_user_xp.return_value = {
+            "previous_amount": 100,
+            "new_amount": 150,
+        }
+
+        mock_publish = mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+
+        data = XpGrantRequest(amount=50, type="Other", reason="Won community event")
+        await service.grant_user_xp(headers={}, user_id=123, data=data)
+
+        mock_publish.assert_called_once()
+        event = mock_publish.call_args.kwargs["data"]
+        assert isinstance(event, XpGrantEvent)
+        assert event.reason == "Won community event"
+
+    async def test_grant_user_xp_reason_none_by_default(
+        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+    ):
+        """XpGrantEvent has reason=None when not provided."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.fetch_xp_multiplier.return_value = 1.0
+        mock_lootbox_repo.upsert_user_xp.return_value = {
+            "previous_amount": 100,
+            "new_amount": 150,
+        }
+
+        mock_publish = mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+
+        data = XpGrantRequest(amount=50, type="Other")
+        await service.grant_user_xp(headers={}, user_id=123, data=data)
+
+        event = mock_publish.call_args.kwargs["data"]
+        assert event.reason is None
