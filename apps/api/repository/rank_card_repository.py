@@ -406,7 +406,7 @@ class RankCardRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-            SELECT count(*) + dc.count
+            SELECT count(*) + coalesce(dc.count, 0)
             FROM playtests.votes pv
             LEFT JOIN playtests.deprecated_count dc ON pv.user_id = dc.user_id
             WHERE pv.user_id=$1
