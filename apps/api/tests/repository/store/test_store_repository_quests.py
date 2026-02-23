@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from repository.store_repository import StoreRepository, _decode_jsonb
+from repository.store_repository import StoreRepository
 
 pytestmark = [
     pytest.mark.domain_store,
@@ -15,11 +15,6 @@ pytestmark = [
 async def repository(asyncpg_conn):
     """Provide store repository instance."""
     return StoreRepository(asyncpg_conn)
-
-
-def test_decode_jsonb_handles_dict_and_str():
-    assert _decode_jsonb({"a": 1})["a"] == 1
-    assert _decode_jsonb('{"a": 1}') == {"a": 1}
 
 
 class TestGetRotationWindow:

@@ -12,7 +12,7 @@ from litestar import Litestar
 from litestar.testing import AsyncTestClient
 from pytest_databases.docker.postgres import PostgresService
 
-from app import create_app
+from app import _async_pg_init, create_app
 from genjishimada_sdk import difficulties
 
 pytest_plugins = [
@@ -82,6 +82,7 @@ async def asyncpg_conn(postgres_service: PostgresService) -> AsyncIterator[async
         port=postgres_service.port,
         database=postgres_service.database,
     )
+    await _async_pg_init(conn)
     yield conn
     await conn.close()
 
@@ -101,6 +102,7 @@ async def asyncpg_pool(postgres_service: PostgresService) -> AsyncIterator[async
         database=postgres_service.database,
         min_size=1,
         max_size=3,
+        init=_async_pg_init,
     )
     yield pool
     await pool.close()

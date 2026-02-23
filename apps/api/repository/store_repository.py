@@ -5,26 +5,11 @@ from __future__ import annotations
 from uuid import UUID
 
 import asyncpg
-import msgspec
 from asyncpg import Connection, Pool
 from litestar.datastructures import State
 
 from repository.base import BaseRepository
 from repository.exceptions import ForeignKeyViolationError, extract_constraint_name
-
-
-def _encode_jsonb(data: dict) -> str:
-    return msgspec.json.encode(data).decode()
-
-
-def _decode_jsonb(value: object) -> object:
-    if value is None:
-        return {}
-    if isinstance(value, (dict, list)):
-        return value
-    if isinstance(value, (bytes, bytearray, str)):
-        return msgspec.json.decode(value)
-    return value
 
 
 def _initial_progress(requirements: dict) -> dict:
@@ -245,7 +230,7 @@ class StoreRepository(BaseRepository):
             """,
             rotation_id,
         )
-        return [{"quest_id": row["quest_id"], "quest_data": _decode_jsonb(row["quest_data"])} for row in rows]
+        return [{"quest_id": row["quest_id"], "quest_data": row["quest_data"]} for row in rows]
 
     async def get_bounty_for_user(
         self,
@@ -268,7 +253,7 @@ class StoreRepository(BaseRepository):
         )
         if not row:
             return None
-        return {"quest_data": _decode_jsonb(row["quest_data"])}
+        return {"quest_data": row["quest_data"]}
 
     async def insert_bounty(
         self,
@@ -306,7 +291,7 @@ class StoreRepository(BaseRepository):
             """,
             rotation_id,
             user_id,
-            _encode_jsonb(quest_data),
+            quest_data,
             window["available_from"],
             window["available_until"],
         )
@@ -331,8 +316,8 @@ class StoreRepository(BaseRepository):
                     user_id,
                     rotation_id,
                     quest["quest_id"],
-                    _encode_jsonb(quest_data),
-                    _encode_jsonb(progress),
+                    quest_data,
+                    progress,
                 )
             )
 
@@ -379,8 +364,8 @@ class StoreRepository(BaseRepository):
             """,
             user_id,
             rotation_id,
-            _encode_jsonb(quest_data),
-            _encode_jsonb(progress),
+            quest_data,
+            progress,
         )
 
     async def get_active_user_quests(
@@ -424,7 +409,7 @@ class StoreRepository(BaseRepository):
             WHERE id = $1
             """,
             progress_id,
-            _encode_jsonb(new_progress),
+            new_progress,
         )
 
     async def mark_quest_complete(self, progress_id: int, *, conn: Connection | None = None) -> None:
@@ -968,7 +953,7 @@ class StoreRepository(BaseRepository):
         for idx, (field, value) in enumerate(updates.items(), start=1):
             if field == "requirements":
                 set_clauses.append(f"{field} = ${idx}::jsonb")
-                values.append(_encode_jsonb(value))
+                values.append(value)
             else:
                 set_clauses.append(f"{field} = ${idx}")
                 values.append(value)

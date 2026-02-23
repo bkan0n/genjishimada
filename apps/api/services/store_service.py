@@ -68,49 +68,6 @@ ROTATION_ITEM_MIN = 3
 ROTATION_ITEM_MAX = 5
 
 
-def _decode_jsonb(value: object) -> object:
-    if value is None:
-        return {}
-    if isinstance(value, (dict, list)):
-        return value
-    if isinstance(value, (bytes, bytearray, str)):
-        return msgspec.json.decode(value)
-    return value
-
-
-def _decode_jsonb_dict(value: object) -> dict[str, object]:
-    decoded = _decode_jsonb(value)
-    if isinstance(decoded, dict):
-        return decoded
-    return {}
-
-
-def _coerce_int(value: object | None, default: int) -> int:
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and value.isdigit():
-        return int(value)
-    return default
-
-
-def _coerce_float(value: object | None, default: float) -> float:
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return default
-    return default
-
-
-def _decode_requirements(quest_data: dict[str, object]) -> dict[str, object]:
-    requirements = quest_data.get("requirements")
-    if isinstance(requirements, dict):
-        return requirements
-    return {}
-
-
 class StoreService(BaseService):
     """Service for store domain business logic."""
 
@@ -490,32 +447,35 @@ class StoreService(BaseService):
         )
 
         for row in quest_rows:
-            quest_data = _decode_jsonb_dict(row.get("quest_data"))
-            progress_raw = _decode_jsonb_dict(row.get("progress"))
+            quest_data = row.get("quest_data") or {}
+            progress_raw = row.get("progress") or {}
 
             completed = row.get("completed_at") is not None
             claimed = row.get("claimed_at") is not None
 
             # Compute percentage before struct conversion
             percentage = 0
-            target_val = _coerce_float(progress_raw.get("target"), 0.0)
+            target_raw = progress_raw.get("target")
+            target_val = float(target_raw) if isinstance(target_raw, (int, float)) else 0.0
             if target_val:
-                current_val = _coerce_float(progress_raw.get("current"), 0.0)
+                current_raw = progress_raw.get("current")
+                current_val = float(current_raw) if isinstance(current_raw, (int, float)) else 0.0
                 percentage = min(100, int((current_val / target_val) * 100))
             elif completed:
                 percentage = 100
             progress_raw["percentage"] = percentage
 
-            # Coerce JSONB string values to int for struct conversion
+            # Coerce non-numeric progress fields to None for struct conversion
+            # (e.g., complete_map quests store target as "complete" string)
             for field in ("current", "target"):
                 val = progress_raw.get(field)
-                if isinstance(val, str):
-                    progress_raw[field] = int(val) if val.isdigit() else None
+                if not isinstance(val, (int, float, type(None))):
+                    progress_raw[field] = None
 
             progress = msgspec.convert(progress_raw, QuestProgress)
 
-            coin_reward = _coerce_int(quest_data.get("coin_reward"), 0)
-            xp_reward = _coerce_int(quest_data.get("xp_reward"), 0)
+            coin_reward = quest_data.get("coin_reward") or 0
+            xp_reward = quest_data.get("xp_reward") or 0
 
             quests.append(
                 QuestResponse(
@@ -540,8 +500,8 @@ class StoreService(BaseService):
                 summary.completed += 1
             if claimed:
                 summary.claimed += 1
-            summary.earned_coins += _coerce_int(row.get("coins_rewarded"), 0)
-            summary.earned_xp += _coerce_int(row.get("xp_rewarded"), 0)
+            summary.earned_coins += row.get("coins_rewarded") or 0
+            summary.earned_xp += row.get("xp_rewarded") or 0
 
         return UserQuestsResponse(
             rotation_id=rotation_id,
@@ -555,7 +515,7 @@ class StoreService(BaseService):
         total, rows = await self._store_repo.fetch_quest_history(user_id, limit, offset)
         quests: list[QuestHistoryItem] = []
         for row in rows:
-            quest_data = _decode_jsonb_dict(row.get("quest_data"))
+            quest_data = row.get("quest_data") or {}
             quests.append(
                 QuestHistoryItem(
                     progress_id=row["progress_id"],
@@ -563,8 +523,8 @@ class StoreService(BaseService):
                     name=cast("str | None", quest_data.get("name")),
                     description=cast("str | None", quest_data.get("description")),
                     difficulty=cast("str | None", quest_data.get("difficulty")),
-                    coin_reward=_coerce_int(quest_data.get("coin_reward"), 0),
-                    xp_reward=_coerce_int(quest_data.get("xp_reward"), 0),
+                    coin_reward=quest_data.get("coin_reward") or 0,
+                    xp_reward=quest_data.get("xp_reward") or 0,
                     completed_at=row.get("completed_at"),
                     claimed_at=row.get("claimed_at"),
                     coins_rewarded=row.get("coins_rewarded") or 0,
@@ -1066,9 +1026,9 @@ class StoreService(BaseService):
                 if quest.get("completed_at"):
                     continue
 
-                quest_data = _decode_jsonb_dict(quest.get("quest_data"))
-                progress = _decode_jsonb_dict(quest.get("progress"))
-                requirements = _decode_requirements(quest_data)
+                quest_data = quest.get("quest_data") or {}
+                progress = quest.get("progress") or {}
+                requirements = quest_data.get("requirements") or {}
 
                 if not self._event_matches_quest(requirements, event_type, event_data):
                     continue
@@ -1108,9 +1068,9 @@ class StoreService(BaseService):
             )
 
             for quest in quests:
-                quest_data = _decode_jsonb_dict(quest.get("quest_data"))
-                progress = _decode_jsonb_dict(quest.get("progress"))
-                requirements = _decode_requirements(quest_data)
+                quest_data = quest.get("quest_data") or {}
+                progress = quest.get("progress") or {}
+                requirements = quest_data.get("requirements") or {}
 
                 if quest.get("completed_at") is not None:
                     continue
@@ -1170,7 +1130,7 @@ class StoreService(BaseService):
                     raise QuestAlreadyClaimedError(progress_id)
                 raise QuestNotCompletedError(progress_id)
 
-            quest_data = _decode_jsonb_dict(row["quest_data"])
+            quest_data = row["quest_data"] or {}
             coin_reward = row["coins_rewarded"] or 0
             xp_reward = row["xp_rewarded"] or 0
 
@@ -1256,8 +1216,8 @@ class StoreService(BaseService):
             updates["hard_quest_count"] = hard_quest_count
 
         if "rotation_day" in updates or "rotation_hour" in updates:
-            new_day = _coerce_int(updates.get("rotation_day", config.get("rotation_day")), 1)
-            new_hour = _coerce_int(updates.get("rotation_hour", config.get("rotation_hour")), 0)
+            new_day = cast(int, updates.get("rotation_day") or config.get("rotation_day") or 1)
+            new_hour = cast(int, updates.get("rotation_hour") or config.get("rotation_hour") or 0)
             now = datetime.datetime.now(datetime.timezone.utc)
             candidate = now.replace(hour=new_hour, minute=0, second=0, microsecond=0)
             weekday = candidate.isoweekday()

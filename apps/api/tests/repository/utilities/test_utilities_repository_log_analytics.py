@@ -61,4 +61,4 @@ class TestLogAnalyticsHappyPath:
         assert row is not None
         assert row["command_name"] == command_name
         assert row["user_id"] == unique_user_id
-        assert row["namespace"] == json.dumps(namespace)
+        assert row["namespace"] == namespace
