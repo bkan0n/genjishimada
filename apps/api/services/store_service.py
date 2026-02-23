@@ -657,7 +657,7 @@ class StoreService(BaseService):
             "rotation_id": rotation_id,
             "quest_data": {
                 "name": "Beat Your Best",
-                "description": f"Improve your time on {completion['map_name']}",
+                "description": f"Improve your time on {completion['code']}",
                 "difficulty": "bounty",
                 "coin_reward": 300,
                 "xp_reward": 50,
@@ -690,7 +690,7 @@ class StoreService(BaseService):
             "rotation_id": rotation_id,
             "quest_data": {
                 "name": "Rival Challenge",
-                "description": f"Beat {rival['username']}'s time on {target_map['map_name']}",
+                "description": f"Beat {rival['username']}'s time on {target_map['code']}",
                 "difficulty": "bounty",
                 "coin_reward": 300,
                 "xp_reward": 50,
@@ -733,7 +733,7 @@ class StoreService(BaseService):
             "rotation_id": rotation_id,
             "quest_data": {
                 "name": "Explore New Territory",
-                "description": f"Complete {target_map['map_name']}",
+                "description": f"Complete {target_map['code']}",
                 "difficulty": "bounty",
                 "coin_reward": 300,
                 "xp_reward": 50,

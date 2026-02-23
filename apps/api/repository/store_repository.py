@@ -483,6 +483,7 @@ class StoreRepository(BaseRepository):
             """
             SELECT
                 c.map_id,
+                m.code,
                 m.map_name,
                 c.time::float AS time,
                 m.difficulty,
@@ -712,7 +713,7 @@ class StoreRepository(BaseRepository):
                 WHERE user_id = $2 AND verified = TRUE AND legacy = FALSE
                 GROUP BY map_id
             )
-            SELECT rt.map_id, m.map_name, rt.rival_time, ut.user_time
+            SELECT rt.map_id, m.code, m.map_name, rt.rival_time, ut.user_time
             FROM rival_times rt
             JOIN user_times ut ON ut.map_id = rt.map_id
             JOIN core.maps m ON m.id = rt.map_id
@@ -733,6 +734,7 @@ class StoreRepository(BaseRepository):
             """
             SELECT
                 m.id AS map_id,
+                m.code,
                 m.map_name,
                 m.difficulty,
                 m.category
