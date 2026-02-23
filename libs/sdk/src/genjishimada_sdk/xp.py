@@ -44,10 +44,12 @@ class XpGrantRequest(Struct):
     Attributes:
         amount: Amount of XP to grant.
         type: Category describing why XP is granted.
+        reason: Optional free-text reason for the grant.
     """
 
     amount: int
     type: XP_TYPES
+    reason: str | None = None
 
 
 class TierChangeResponse(Struct):
@@ -147,6 +149,7 @@ class XpGrantEvent(Struct):
         type: Category describing why XP is granted.
         previous_amount: XP total before the grant.
         new_amount: XP total after the grant.
+        reason: Optional free-text reason for the grant.
     """
 
     user_id: int
@@ -154,3 +157,4 @@ class XpGrantEvent(Struct):
     type: XP_TYPES
     previous_amount: int
     new_amount: int
+    reason: str | None = None
