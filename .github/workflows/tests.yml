@@ -1,10 +1,6 @@
 name: Tests
 
 on:
-  pull_request:
-    branches:
-      - main
-      - dev
   workflow_call:
     inputs:
       ref:
