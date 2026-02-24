@@ -13,6 +13,8 @@ from asyncpg import Connection, Pool
 from asyncpg.pool import PoolConnectionProxy
 from genjishimada_sdk.lootbox import LootboxKeyType
 from genjishimada_sdk.store import (
+    AdminUpdateUserQuestRequest,
+    AdminUpdateUserQuestResponse,
     ClaimQuestResponse,
     GenerateQuestRotationResponse,
     GenerateRotationResponse,
@@ -43,6 +45,7 @@ from services.exceptions.store import (
     InsufficientCoinsError,
     InvalidKeyTypeError,
     InvalidQuantityError,
+    InvalidQuestPatchError,
     InvalidRotationItemCountError,
     ItemNotInRotationError,
     QuestAlreadyClaimedError,
@@ -1178,6 +1181,111 @@ class StoreService(BaseService):
             new_coin_balance=new_coins,
             new_xp=new_xp,
         )
+
+    @staticmethod
+    def _merge_quest_data_patch(existing: dict, patch: msgspec.Struct) -> dict:
+        """Merge a PatchQuestData into existing quest_data dict."""
+        merged = dict(existing)
+        patch_fields = {k: v for k, v in msgspec.structs.asdict(patch).items() if v is not msgspec.UNSET}
+
+        # Handle nested requirements merge
+        req_patch = patch_fields.pop("requirements", None)
+        if isinstance(req_patch, dict):
+            filtered_req = {k: v for k, v in req_patch.items() if v is not msgspec.UNSET}
+            existing_req = merged.get("requirements") or {}
+            existing_req.update(filtered_req)
+            merged["requirements"] = existing_req
+
+        merged.update(patch_fields)
+        return merged
+
+    @staticmethod
+    def _auto_patch_progress_for_completion(existing_progress: dict, requirements: dict) -> dict:
+        """Auto-patch progress fields when marking a quest as complete."""
+        progress = dict(existing_progress)
+        req_type = requirements.get("type")
+
+        if req_type in ("complete_maps", "earn_medals"):
+            progress["current"] = requirements.get("count", 0)
+        elif req_type == "complete_difficulty_range":
+            progress["current"] = requirements.get("min_count", 0)
+        elif req_type == "complete_map":
+            progress["completed"] = True
+        elif req_type == "beat_time":
+            target_time = requirements.get("target_time")
+            if target_time is not None:
+                progress["best_attempt"] = float(target_time) - 0.01
+        elif req_type == "beat_rival":
+            rival_time = requirements.get("rival_time")
+            if rival_time is not None:
+                progress["best_attempt"] = float(rival_time) - 0.01
+
+        return progress
+
+    async def admin_update_user_quest(
+        self,
+        user_id: int,
+        progress_id: int,
+        data: AdminUpdateUserQuestRequest,
+    ) -> AdminUpdateUserQuestResponse:
+        """Admin-update a user's quest progress, data, or completion status.
+
+        Args:
+            user_id: Target user ID.
+            progress_id: Quest progress row ID.
+            data: Patch request with optional fields.
+
+        Returns:
+            Success response.
+
+        Raises:
+            InvalidQuestPatchError: If all fields are UNSET.
+            QuestNotFoundError: If progress row not found.
+        """
+        if not any(v is not msgspec.UNSET for v in msgspec.structs.asdict(data).values()):
+            raise InvalidQuestPatchError()
+
+        existing = await self._store_repo.get_user_quest_progress(user_id, progress_id)
+        if not existing:
+            raise QuestNotFoundError(progress_id)
+
+        existing_quest_data = existing.get("quest_data") or {}
+        existing_progress = existing.get("progress") or {}
+
+        quest_data_dict = (
+            self._merge_quest_data_patch(existing_quest_data, data.quest_data)
+            if data.quest_data is not msgspec.UNSET
+            else None
+        )
+
+        effective_quest_data = quest_data_dict if quest_data_dict is not None else existing_quest_data
+
+        completed_at: object = msgspec.UNSET
+        auto_patched: dict | None = None
+        if data.completed is not msgspec.UNSET:
+            if data.completed:
+                completed_at = datetime.datetime.now(datetime.timezone.utc)
+                requirements = effective_quest_data.get("requirements") or {}
+                auto_patched = self._auto_patch_progress_for_completion(existing_progress, requirements)
+            else:
+                completed_at = None
+
+        if data.progress is not msgspec.UNSET:
+            base = auto_patched if auto_patched is not None else dict(existing_progress)
+            explicit = {k: v for k, v in msgspec.structs.asdict(data.progress).items() if v is not msgspec.UNSET}
+            base.update(explicit)
+            progress_dict = base
+        else:
+            progress_dict = auto_patched
+
+        await self._store_repo.admin_update_user_quest(
+            progress_id,
+            quest_data=quest_data_dict,
+            progress=progress_dict,
+            completed_at=completed_at,
+        )
+
+        return AdminUpdateUserQuestResponse(success=True)
 
     async def update_config(
         self,

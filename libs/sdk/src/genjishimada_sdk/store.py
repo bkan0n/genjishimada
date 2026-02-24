@@ -6,11 +6,13 @@ import datetime as dt
 from typing import Literal
 from uuid import UUID
 
-from msgspec import Struct
+from msgspec import UNSET, Struct, UnsetType
 
 from .utilities import get_reward_url
 
 __all__ = (
+    "AdminUpdateUserQuestRequest",
+    "AdminUpdateUserQuestResponse",
     "ClaimQuestRequest",
     "ClaimQuestResponse",
     "GenerateQuestRotationResponse",
@@ -23,6 +25,9 @@ __all__ = (
     "KeyPricingResponse",
     "KeyPurchaseRequest",
     "KeyPurchaseResponse",
+    "PatchQuestData",
+    "PatchQuestProgress",
+    "PatchQuestRequirements",
     "PurchaseHistoryItem",
     "PurchaseHistoryResponse",
     "QuestConfigResponse",
@@ -522,7 +527,7 @@ class QuestData(Struct):
     difficulty: str
     coin_reward: int
     xp_reward: int
-    requirements: dict
+    requirements: QuestRequirements
     bounty_type: str | None = None
 
 
@@ -546,6 +551,71 @@ class QuestProgress(Struct):
     rival_time: float | None = None
     completed: bool | None = None
     medal_earned: str | None = None
+
+
+class PatchQuestRequirements(Struct):
+    """Partial quest requirements for admin patching."""
+
+    type: str | UnsetType = UNSET
+    count: int | UnsetType = UNSET
+    difficulty: str | UnsetType = UNSET
+    category: str | UnsetType = UNSET
+    medal_type: str | UnsetType = UNSET
+    map_id: int | UnsetType = UNSET
+    target_time: float | UnsetType = UNSET
+    target_type: str | UnsetType = UNSET
+    rival_user_id: int | UnsetType = UNSET
+    rival_time: float | UnsetType = UNSET
+    target: str | UnsetType = UNSET
+    min_count: int | UnsetType = UNSET
+
+
+class PatchQuestData(Struct):
+    """Partial quest data for admin patching."""
+
+    name: str | UnsetType = UNSET
+    description: str | UnsetType = UNSET
+    difficulty: str | UnsetType = UNSET
+    coin_reward: int | UnsetType = UNSET
+    xp_reward: int | UnsetType = UNSET
+    requirements: PatchQuestRequirements | UnsetType = UNSET
+    bounty_type: str | None | UnsetType = UNSET
+
+
+class PatchQuestProgress(Struct):
+    """Partial quest progress for admin patching."""
+
+    current: int | UnsetType = UNSET
+    target: int | UnsetType = UNSET
+    percentage: int | UnsetType = UNSET
+    details: dict | UnsetType = UNSET
+    completed_map_ids: list[int] | UnsetType = UNSET
+    counted_map_ids: list[int] | UnsetType = UNSET
+    medals: list[dict] | UnsetType = UNSET
+    map_id: int | UnsetType = UNSET
+    target_time: float | UnsetType = UNSET
+    target_type: str | UnsetType = UNSET
+    medal_type: str | UnsetType = UNSET
+    best_attempt: float | UnsetType = UNSET
+    last_attempt: float | UnsetType = UNSET
+    rival_user_id: int | UnsetType = UNSET
+    rival_time: float | UnsetType = UNSET
+    completed: bool | UnsetType = UNSET
+    medal_earned: str | UnsetType = UNSET
+
+
+class AdminUpdateUserQuestRequest(Struct):
+    """Request to admin-update a user's quest progress."""
+
+    completed: bool | UnsetType = UNSET
+    quest_data: PatchQuestData | UnsetType = UNSET
+    progress: PatchQuestProgress | UnsetType = UNSET
+
+
+class AdminUpdateUserQuestResponse(Struct):
+    """Response from admin-updating a user's quest progress."""
+
+    success: bool
 
 
 class QuestResponse(Struct):

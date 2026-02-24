@@ -7,6 +7,8 @@ from typing import Annotated
 import litestar
 import msgspec
 from genjishimada_sdk.store import (
+    AdminUpdateUserQuestRequest,
+    AdminUpdateUserQuestResponse,
     ClaimQuestRequest,
     ClaimQuestResponse,
     GenerateQuestRotationResponse,
@@ -45,6 +47,7 @@ from services.exceptions.store import (
     InsufficientCoinsError,
     InvalidKeyTypeError,
     InvalidQuantityError,
+    InvalidQuestPatchError,
     InvalidRotationItemCountError,
     ItemNotInRotationError,
     QuestAlreadyClaimedError,
@@ -443,3 +446,25 @@ class StoreController(litestar.Controller):
             raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail="No valid fields to update")
         updated_fields = await store_repo.update_quest(quest_id, updates)
         return UpdateQuestResponse(success=True, updated_fields=updated_fields)
+
+    @litestar.patch(
+        path="/admin/users/{user_id:int}/quests/{progress_id:int}",
+        summary="Update User Quest Progress (Admin)",
+        description="Edit quest data, progress, or completion status for a user's quest.",
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"store:admin"}},
+    )
+    async def admin_update_user_quest(
+        self,
+        store_service: StoreService,
+        user_id: int,
+        progress_id: int,
+        data: Annotated[AdminUpdateUserQuestRequest, Body()],
+    ) -> AdminUpdateUserQuestResponse:
+        """Admin-update a user's quest progress."""
+        try:
+            return await store_service.admin_update_user_quest(user_id, progress_id, data)
+        except InvalidQuestPatchError as e:
+            raise CustomHTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        except QuestNotFoundError as e:
+            raise CustomHTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e

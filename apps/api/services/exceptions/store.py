@@ -98,6 +98,13 @@ class InvalidKeyTypeError(StoreError):
         super().__init__(f"Invalid key type: {key_type}", key_type=key_type)
 
 
+class InvalidQuestPatchError(StoreError):
+    """Raised when all fields in an admin quest patch are UNSET."""
+
+    def __init__(self) -> None:
+        super().__init__("No fields provided to update")
+
+
 class InvalidRotationItemCountError(StoreError):
     """Raised when rotation item_count is outside allowed range."""
 

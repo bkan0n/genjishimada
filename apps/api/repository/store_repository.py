@@ -7,6 +7,7 @@ from uuid import UUID
 import asyncpg
 from asyncpg import Connection, Pool
 from litestar.datastructures import State
+from msgspec import UNSET
 
 from repository.base import BaseRepository
 from repository.exceptions import ForeignKeyViolationError, extract_constraint_name
@@ -943,6 +944,80 @@ class StoreRepository(BaseRepository):
         if updates:
             query = f"UPDATE store.config SET {', '.join(updates)} WHERE id = 1"
             await _conn.execute(query, *params)
+
+    async def get_user_quest_progress(
+        self,
+        user_id: int,
+        progress_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch a single user quest progress row.
+
+        Args:
+            user_id: User ID.
+            progress_id: Progress row ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Progress row dict or None if not found.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT id, user_id, quest_data, progress, completed_at, claimed_at
+            FROM store.user_quest_progress
+            WHERE id = $1 AND user_id = $2
+            """,
+            progress_id,
+            user_id,
+        )
+        return dict(row) if row else None
+
+    async def admin_update_user_quest(
+        self,
+        progress_id: int,
+        *,
+        quest_data: dict | None = None,
+        progress: dict | None = None,
+        completed_at: object = UNSET,
+        conn: Connection | None = None,
+    ) -> None:
+        """Admin-update a user quest progress row.
+
+        Args:
+            progress_id: Progress row ID.
+            quest_data: Updated quest_data JSONB (if provided).
+            progress: Updated progress JSONB (if provided).
+            completed_at: Updated completed_at timestamp (UNSET to skip).
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        set_clauses: list[str] = []
+        values: list[object] = []
+        idx = 1
+
+        if quest_data is not None:
+            set_clauses.append(f"quest_data = ${idx}::jsonb")
+            values.append(quest_data)
+            idx += 1
+
+        if progress is not None:
+            set_clauses.append(f"progress = ${idx}::jsonb")
+            values.append(progress)
+            idx += 1
+
+        if completed_at is not UNSET:
+            set_clauses.append(f"completed_at = ${idx}")
+            values.append(completed_at)
+            idx += 1
+
+        if not set_clauses:
+            return
+
+        query = f"UPDATE store.user_quest_progress SET {', '.join(set_clauses)} WHERE id = ${idx}"
+        values.append(progress_id)
+        await _conn.execute(query, *values)
 
     async def update_quest(
         self,

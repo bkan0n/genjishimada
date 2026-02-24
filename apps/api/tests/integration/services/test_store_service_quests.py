@@ -359,3 +359,70 @@ async def test_claim_quest_updates_coin_and_xp(asyncpg_pool, create_test_user):
     assert coins == 100
     assert xp_amount == 25
     assert claimed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_admin_update_user_quest_round_trip(asyncpg_pool, create_test_user):
+    """Admin can complete and then un-complete a quest with auto-patched progress."""
+    user_id = await create_test_user()
+
+    store_repo = StoreRepository(asyncpg_pool)
+    lootbox_repo = LootboxRepository(asyncpg_pool)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+
+    async with asyncpg_pool.acquire() as conn:
+        await conn.execute("SELECT store.check_and_generate_quest_rotation()")
+        rotation_id = await conn.fetchval(
+            "SELECT current_rotation_id FROM store.quest_config WHERE id = 1",
+        )
+
+        quest_data = {
+            "name": "Admin Patch Test",
+            "description": "Complete 5 maps",
+            "difficulty": "easy",
+            "coin_reward": 50,
+            "xp_reward": 10,
+            "requirements": {"type": "complete_maps", "count": 5, "difficulty": "any"},
+        }
+        progress_id = await conn.fetchval(
+            """
+            INSERT INTO store.user_quest_progress (user_id, rotation_id, quest_data, progress)
+            VALUES ($1, $2, $3::jsonb, $4::jsonb)
+            RETURNING id
+            """,
+            user_id,
+            rotation_id,
+            msgspec.json.encode(quest_data).decode(),
+            msgspec.json.encode({"current": 2, "completed_map_ids": [1, 2]}).decode(),
+        )
+
+    # Mark as complete
+    from genjishimada_sdk.store import AdminUpdateUserQuestRequest
+
+    result = await service.admin_update_user_quest(
+        user_id, progress_id, AdminUpdateUserQuestRequest(completed=True)
+    )
+    assert result.success is True
+
+    # Verify DB: completed_at set, progress auto-patched
+    async with asyncpg_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT completed_at, progress FROM store.user_quest_progress WHERE id = $1",
+            progress_id,
+        )
+    assert row["completed_at"] is not None
+    assert row["progress"]["current"] == 5
+
+    # Un-complete
+    result = await service.admin_update_user_quest(
+        user_id, progress_id, AdminUpdateUserQuestRequest(completed=False)
+    )
+    assert result.success is True
+
+    # Verify DB: completed_at cleared
+    async with asyncpg_pool.acquire() as conn:
+        completed_at = await conn.fetchval(
+            "SELECT completed_at FROM store.user_quest_progress WHERE id = $1",
+            progress_id,
+        )
+    assert completed_at is None
