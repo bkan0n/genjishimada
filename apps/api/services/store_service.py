@@ -639,11 +639,13 @@ class StoreService(BaseService):
             percentile_target = float(percentile_target)
 
         medal_target = None
+        target_medal = None
         if medal_thresholds:
             for medal_name in ("gold", "silver", "bronze"):
                 threshold = medal_thresholds.get(medal_name)
                 if threshold and completion["time"] > float(threshold):
                     medal_target = float(threshold)
+                    target_medal = medal_name
                     break
 
         if medal_target and percentile_target:
@@ -657,7 +659,16 @@ class StoreService(BaseService):
             target_type = "percentile"
         else:
             target_time = completion["time"] * 0.9
-            target_type = "percentile"
+            target_type = "personal_best"
+
+        requirements: dict = {
+            "type": "beat_time",
+            "map_id": completion["map_id"],
+            "target_time": target_time,
+            "target_type": target_type,
+        }
+        if target_type == "medal_threshold":
+            requirements["medal_type"] = target_medal
 
         return {
             "user_id": user_id,
@@ -669,12 +680,7 @@ class StoreService(BaseService):
                 "coin_reward": 300,
                 "xp_reward": 50,
                 "bounty_type": "personal_improvement",
-                "requirements": {
-                    "type": "beat_time",
-                    "map_id": completion["map_id"],
-                    "target_time": target_time,
-                    "target_type": target_type,
-                },
+                "requirements": requirements,
             },
         }
 
