@@ -539,6 +539,7 @@ class QuestProgress(Struct):
     map_id: int | None = None
     target_time: float | None = None
     target_type: str | None = None
+    medal_type: str | None = None
     best_attempt: float | None = None
     last_attempt: float | None = None
     rival_user_id: int | None = None
