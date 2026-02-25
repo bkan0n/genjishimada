@@ -126,21 +126,40 @@ class NotificationHandler(BaseHandler):
             user_data = await self.bot.api.get_user(event.user_id)
             completer_text = user_data.coalesced_name if user_data else "Unknown User"
 
+        # Read enriched metadata
+        bounty_type = metadata.get("bounty_type")
+        map_code = metadata.get("map_code")
+        completion_time = metadata.get("completion_time")
+        rival_time = metadata.get("rival_time")
+        target_time = metadata.get("target_time")
+        quest_description = metadata.get("quest_description", "")
+
         difficulty_text = f" {quest_difficulty.capitalize()}" if quest_difficulty else ""
 
-        if rival_user_id:
+        if bounty_type == "rival_challenge" and rival_user_id:
+            # Resolve rival text (ping or display name)
             should_ping_rival = await self.should_deliver_new(
                 rival_user_id, NotificationEventType.QUEST_RIVAL_MENTION, NotificationChannel.DISCORD_PING
             )
             rival_text = f"<@{rival_user_id}>" if should_ping_rival else (rival_display_name or "Unknown User")
 
             ping_message = (
-                f"<:_:976917981009440798> {completer_text} completed the{difficulty_text} "
-                f"quest **{quest_name}** (vs {rival_text})!"
+                f"<:_:976917981009440798> {completer_text} beat {rival_text}'s time on "
+                f"**{map_code}** ({rival_time:.2f}s \u2192 {completion_time:.2f}s)!"
             )
-        else:
+        elif bounty_type == "personal_improvement":
             ping_message = (
-                f"<:_:976917981009440798> {completer_text} completed the{difficulty_text} quest **{quest_name}**!"
+                f"<:_:976917981009440798> {completer_text} improved their time on "
+                f"**{map_code}** ({target_time:.2f}s \u2192 {completion_time:.2f}s)!"
+            )
+        elif bounty_type == "gap_filling":
+            ping_message = f"<:_:976917981009440798> {completer_text} completed **{map_code}**!"
+        else:
+            # Global quest (no bounty_type)
+            desc_part = f" ({quest_description})" if quest_description else ""
+            ping_message = (
+                f"<:_:976917981009440798> {completer_text} completed the{difficulty_text} "
+                f"quest **{quest_name}**{desc_part}!"
             )
 
         try:
