@@ -331,6 +331,10 @@ class TestCompletionsServiceVerifyCompletion:
         )
         mocker.patch("services.completions_service.StoreService", return_value=mock_store_service)
 
+        mock_users_repo = mocker.AsyncMock()
+        mock_users_repo.fetch_user.return_value = {"coalesced_name": "TestPlayer"}
+        mocker.patch("services.completions_service.UsersRepository", return_value=mock_users_repo)
+
         service.publish_message = mocker.AsyncMock(return_value={"job_id": "job123"})
 
         data = CompletionVerificationUpdateRequest(
