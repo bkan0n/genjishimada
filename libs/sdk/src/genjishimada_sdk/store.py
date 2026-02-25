@@ -610,6 +610,7 @@ class AdminUpdateUserQuestRequest(Struct):
     completed: bool | UnsetType = UNSET
     quest_data: PatchQuestData | UnsetType = UNSET
     progress: PatchQuestProgress | UnsetType = UNSET
+    claimed: bool | UnsetType = UNSET
 
 
 class AdminUpdateUserQuestResponse(Struct):

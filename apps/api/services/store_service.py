@@ -1270,6 +1270,10 @@ class StoreService(BaseService):
             else:
                 completed_at = None
 
+        claimed: bool | msgspec.UnsetType = msgspec.UNSET
+        if data.claimed is not msgspec.UNSET:
+            claimed = data.claimed
+
         if data.progress is not msgspec.UNSET:
             base = auto_patched if auto_patched is not None else dict(existing_progress)
             explicit = {k: v for k, v in msgspec.structs.asdict(data.progress).items() if v is not msgspec.UNSET}
@@ -1278,12 +1282,37 @@ class StoreService(BaseService):
         else:
             progress_dict = auto_patched
 
-        await self._store_repo.admin_update_user_quest(
-            progress_id,
-            quest_data=quest_data_dict,
-            progress=progress_dict,
-            completed_at=completed_at,
-        )
+        async with self._pool.acquire() as conn, conn.transaction():
+            await self._store_repo.admin_update_user_quest(
+                progress_id,
+                quest_data=quest_data_dict,
+                progress=progress_dict,
+                completed_at=completed_at,
+                claimed=claimed,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            if claimed is True and existing.get("claimed_at") is None:
+                coin_reward = effective_quest_data.get("coin_reward") or 0
+                xp_reward = effective_quest_data.get("xp_reward") or 0
+
+                if coin_reward:
+                    await conn.execute(
+                        "UPDATE core.users SET coins = coins + $2 WHERE id = $1",
+                        user_id,
+                        coin_reward,
+                    )
+                if xp_reward:
+                    await conn.execute(
+                        """
+                        INSERT INTO lootbox.xp (user_id, amount)
+                        VALUES ($1, $2)
+                        ON CONFLICT (user_id) DO UPDATE
+                            SET amount = lootbox.xp.amount + EXCLUDED.amount
+                        """,
+                        user_id,
+                        xp_reward,
+                    )
 
         return AdminUpdateUserQuestResponse(success=True)
 

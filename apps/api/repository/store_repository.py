@@ -7,7 +7,7 @@ from uuid import UUID
 import asyncpg
 from asyncpg import Connection, Pool
 from litestar.datastructures import State
-from msgspec import UNSET
+from msgspec import UNSET, UnsetType
 
 from repository.base import BaseRepository
 from repository.exceptions import ForeignKeyViolationError, extract_constraint_name
@@ -974,13 +974,14 @@ class StoreRepository(BaseRepository):
         )
         return dict(row) if row else None
 
-    async def admin_update_user_quest(
+    async def admin_update_user_quest(  # noqa: PLR0913
         self,
         progress_id: int,
         *,
         quest_data: dict | None = None,
         progress: dict | None = None,
         completed_at: object = UNSET,
+        claimed: bool | UnsetType = UNSET,
         conn: Connection | None = None,
     ) -> None:
         """Admin-update a user quest progress row.
@@ -990,6 +991,7 @@ class StoreRepository(BaseRepository):
             quest_data: Updated quest_data JSONB (if provided).
             progress: Updated progress JSONB (if provided).
             completed_at: Updated completed_at timestamp (UNSET to skip).
+            claimed: Force-claim (True) or unclaim (False) the quest (UNSET to skip).
             conn: Optional connection for transaction support.
         """
         _conn = self._get_connection(conn)
@@ -1011,6 +1013,16 @@ class StoreRepository(BaseRepository):
             set_clauses.append(f"completed_at = ${idx}")
             values.append(completed_at)
             idx += 1
+
+        if claimed is not UNSET:
+            if claimed:
+                set_clauses.append("claimed_at = now()")
+                set_clauses.append("coins_rewarded = (quest_data->>'coin_reward')::int")
+                set_clauses.append("xp_rewarded = (quest_data->>'xp_reward')::int")
+            else:
+                set_clauses.append("claimed_at = NULL")
+                set_clauses.append("coins_rewarded = NULL")
+                set_clauses.append("xp_rewarded = NULL")
 
         if not set_clauses:
             return
