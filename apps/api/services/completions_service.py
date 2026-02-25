@@ -129,39 +129,74 @@ class CompletionsService(BaseService):
         )
 
         if notifications:
+            users_repo = UsersRepository(self._pool)
+
             for quest in completed_quests:
                 requirements = quest.get("requirements", {})
+                bounty_type = quest.get("bounty_type")
                 rival_user_id = requirements.get("rival_user_id")
                 rival_display_name = None
-                completer_display_name = None
+
+                # Always fetch completer display name (needed for 3rd-person body text)
+                completer_user = await users_repo.fetch_user(user_id)
+                completer_display_name = completer_user["coalesced_name"] if completer_user else "Unknown User"
 
                 if rival_user_id:
-                    users_repo = UsersRepository(self._pool)
                     rival_user = await users_repo.fetch_user(rival_user_id)
                     rival_display_name = rival_user["coalesced_name"] if rival_user else "Unknown User"
-                    completer_user = await users_repo.fetch_user(user_id)
-                    completer_display_name = completer_user["coalesced_name"] if completer_user else "Unknown User"
 
-                metadata = {
+                # Build body per quest type
+                coins = quest.get("coin_reward", 0)
+                xp = quest.get("xp_reward", 0)
+                reward_suffix = f" and earned {coins} coins + {xp} XP."
+
+                # Build enriched metadata (base fields)
+                metadata: dict[str, Any] = {
                     "quest_id": quest.get("quest_id"),
                     "progress_id": quest.get("progress_id"),
                     "quest_name": quest["name"],
                     "quest_difficulty": quest.get("difficulty"),
                     "coin_reward": quest.get("coin_reward"),
                     "xp_reward": quest.get("xp_reward"),
+                    "completer_display_name": completer_display_name,
                     "rival_user_id": rival_user_id,
                     "rival_display_name": rival_display_name,
                 }
+
+                # Build body and type-specific metadata per quest type
+                if bounty_type == "rival_challenge":
+                    rival_time = requirements.get("rival_time")
+                    body = (
+                        f"{completer_display_name} beat {rival_display_name}'s time on {map_code} "
+                        f"({rival_time:.2f}s \u2192 {time:.2f}s){reward_suffix}"
+                    )
+                    metadata.update(
+                        bounty_type=bounty_type, map_code=map_code, completion_time=float(time), rival_time=rival_time
+                    )
+                elif bounty_type == "personal_improvement":
+                    target_time = requirements.get("target_time")
+                    body = (
+                        f"{completer_display_name} improved their time on {map_code} "
+                        f"({target_time:.2f}s \u2192 {time:.2f}s){reward_suffix}"
+                    )
+                    metadata.update(
+                        bounty_type=bounty_type, map_code=map_code, completion_time=float(time), target_time=target_time
+                    )
+                elif bounty_type == "gap_filling":
+                    body = f"{completer_display_name} completed {map_code}{reward_suffix}"
+                    metadata.update(bounty_type=bounty_type, map_code=map_code)
+                else:
+                    description = quest.get("description", "")
+                    desc_part = f" ({description})" if description else ""
+                    body = f"{completer_display_name} completed '{quest['name']}'{desc_part}{reward_suffix}"
+                    metadata["quest_description"] = description
 
                 await notifications.create_and_dispatch(
                     data=NotificationCreateRequest(
                         user_id=user_id,
                         event_type=NotificationEventType.QUEST_COMPLETE,  # type: ignore
                         title="Quest Completed!",
-                        body=(
-                            f"You completed '{quest['name']}' and earned "
-                            f"{quest.get('coin_reward', 0)} coins + {quest.get('xp_reward', 0)} XP."
-                        ),
+                        body=body,
                         metadata=metadata,
                     ),
                     headers=headers,
