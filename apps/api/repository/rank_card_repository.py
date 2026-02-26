@@ -383,7 +383,7 @@ class RankCardRepository(BaseRepository):
             SELECT count(*)
             FROM maps.creators c
             LEFT JOIN core.maps m ON c.map_id = m.id
-            WHERE c.user_id = $1 AND m.official = FALSE and m.archived = FALSE
+            WHERE c.user_id = $1 AND m.official = TRUE and m.archived = FALSE
             GROUP BY c.user_id;
         """
         return await _conn.fetchval(query, user_id) or 0
