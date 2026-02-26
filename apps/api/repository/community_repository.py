@@ -196,7 +196,7 @@ class CommunityRepository(BaseRepository):
             WHERE u.id > 100000
         ),
         playtest_counts AS (
-            SELECT pv.user_id, count(*) + dc.count AS amount
+            SELECT pv.user_id, count(*) + coalesce(dc.count, 0) AS amount
             FROM playtests.votes pv
             LEFT JOIN playtests.deprecated_count dc ON pv.user_id = dc.user_id
             GROUP BY pv.user_id, dc.count
