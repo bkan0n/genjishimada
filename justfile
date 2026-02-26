@@ -39,6 +39,10 @@ lint-api:
 test-api:
     uv run pytest -n 4 apps/api -x
 
+# Test API - full suite, bypassing testmon
+test-api-all:
+    uv run pytest -n 4 apps/api -x --no-testmon
+
 # Test v3 API only (requires Docker to be running for test database)
 test-api-v3:
     uv run pytest -n 4 apps/api/tests -x

@@ -281,3 +281,4 @@ backups/*
 /docs/reviews
 /.complexipy_cache/
 .planning/
+.testmondata*

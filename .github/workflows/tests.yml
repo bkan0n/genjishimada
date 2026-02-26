@@ -1,6 +1,14 @@
 name: Tests
 
 on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
   workflow_call:
     inputs:
       ref:
@@ -25,6 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 2
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
@@ -36,5 +45,20 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-groups
 
+      - name: Restore testmon cache
+        uses: actions/cache/restore@v4
+        with:
+          path: apps/api/.testmondata
+          key: testmon-${{ github.base_ref || github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            testmon-${{ github.base_ref || github.ref_name }}-
+
       - name: Run API tests
-        run: uv run --project apps/api --group dev-api pytest -n auto apps/api
+        run: uv run --project apps/api --group dev-api pytest --testmon -n auto apps/api
+
+      - name: Save testmon cache
+        if: github.event_name == 'push'
+        uses: actions/cache/save@v4
+        with:
+          path: apps/api/.testmondata
+          key: testmon-${{ github.ref_name }}-${{ github.sha }}

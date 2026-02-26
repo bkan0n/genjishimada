@@ -30,11 +30,13 @@ dev-api = [
     "pytest>=8.3.5",
     "pytest-asyncio>=1.2.0",
     "pytest-databases[postgres]>=0.14.0",
+    "pytest-testmon>=2.1.0",
     "pytest-xdist>=3.8.0",
     "types-boto3[boto3]>=1.40.25",
 ]
 
 [tool.pytest.ini_options]
+addopts = "--testmon"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
