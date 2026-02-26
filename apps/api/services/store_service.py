@@ -664,11 +664,16 @@ class StoreService(BaseService):
             target_time = completion["time"] * 0.9
             target_type = "personal_best"
 
+        if target_time >= completion["time"]:
+            target_time = completion["time"] * 0.9
+            target_type = "personal_best"
+
         requirements: dict = {
             "type": "beat_time",
             "map_id": completion["map_id"],
             "target_time": target_time,
             "target_type": target_type,
+            "current_best": completion["time"],
         }
         if target_type == "medal_threshold":
             requirements["medal_type"] = target_medal

@@ -80,8 +80,9 @@ async def test_generate_personal_improvement_bounty(asyncpg_pool, create_test_us
     assert quest_data["bounty_type"] == "personal_improvement"
     assert requirements["type"] == "beat_time"
     assert requirements["map_id"] == map_id
-    assert requirements["target_time"] == 70.0
-    assert requirements["target_type"] == "percentile"
+    assert requirements["target_time"] == 70.0 * 0.9  # percentile == user time, falls back to personal_best
+    assert requirements["target_type"] == "personal_best"
+    assert requirements["current_best"] == 70.0
 
 
 @pytest.mark.asyncio
@@ -426,3 +427,31 @@ async def test_admin_update_user_quest_round_trip(asyncpg_pool, create_test_user
             progress_id,
         )
     assert completed_at is None
+
+
+@pytest.mark.asyncio
+async def test_personal_improvement_bounty_falls_back_when_user_faster_than_percentile(
+    asyncpg_pool, create_test_user, create_test_map, create_test_completion,
+):
+    """Fast user gets personal_best target when their time already beats the percentile."""
+    fast_user = await create_test_user()
+    slow_user_1 = await create_test_user()
+    slow_user_2 = await create_test_user()
+    map_id = await create_test_map(medals={"gold": 10.0, "silver": 20.0, "bronze": 30.0})
+
+    # Slow users with high times push the 60th percentile above the fast user's best
+    await create_test_completion(slow_user_1, map_id, time=200.0)
+    await create_test_completion(slow_user_2, map_id, time=180.0)
+    await create_test_completion(fast_user, map_id, time=25.0)
+
+    store_repo = StoreRepository(asyncpg_pool)
+    lootbox_repo = LootboxRepository(asyncpg_pool)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+
+    bounty = await service._generate_personal_improvement_bounty(fast_user, uuid4())
+
+    requirements = bounty["quest_data"]["requirements"]
+    # The percentile target would be >= 25.0, so it should fall back to personal_best
+    assert requirements["target_type"] == "personal_best"
+    assert requirements["target_time"] == 25.0 * 0.9
+    assert requirements["current_best"] == 25.0

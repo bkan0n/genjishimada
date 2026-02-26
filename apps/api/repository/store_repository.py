@@ -41,6 +41,8 @@ def _initial_progress(requirements: dict) -> dict:
             "target_time": requirements.get("target_time"),
             "target_type": requirements.get("target_type"),
             "medal_type": requirements.get("medal_type"),
+            "best_attempt": requirements.get("current_best"),
+            "last_attempt": requirements.get("current_best"),
         }
         if req_type == "beat_rival":
             progress["rival_user_id"] = requirements.get("rival_user_id")
@@ -483,7 +485,7 @@ class StoreRepository(BaseRepository):
         return total or 0, [dict(row) for row in rows]
 
     async def get_user_completions(self, user_id: int, *, conn: Connection | None = None) -> list[dict]:
-        """Get user's map completions for bounty generation."""
+        """Get user's best time per map for bounty generation."""
         _conn = self._get_connection(conn)
         rows = await _conn.fetch(
             """
@@ -491,14 +493,13 @@ class StoreRepository(BaseRepository):
                 c.map_id,
                 m.code,
                 m.map_name,
-                c.time::float AS time,
+                MIN(c.time)::float AS time,
                 m.difficulty,
-                m.category,
-                c.inserted_at
+                m.category
             FROM core.completions c
             JOIN core.maps m ON m.id = c.map_id
             WHERE c.user_id = $1 AND c.verified = TRUE AND c.legacy = FALSE
-            ORDER BY c.inserted_at DESC
+            GROUP BY c.map_id, m.code, m.map_name, m.difficulty, m.category
             """,
             user_id,
         )

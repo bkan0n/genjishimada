@@ -47,7 +47,7 @@ class TestGetRotationWindow:
 
 
 class TestBountyDataSources:
-    async def test_get_user_completions_returns_rows(
+    async def test_get_user_completions_returns_best_per_map(
         self,
         repository: StoreRepository,
         asyncpg_conn,
@@ -60,10 +60,12 @@ class TestBountyDataSources:
         )
         map_id = await create_test_map()
 
+        # Insert two completions for the same map with different times
         await asyncpg_conn.execute(
             """
-            INSERT INTO core.completions (map_id, user_id, time, screenshot, verified, legacy)
-            VALUES ($1, $2, 45.5, 'test.png', true, false)
+            INSERT INTO core.completions (map_id, user_id, time, screenshot, verified, legacy, inserted_at)
+            VALUES ($1, $2, 45.5, 'test1.png', true, false, now()),
+                   ($1, $2, 30.0, 'test2.png', true, false, now() + interval '1 second')
             """,
             map_id,
             unique_user_id,
@@ -71,8 +73,9 @@ class TestBountyDataSources:
 
         completions = await repository.get_user_completions(unique_user_id)
 
-        assert completions
+        assert len(completions) == 1
         assert completions[0]["map_id"] == map_id
+        assert completions[0]["time"] == 30.0  # Best time, not 45.5
 
     async def test_get_medal_thresholds_returns_values(
         self,

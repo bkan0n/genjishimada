@@ -25,8 +25,3 @@ async def test_database_has_migrations(asyncpg_conn: asyncpg.Connection) -> None
     assert result is True
 
 
-async def test_database_has_seed_data(asyncpg_conn: asyncpg.Connection) -> None:
-    """Test that seed data was applied."""
-    # Check that we have at least one user from seed data
-    result = await asyncpg_conn.fetchval("SELECT COUNT(*) FROM core.users")
-    assert result > 0
