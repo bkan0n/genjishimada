@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 
 import aio_pika
 import litestar
+import msgspec
 import sentry_sdk
 from aio_pika.abc import AbstractRobustConnection
 from aio_pika.pool import Pool
@@ -82,6 +83,19 @@ def internal_server_error_handler(_: Request, exc: Exception) -> Response:
 
 async def _async_pg_init(conn: AsyncpgConnection) -> None:
     await conn.set_type_codec("numeric", encoder=str, decoder=float, schema="pg_catalog", format="text")
+    await conn.set_type_codec(
+        "jsonb", encoder=_jsonb_encoder, decoder=_jsonb_decoder, schema="pg_catalog", format="text"
+    )
+
+
+def _jsonb_encoder(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    return msgspec.json.encode(value).decode()
+
+
+def _jsonb_decoder(value: str) -> object:
+    return msgspec.json.decode(value)
 
 
 class HealthcheckEndpointFilter(logging.Filter):

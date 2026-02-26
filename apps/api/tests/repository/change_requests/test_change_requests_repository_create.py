@@ -141,28 +141,22 @@ class TestCreateRequestHappyPath:
         repository: ChangeRequestsRepository,
         create_test_map,
         create_test_user,
-        global_thread_id_tracker: set[int],
+        unique_map_code: str,
+        unique_thread_id: int,
         change_request_type: str,
     ):
         """Test creating change requests with different types succeeds."""
         # Arrange
-        map_code = f"T{uuid4().hex[:5].upper()}"
-        map_id = await create_test_map(map_code)
+        map_code = unique_map_code
+        await create_test_map(map_code)
         user_id = await create_test_user()
-
-        # Generate unique thread_id
-        while True:
-            thread_id = fake.random_int(min=100000000000000000, max=999999999999999999)
-            if thread_id not in global_thread_id_tracker:
-                global_thread_id_tracker.add(thread_id)
-                break
 
         content = fake.sentence(nb_words=20)
         creator_mentions = ""
 
         # Act
         await repository.create_request(
-            thread_id=thread_id,
+            thread_id=unique_thread_id,
             code=map_code,
             user_id=user_id,
             content=content,
@@ -171,7 +165,7 @@ class TestCreateRequestHappyPath:
         )
 
         # Assert - no exception raised means success
-        result = await repository.fetch_creator_mentions(thread_id, map_code)
+        result = await repository.fetch_creator_mentions(unique_thread_id, map_code)
         assert result is not None
 
 
@@ -222,4 +216,3 @@ class TestCreateRequestErrorCases:
 # ==============================================================================
 # TRANSACTION TESTS
 # ==============================================================================
-

@@ -1002,6 +1002,153 @@ class CompletionsRepository(BaseRepository):
         rows = await _conn.fetch(query, page_size, offset)
         return [dict(row) for row in rows]
 
+    async def fetch_dashboard_completions(
+        self,
+        user_id: int,
+        page_size: int,
+        page_number: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch completions for a user's dashboard with verification status.
+
+        Returns all non-legacy completions for a user regardless of verification
+        state, including a three-state status (Pending/Verified/Rejected) and
+        the verification reason.
+
+        Args:
+            user_id: User ID to fetch completions for.
+            page_size: Number of results per page.
+            page_number: Page number (1-indexed).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of completion records as dicts.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+        WITH latest_per_user_per_map AS (
+            SELECT DISTINCT ON (c.user_id, c.map_id)
+                c.id,
+                c.user_id,
+                c.map_id,
+                c.time,
+                c.completion,
+                c.inserted_at
+            FROM core.completions c
+            WHERE c.verified
+              AND c.legacy = FALSE
+            ORDER BY c.user_id,
+                c.map_id,
+                c.inserted_at DESC
+        ), current_ranks AS (
+            SELECT
+                l.map_id,
+                l.user_id,
+                CASE
+                    WHEN l.completion = FALSE
+                        THEN rank() OVER (PARTITION BY l.map_id ORDER BY l.time, l.inserted_at)
+                    ELSE NULL::int
+                END AS current_rank
+            FROM latest_per_user_per_map l
+        )
+        SELECT
+            m.code,
+            c.user_id,
+            coalesce(ow.username, u.nickname, u.global_name, 'Unknown Username') AS name,
+            (
+                SELECT
+                    ou.username
+                FROM users.overwatch_usernames ou
+                WHERE ou.user_id = c.user_id
+                  AND NOT ou.is_primary
+                ORDER BY c.inserted_at DESC NULLS LAST
+                LIMIT 1
+            ) AS also_known_as,
+            c.time,
+            c.screenshot,
+            c.video,
+            c.completion,
+            CASE WHEN lp.id = c.id THEN r.current_rank END AS rank,
+            CASE
+                WHEN med.gold IS NOT NULL AND c.time <= med.gold
+                    THEN 'Gold'
+                WHEN med.silver IS NOT NULL AND c.time <= med.silver
+                    THEN 'Silver'
+                WHEN med.bronze IS NOT NULL AND c.time <= med.bronze
+                    THEN 'Bronze'
+            END AS medal,
+            m.map_name,
+            m.difficulty,
+            c.message_id,
+            (SELECT COUNT(*) FROM completions.upvotes WHERE message_id=c.message_id) AS upvotes,
+            c.id,
+            c.reason,
+            CASE
+                WHEN c.verified = TRUE THEN 'Verified'
+                WHEN c.verified_by IS NOT NULL THEN 'Rejected'
+                ELSE 'Pending'
+            END AS status,
+            count(*) OVER () AS total_results
+        FROM core.completions c
+        JOIN core.maps m ON m.id = c.map_id
+        JOIN core.users u ON u.id = c.user_id
+        LEFT JOIN users.overwatch_usernames ow ON ow.user_id = u.id AND ow.is_primary
+        LEFT JOIN maps.medals med ON med.map_id = m.id
+        LEFT JOIN latest_per_user_per_map lp ON lp.user_id = c.user_id AND lp.map_id = c.map_id
+        LEFT JOIN current_ranks r ON r.user_id = c.user_id AND r.map_id = c.map_id
+        LEFT JOIN LATERAL (
+            WITH ow AS (
+                SELECT username, is_primary
+                FROM users.overwatch_usernames
+                WHERE user_id = c.user_id
+            ),
+                display AS (
+                    SELECT COALESCE(
+                            (SELECT username FROM ow WHERE is_primary LIMIT 1),
+                            u.nickname,
+                            u.global_name,
+                            'Unknown Username'
+                           ) AS name
+                ),
+                candidates AS (
+                    SELECT u.global_name AS n
+                    UNION ALL SELECT u.nickname
+                    UNION ALL SELECT username FROM ow
+                ),
+                dedup AS (
+                    SELECT DISTINCT ON (lower(btrim(n))) btrim(n) AS n
+                    FROM candidates
+                    WHERE n IS NOT NULL AND btrim(n) <> ''
+                    ORDER BY lower(btrim(n))
+                )
+            SELECT
+                (SELECT name FROM display) AS name,
+                NULLIF(
+                        array_to_string(
+                                ARRAY(
+                                        SELECT n
+                                        FROM dedup
+                                        WHERE lower(n) <> lower((SELECT name FROM display))
+                                        ORDER BY n
+                                ),
+                                ', '
+                        ),
+                        ''
+                ) AS also_known_as
+            ) names ON TRUE
+
+        WHERE TRUE
+          AND c.user_id = $1
+          AND c.legacy = FALSE
+          AND c.message_id IS NOT NULL
+        ORDER BY c.inserted_at DESC
+        LIMIT $2 OFFSET $3;
+        """
+        offset = (page_number - 1) * page_size
+        rows = await _conn.fetch(query, user_id, page_size, offset)
+        return [dict(row) for row in rows]
+
     async def fetch_suspicious_flags(
         self,
         user_id: int,
@@ -1443,6 +1590,24 @@ class CompletionsRepository(BaseRepository):
         query = "SELECT EXISTS(SELECT 1 FROM core.maps WHERE code=$1 and archived=FALSE);"
         return await _conn.fetchval(query, code)
 
+    async def fetch_map_metadata_by_code(
+        self,
+        code: str,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch map metadata for quest progress updates."""
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT id AS map_id, difficulty, category
+            FROM core.maps
+            WHERE code = $1
+            """,
+            code,
+        )
+        return dict(row) if row else None
+
     def build_completion_patch_query(
         self,
         record_id: int,
@@ -1463,7 +1628,7 @@ class CompletionsRepository(BaseRepository):
         set_clauses = []
         values = [record_id]
 
-        index = 2  # Start at $2 because $1 is id
+        index = 2
         for field_name, value in patch_data.items():
             set_clauses.append(f"{field_name.lower()} = ${index}")
             values.append(value)
@@ -1686,6 +1851,26 @@ class CompletionsRepository(BaseRepository):
         """
         row = await _conn.fetchrow(query, completion_id)
         return dict(row) if row else None
+
+    async def fetch_verified_times_for_user_map(
+        self,
+        user_id: int,
+        map_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[float]:
+        """Fetch verified completion times for a user on a map."""
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            """
+            SELECT time
+            FROM core.completions
+            WHERE user_id = $1 AND map_id = $2 AND verified = TRUE
+            """,
+            user_id,
+            map_id,
+        )
+        return [float(row["time"]) for row in rows]
 
     async def update_completion_time(
         self,

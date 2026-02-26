@@ -63,7 +63,6 @@ class UtilitiesService(BaseService):
         Args:
             request: Map click request.
         """
-        # Hash IP address for privacy
         secret = os.getenv("IP_HASH_SECRET", "").encode("utf-8")
         ip_hash = hmac.new(secret, request.ip_address.encode("utf-8"), hashlib.sha256).hexdigest()
 

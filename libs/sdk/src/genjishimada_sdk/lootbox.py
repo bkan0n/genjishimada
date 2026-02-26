@@ -15,7 +15,9 @@ __all__ = (
     "UserRewardResponse",
 )
 
-LootboxKeyType = Literal["Classic", "Winter"]
+from .utilities import get_reward_url
+
+LootboxKeyType = Literal["Classic", "Winter", "Summer", "Halloween", "Spring", "Autumn"]
 
 
 class RewardTypeResponse(Struct):
@@ -42,7 +44,7 @@ class RewardTypeResponse(Struct):
 
     def __post_init__(self) -> None:
         """Compute the asset URL for the reward."""
-        self.url = _reward_url(self.type, self.name)
+        self.url = get_reward_url(self.type, self.name)
 
 
 class LootboxKeyTypeResponse(Struct):
@@ -84,24 +86,7 @@ class UserRewardResponse(Struct):
             medal = sanitize_string(self.medal)
             self.url = f"https://cdn.genji.pk/assets/mastery/{name}_{medal}.webp"
         else:
-            self.url = _reward_url(self.type, self.name)
-
-
-def _reward_url(type_: str, name: str) -> str:
-    sanitized_name = sanitize_string(name)
-    if type_ == "spray":
-        url = f"https://cdn.genji.pk/assets/rank_card/spray/{sanitized_name}.webp"
-    elif type_ == "skin":
-        url = f"https://cdn.genji.pk/assets/rank_card/avatar/{sanitized_name}/heroic.webp"
-    elif type_ == "pose":
-        url = f"https://cdn.genji.pk/assets/rank_card/avatar/overwatch_1/{sanitized_name}.webp"
-    elif type_ == "background":
-        url = f"https://cdn.genji.pk/assets/rank_card/background/{sanitized_name}.webp"
-    elif type_ == "coins":
-        url = f"https://cdn.genji.pk/assets/rank_card/coins/{sanitized_name}.webp"
-    else:
-        url = ""
-    return url
+            self.url = get_reward_url(self.type, self.name)
 
 
 class UserLootboxKeyAmountResponse(Struct):

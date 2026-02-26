@@ -151,7 +151,6 @@ class AuthController(Controller):
             client_ip = self._safe_client_ip(request)
             resp = await auth_service.login(data, client_ip=client_ip)
 
-            # Wrap response to match v3 API contract
             return Response(resp, status_code=HTTP_200_OK)
 
         except InvalidCredentialsError as e:
@@ -180,7 +179,6 @@ class AuthController(Controller):
         try:
             resp = await auth_service.verify_email(data)
 
-            # Wrap response to match v3 API contract
             return Response(resp, status_code=HTTP_200_OK)
 
         except TokenInvalidError as e:
@@ -282,7 +280,6 @@ class AuthController(Controller):
         try:
             resp = await auth_service.confirm_password_reset(data)
 
-            # Wrap response to match v3 API contract
             return Response(resp, status_code=HTTP_200_OK)
 
         except PasswordValidationError as e:
@@ -318,8 +315,6 @@ class AuthController(Controller):
                 detail="User does not have email authentication.",
                 status_code=HTTP_404_NOT_FOUND,
             )
-
-    # ===== Session Management Endpoints =====
 
     @get("/sessions/{session_id:str}")
     async def session_read_endpoint(
@@ -441,8 +436,6 @@ class AuthController(Controller):
         """
         resp = await auth_service.session_destroy_all_for_user(user_id, except_session_id)
         return Response(resp, status_code=HTTP_200_OK)
-
-    # ===== Remember Token Endpoints =====
 
     @post("/remember-token")
     async def create_remember_token_endpoint(

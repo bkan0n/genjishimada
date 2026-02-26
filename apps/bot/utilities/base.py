@@ -224,7 +224,7 @@ class BaseHandler:
     async def _job_patch(self, job_id: UUID, payload: dict) -> None:
         """Best-effort: never raise so queue flow isn't blocked."""
         try:
-            await self.bot.api.update_job(job_id=job_id, **payload)  # adapt args as needed
+            await self.bot.api.update_job(job_id=job_id, **payload)
         except Exception as e:
             log.warning(f"[jobs] PATCH failed for {job_id}: {e}")
 

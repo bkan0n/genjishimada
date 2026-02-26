@@ -1817,10 +1817,6 @@ class APIService:
         )
         return self._request(r, params={"enabled": enabled})
 
-    # =========================================================================
-    # Map Edit Request Methods
-    # =========================================================================
-
     def create_map_edit_request(self, data: MapEditCreateRequest) -> Response[MapEditResponse]:
         """Create a new map edit request.
 

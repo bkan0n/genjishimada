@@ -16,10 +16,15 @@ from genjishimada_sdk.users import (
 )
 from litestar.datastructures import State
 
-from repository.exceptions import UniqueConstraintViolationError
+from repository.exceptions import ForeignKeyViolationError, UniqueConstraintViolationError
 from repository.users_repository import UsersRepository
 from services.base import BaseService
-from services.exceptions.users import InvalidUserIdError, UserAlreadyExistsError, UserNotFoundError
+from services.exceptions.users import (
+    DuplicateOverwatchUsernameError,
+    InvalidUserIdError,
+    UserAlreadyExistsError,
+    UserNotFoundError,
+)
 from utilities.shared_queries import get_user_rank_data
 
 log = logging.getLogger(__name__)
@@ -162,15 +167,24 @@ class UsersService(BaseService):
         Args:
             user_id: The user ID.
             new_usernames: List of new usernames to set.
+
+        Raises:
+            UserNotFoundError: If user does not exist.
+            DuplicateOverwatchUsernameError: If duplicate usernames are provided.
         """
         await self._users_repo.delete_overwatch_usernames(user_id)
 
         for item in new_usernames:
-            await self._users_repo.insert_overwatch_username(
-                user_id=user_id,
-                username=item.username,
-                is_primary=item.is_primary,
-            )
+            try:
+                await self._users_repo.insert_overwatch_username(
+                    user_id=user_id,
+                    username=item.username,
+                    is_primary=item.is_primary,
+                )
+            except ForeignKeyViolationError:
+                raise UserNotFoundError(user_id)
+            except UniqueConstraintViolationError as e:
+                raise DuplicateOverwatchUsernameError(user_id, item.username) from e
 
     async def fetch_overwatch_usernames(self, user_id: int) -> list[OverwatchUsernameItem]:
         """Fetch Overwatch usernames for a user.

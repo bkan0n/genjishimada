@@ -279,3 +279,6 @@ backups/*
 /docs/plans/
 .env.local
 /docs/reviews
+/.complexipy_cache/
+.planning/
+.testmondata*

@@ -44,7 +44,6 @@ class _NextButton(ui.Button["BasePaginatorView"]):
         super().__init__(
             style=ButtonStyle.blurple,
             label="Next",
-            # TODO: > Emoji
         )
 
     async def callback(self, itx: GenjiItx) -> None:
@@ -71,7 +70,6 @@ class _PreviousButton(ui.Button["BasePaginatorView"]):
         super().__init__(
             style=ButtonStyle.blurple,
             label="Previous",
-            # TODO: < Emoji
         )
 
     async def callback(self, itx: GenjiItx) -> None:
@@ -187,16 +185,12 @@ class BasePaginatorView(ABC, BaseView, Generic[T]):
         self._page_number_button: _PageNumberButton = _PageNumberButton(1)
         self._next_button: _NextButton = _NextButton()
 
-        # Call discord.ui.LayoutView.__init__ directly to skip BaseView's rebuild_components()
-        # We'll call rebuild_components() after subclasses initialize their data
         discord.ui.LayoutView.__init__(self, timeout=600)
 
-        # Manually set up BaseView attributes
         assert self.timeout
         timeout_dt = discord.utils.format_dt(discord.utils.utcnow() + timedelta(seconds=self.timeout), "R")
         self._end_time_string = f"-# ⚠️ This message will expire and become inactive {timeout_dt}."
         self.original_interaction: GenjiItx | None = None
-        # Note: rebuild_components() will be called by subclasses after data is initialized
 
     @property
     def current_page_index(self) -> int:
@@ -343,7 +337,6 @@ class StaticPaginatorView(BasePaginatorView[T]):
         """
         super().__init__(title, page_size=page_size)
         self.rebuild_data(data)
-        # Now that _pages is initialized, rebuild components
         self.rebuild_components()
 
     @property

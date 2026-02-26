@@ -24,7 +24,6 @@ RABBITMQ_USER = os.getenv("RABBITMQ_USER", "")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "")
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "")
 
-# DLQ processor config (no edits to existing constants)
 DLQ_HEADER_KEY = os.getenv("DLQ_HEADER_KEY", "dlq_notified")
 DLQ_PROCESS_INTERVAL = int(os.getenv("DLQ_PROCESS_INTERVAL", "60"))  # seconds between scans
 DLQ_MAX_PER_QUEUE_TICK = int(os.getenv("DLQ_MAX_PER_QUEUE_TICK", "5000"))  # safety cap per scan
@@ -148,8 +147,6 @@ class RabbitHandler:
         queues: dict[str, QueueHandler] = {}
 
         for attr_name in dir(self.bot):
-            # Skip private attributes to avoid scanning the same instance multiple times
-            # (properties store their values in private backing fields like _completions_manager)
             if attr_name.startswith("_"):
                 continue
 
@@ -167,7 +164,6 @@ class RabbitHandler:
                 if not queue_name:
                     continue
 
-                # Apply job-status wrapper if available
                 if hasattr(instance, "_wrap_job_status"):
                     handler: QueueHandler = instance._wrap_job_status(candidate)  # noqa: SLF001
                 else:
@@ -271,7 +267,6 @@ class RabbitHandler:
             int: Total number of DLQ messages processed in this sweep.
         """
         total = 0
-        # Use a single channel for the sweep; it's fine for moderate volumes.
         async with self._channel_pool.acquire() as channel:
             await channel.set_qos(prefetch_count=100)
             for base_queue in self._queues:
@@ -293,9 +288,7 @@ class RabbitHandler:
         """
         dlq_name = f"{base_queue}{self._dlq_suffix}"
 
-        # Passive declare to get initial count without creating it.
         dlq = await channel.declare_queue(dlq_name, passive=True)
-        # Snapshot the depth at the start; cap by DLQ_MAX_PER_QUEUE_TICK to be extra safe.
         initial_count = dlq.declaration_result.message_count or 0
         cap = min(initial_count, DLQ_MAX_PER_QUEUE_TICK)
         if cap == 0:
@@ -303,18 +296,15 @@ class RabbitHandler:
             return 0
 
         processed = 0
-        # We re-declare a queue object to use .get() (dlq above is fine too; either works).
         queue = await channel.declare_queue(dlq_name, passive=True)
 
         while processed < cap:
-            # Non-blocking get; returns None if empty.
             msg = await queue.get(no_ack=False, fail=False)
             if msg is None:
                 log.debug("[DLQ] %s has no messages available.", dlq_name)
                 break
 
             headers = dict(msg.headers or {})
-            # If we've already marked it, just ack and move on.
             if headers.get(DLQ_HEADER_KEY):
                 await msg.nack(requeue=True)
                 processed += 1
@@ -328,14 +318,13 @@ class RabbitHandler:
             assert isinstance(alert_channel, TextChannel)
             await alert_channel.send(content[:1996] + "```")
 
-            # Republish a *copy* with the header set, then ack the original.
             new_headers = {**headers, DLQ_HEADER_KEY: True, "dlq_notified_at": int(time.time())}
             repub = Message(
                 body=msg.body,
                 headers=new_headers,
                 content_type=msg.content_type,
                 content_encoding=msg.content_encoding,
-                delivery_mode=msg.delivery_mode,  # preserve persistence
+                delivery_mode=msg.delivery_mode,
                 correlation_id=msg.correlation_id,
                 message_id=msg.message_id,
                 timestamp=msg.timestamp,
@@ -344,7 +333,6 @@ class RabbitHandler:
                 user_id=msg.user_id,
             )
 
-            # Publish right back to the DLQ by name via the default exchange.
             await channel.default_exchange.publish(repub, routing_key=dlq_name)
             await msg.ack()
             processed += 1

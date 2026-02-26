@@ -94,8 +94,7 @@ class TestCreateEditRequest:
         # Assert
         assert isinstance(result, dict)
         assert result["id"] > 0
-        # proposed_changes is returned as JSON string from PostgreSQL
-        assert json.loads(result["proposed_changes"]) == {}
+        assert result["proposed_changes"] == {}
 
     @pytest.mark.asyncio
     async def test_create_edit_request_with_complex_proposed_changes(
@@ -132,8 +131,7 @@ class TestCreateEditRequest:
         # Assert
         assert isinstance(result, dict)
         assert result["id"] > 0
-        # proposed_changes is returned as JSON string from PostgreSQL
-        assert json.loads(result["proposed_changes"]) == proposed_changes
+        assert result["proposed_changes"] == proposed_changes
 
     @pytest.mark.asyncio
     async def test_create_edit_request_returns_all_expected_fields(

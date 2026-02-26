@@ -308,7 +308,6 @@ class LootboxRepository(BaseRepository):
                   AND key_type = $2::text \
                 """
         result = await _conn.execute(query, user_id, key_type)
-        # Result is like "DELETE 1" or "DELETE 0"
         return result != "DELETE 0"
 
     async def check_user_has_reward(
@@ -402,6 +401,32 @@ class LootboxRepository(BaseRepository):
                 ON CONFLICT (id) DO UPDATE SET coins = users.coins + excluded.coins \
                 """
         await _conn.execute(query, user_id, amount)
+
+    async def deduct_user_coins(
+        self,
+        user_id: int,
+        amount: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int | None:
+        """Deduct coins if balance is sufficient, return new balance.
+
+        Args:
+            user_id: Target user ID.
+            amount: Amount to deduct.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            New balance, or None if insufficient.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+                UPDATE core.users
+                SET coins = coins - $2
+                WHERE id = $1 AND coins >= $2
+                RETURNING coins
+                """
+        return await _conn.fetchval(query, user_id, amount)
 
     async def insert_user_key(
         self,
@@ -575,6 +600,67 @@ class LootboxRepository(BaseRepository):
 
         query = "UPDATE lootbox.xp_multiplier SET value=$1"
         await _conn.execute(query, multiplier)
+
+    async def fetch_user_xp_summary(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch a user's complete XP progression summary.
+
+        Computes current tier, next tier, and XP requirements from raw XP amount.
+
+        Args:
+            user_id: Target user ID.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Dict with all tier and XP fields, or None if user does not exist.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+                WITH user_xp AS (
+                    SELECT coalesce(xp.amount, 0) AS xp
+                    FROM core.users u
+                    LEFT JOIN lootbox.xp xp ON u.id = xp.user_id
+                    WHERE u.id = $1
+                ), computed AS (
+                    SELECT
+                        xp,
+                        (xp / 100) AS raw_tier,
+                        ((xp / 100) % 100) AS normalized_tier,
+                        ((xp / 100) / 100) AS prestige_level
+                    FROM user_xp
+                )
+                SELECT
+                    c.xp,
+                    c.raw_tier,
+                    c.normalized_tier,
+                    c.prestige_level,
+                    cm.name AS current_main_tier_name,
+                    cs.name AS current_sub_tier_name,
+                    cm.name || ' ' || cs.name AS current_full_tier_name,
+                    nm.name AS next_main_tier_name,
+                    ns.name AS next_sub_tier_name,
+                    CASE
+                        WHEN (c.raw_tier % 5) = 4 THEN nm.name || ' ' || ns.name
+                        ELSE cm.name || ' ' || ns.name
+                    END AS next_full_tier_name,
+                    ((c.raw_tier + 1) * 100) - c.xp AS next_sub_tier_xp_required,
+                    (c.raw_tier + 1) * 100 AS next_sub_tier_xp_total,
+                    (((c.normalized_tier / 5 + 1) * 5 + c.prestige_level * 100) * 100) - c.xp
+                        AS next_main_tier_xp_required,
+                    ((c.normalized_tier / 5 + 1) * 5 + c.prestige_level * 100) * 100
+                        AS next_main_tier_xp_total
+                FROM computed c
+                LEFT JOIN lootbox.main_tiers cm ON (c.normalized_tier / 5) = cm.threshold
+                LEFT JOIN lootbox.sub_tiers cs ON (c.raw_tier % 5) = cs.threshold
+                LEFT JOIN lootbox.main_tiers nm ON ((c.normalized_tier / 5 + 1) % 20) = nm.threshold
+                LEFT JOIN lootbox.sub_tiers ns ON ((c.raw_tier + 1) % 5) = ns.threshold \
+                """
+        row = await _conn.fetchrow(query, user_id)
+        return dict(row) if row else None
 
     async def update_active_key(
         self,

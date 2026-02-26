@@ -13,11 +13,11 @@ from genjishimada_sdk.lootbox import (
     UserRewardResponse,
 )
 from genjishimada_sdk.maps import XPMultiplierRequest
-from genjishimada_sdk.xp import TierChangeResponse, XpGrantRequest, XpGrantResponse
+from genjishimada_sdk.xp import TierChangeResponse, XpGrantRequest, XpGrantResponse, XpSummaryResponse
 from litestar.di import Provide
 from litestar.params import Body
 from litestar.response import Response
-from litestar.status_codes import HTTP_200_OK, HTTP_204_NO_CONTENT, HTTP_400_BAD_REQUEST
+from litestar.status_codes import HTTP_200_OK, HTTP_204_NO_CONTENT, HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
 
 from repository.lootbox_repository import provide_lootbox_repository
 from services.exceptions.lootbox import InsufficientKeysError
@@ -202,11 +202,9 @@ class LootboxController(litestar.Controller):
         """
         test_mode = bool(request.headers.get("x-test-mode"))
         if test_mode:
-            # In test mode, just grant the reward without key validation
             await lootbox_service.debug_grant_reward_no_key(
                 user_id=user_id, key_type=key_type, reward_type=reward_type, reward_name=reward_name
             )
-            # Return a minimal response
             return RewardTypeResponse(
                 name=reward_name,
                 key_type=key_type,
@@ -346,6 +344,36 @@ class LootboxController(litestar.Controller):
         """
         return await lootbox_service.view_user_coins(user_id=user_id)
 
+    @litestar.get(
+        path="/users/{user_id:int}/xp-summary",
+        summary="Get User XP Summary",
+        description="Get a user's complete XP progression including current tier, next tier, and XP requirements.",
+    )
+    async def view_user_xp_summary(
+        self,
+        lootbox_service: LootboxService,
+        user_id: int,
+    ) -> XpSummaryResponse:
+        """Get a user's XP progression summary.
+
+        Args:
+            lootbox_service: Lootbox service.
+            user_id: Target user ID.
+
+        Returns:
+            XP summary with current and next tier info.
+
+        Raises:
+            CustomHTTPException: 404 if user does not exist.
+        """
+        result = await lootbox_service.view_user_xp_summary(user_id=user_id)
+        if result is None:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail="User does not exist.",
+            )
+        return result
+
     @litestar.post(
         path="/users/{user_id:int}/xp",
         summary="Grant XP to User",
@@ -370,7 +398,6 @@ class LootboxController(litestar.Controller):
         Returns:
             XpGrantResponse with previous and new amounts.
         """
-        # Service handles RabbitMQ publishing internally
         return await lootbox_service.grant_user_xp(request.headers, user_id, data)
 
     @litestar.get(

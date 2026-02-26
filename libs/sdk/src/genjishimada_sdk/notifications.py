@@ -33,29 +33,28 @@ class NotificationChannel(str, Enum):
 class NotificationEventType(str, Enum):
     """Notification event types."""
 
-    # Completion/Record events
     VERIFICATION_APPROVED = "verification_approved"
     VERIFICATION_REJECTED = "verification_rejected"
     RECORD_REMOVED = "record_removed"
     RECORD_EDITED = "record_edited"
     AUTO_VERIFY_FAILED = "auto_verify_failed"
 
-    # Progression events
     SKILL_ROLE_UPDATE = "skill_role_update"
     XP_GAIN = "xp_gain"
     RANK_UP = "rank_up"
     PRESTIGE = "prestige"
     MASTERY_EARNED = "mastery_earned"
 
-    # Reward events
     LOOTBOX_EARNED = "lootbox_earned"
 
-    # Engagement events
     PLAYTEST_UPDATE = "playtest_update"
 
-    # Map edit events
     MAP_EDIT_APPROVED = "map_edit_approved"
     MAP_EDIT_REJECTED = "map_edit_rejected"
+
+    QUEST_COMPLETE = "quest_complete"
+    QUEST_ROTATION = "quest_rotation"
+    QUEST_RIVAL_MENTION = "quest_rival_mention"
 
 
 NOTIFICATION_EVENT_TYPE = Literal[
@@ -73,12 +72,14 @@ NOTIFICATION_EVENT_TYPE = Literal[
     "playtest_update",
     "map_edit_approved",
     "map_edit_rejected",
+    "quest_complete",
+    "quest_rotation",
+    "quest_rival_mention",
 ]
 
 NOTIFICATION_CHANNEL = Literal["discord_dm", "discord_ping", "web"]
 
 
-# Default channels for each event type
 EVENT_TYPE_DEFAULT_CHANNELS: dict[NotificationEventType, list[NotificationChannel]] = {
     NotificationEventType.VERIFICATION_APPROVED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.VERIFICATION_REJECTED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
@@ -93,6 +94,13 @@ EVENT_TYPE_DEFAULT_CHANNELS: dict[NotificationEventType, list[NotificationChanne
     NotificationEventType.PLAYTEST_UPDATE: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.MAP_EDIT_APPROVED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
     NotificationEventType.MAP_EDIT_REJECTED: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
+    NotificationEventType.QUEST_COMPLETE: [
+        NotificationChannel.DISCORD_DM,
+        NotificationChannel.DISCORD_PING,
+        NotificationChannel.WEB,
+    ],
+    NotificationEventType.QUEST_ROTATION: [NotificationChannel.WEB],
+    NotificationEventType.QUEST_RIVAL_MENTION: [NotificationChannel.DISCORD_DM, NotificationChannel.WEB],
 }
 
 
@@ -102,14 +110,14 @@ class NotificationDeliveryEvent(Struct):
     Routing key: api.notification.delivery
     """
 
-    event_id: int  # ID in notifications.events table
-    user_id: int  # Target user
-    event_type: NOTIFICATION_EVENT_TYPE  # Type for preference lookup
-    title: str  # Notification title
-    body: str  # Notification body
-    discord_message: str | None  # Discord-specific formatted message
-    metadata: dict | None  # Additional context (map_code, etc.)
-    channels_to_deliver: list[NOTIFICATION_CHANNEL]  # Which channels to attempt
+    event_id: int
+    user_id: int
+    event_type: NOTIFICATION_EVENT_TYPE
+    title: str
+    body: str
+    discord_message: str | None
+    metadata: dict | None
+    channels_to_deliver: list[NOTIFICATION_CHANNEL]
 
 
 class NotificationCreateRequest(Struct):
@@ -119,7 +127,7 @@ class NotificationCreateRequest(Struct):
     event_type: NOTIFICATION_EVENT_TYPE
     title: str
     body: str
-    discord_message: str | None = None  # Override for Discord-specific formatting
+    discord_message: str | None = None
     metadata: dict | None = None
 
 
@@ -149,7 +157,7 @@ class NotificationPreferencesResponse(Struct):
     """All preferences for a user for a single event type."""
 
     event_type: NOTIFICATION_EVENT_TYPE
-    channels: dict[str, bool]  # channel -> enabled
+    channels: dict[str, bool]
 
 
 class NotificationUnreadCountResponse(Struct):

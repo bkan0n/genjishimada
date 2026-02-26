@@ -12,7 +12,7 @@ from litestar import Litestar
 from litestar.testing import AsyncTestClient
 from pytest_databases.docker.postgres import PostgresService
 
-from app import create_app
+from app import _async_pg_init, create_app
 from genjishimada_sdk import difficulties
 
 pytest_plugins = [
@@ -44,6 +44,7 @@ def pytest_configure(config: Any) -> None:
     config.addinivalue_line("markers", "domain_jobs: Tests for jobs domain")
     config.addinivalue_line("markers", "domain_newsfeed: Tests for newsfeed domain")
     config.addinivalue_line("markers", "domain_utilities: Tests for utilities domain")
+    config.addinivalue_line("markers", "domain_store: Tests for store domain")
 
 
 MIGRATIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "migrations"))
@@ -81,6 +82,7 @@ async def asyncpg_conn(postgres_service: PostgresService) -> AsyncIterator[async
         port=postgres_service.port,
         database=postgres_service.database,
     )
+    await _async_pg_init(conn)
     yield conn
     await conn.close()
 
@@ -100,6 +102,7 @@ async def asyncpg_pool(postgres_service: PostgresService) -> AsyncIterator[async
         database=postgres_service.database,
         min_size=1,
         max_size=3,
+        init=_async_pg_init,
     )
     yield pool
     await pool.close()
@@ -233,6 +236,8 @@ def unique_map_code(global_code_tracker: set[str]) -> str:
     code = f"T{uuid4().hex[:5].upper()}"
     global_code_tracker.add(code)
     return code
+
+
 
 
 @pytest.fixture
@@ -508,6 +513,34 @@ async def create_test_user(asyncpg_pool: asyncpg.Pool, global_user_id_tracker: s
 
 
 @pytest.fixture
+async def grant_user_coins(asyncpg_pool: asyncpg.Pool):
+    """Factory fixture for granting coins to users.
+
+    Returns a function that adds coins to a user's balance.
+
+    Usage:
+        balance = await grant_user_coins(user_id, 1000)
+        balance = await grant_user_coins(user_id, 500)
+    """
+
+    async def _grant(user_id: int, amount: int) -> int:
+        async with asyncpg_pool.acquire() as conn:
+            result = await conn.fetchval(
+                """
+                UPDATE core.users
+                SET coins = coins + $2
+                WHERE id = $1
+                RETURNING coins
+                """,
+                user_id,
+                amount,
+            )
+        return result
+
+    return _grant
+
+
+@pytest.fixture
 async def create_test_playtest(asyncpg_pool: asyncpg.Pool, global_thread_id_tracker: set[int]):
     """Factory fixture for creating test playtest metadata.
 
@@ -576,6 +609,9 @@ async def create_test_completion(asyncpg_pool: asyncpg.Pool):
             "time": 30.5,
             "screenshot": "https://example.com/screenshot.png",
             "completion": True,
+            "message_id": None,
+            "verified_by": None,
+            "reason": None,
         }
 
         # Apply overrides
@@ -585,9 +621,10 @@ async def create_test_completion(asyncpg_pool: asyncpg.Pool):
             completion_id = await conn.fetchval(
                 """
                 INSERT INTO core.completions (
-                    user_id, map_id, verified, legacy, time, screenshot, completion
+                    user_id, map_id, verified, legacy, time, screenshot,
+                    completion, message_id, verified_by, reason
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 RETURNING id
                 """,
                 user_id,
@@ -597,6 +634,9 @@ async def create_test_completion(asyncpg_pool: asyncpg.Pool):
                 data["time"],
                 data["screenshot"],
                 data["completion"],
+                data["message_id"],
+                data["verified_by"],
+                data["reason"],
             )
         return completion_id
 

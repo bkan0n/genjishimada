@@ -14,7 +14,7 @@ from genjishimada_sdk.lootbox import (
     UserLootboxKeyAmountResponse,
     UserRewardResponse,
 )
-from genjishimada_sdk.xp import TierChangeResponse, XpGrantEvent, XpGrantRequest, XpGrantResponse
+from genjishimada_sdk.xp import TierChangeResponse, XpGrantEvent, XpGrantRequest, XpGrantResponse, XpSummaryResponse
 from litestar.datastructures import State
 from litestar.datastructures.headers import Headers
 
@@ -24,7 +24,6 @@ from services.exceptions.lootbox import InsufficientKeysError
 
 log = logging.getLogger(__name__)
 
-# Gacha weights (must match v3 exactly)
 GACHA_WEIGHTS = {
     "legendary": 3,
     "epic": 5,
@@ -32,7 +31,6 @@ GACHA_WEIGHTS = {
     "common": 65,
 }
 
-# Duplicate coin values (must match v3 exactly)
 DUPLICATE_COIN_VALUES = {
     "common": 100,
     "rare": 250,
@@ -164,6 +162,20 @@ class LootboxService(BaseService):
         """
         return await self._lootbox_repo.fetch_user_coins(user_id)
 
+    async def view_user_xp_summary(self, user_id: int) -> XpSummaryResponse | None:
+        """Get a user's complete XP progression summary.
+
+        Args:
+            user_id: Target user ID.
+
+        Returns:
+            XP summary response, or None if user does not exist.
+        """
+        row = await self._lootbox_repo.fetch_user_xp_summary(user_id)
+        if row is None:
+            return None
+        return msgspec.convert(row, XpSummaryResponse)
+
     async def view_xp_multiplier(self) -> float:
         """Get the current XP multiplier.
 
@@ -224,7 +236,6 @@ class LootboxService(BaseService):
             Reward response with duplicate flag and coin amount.
         """
         async with self._pool.acquire() as conn, conn.transaction():
-            # Check for duplicate
             rarity = await self._lootbox_repo.check_user_has_reward(
                 user_id=user_id,
                 reward_type=reward_type,
@@ -234,7 +245,6 @@ class LootboxService(BaseService):
             )
 
             if rarity:
-                # Duplicate: grant coins
                 coin_amount = DUPLICATE_COIN_VALUES.get(rarity.lower(), 0)
                 await self._lootbox_repo.add_user_coins(user_id, coin_amount, conn=conn)  # type: ignore[arg-type]
 
@@ -247,7 +257,6 @@ class LootboxService(BaseService):
                     coin_amount=coin_amount,
                 )
             else:
-                # New reward: grant it
                 await self._lootbox_repo.insert_user_reward(
                     user_id=user_id,
                     reward_type=reward_type,
@@ -256,7 +265,6 @@ class LootboxService(BaseService):
                     conn=conn,  # type: ignore[arg-type]
                 )
 
-                # Get reward details to return rarity
                 rewards = await self._lootbox_repo.fetch_all_rewards(
                     reward_type=reward_type,
                     key_type=key_type,
@@ -302,7 +310,6 @@ class LootboxService(BaseService):
         results: list[RewardTypeResponse] = []
 
         async with self._pool.acquire() as conn, conn.transaction():
-            # Consume ONE key upfront (skip in test mode)
             if not test_mode:
                 key_deleted = await self._lootbox_repo.delete_oldest_user_key(
                     user_id,
@@ -312,7 +319,6 @@ class LootboxService(BaseService):
                 if not key_deleted:
                     raise InsufficientKeysError(key_type)
 
-            # Generate 3 random rewards (preview only, no granting)
             for _ in range(3):
                 rarity = self._perform_gacha()
 
@@ -327,7 +333,6 @@ class LootboxService(BaseService):
                     log.warning(f"No reward found for rarity={rarity}, key_type={key_type}")
                     continue
 
-                # Build response (NO granting here!)
                 results.append(
                     RewardTypeResponse(
                         name=reward_row["name"],
@@ -357,10 +362,8 @@ class LootboxService(BaseService):
         Returns:
             XP grant response.
         """
-        # Get multiplier
         multiplier = await self._lootbox_repo.fetch_xp_multiplier()
 
-        # Upsert XP
         result = await self._lootbox_repo.upsert_user_xp(
             user_id=user_id,
             xp_amount=data.amount,
@@ -372,16 +375,15 @@ class LootboxService(BaseService):
             new_amount=result["new_amount"],
         )
 
-        # Create event
         event = XpGrantEvent(
             user_id=user_id,
             amount=data.amount,
             type=data.type,
             previous_amount=result["previous_amount"],
             new_amount=result["new_amount"],
+            reason=data.reason,
         )
 
-        # Publish to RabbitMQ (like v3)
         await self.publish_message(
             routing_key="api.xp.grant",
             data=event,
@@ -446,7 +448,6 @@ class LootboxService(BaseService):
                 conn=None,
             )
         else:
-            # Grant coins
             coin_amount = int(reward_name)
             await self._lootbox_repo.add_user_coins(user_id, coin_amount, conn=None)
 

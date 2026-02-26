@@ -11,6 +11,7 @@ __all__ = (
     "XpGrantEvent",
     "XpGrantRequest",
     "XpGrantResponse",
+    "XpSummaryResponse",
 )
 
 XP_TYPES = Literal["Map Submission", "Playtest", "Guide", "Completion", "Record", "World Record", "Other"]
@@ -43,10 +44,12 @@ class XpGrantRequest(Struct):
     Attributes:
         amount: Amount of XP to grant.
         type: Category describing why XP is granted.
+        reason: Optional free-text reason for the grant.
     """
 
     amount: int
     type: XP_TYPES
+    reason: str | None = None
 
 
 class TierChangeResponse(Struct):
@@ -73,7 +76,6 @@ class TierChangeResponse(Struct):
     new_sub_tier_name: str
     old_prestige_level: int
     new_prestige_level: int
-    # "Main Tier Rank Up" | "Sub-Tier Rank Up" | None
     rank_change_type: str | None
     prestige_change: bool
 
@@ -102,6 +104,42 @@ class PlayersPerSkillTierResponse(Struct):
     amount: int
 
 
+class XpSummaryResponse(Struct):
+    """Complete XP progression summary for a user.
+
+    Attributes:
+        xp: Current total XP.
+        raw_tier: Absolute tier count (xp / 100).
+        normalized_tier: Tier within current prestige ((xp / 100) % 100).
+        prestige_level: Prestige cycle count ((xp / 100) / 100).
+        current_main_tier_name: Current main tier label.
+        current_sub_tier_name: Current sub-tier label.
+        current_full_tier_name: Combined current tier label.
+        next_main_tier_name: Next main tier label.
+        next_sub_tier_name: Next sub-tier label.
+        next_full_tier_name: Combined next tier label.
+        next_sub_tier_xp_required: Remaining XP to reach next sub-tier.
+        next_sub_tier_xp_total: Absolute XP threshold for next sub-tier.
+        next_main_tier_xp_required: Remaining XP to reach next main tier.
+        next_main_tier_xp_total: Absolute XP threshold for next main tier.
+    """
+
+    xp: int
+    raw_tier: int
+    normalized_tier: int
+    prestige_level: int
+    current_main_tier_name: str
+    current_sub_tier_name: str
+    current_full_tier_name: str
+    next_main_tier_name: str
+    next_sub_tier_name: str
+    next_full_tier_name: str
+    next_sub_tier_xp_required: int
+    next_sub_tier_xp_total: int
+    next_main_tier_xp_required: int
+    next_main_tier_xp_total: int
+
+
 class XpGrantEvent(Struct):
     """Event emitted when XP is granted to a user.
 
@@ -111,6 +149,7 @@ class XpGrantEvent(Struct):
         type: Category describing why XP is granted.
         previous_amount: XP total before the grant.
         new_amount: XP total after the grant.
+        reason: Optional free-text reason for the grant.
     """
 
     user_id: int
@@ -118,3 +157,4 @@ class XpGrantEvent(Struct):
     type: XP_TYPES
     previous_amount: int
     new_amount: int
+    reason: str | None = None

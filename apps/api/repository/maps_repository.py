@@ -26,8 +26,6 @@ from .exceptions import (
 class MapsRepository(BaseRepository):
     """Repository for maps data access."""
 
-    # Core map operations
-
     async def fetch_maps(
         self,
         *,
@@ -49,20 +47,16 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Build filters struct
         if code and not filters:
             filters = MapSearchFilters(code=code, return_all=True)
         elif not filters:
             filters = MapSearchFilters(return_all=True)
 
-        # Use MapSearchSQLSpecBuilder to generate query
         builder = MapSearchSQLSpecBuilder(filters)
         query_with_args = builder.build()
 
-        # Execute query
         rows = await _conn.fetch(query_with_args.query, *query_with_args.args)
 
-        # Convert to dicts
         result = [dict(row) for row in rows]
 
         if single:
@@ -96,10 +90,11 @@ class MapsRepository(BaseRepository):
                 m.map_name,
                 m.checkpoints,
                 pm.initial_difficulty AS difficulty,
-                array_agg(DISTINCT u.nickname) AS creator_names
+                array_agg(DISTINCT coalesce(ou.username, u.nickname, u.global_name, 'Unknown User')) AS creator_names
             FROM core.maps AS m
             LEFT JOIN maps.creators AS c ON c.map_id = m.id AND c.is_primary
             LEFT JOIN core.users AS u ON c.user_id = u.id
+            LEFT JOIN users.overwatch_usernames ou ON c.user_id = ou.user_id AND ou.is_primary
             LEFT JOIN playtests.meta AS pm ON m.id = pm.map_id
             WHERE m.code = $1
             GROUP BY m.id,
@@ -236,7 +231,6 @@ class MapsRepository(BaseRepository):
         if not data:
             return
 
-        # Build dynamic UPDATE query
         set_clauses = []
         values = []
         param_idx = 1
@@ -246,7 +240,6 @@ class MapsRepository(BaseRepository):
             values.append(value)
             param_idx += 1
 
-        # Add code for WHERE clause
         values.append(code)
         where_param = f"${param_idx}"
 
@@ -265,8 +258,6 @@ class MapsRepository(BaseRepository):
                 table="core.maps",
                 detail=str(e),
             ) from e
-
-    # Related data operations - Creators
 
     async def insert_creators(
         self,
@@ -333,8 +324,6 @@ class MapsRepository(BaseRepository):
             map_id,
         )
 
-    # Related data operations - Mechanics
-
     async def insert_mechanics(
         self,
         map_id: int,
@@ -357,7 +346,6 @@ class MapsRepository(BaseRepository):
         if not mechanics:
             return
 
-        # Lookup mechanic IDs
         mechanic_ids = await _conn.fetch(
             """
             SELECT id FROM maps.mechanics
@@ -404,8 +392,6 @@ class MapsRepository(BaseRepository):
             map_id,
         )
 
-    # Related data operations - Restrictions
-
     async def insert_restrictions(
         self,
         map_id: int,
@@ -428,7 +414,6 @@ class MapsRepository(BaseRepository):
         if not restrictions:
             return
 
-        # Lookup restriction IDs
         restriction_ids = await _conn.fetch(
             """
             SELECT id FROM maps.restrictions
@@ -475,8 +460,6 @@ class MapsRepository(BaseRepository):
             map_id,
         )
 
-    # Related data operations - Tags
-
     async def insert_tags(
         self,
         map_id: int,
@@ -499,7 +482,6 @@ class MapsRepository(BaseRepository):
         if not tags:
             return
 
-        # Lookup tag IDs
         tag_ids = await _conn.fetch(
             """
             SELECT id FROM maps.tags
@@ -545,8 +527,6 @@ class MapsRepository(BaseRepository):
             "DELETE FROM maps.tag_links WHERE map_id = $1",
             map_id,
         )
-
-    # Related data operations - Medals
 
     async def insert_medals(
         self,
@@ -600,8 +580,6 @@ class MapsRepository(BaseRepository):
             "DELETE FROM maps.medals WHERE map_id = $1",
             map_id,
         )
-
-    # Related data operations - Guides
 
     async def insert_guide(
         self,
@@ -694,7 +672,6 @@ class MapsRepository(BaseRepository):
             map_id,
             user_id,
         )
-        # Extract row count from result string like "DELETE 1"
         return int(result.split()[-1]) if result else 0
 
     async def update_guide(
@@ -749,7 +726,6 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Query from v3 with UNION ALL for records when include_records=True
         query = """
         WITH m AS (
             SELECT id
@@ -802,35 +778,68 @@ class MapsRepository(BaseRepository):
         rows = await _conn.fetch(query, code, include_records)
         return [dict(row) for row in rows]
 
-    # Archive operations
-
     async def set_archive_status(
         self,
         codes: list[str],
         archived: bool,
         *,
         conn: Connection | None = None,
-    ) -> None:
+    ) -> list[dict[str, Any]]:
         """Set archive status for one or more maps.
+
+        When archiving maps that are currently ``In Progress``, this also
+        sets ``playtesting='Rejected'`` and marks active ``playtests.meta``
+        rows as ``completed=TRUE``.
 
         Args:
             codes: List of map codes.
             archived: Archive status to set.
             conn: Optional connection.
+
+        Returns:
+            List of dicts with ``code`` and ``thread_id`` for playtests
+            cancelled by this archive action (empty when unarchiving or
+            when no active playtests exist).
         """
         _conn = self._get_connection(conn)
 
-        await _conn.execute(
+        if not archived:
+            await _conn.execute(
+                """
+                UPDATE core.maps
+                SET archived = FALSE
+                WHERE code = ANY($1::text[])
+                """,
+                codes,
+            )
+            return []
+
+        rows = await _conn.fetch(
             """
-            UPDATE core.maps
-            SET archived = $2
-            WHERE code = ANY($1::text[])
+            WITH to_archive AS (
+                UPDATE core.maps
+                SET archived = TRUE,
+                    playtesting = CASE
+                        WHEN playtesting = 'In Progress' THEN 'Rejected'
+                        ELSE playtesting
+                    END
+                WHERE code = ANY($1::text[])
+                RETURNING id, code, playtesting
+            ),
+            completed_playtests AS (
+                UPDATE playtests.meta pm
+                SET completed = TRUE
+                FROM to_archive ta
+                WHERE pm.map_id = ta.id
+                  AND pm.completed = FALSE
+                  AND ta.playtesting = 'Rejected'
+                RETURNING ta.code, pm.thread_id
+            )
+            SELECT code, thread_id FROM completed_playtests
             """,
             codes,
-            archived,
         )
-
-    # Mastery operations
+        return [dict(row) for row in rows]
 
     async def fetch_map_mastery(
         self,
@@ -895,8 +904,6 @@ class MapsRepository(BaseRepository):
 
         return dict(row)
 
-    # Quality operations
-
     async def override_quality_votes(
         self,
         code: str,
@@ -915,12 +922,10 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Look up map ID
         map_id = await self.lookup_map_id(code, conn=conn)
         if map_id is None:
             return
 
-        # Update all quality ratings for this map
         await _conn.execute(
             """
             UPDATE maps.ratings SET quality = $2 WHERE map_id = $1
@@ -928,8 +933,6 @@ class MapsRepository(BaseRepository):
             map_id,
             quality_value,
         )
-
-    # Trending maps
 
     async def fetch_trending_maps(
         self,
@@ -956,7 +959,6 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Calculate window start timestamp
         window_start = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=window_days)
 
         query = """
@@ -1055,8 +1057,6 @@ class MapsRepository(BaseRepository):
         rows = await _conn.fetch(query, window_start, limit)
         return [dict(row) for row in rows]
 
-    # Legacy conversion
-
     async def check_pending_verifications(
         self,
         code: str,
@@ -1074,7 +1074,6 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Check if there are any unverified completions for this map
         return await _conn.fetchval(
             """
             SELECT EXISTS(
@@ -1128,7 +1127,6 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Mark completions as legacy (implementation depends on schema)
         result = await _conn.execute(
             """
             UPDATE core.completions
@@ -1139,8 +1137,6 @@ class MapsRepository(BaseRepository):
             code,
         )
         return int(result.split()[-1]) if result else 0
-
-    # Map linking
 
     async def link_map_codes(
         self,
@@ -1158,7 +1154,6 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Link bidirectionally
         await _conn.execute(
             """
             UPDATE core.maps
@@ -1192,14 +1187,12 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Get linked code first
         linked_code = await _conn.fetchval(
             "SELECT linked_code FROM core.maps WHERE code = $1",
             code,
         )
 
         if linked_code:
-            # Remove link from both maps (split into two statements to avoid trigger conflicts)
             await _conn.execute(
                 "UPDATE core.maps SET linked_code = NULL WHERE code = $1",
                 code,
@@ -1236,8 +1229,6 @@ class MapsRepository(BaseRepository):
             code,
         )
         return [row["user_id"] for row in rows]
-
-    # Playtest operations (minimal for Phase 1)
 
     async def create_playtest_meta_partial(
         self,
@@ -1292,28 +1283,6 @@ class MapsRepository(BaseRepository):
             thread_id,
             initial_difficulty,
         )
-
-    async def fetch_playtest_plot_data(
-        self,
-        thread_id: int,
-        *,
-        conn: Connection | None = None,
-    ) -> dict | None:
-        """Fetch playtest plot data (placeholder for Phase 3).
-
-        Args:
-            thread_id: Playtest thread ID.
-            conn: Optional connection.
-
-        Returns:
-            Plot data dict or None.
-        """
-        _conn = self._get_connection(conn)
-
-        # Placeholder - actual implementation in Phase 3
-        return None
-
-    # Edit request operations
 
     async def create_edit_request(  # noqa: PLR0913
         self,
@@ -1469,7 +1438,6 @@ class MapsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Get edit request with map info
         edit_row = await _conn.fetchrow(
             """
             SELECT
@@ -1485,7 +1453,6 @@ class MapsRepository(BaseRepository):
         if not edit_row:
             return None
 
-        # Get submitter name
         user_row = await _conn.fetchrow(
             """
             SELECT COALESCE(nickname, global_name, 'Unknown User') as name
@@ -1495,7 +1462,6 @@ class MapsRepository(BaseRepository):
             edit_row["created_by"],
         )
 
-        # Get current map data (for comparison)
         map_row = await _conn.fetchrow(
             """
             WITH target_map AS (
@@ -1539,7 +1505,6 @@ class MapsRepository(BaseRepository):
             edit_row["code"],
         )
 
-        # Get creators
         creator_rows = await _conn.fetch(
             """
             SELECT user_id, is_primary
@@ -1550,7 +1515,6 @@ class MapsRepository(BaseRepository):
             edit_row["map_id"],
         )
 
-        # Get medals
         medals_row = await _conn.fetchrow(
             """
             SELECT gold, silver, bronze
@@ -1561,7 +1525,6 @@ class MapsRepository(BaseRepository):
             edit_row["code"],
         )
 
-        # Assemble enriched response
         return {
             "edit_request": dict(edit_row),
             "submitter_name": user_row["name"] if user_row else "Unknown User",

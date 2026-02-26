@@ -4,6 +4,8 @@ Tests HTTP interface: request/response serialization,
 error translation, and full stack flow through real database.
 """
 
+from uuid import uuid4
+
 from faker import Faker
 import pytest
 
@@ -62,16 +64,28 @@ class TestGetCompletionsForUser:
 
         assert response.status_code == 401
 
-    async def test_difficulty_filter(self, test_client, create_test_user, create_test_map, unique_message_id):
+    async def test_difficulty_filter(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        unique_message_id,
+        global_code_tracker,
+    ):
         """Difficulty filter returns only matching difficulty completions."""
         from uuid import uuid4
 
         user_id = await create_test_user()
 
-        # Create 3 maps with different difficulties using unique codes
-        easy_code = f"T{uuid4().hex[:5].upper()}"
-        medium_code = f"T{uuid4().hex[:5].upper()}"
-        hard_code = f"T{uuid4().hex[:5].upper()}"
+        # Generate 3 unique codes upfront
+        def generate_unique_code():
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
+            return code
+
+        easy_code = generate_unique_code()
+        medium_code = generate_unique_code()
+        hard_code = generate_unique_code()
 
         await create_test_map(code=easy_code, difficulty="Easy", checkpoints=10)
         await create_test_map(code=medium_code, difficulty="Medium", checkpoints=10)
@@ -215,6 +229,86 @@ class TestSubmitCompletion:
         response2 = await test_client.post("/api/v3/completions/", json=payload)
 
         assert response2.status_code == 400
+
+    async def test_submit_completion_updates_quest_progress(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        asyncpg_pool,
+        unique_map_code,
+    ):
+        """Submit completion updates quest progress and creates notification."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code, checkpoints=10, difficulty="Easy", category="Classic")
+
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute("SELECT store.check_and_generate_quest_rotation()")
+            rotation_id = await conn.fetchval(
+                "SELECT current_rotation_id FROM store.quest_config WHERE id = 1",
+            )
+            quest_id = await conn.fetchval(
+                """
+                INSERT INTO store.quests (name, description, quest_type, difficulty, coin_reward, xp_reward, requirements)
+                VALUES ('Complete Map', 'Finish the map', 'global', 'easy', 10, 5,
+                    jsonb_build_object('type','complete_map','map_id',$1::int,'target','complete'))
+                RETURNING id
+                """,
+                map_id,
+            )
+            progress_id = await conn.fetchval(
+                """
+                INSERT INTO store.user_quest_progress (user_id, rotation_id, quest_id, quest_data, progress)
+                VALUES ($1, $2, $3,
+                    jsonb_build_object('name','Complete Map','description','Finish the map','difficulty','easy',
+                                       'coin_reward',10,'xp_reward',5,
+                                       'requirements', jsonb_build_object('type','complete_map','map_id',$4::int,'target','complete')),
+                    jsonb_build_object('completed', false))
+                RETURNING id
+                """,
+                user_id,
+                rotation_id,
+                quest_id,
+                map_id,
+            )
+
+        payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+
+        response = await test_client.post("/api/v3/completions/", json=payload)
+
+        assert response.status_code == 201
+        completion_id = response.json()["completion_id"]
+
+        verify_payload = {"verified": True, "verified_by": user_id, "reason": None}
+        verify_response = await test_client.put(
+            f"/api/v3/completions/{completion_id}/verification",
+            json=verify_payload,
+        )
+        assert verify_response.status_code == 200
+
+        async with asyncpg_pool.acquire() as conn:
+            completed_at = await conn.fetchval(
+                "SELECT completed_at FROM store.user_quest_progress WHERE id = $1",
+                progress_id,
+            )
+            notification_count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM notifications.events
+                WHERE user_id = $1 AND event_type = 'quest_complete'
+                """,
+                user_id,
+            )
+
+        assert completed_at is not None
+        assert notification_count >= 1
 
 
 class TestGetPendingVerifications:
@@ -672,15 +766,27 @@ class TestGetRecordsFiltered:
         verified_ids = [r["id"] for r in data if r.get("verified") is True]
         assert completion_ids[0] in verified_ids
 
-    async def test_code_filter(self, test_client, create_test_user, create_test_map, unique_message_id):
+    async def test_code_filter(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        unique_message_id,
+        global_code_tracker,
+    ):
         """Code filter returns only completions for that map."""
         from uuid import uuid4
 
         user = await create_test_user()
 
-        # Create two maps
-        code1 = f"T{uuid4().hex[:5].upper()}"
-        code2 = f"T{uuid4().hex[:5].upper()}"
+        # Generate 2 unique codes upfront
+        def generate_unique_code():
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
+            return code
+
+        code1 = generate_unique_code()
+        code2 = generate_unique_code()
         await create_test_map(code=code1, checkpoints=10)
         await create_test_map(code=code2, checkpoints=10)
 
@@ -929,3 +1035,155 @@ class TestGetUpvotesFromMessageId:
         count = response.json()
         assert isinstance(count, int)
         assert count >= 0  # Count should never be negative
+
+
+class TestGetDashboardCompletions:
+    """GET /api/v3/completions/dashboard"""
+
+    async def test_returns_verified_completion(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Verified completion returns status 'Verified' with reason."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+        moderator_id = await create_test_user()
+
+        await create_test_completion(
+            user_id,
+            map_id,
+            verified=True,
+            verified_by=moderator_id,
+            message_id=unique_message_id,
+            reason="Clean run",
+        )
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["status"] == "Verified"
+        assert data[0]["reason"] == "Clean run"
+        assert data[0]["code"] == code
+        assert data[0]["user_id"] == user_id
+
+    async def test_returns_rejected_completion(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Rejected completion returns status 'Rejected' with reason."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+        moderator_id = await create_test_user()
+
+        await create_test_completion(
+            user_id,
+            map_id,
+            verified=False,
+            verified_by=moderator_id,
+            message_id=unique_message_id,
+            reason="Screenshot doesn't match",
+        )
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["status"] == "Rejected"
+        assert data[0]["reason"] == "Screenshot doesn't match"
+
+    async def test_returns_pending_completion(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Pending completion (unreviewed) returns status 'Pending'."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+
+        await create_test_completion(
+            user_id,
+            map_id,
+            verified=False,
+            verified_by=None,
+            message_id=unique_message_id,
+            reason=None,
+        )
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["status"] == "Pending"
+        assert data[0]["reason"] is None
+
+    async def test_excludes_other_users(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Only returns completions for the requested user_id."""
+        user_a = await create_test_user()
+        user_b = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+
+        await create_test_completion(user_a, map_id, message_id=unique_message_id)
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_b})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_pagination(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Pagination returns correct page_size and total_results."""
+        user_id = await create_test_user()
+        moderator_id = await create_test_user()
+
+        # Create 3 completions on different maps
+        for i in range(3):
+            code = f"D{uuid4().hex[:5].upper()}"
+            map_id = await create_test_map(code=code)
+            msg_id = unique_message_id + i + 1
+            await create_test_completion(
+                user_id, map_id, verified=True, verified_by=moderator_id, message_id=msg_id
+            )
+
+        response = await test_client.get(
+            "/api/v3/completions/dashboard",
+            params={"user_id": user_id, "page_size": 2, "page_number": 1},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["total_results"] == 3
+
+    async def test_excludes_legacy(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Legacy completions are excluded from dashboard."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+
+        await create_test_completion(user_id, map_id, legacy=True, message_id=unique_message_id)
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Dashboard endpoint requires authentication."""
+        user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            "/api/v3/completions/dashboard", params={"user_id": user_id}
+        )
+
+        assert response.status_code == 401

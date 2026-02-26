@@ -1,4 +1,3 @@
-# apps/bot/extensions/notifications.py
 """Notification service for processing and delivering notifications.
 
 This service:
@@ -41,8 +40,15 @@ class NotificationHandler(BaseHandler):
     and maintains backwards compatibility with legacy methods.
     """
 
+    xp_channel: discord.TextChannel | None
+
     async def _resolve_channels(self) -> None:
-        """No channels to resolve for notifications service."""
+        """Resolve channels used by notification delivery."""
+        xp_channel = self.bot.get_channel(self.bot.config.channels.updates.xp)
+        if isinstance(xp_channel, discord.TextChannel):
+            self.xp_channel = xp_channel
+        else:
+            self.xp_channel = None
 
     @queue_consumer("api.notification.delivery", struct_type=NotificationDeliveryEvent)
     async def _process_notification_delivery(
@@ -60,7 +66,6 @@ class NotificationHandler(BaseHandler):
             f"event_id={event.event_id}, user_id={event.user_id}, type={event.event_type}"
         )
 
-        # Skip non-Discord users
         if event.user_id < DISCORD_USER_ID_LOWER_LIMIT:
             logger.debug(f"Skipping non-Discord user {event.user_id}")
             return
@@ -79,18 +84,90 @@ class NotificationHandler(BaseHandler):
                         error = "Failed to send DM"
 
                 elif channel == NotificationChannel.DISCORD_PING.value:
-                    # Channel pings are handled at call-site since they need
-                    # the specific channel. Mark as skipped here.
-                    status = "skipped"
-                    error = "Channel pings handled at trigger site"
+                    if event.event_type in ("quest_complete",):
+                        status, error = await self._handle_quest_ping(event)
+                    else:
+                        status = "skipped"
+                        error = "Channel pings handled at trigger site"
 
             except Exception as e:
                 logger.exception(f"Error delivering notification {event.event_id}: {e}")
                 status = "failed"
                 error = str(e)
 
-            # Report delivery result back to API
             await self._report_delivery_result(event.event_id, channel, status, error)
+
+    async def _handle_quest_ping(
+        self, event: NotificationDeliveryEvent
+    ) -> tuple[Literal["delivered", "failed", "skipped"], str | None]:
+        """Handle DISCORD_PING delivery for quest completion events.
+
+        Posts a message in the XP channel announcing the quest completion.
+        Handles rival mention logic for beat_rival quests.
+
+        Returns:
+            Tuple of (status, error_message).
+        """
+        if not self.xp_channel:
+            return "failed", "XP channel not configured"
+
+        metadata = event.metadata or {}
+        quest_name = metadata.get("quest_name", "a quest")
+        quest_difficulty = metadata.get("quest_difficulty", "")
+        rival_user_id = metadata.get("rival_user_id")
+        rival_display_name = metadata.get("rival_display_name")
+
+        should_ping_completer = await self.should_deliver_new(
+            event.user_id, NotificationEventType.QUEST_COMPLETE, NotificationChannel.DISCORD_PING
+        )
+        if should_ping_completer:
+            completer_text = f"<@{event.user_id}>"
+        else:
+            user_data = await self.bot.api.get_user(event.user_id)
+            completer_text = user_data.coalesced_name if user_data else "Unknown User"
+
+        # Read enriched metadata
+        bounty_type = metadata.get("bounty_type")
+        map_code = metadata.get("map_code")
+        completion_time = metadata.get("completion_time")
+        rival_time = metadata.get("rival_time")
+        target_time = metadata.get("target_time")
+        quest_description = metadata.get("quest_description", "")
+
+        difficulty_text = f" {quest_difficulty.capitalize()}" if quest_difficulty else ""
+
+        if bounty_type == "rival_challenge" and rival_user_id:
+            # Resolve rival text (ping or display name)
+            should_ping_rival = await self.should_deliver_new(
+                rival_user_id, NotificationEventType.QUEST_RIVAL_MENTION, NotificationChannel.DISCORD_PING
+            )
+            rival_text = f"<@{rival_user_id}>" if should_ping_rival else (rival_display_name or "Unknown User")
+
+            ping_message = (
+                f"<:_:976917981009440798> {completer_text} beat {rival_text}'s time on "
+                f"**{map_code}** ({rival_time:.2f}s \u2192 {completion_time:.2f}s)!"
+            )
+        elif bounty_type == "personal_improvement":
+            ping_message = (
+                f"<:_:976917981009440798> {completer_text} improved their time on "
+                f"**{map_code}** ({target_time:.2f}s \u2192 {completion_time:.2f}s)!"
+            )
+        elif bounty_type == "gap_filling":
+            ping_message = f"<:_:976917981009440798> {completer_text} completed **{map_code}**!"
+        else:
+            # Global quest (no bounty_type)
+            desc_part = f" ({quest_description})" if quest_description else ""
+            ping_message = (
+                f"<:_:976917981009440798> {completer_text} completed the{difficulty_text} "
+                f"quest **{quest_name}**{desc_part}!"
+            )
+
+        try:
+            await self.xp_channel.send(ping_message)
+            return "delivered", None
+        except Exception as e:
+            logger.exception("Failed to send quest completion ping: %s", e)
+            return "failed", str(e)
 
     async def _report_delivery_result(
         self,
@@ -168,7 +245,6 @@ class NotificationHandler(BaseHandler):
             fallback_message: Message to send without ping if disabled.
             **kwargs: Additional arguments for channel.send().
         """
-        # Create notification via API (stores for web, triggers DM via RabbitMQ)
         await self.bot.api.create_notification(
             user_id=user_id,
             event_type=event_type.value,
@@ -177,9 +253,7 @@ class NotificationHandler(BaseHandler):
             metadata=metadata,
         )
 
-        # Handle channel ping directly (since we have the channel object)
         if user_id < DISCORD_USER_ID_LOWER_LIMIT:
-            # Email user - just send without mention
             await channel.send(fallback_message, **kwargs)
             return
 

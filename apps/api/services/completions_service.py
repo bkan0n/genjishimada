@@ -20,6 +20,7 @@ from genjishimada_sdk.completions import (
     CompletionSubmissionJobResponse,
     CompletionSubmissionResponse,
     CompletionVerificationUpdateRequest,
+    DashboardCompletionResponse,
     FailedAutoverifyEvent,
     OcrResponse,
     PendingVerificationResponse,
@@ -31,7 +32,7 @@ from genjishimada_sdk.completions import (
     VerificationChangedEvent,
     VerificationMessageDeleteEvent,
 )
-from genjishimada_sdk.difficulties import DifficultyTop
+from genjishimada_sdk.difficulties import DifficultyTop, convert_extended_difficulty_to_top_level
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
 from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
@@ -44,6 +45,9 @@ from repository.exceptions import (
     ForeignKeyViolationError,
     UniqueConstraintViolationError,
 )
+from repository.lootbox_repository import LootboxRepository
+from repository.store_repository import StoreRepository
+from repository.users_repository import UsersRepository
 from services.exceptions.completions import (
     CompletionNotFoundError,
     DuplicateCompletionError,
@@ -56,6 +60,7 @@ from services.exceptions.completions import (
 )
 
 from .base import BaseService
+from .store_service import StoreService
 from .users_service import UsersService
 
 if TYPE_CHECKING:
@@ -79,6 +84,180 @@ class CompletionsService(BaseService):
         """
         super().__init__(pool, state)
         self._completions_repo = completions_repo
+
+    @staticmethod
+    def _compute_medal(time_value: float, thresholds: dict | None) -> str | None:
+        if not thresholds:
+            return None
+        if thresholds.get("gold") and time_value <= float(thresholds["gold"]):
+            return "Gold"
+        if thresholds.get("silver") and time_value <= float(thresholds["silver"]):
+            return "Silver"
+        if thresholds.get("bronze") and time_value <= float(thresholds["bronze"]):
+            return "Bronze"
+        return None
+
+    async def _update_quest_progress_for_completion(
+        self,
+        *,
+        user_id: int,
+        map_code: str,
+        time: float,
+        notifications: NotificationsService | None,
+        headers: Headers,
+    ) -> None:
+        map_meta = await self._completions_repo.fetch_map_metadata_by_code(map_code)
+        if not map_meta:
+            return
+
+        store_repo = StoreRepository(self._pool)
+        lootbox_repo = LootboxRepository(self._pool)
+        store_service = StoreService(self._pool, self._state, store_repo, lootbox_repo)
+        medal_thresholds = await store_repo.get_medal_thresholds(map_meta["map_id"])
+        medal = self._compute_medal(float(time), medal_thresholds)
+
+        completed_quests = await store_service.update_quest_progress(
+            user_id=user_id,
+            event_type="completion",
+            event_data={
+                "map_id": map_meta["map_id"],
+                "difficulty": convert_extended_difficulty_to_top_level(map_meta["difficulty"]),
+                "category": map_meta["category"],
+                "time": float(time),
+                "medal": medal,
+            },
+        )
+
+        if notifications:
+            users_repo = UsersRepository(self._pool)
+
+            for quest in completed_quests:
+                requirements = quest.get("requirements", {})
+                bounty_type = quest.get("bounty_type")
+                rival_user_id = requirements.get("rival_user_id")
+                rival_display_name = None
+
+                # Always fetch completer display name (needed for 3rd-person body text)
+                completer_user = await users_repo.fetch_user(user_id)
+                completer_display_name = completer_user["coalesced_name"] if completer_user else "Unknown User"
+
+                if rival_user_id:
+                    rival_user = await users_repo.fetch_user(rival_user_id)
+                    rival_display_name = rival_user["coalesced_name"] if rival_user else "Unknown User"
+
+                # Build body per quest type
+                coins = quest.get("coin_reward", 0)
+                xp = quest.get("xp_reward", 0)
+                reward_suffix = f" and earned {coins} coins + {xp} XP."
+
+                # Build enriched metadata (base fields)
+                metadata: dict[str, Any] = {
+                    "quest_id": quest.get("quest_id"),
+                    "progress_id": quest.get("progress_id"),
+                    "quest_name": quest["name"],
+                    "quest_difficulty": quest.get("difficulty"),
+                    "coin_reward": quest.get("coin_reward"),
+                    "xp_reward": quest.get("xp_reward"),
+                    "completer_display_name": completer_display_name,
+                    "rival_user_id": rival_user_id,
+                    "rival_display_name": rival_display_name,
+                }
+
+                # Build body and type-specific metadata per quest type
+                if bounty_type == "rival_challenge":
+                    rival_time = requirements.get("rival_time")
+                    body = (
+                        f"{completer_display_name} beat {rival_display_name}'s time on {map_code} "
+                        f"({rival_time:.2f}s \u2192 {time:.2f}s){reward_suffix}"
+                    )
+                    metadata.update(
+                        bounty_type=bounty_type, map_code=map_code, completion_time=float(time), rival_time=rival_time
+                    )
+                elif bounty_type == "personal_improvement":
+                    target_time = requirements.get("target_time")
+                    body = (
+                        f"{completer_display_name} improved their time on {map_code} "
+                        f"({target_time:.2f}s \u2192 {time:.2f}s){reward_suffix}"
+                    )
+                    metadata.update(
+                        bounty_type=bounty_type, map_code=map_code, completion_time=float(time), target_time=target_time
+                    )
+                elif bounty_type == "gap_filling":
+                    body = f"{completer_display_name} completed {map_code}{reward_suffix}"
+                    metadata.update(bounty_type=bounty_type, map_code=map_code)
+                else:
+                    description = quest.get("description", "")
+                    desc_part = f" ({description})" if description else ""
+                    body = f"{completer_display_name} completed '{quest['name']}'{desc_part}{reward_suffix}"
+                    metadata["quest_description"] = description
+
+                await notifications.create_and_dispatch(
+                    data=NotificationCreateRequest(
+                        user_id=user_id,
+                        event_type=NotificationEventType.QUEST_COMPLETE,  # type: ignore
+                        title="Quest Completed!",
+                        body=body,
+                        metadata=metadata,
+                    ),
+                    headers=headers,
+                )
+
+                if rival_user_id:
+                    await notifications.create_and_dispatch(
+                        data=NotificationCreateRequest(
+                            user_id=rival_user_id,
+                            event_type=NotificationEventType.QUEST_RIVAL_MENTION,  # type: ignore
+                            title="Rival Quest Challenge",
+                            body=f"{completer_display_name} completed a rival quest against you!",
+                            discord_message=f"{completer_display_name} completed a rival quest against you!",
+                            metadata={
+                                "quest_name": quest["name"],
+                                "quest_difficulty": quest.get("difficulty"),
+                                "completer_user_id": user_id,
+                                "completer_display_name": completer_display_name,
+                            },
+                        ),
+                        headers=headers,
+                    )
+
+    async def _revert_quest_progress_for_completion(
+        self,
+        *,
+        user_id: int,
+        map_code: str,
+        time: float,
+    ) -> None:
+        map_meta = await self._completions_repo.fetch_map_metadata_by_code(map_code)
+        if not map_meta:
+            return
+
+        store_repo = StoreRepository(self._pool)
+        lootbox_repo = LootboxRepository(self._pool)
+        store_service = StoreService(self._pool, self._state, store_repo, lootbox_repo)
+        remaining_times = await self._completions_repo.fetch_verified_times_for_user_map(
+            user_id,
+            map_meta["map_id"],
+        )
+        medal_thresholds = await store_repo.get_medal_thresholds(map_meta["map_id"])
+        remaining_medals: list[str] = []
+        if medal_thresholds:
+            for remaining_time in remaining_times:
+                medal = self._compute_medal(float(remaining_time), medal_thresholds)
+                if medal:
+                    remaining_medals.append(medal)
+
+        await store_service.revert_quest_progress(
+            user_id=user_id,
+            event_type="completion",
+            event_data={
+                "map_id": map_meta["map_id"],
+                "difficulty": convert_extended_difficulty_to_top_level(map_meta["difficulty"]),
+                "category": map_meta["category"],
+                "time": float(time),
+            },
+            remaining_times=remaining_times,
+            remaining_medals=remaining_medals,
+        )
 
     async def get_completions_for_user(
         self,
@@ -150,16 +329,16 @@ class CompletionsService(BaseService):
             user_match = extracted.name in user_names
 
             if code_match and time_match and user_match:
-                # Auto-verification succeeded
                 verification_data = CompletionVerificationUpdateRequest(
                     verified_by=BOT_USER_ID,
                     verified=True,
                     reason="Auto Verified by Genji Shimada.",
                 )
-                await self.verify_completion_with_pool(None, completion_id, verification_data)
+                await self.verify_completion_with_pool(
+                    None, completion_id, verification_data, notifications=notifications
+                )
                 return
 
-            # Autoverification failed validation, send failure details and fall back to manual
             await self.publish_message(
                 routing_key="api.completion.autoverification.failed",
                 data=FailedAutoverifyEvent(
@@ -183,7 +362,6 @@ class CompletionsService(BaseService):
                 idempotency_key=idempotency_key,
             )
 
-            # Notify user that auto-verification failed
             if notifications:
                 await notifications.create_and_dispatch(
                     data=NotificationCreateRequest(
@@ -200,7 +378,6 @@ class CompletionsService(BaseService):
                 )
 
         except Exception as e:
-            # ANY error = fall back to manual verification
             log.exception(
                 "OCR auto-verification failed for completion_id=%s: %s",
                 completion_id,
@@ -215,7 +392,6 @@ class CompletionsService(BaseService):
                 idempotency_key=idempotency_key,
             )
 
-            # Notify user that auto-verification failed
             if notifications:
                 await notifications.create_and_dispatch(
                     data=NotificationCreateRequest(
@@ -251,28 +427,21 @@ class CompletionsService(BaseService):
             SlowerThanPendingError: If new time is slower than pending verification.
             CompletionNotFoundError: If referenced completion not found (FK violation).
         """
-        # Service checks map exists
         map_exists = await self._completions_repo.check_map_exists(data.code)
         if not map_exists:
             raise MapNotFoundError(data.code)
 
-        # Service orchestrates business logic with transaction
         async with self._pool.acquire() as conn, conn.transaction():
-            # 1. Check for pending verification
             pending = await self._completions_repo.get_pending_verification(data.user_id, data.code, conn=conn)  # type: ignore
-
             verification_id_to_delete = None
 
-            # 2. Business logic: compare times
             if pending:
                 if data.time >= pending["time"]:
                     raise SlowerThanPendingError(new_time=data.time, pending_time=pending["time"])
 
-                # 3. Business decision: supersede pending with faster time
                 await self._completions_repo.reject_completion(pending["id"], BOT_USER_ID, conn=conn)  # type: ignore
                 verification_id_to_delete = pending["verification_id"]
 
-            # 4. Insert new completion
             try:
                 completion_id = await self._completions_repo.insert_completion(
                     code=data.code,
@@ -285,12 +454,10 @@ class CompletionsService(BaseService):
             except UniqueConstraintViolationError:
                 raise DuplicateCompletionError(user_id=data.user_id, map_code=data.code)
             except ForeignKeyViolationError as e:
-                # Translate FK violations to domain exceptions
                 if "user_id" in e.constraint_name:
                     raise CompletionNotFoundError(data.user_id)
                 raise MapNotFoundError(data.code)
 
-        # Delete superseded verification message if needed
         if verification_id_to_delete:
             delete_event = VerificationMessageDeleteEvent(verification_id_to_delete)
             await self.publish_message(
@@ -306,7 +473,6 @@ class CompletionsService(BaseService):
         suspicious_flags = await self.get_suspicious_flags(data.user_id)
 
         if not (data.video or suspicious_flags):
-            # Emit event for background OCR processing
             request.app.emit(
                 "completion.ocr.requested",
                 OcrVerificationRequestedEvent(
@@ -320,7 +486,6 @@ class CompletionsService(BaseService):
                 users=users,
                 notifications=notifications,
             )
-            # Return immediately - OCR happens in background
             return CompletionSubmissionJobResponse(None, completion_id)
 
         idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
@@ -372,7 +537,6 @@ class CompletionsService(BaseService):
             CompletionNotFoundError: If completion or user not found.
         """
         _ = state
-        # Check existence first
         exists = await self._completions_repo.check_completion_exists(record_id)
         if not exists:
             raise CompletionNotFoundError(record_id)
@@ -412,6 +576,7 @@ class CompletionsService(BaseService):
         data: CompletionVerificationUpdateRequest,
         *,
         conn: Connection | None = None,
+        notifications: NotificationsService | None = None,
     ) -> JobStatusResponse:
         """Update verification status for a completion and publish an event.
 
@@ -420,6 +585,7 @@ class CompletionsService(BaseService):
             record_id: Completion record ID.
             data: Verification update data.
             conn: Database connection (optional).
+            notifications: Notifications service for quest completion alerts.
 
         Returns:
             Job status response.
@@ -428,9 +594,15 @@ class CompletionsService(BaseService):
             DuplicateVerificationError: If verification record already exists.
             CompletionNotFoundError: If completion or user not found.
         """
-        # Check existence first
         exists = await self._completions_repo.check_completion_exists(record_id, conn=conn)
         if not exists:
+            raise CompletionNotFoundError(record_id)
+
+        completion_info = await self._completions_repo.fetch_completion_for_moderation(
+            record_id,
+            conn=conn,  # type: ignore[arg-type]
+        )
+        if not completion_info:
             raise CompletionNotFoundError(record_id)
 
         try:
@@ -445,6 +617,21 @@ class CompletionsService(BaseService):
             raise DuplicateVerificationError(record_id)
         except ForeignKeyViolationError:
             raise CompletionNotFoundError(record_id)
+
+        if data.verified and not completion_info["old_verified"]:
+            await self._update_quest_progress_for_completion(
+                user_id=completion_info["user_id"],
+                map_code=completion_info["code"],
+                time=completion_info["old_time"],
+                notifications=notifications,
+                headers=request.headers if request else Headers(),
+            )
+        if not data.verified and completion_info["old_verified"]:
+            await self._revert_quest_progress_for_completion(
+                user_id=completion_info["user_id"],
+                map_code=completion_info["code"],
+                time=completion_info["old_time"],
+            )
 
         message_data = VerificationChangedEvent(
             completion_id=record_id,
@@ -466,6 +653,7 @@ class CompletionsService(BaseService):
         request: Request | None,
         record_id: int,
         data: CompletionVerificationUpdateRequest,
+        notifications: NotificationsService | None = None,
     ) -> JobStatusResponse:
         """Verify completion using pool connection."""
         async with self._pool.acquire() as conn:
@@ -474,6 +662,7 @@ class CompletionsService(BaseService):
                 record_id,
                 data,
                 conn=conn,  # type: ignore
+                notifications=notifications,
             )
 
     async def get_completions_leaderboard(
@@ -566,6 +755,13 @@ class CompletionsService(BaseService):
         rows = await self._completions_repo.fetch_all_completions(page_size, page_number)
         return msgspec.convert(rows, list[CompletionResponse])
 
+    async def get_dashboard_completions(
+        self, user_id: int, page_size: int, page_number: int
+    ) -> list[DashboardCompletionResponse]:
+        """Get completions for a user's dashboard with verification status."""
+        rows = await self._completions_repo.fetch_dashboard_completions(user_id, page_size, page_number)
+        return msgspec.convert(rows, list[DashboardCompletionResponse])
+
     async def set_quality_vote_for_map_code(self, code: OverwatchCode, user_id: int, quality: int) -> None:
         """Set the quality vote for a map code per user.
 
@@ -574,7 +770,6 @@ class CompletionsService(BaseService):
             MapNotFoundError: If map not found.
             CompletionNotFoundError: If user not found.
         """
-        # Check map exists first (upsert silently succeeds with 0 rows if map doesn't exist)
         map_exists = await self._completions_repo.check_map_exists(code)
         if not map_exists:
             raise MapNotFoundError(code)
@@ -582,7 +777,6 @@ class CompletionsService(BaseService):
         try:
             await self._completions_repo.upsert_quality_vote(code, user_id, quality)
         except UniqueConstraintViolationError:
-            # Note: This should not happen with upsert, but keeping for safety
             raise DuplicateQualityVoteError(user_id, 0)
         except ForeignKeyViolationError as e:
             if "map" in e.constraint_name.lower():
@@ -633,7 +827,6 @@ class CompletionsService(BaseService):
 
         notification_messages: list[str] = []
 
-        # Handle time change
         if data.time is not msgspec.UNSET:
             if data.time_change_reason is msgspec.UNSET:
                 raise ValueError("time_change_reason is required when changing time")
@@ -648,7 +841,6 @@ class CompletionsService(BaseService):
                 f"Reason: {data.time_change_reason}"
             )
 
-        # Handle verification change
         if data.verified is not msgspec.UNSET:
             verified = cast(bool, data.verified)
             await self._run_repo_write(
@@ -659,6 +851,20 @@ class CompletionsService(BaseService):
 
             if verified != old_verified:
                 if verified:
+                    await self._update_quest_progress_for_completion(
+                        user_id=user_id,
+                        map_code=map_code,
+                        time=old_time,
+                        notifications=notification_service,
+                        headers=headers if headers else Headers(),
+                    )
+                else:
+                    await self._revert_quest_progress_for_completion(
+                        user_id=user_id,
+                        map_code=map_code,
+                        time=old_time,
+                    )
+                if verified:
                     notification_messages.append(f"Your completion on **{map_code}** has been verified by a moderator.")
                 else:
                     reason_msg = f"\nReason: {data.verification_reason}" if data.verification_reason else ""
@@ -666,7 +872,6 @@ class CompletionsService(BaseService):
                         f"Your completion on **{map_code}** has been unverified by a moderator.{reason_msg}"
                     )
 
-        # Handle suspicious flag
         if data.mark_suspicious:
             if data.suspicious_context is msgspec.UNSET or data.suspicious_flag_type is msgspec.UNSET:
                 raise ValueError("suspicious_context and suspicious_flag_type are required when marking as suspicious")
@@ -696,7 +901,6 @@ class CompletionsService(BaseService):
                     f"The suspicious flag on your completion for **{map_code}** has been removed."
                 )
 
-        # Send notification if any changes were made
         if notification_messages and notification_service is not None and headers is not None:
             notification_body = "\n\n".join(notification_messages)
 

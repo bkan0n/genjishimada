@@ -113,16 +113,19 @@ class XPHandler(BaseHandler):
         multiplier = await self.bot.api.get_xp_multiplier()
         amount = floor(event.amount * multiplier)
 
-        # XP Gain notification (channel ping + web tray + potential DM)
+        type_display = f"{event.type} - {event.reason}" if event.reason else event.type
+
         await self.bot.notifications.notify_with_channel_ping(
             channel=self.xp_channel,
             user_id=event.user_id,
             event_type=NotificationEventType.XP_GAIN,
             title="XP Gained",
-            body=f"You gained {amount} XP from {event.type}!",
-            metadata={"amount": amount, "type": event.type},
-            ping_message=f"<:_:976917981009440798> {user.display_name} has gained **{amount} XP** ({event.type})!",
-            fallback_message=f"<:_:976917981009440798> {user.display_name} has gained **{amount} XP** ({event.type})!",
+            body=f"You gained {amount} XP from {type_display}!",
+            metadata={"amount": amount, "type": event.type, "reason": event.reason},
+            ping_message=(f"<:_:976917981009440798> {user.display_name} has gained **{amount} XP** ({type_display})!"),
+            fallback_message=(
+                f"<:_:976917981009440798> {user.display_name} has gained **{amount} XP** ({type_display})!"
+            ),
         )
 
         xp_data = await self.bot.api.get_xp_tier_change(event.previous_amount, event.new_amount)
@@ -134,7 +137,6 @@ class XPHandler(BaseHandler):
             await self.bot.api.grant_active_key_to_user(event.user_id)
             await self._update_xp_roles_for_user(event.user_id, xp_data.old_main_tier_name, xp_data.new_main_tier_name)
 
-            # Lootbox earned DM notification
             await self.bot.notifications.notify_dm_only(
                 user_id=event.user_id,
                 event_type=NotificationEventType.LOOTBOX_EARNED,
@@ -147,7 +149,6 @@ class XPHandler(BaseHandler):
                 metadata={"old_rank": old_rank, "new_rank": new_rank, "reason": "rank_up"},
             )
 
-            # Rank up channel ping notification
             await self.bot.notifications.notify_with_channel_ping(
                 channel=self.xp_channel,
                 user_id=event.user_id,
@@ -175,7 +176,6 @@ class XPHandler(BaseHandler):
                 event.user_id, xp_data.old_prestige_level, xp_data.new_prestige_level
             )
 
-            # Prestige lootbox DM notification
             await self.bot.notifications.notify_dm_only(
                 user_id=event.user_id,
                 event_type=NotificationEventType.LOOTBOX_EARNED,
@@ -192,7 +192,6 @@ class XPHandler(BaseHandler):
                 },
             )
 
-            # Prestige channel ping notification
             await self.bot.notifications.notify_with_channel_ping(
                 channel=self.xp_channel,
                 user_id=event.user_id,
@@ -228,12 +227,14 @@ class XPCog(commands.GroupCog, group_name="xp"):
         itx: GenjiItx,
         user: app_commands.Transform[int, transformers.UserTransformer],
         amount: app_commands.Range[int, 1],
+        reason: str | None = None,
     ) -> None:
         """Grant user XP."""
         user_data = await self.bot.api.get_user(user)
         nickname = user_data.coalesced_name if user_data else "Unknown User"
-        await itx.response.send_message(f"Granting user {nickname} {amount} XP.", ephemeral=True)
-        data = XpGrantRequest(amount, "Other")
+        reason_display = f" ({reason})" if reason else ""
+        await itx.response.send_message(f"Granting user {nickname} {amount} XP{reason_display}.", ephemeral=True)
+        data = XpGrantRequest(amount, "Other", reason=reason)
         await self.bot.api.grant_user_xp(user, data)
 
 

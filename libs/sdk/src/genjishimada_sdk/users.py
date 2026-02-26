@@ -151,7 +151,7 @@ class OverwatchUsernameItem(Struct):
     is_primary: bool = False
 
 
-class OverwatchUsernamesUpdateRequest(Struct):  # TODO Rework this to use primary/secondary/tertiary
+class OverwatchUsernamesUpdateRequest(Struct):
     """Payload for updating Overwatch usernames.
 
     Attributes:

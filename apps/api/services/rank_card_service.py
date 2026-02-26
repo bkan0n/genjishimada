@@ -150,7 +150,6 @@ class RankCardService(BaseService):
         if not row:
             return RankCardBadgeSettings()
 
-        # Resolve URLs for mastery and spray badges
         async with self._pool.acquire() as conn:
             for num in range(1, 7):
                 type_col = f"badge_type{num}"
@@ -225,7 +224,6 @@ class RankCardService(BaseService):
         """
         await self._ensure_user_exists(user_id)
 
-        # Fetch all data in parallel where possible
         async with self._pool.acquire() as conn:
             rank_data = await get_user_rank_data(conn, user_id)  # type: ignore[arg-type]
             nickname = await self._rank_card_repo.fetch_nickname(user_id, conn=conn)  # type: ignore[arg-type]
@@ -237,16 +235,13 @@ class RankCardService(BaseService):
             totals = await self._rank_card_repo.fetch_map_totals(conn=conn)  # type: ignore[arg-type]
             xp_data = await self._rank_card_repo.fetch_community_rank_xp(user_id, conn=conn)  # type: ignore[arg-type]
 
-        # Get badges with resolved URLs
         badges = await self.get_badges(user_id)
 
-        # Extract values with defaults
         background = background_row["name"] if background_row else "placeholder"
         avatar_skin = avatar_row["skin"] if avatar_row else "Overwatch 1"
         avatar_pose = avatar_row["pose"] if avatar_row else "Heroic"
         rank = self._find_highest_rank(rank_data)
 
-        # Build difficulties dict
         difficulties = {}
         for row in rank_data:
             difficulties[row.difficulty] = {
@@ -256,7 +251,6 @@ class RankCardService(BaseService):
                 "bronze": row.bronze,
             }
 
-        # Add totals to difficulties
         for total in totals:
             if total["base_difficulty"] in difficulties:
                 difficulties[total["base_difficulty"]]["total"] = total["total"]

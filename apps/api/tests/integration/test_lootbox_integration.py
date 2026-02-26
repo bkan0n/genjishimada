@@ -4,6 +4,8 @@ Tests HTTP interface: request/response serialization,
 error translation, and full stack flow through real database.
 """
 
+from typing import get_args
+from genjishimada_sdk.lootbox import LootboxKeyType
 import pytest
 
 pytestmark = [
@@ -43,7 +45,7 @@ class TestViewAllKeys:
         assert len(data) > 0  # Should have Classic and Winter at minimum
         for key in data:
             assert "name" in key
-            assert key["name"] in ["Classic", "Winter"]
+            assert key["name"] in get_args(LootboxKeyType)
 
 
 class TestViewUserRewards:
@@ -368,6 +370,112 @@ class TestGetUserCoins:
 
         assert response.status_code == 200
         assert response.json() == 0
+
+
+class TestViewUserXpSummary:
+    """GET /api/v3/lootbox/users/{user_id}/xp-summary"""
+
+    async def test_user_with_no_xp_returns_newcomer(self, test_client, create_test_user):
+        """User with no XP returns Newcomer I at 0 XP."""
+        user_id = await create_test_user()
+
+        response = await test_client.get(f"/api/v3/lootbox/users/{user_id}/xp-summary")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["xp"] == 0
+        assert data["raw_tier"] == 0
+        assert data["normalized_tier"] == 0
+        assert data["prestige_level"] == 0
+        assert data["current_main_tier_name"] == "Newcomer"
+        assert data["current_sub_tier_name"] == "I"
+        assert data["current_full_tier_name"] == "Newcomer I"
+
+    async def test_response_contains_all_fields(self, test_client, create_test_user):
+        """Response contains all 14 expected fields."""
+        user_id = await create_test_user()
+
+        response = await test_client.get(f"/api/v3/lootbox/users/{user_id}/xp-summary")
+
+        assert response.status_code == 200
+        data = response.json()
+        expected_fields = {
+            "xp", "raw_tier", "normalized_tier", "prestige_level",
+            "current_main_tier_name", "current_sub_tier_name", "current_full_tier_name",
+            "next_main_tier_name", "next_sub_tier_name", "next_full_tier_name",
+            "next_sub_tier_xp_required", "next_sub_tier_xp_total",
+            "next_main_tier_xp_required", "next_main_tier_xp_total",
+        }
+        assert set(data.keys()) == expected_fields
+
+    async def test_user_with_xp_returns_correct_tier(self, test_client, create_test_user):
+        """User with granted XP returns correct tier computation."""
+        user_id = await create_test_user()
+
+        # Grant 350 XP (Completion = 5 XP each, 70 grants = 350 XP with 1x multiplier)
+        # Use a single large grant instead
+        await test_client.post(
+            f"/api/v3/lootbox/users/{user_id}/xp",
+            json={"amount": 350, "type": "Other"},
+        )
+
+        response = await test_client.get(f"/api/v3/lootbox/users/{user_id}/xp-summary")
+
+        assert response.status_code == 200
+        data = response.json()
+        # 350 XP: raw_tier = 3, normalized_tier = 3, prestige = 0
+        # main tier = 3/5 = 0 (Newcomer), sub tier = 3%5 = 3 (IV)
+        assert data["xp"] == 350
+        assert data["raw_tier"] == 3
+        assert data["current_main_tier_name"] == "Newcomer"
+        assert data["current_sub_tier_name"] == "IV"
+        assert data["current_full_tier_name"] == "Newcomer IV"
+        assert data["next_sub_tier_xp_required"] == 50
+        assert data["next_sub_tier_xp_total"] == 400
+
+    async def test_next_tier_names_within_main_tier(self, test_client, create_test_user):
+        """Next tier names are correct when staying within the same main tier."""
+        user_id = await create_test_user()
+
+        # Grant 100 XP: raw_tier=1, main=Newcomer(0), sub=II(1)
+        await test_client.post(
+            f"/api/v3/lootbox/users/{user_id}/xp",
+            json={"amount": 100, "type": "Other"},
+        )
+
+        response = await test_client.get(f"/api/v3/lootbox/users/{user_id}/xp-summary")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["current_full_tier_name"] == "Newcomer II"
+        assert data["next_sub_tier_name"] == "III"
+        assert data["next_full_tier_name"] == "Newcomer III"
+        assert data["next_main_tier_name"] == "Initiate"
+
+    async def test_next_tier_names_crossing_main_tier(self, test_client, create_test_user):
+        """Next tier wraps to next main tier when at sub-tier V."""
+        user_id = await create_test_user()
+
+        # Grant 400 XP: raw_tier=4, main=Newcomer(0), sub=V(4)
+        await test_client.post(
+            f"/api/v3/lootbox/users/{user_id}/xp",
+            json={"amount": 400, "type": "Other"},
+        )
+
+        response = await test_client.get(f"/api/v3/lootbox/users/{user_id}/xp-summary")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["current_full_tier_name"] == "Newcomer V"
+        assert data["next_sub_tier_name"] == "I"
+        assert data["next_full_tier_name"] == "Initiate I"
+        assert data["next_main_tier_name"] == "Initiate"
+
+    async def test_nonexistent_user_returns_404(self, test_client):
+        """Get XP summary for non-existent user returns 404."""
+        response = await test_client.get("/api/v3/lootbox/users/999999999/xp-summary")
+
+        assert response.status_code == 404
 
 
 class TestGrantUserXp:

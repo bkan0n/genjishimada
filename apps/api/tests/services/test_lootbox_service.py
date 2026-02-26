@@ -1,8 +1,9 @@
 """Unit tests for LootboxService."""
 
-from unittest.mock import ANY
+from unittest.mock import ANY, AsyncMock
 
 import pytest
+from genjishimada_sdk.xp import XpGrantEvent, XpGrantRequest
 
 from services.exceptions.lootbox import InsufficientKeysError
 from services.lootbox_service import DUPLICATE_COIN_VALUES, GACHA_WEIGHTS, LootboxService
@@ -316,6 +317,54 @@ class TestLootboxServiceGrantReward:
             mock_lootbox_repo.add_user_coins.assert_called_once_with(123456789, expected_coins, conn=ANY)
 
 
+class TestLootboxServiceViewXpSummary:
+    """Test view_user_xp_summary."""
+
+    async def test_returns_none_when_user_not_found(
+        self, mock_pool, mock_state, mock_lootbox_repo
+    ):
+        """Returns None when repository returns None (user doesn't exist)."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+        mock_lootbox_repo.fetch_user_xp_summary.return_value = None
+
+        result = await service.view_user_xp_summary(user_id=999999999)
+
+        assert result is None
+        mock_lootbox_repo.fetch_user_xp_summary.assert_called_once_with(999999999)
+
+    async def test_returns_xp_summary_response(
+        self, mock_pool, mock_state, mock_lootbox_repo
+    ):
+        """Returns XpSummaryResponse when user exists."""
+        from genjishimada_sdk.xp import XpSummaryResponse
+
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+        mock_lootbox_repo.fetch_user_xp_summary.return_value = {
+            "xp": 6850,
+            "raw_tier": 68,
+            "normalized_tier": 68,
+            "prestige_level": 0,
+            "current_main_tier_name": "Assassin",
+            "current_sub_tier_name": "IV",
+            "current_full_tier_name": "Assassin IV",
+            "next_main_tier_name": "Ronin",
+            "next_sub_tier_name": "V",
+            "next_full_tier_name": "Assassin V",
+            "next_sub_tier_xp_required": 50,
+            "next_sub_tier_xp_total": 6900,
+            "next_main_tier_xp_required": 150,
+            "next_main_tier_xp_total": 7000,
+        }
+
+        result = await service.view_user_xp_summary(user_id=123456789)
+
+        assert isinstance(result, XpSummaryResponse)
+        assert result.xp == 6850
+        assert result.current_full_tier_name == "Assassin IV"
+        assert result.next_full_tier_name == "Assassin V"
+        assert result.next_sub_tier_xp_required == 50
+
+
 class TestLootboxServiceDebugGrant:
     """Test debug_grant_reward_no_key conditional logic."""
 
@@ -384,3 +433,49 @@ class TestLootboxServiceDebugGrant:
             reward_name="Test Banner",
             conn=ANY,
         )
+
+
+class TestGrantUserXpReason:
+    """Verify reason field is threaded from request to event."""
+
+    async def test_grant_user_xp_passes_reason_to_event(
+        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+    ):
+        """XpGrantEvent includes reason from XpGrantRequest."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.fetch_xp_multiplier.return_value = 1.0
+        mock_lootbox_repo.upsert_user_xp.return_value = {
+            "previous_amount": 100,
+            "new_amount": 150,
+        }
+
+        mock_publish = mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+
+        data = XpGrantRequest(amount=50, type="Other", reason="Won community event")
+        await service.grant_user_xp(headers={}, user_id=123, data=data)
+
+        mock_publish.assert_called_once()
+        event = mock_publish.call_args.kwargs["data"]
+        assert isinstance(event, XpGrantEvent)
+        assert event.reason == "Won community event"
+
+    async def test_grant_user_xp_reason_none_by_default(
+        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+    ):
+        """XpGrantEvent has reason=None when not provided."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.fetch_xp_multiplier.return_value = 1.0
+        mock_lootbox_repo.upsert_user_xp.return_value = {
+            "previous_amount": 100,
+            "new_amount": 150,
+        }
+
+        mock_publish = mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+
+        data = XpGrantRequest(amount=50, type="Other")
+        await service.grant_user_xp(headers={}, user_id=123, data=data)
+
+        event = mock_publish.call_args.kwargs["data"]
+        assert event.reason is None

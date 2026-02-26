@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from asyncpg import Connection, Pool
+from asyncpg.exceptions import ForeignKeyViolationError as AsyncpgFKViolationError
 from asyncpg.exceptions import UniqueViolationError
 from litestar.datastructures import State
 
 from repository.base import BaseRepository
-from repository.exceptions import UniqueConstraintViolationError, extract_constraint_name
+from repository.exceptions import ForeignKeyViolationError, UniqueConstraintViolationError, extract_constraint_name
 
 
 class UsersRepository(BaseRepository):
@@ -228,7 +229,22 @@ class UsersRepository(BaseRepository):
             INSERT INTO users.overwatch_usernames (user_id, username, is_primary)
             VALUES ($1, $2, $3)
         """
-        await _conn.execute(query, user_id, username, is_primary)
+        try:
+            await _conn.execute(query, user_id, username, is_primary)
+        except AsyncpgFKViolationError as e:
+            constraint = extract_constraint_name(e)
+            raise ForeignKeyViolationError(
+                constraint_name=constraint or "unknown",
+                table="users.overwatch_usernames",
+                detail=e.detail,
+            ) from e
+        except UniqueViolationError as e:
+            constraint = extract_constraint_name(e)
+            raise UniqueConstraintViolationError(
+                constraint_name=constraint or "unknown",
+                table="users.overwatch_usernames",
+                detail=e.detail,
+            ) from e
 
     async def fetch_overwatch_usernames(
         self,

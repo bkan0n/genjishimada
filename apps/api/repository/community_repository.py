@@ -562,7 +562,7 @@ class CommunityRepository(BaseRepository):
             FROM core.maps m
             LEFT JOIN maps.creators mc ON m.id = mc.map_id
             LEFT JOIN maps.ratings mr ON m.id = mr.map_id
-            WHERE quality IS NOT NULL AND mr.verified
+            WHERE quality IS NOT NULL AND mr.verified AND official AND archived IS FALSE
             GROUP BY mc.user_id, m.code
         ), quality_data AS (
             SELECT
