@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
     
     
       
@@ -2275,6 +2275,17 @@
     <span class="md-ellipsis">
       
         CompletionVerificationUpdateRequest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#genjishimada_sdk.completions.DashboardCompletionResponse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DashboardCompletionResponse
       
     </span>
   </a>
@@ -6891,6 +6902,812 @@
 
 
 
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="genjishimada_sdk.completions.DashboardCompletionResponse" class="doc doc-heading">
+            <code>DashboardCompletionResponse</code>
+
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse" class="headerlink" title="Anchor link to this section">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="msgspec.Struct">Struct</span></code></p>
+
+
+
+        <p>Completion entry for user dashboard with verification status.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="code: OverwatchCode
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.code)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.code">code</a></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="OverwatchCode = Annotated[str, Meta(min_length=4, max_length=6, pattern='^[A-Z0-9]*$')]
+
+  
+      module-attribute
+   (genjishimada_sdk.maps.OverwatchCode)" href="../maps/#genjishimada_sdk.maps.OverwatchCode">OverwatchCode</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Workshop code for the map.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="user_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.user_id)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.user_id">user_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Identifier for the completing user.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.name)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.name">name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Display name of the runner.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="also_known_as: str | None
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.also_known_as)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.also_known_as">also_known_as</a></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Alternate display name if available.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="time: float
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.time)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.time">time</a></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Completion time in seconds.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="screenshot: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.screenshot)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.screenshot">screenshot</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Screenshot URL for proof.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="video: GuideURL | None
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.video)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.video">video</a></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="GuideURL = Annotated[str, Meta(pattern=URL_PATTERN, description='Must be a valid URL starting with http:// or https://.')]
+
+  
+      module-attribute
+   (genjishimada_sdk.maps.GuideURL)" href="../maps/#genjishimada_sdk.maps.GuideURL">GuideURL</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional video URL for proof.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="completion: bool
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.completion)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.completion">completion</a></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the run qualifies as a completion.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="rank: int | None
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.rank)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.rank">rank</a></code></td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Leaderboard rank if verified, null otherwise.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="medal: MedalType | None
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.medal)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.medal">medal</a></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="MedalType = Literal['Gold', 'Silver', 'Bronze']
+
+  
+      module-attribute
+   (genjishimada_sdk.maps.MedalType)" href="../maps/#genjishimada_sdk.maps.MedalType">MedalType</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Awarded medal tier if verified, null otherwise.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="map_name: OverwatchMap
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.map_name)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.map_name">map_name</a></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="OverwatchMap = Literal['Circuit Royal', 'Runasapi', 'Practice Range', 'Route 66', 'Midtown', 'Junkertown', 'Colosseo', 'Lijiang Tower (Lunar New Year)', 'Dorado', 'Throne of Anubis', 'Castillo', 'Blizzard World (Winter)', 'Hollywood (Halloween)', "King's Row", 'Black Forest (Winter)', 'Petra', 'Framework', 'Eichenwalde', 'Workshop Island', 'Chateau Guillard (Halloween)', 'New Junk City', 'Necropolis', 'Kanezaka', 'Havana', 'Oasis', 'Ayutthaya', 'Volskaya Industries', 'Hanamura', 'Workshop Expanse', 'Hanaoka', 'Lijiang Tower', 'Busan (Lunar New Year)', 'Suravasa', "King's Row (Winter)", 'Ecopoint: Antarctica', 'Hanamura (Winter)', 'Blizzard World', 'Chateau Guillard', 'Paraiso', 'Workshop Green Screen', 'Watchpoint: Gibraltar', 'Shambali', 'Eichenwalde (Halloween)', 'Tools', 'Nepal', 'Samoa', 'Horizon Lunar Colony', 'Paris', 'Esperanca', 'Black Forest', 'Antarctic Peninsula', 'Workshop Chamber', 'Hollywood', 'New Queen Street', 'Rialto', 'Busan', 'Malevento', 'Temple of Anubis', 'Ilios', 'Ecopoint: Antarctica (Winter)', 'Numbani', 'Adlersbrunn', 'Aatlis', 'Arena Victoriae', 'Redwood Dam', 'Thames District', 'Gogadoro', 'Powder Keg Mine', 'Place Lacroix']
+
+  
+      module-attribute
+   (genjishimada_sdk.maps.OverwatchMap)" href="../maps/#genjishimada_sdk.maps.OverwatchMap">OverwatchMap</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the Overwatch map.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="difficulty: DifficultyAll
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.difficulty)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.difficulty">difficulty</a></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="DifficultyAll = Literal['Easy -', 'Easy', 'Easy +', 'Medium -', 'Medium', 'Medium +', 'Hard -', 'Hard', 'Hard +', 'Very Hard -', 'Very Hard', 'Very Hard +', 'Extreme -', 'Extreme', 'Extreme +', 'Hell']
+
+  
+      module-attribute
+   (genjishimada_sdk.difficulties.DifficultyAll)" href="../difficulties/#genjishimada_sdk.difficulties.DifficultyAll">DifficultyAll</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Difficulty rating for the map.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="message_id: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.message_id)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.message_id">message_id</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Discord message ID tied to the submission.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="upvotes: int = 0
+
+  
+      class-attribute
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.upvotes)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.upvotes">upvotes</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Current upvote total for the submission.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="id: int | None = None
+
+  
+      class-attribute
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.id)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.id">id</a></code></td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Completion record identifier.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="reason: str | None
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.reason)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.reason">reason</a></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Verification or rejection reason.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="status: Literal['Pending', 'Verified', 'Rejected']
+
+  
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.status)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.status">status</a></code></td>
+            <td>
+                  <code><span title="typing.Literal">Literal</span>[&#39;Pending&#39;, &#39;Verified&#39;, &#39;Rejected&#39;]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Three-state status: Pending, Verified, or Rejected.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="total_results: int | None = None
+
+  
+      class-attribute
+      instance-attribute
+   (genjishimada_sdk.completions.DashboardCompletionResponse.total_results)" href="#genjishimada_sdk.completions.DashboardCompletionResponse.total_results">total_results</a></code></td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Total number of records in the query, when paginated.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.also_known_as" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">also_known_as</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.also_known_as" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.code" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">code</span><span class="p">:</span> <span class="n">OverwatchCode</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.code" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.completion" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">completion</span><span class="p">:</span> <span class="nb">bool</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.completion" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.difficulty" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">difficulty</span><span class="p">:</span> <span class="n">DifficultyAll</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.difficulty" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.map_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">map_name</span><span class="p">:</span> <span class="n">OverwatchMap</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.map_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.medal" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">medal</span><span class="p">:</span> <span class="n">MedalType</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.medal" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.message_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">message_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.message_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.rank" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">rank</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.rank" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.reason" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.reason" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.screenshot" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">screenshot</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.screenshot" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.status" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">status</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s1">&#39;Pending&#39;</span><span class="p">,</span> <span class="s1">&#39;Verified&#39;</span><span class="p">,</span> <span class="s1">&#39;Rejected&#39;</span><span class="p">]</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.status" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.time" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">time</span><span class="p">:</span> <span class="nb">float</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.time" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.total_results" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">total_results</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.total_results" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.upvotes" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">upvotes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.upvotes" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.user_id" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.user_id" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.completions.DashboardCompletionResponse.video" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">video</span><span class="p">:</span> <span class="n">GuideURL</span> <span class="o">|</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.completions.DashboardCompletionResponse.video" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
 
 
 
@@ -9734,7 +10551,7 @@
 
 
 <h3 id="genjishimada_sdk.completions.__all__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;CompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionCreatedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionModerateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionPatchRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionVerificationUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedResultResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;FailedAutoverifyEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;MapRecordProgressionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;OcrResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;PendingVerificationResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;QualityUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousFlag&#39;</span><span class="p">,</span> <span class="s1">&#39;TimePlayedPerRankResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteUpdateEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationChangedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationMessageDeleteEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;WorldRecordXPCheckResponse&#39;</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;CompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionCreatedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionModerateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionPatchRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionSubmissionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;CompletionVerificationUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;DashboardCompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;ExtractedResultResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;FailedAutoverifyEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;MapRecordProgressionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;OcrResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;PendingVerificationResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;QualityUpdateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousCompletionResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;SuspiciousFlag&#39;</span><span class="p">,</span> <span class="s1">&#39;TimePlayedPerRankResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteCreateRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteSubmissionJobResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;UpvoteUpdateEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationChangedEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;VerificationMessageDeleteEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;WorldRecordXPCheckResponse&#39;</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>

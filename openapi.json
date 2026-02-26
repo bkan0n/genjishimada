@@ -4748,6 +4748,108 @@
         "deprecated": false
       }
     },
+    "/api/v3/completions/dashboard": {
+      "get": {
+        "tags": [
+          "Completions"
+        ],
+        "summary": "Get User Dashboard Completions",
+        "description": "Get a user's recent completions with verification status for the dashboard.",
+        "operationId": "ApiV3CompletionsDashboardGetDashboardCompletions",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "page_number",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DashboardCompletionResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
     "/api/v3/completions/{code}/legacy": {
       "get": {
         "tags": [
@@ -5654,7 +5756,11 @@
               "type": "string",
               "enum": [
                 "Classic",
-                "Winter"
+                "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn"
               ]
             },
             "required": true,
@@ -5758,7 +5864,11 @@
               "type": "string",
               "enum": [
                 "Classic",
-                "Winter"
+                "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn"
               ]
             },
             "required": true,
@@ -5857,7 +5967,11 @@
               "type": "string",
               "enum": [
                 "Classic",
-                "Winter"
+                "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn"
               ]
             },
             "required": true,
@@ -6127,6 +6241,10 @@
               "enum": [
                 "Classic",
                 "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn",
                 null
               ]
             },
@@ -6289,7 +6407,11 @@
               "type": "string",
               "enum": [
                 "Classic",
-                "Winter"
+                "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn"
               ]
             },
             "required": true,
@@ -6467,7 +6589,11 @@
               "type": "string",
               "enum": [
                 "Classic",
-                "Winter"
+                "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn"
               ]
             },
             "required": true,
@@ -6548,6 +6674,10 @@
               "enum": [
                 "Classic",
                 "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn",
                 null
               ]
             },
@@ -6652,6 +6782,10 @@
               "enum": [
                 "Classic",
                 "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn",
                 null
               ]
             },
@@ -6856,6 +6990,10 @@
               "enum": [
                 "Classic",
                 "Winter",
+                "Summer",
+                "Halloween",
+                "Spring",
+                "Autumn",
                 null
               ]
             },
@@ -6894,6 +7032,79 @@
                     "$ref": "#/components/schemas/UserRewardResponse"
                   },
                   "type": "array"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/lootbox/users/{user_id}/xp-summary": {
+      "get": {
+        "tags": [
+          "Lootbox"
+        ],
+        "summary": "Get User XP Summary",
+        "description": "Get a user's complete XP progression including current tier, next tier, and XP requirements.",
+        "operationId": "ApiV3LootboxUsersUserIdXpSummaryViewUserXpSummary",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/XpSummaryResponse"
                 }
               }
             }
@@ -11593,7 +11804,10 @@
                 "lootbox_earned",
                 "playtest_update",
                 "map_edit_approved",
-                "map_edit_rejected"
+                "map_edit_rejected",
+                "quest_complete",
+                "quest_rotation",
+                "quest_rival_mention"
               ]
             },
             "required": true,
@@ -11709,7 +11923,10 @@
                 "lootbox_earned",
                 "playtest_update",
                 "map_edit_approved",
-                "map_edit_rejected"
+                "map_edit_rejected",
+                "quest_complete",
+                "quest_rotation",
+                "quest_rival_mention"
               ]
             },
             "required": true,
@@ -11745,6 +11962,1074 @@
           "204": {
             "description": "Request fulfilled, nothing follows",
             "headers": {}
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/admin/users/{user_id}/quests/{progress_id}": {
+      "patch": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Update User Quest Progress (Admin)",
+        "description": "Edit quest data, progress, or completion status for a user's quest.",
+        "operationId": "ApiV3StoreAdminUsersUserIdQuestsProgressIdAdminUpdateUserQuest",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          },
+          {
+            "name": "progress_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUpdateUserQuestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUpdateUserQuestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/quests/{progress_id}/claim": {
+      "post": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Claim Quest Rewards",
+        "description": "Claim rewards for a completed quest.",
+        "operationId": "ApiV3StoreQuestsProgressIdClaimClaimQuest",
+        "parameters": [
+          {
+            "name": "progress_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimQuestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimQuestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/admin/quests/rotation/generate": {
+      "post": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Generate Quest Rotation (Admin)",
+        "description": "Manually trigger quest rotation generation.",
+        "operationId": "ApiV3StoreAdminQuestsRotationGenerateGenerateQuestRotation",
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateQuestRotationResponse"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/admin/rotation/generate": {
+      "post": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Generate New Rotation (Admin)",
+        "description": "Manually trigger new rotation generation.",
+        "operationId": "ApiV3StoreAdminRotationGenerateGenerateRotation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/GenerateRotationRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerateRotationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/admin/config": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get Store Config (Admin)",
+        "description": "View current store configuration.",
+        "operationId": "ApiV3StoreAdminConfigGetConfig",
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreConfigResponse"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "put": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Update Store Config (Admin)",
+        "description": "Update store configuration.",
+        "operationId": "ApiV3StoreAdminConfigUpdateConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/keys": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get Key Pricing",
+        "description": "Get key pricing for all key types with bulk discounts.",
+        "operationId": "ApiV3StoreKeysGetKeyPricing",
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyPricingListResponse"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/users/{user_id}/purchases": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get Purchase History",
+        "description": "Get user's store purchase history.",
+        "operationId": "ApiV3StoreUsersUserIdPurchasesGetPurchaseHistory",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PurchaseHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/admin/quests/config": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get Quest Config (Admin)",
+        "description": "View current quest configuration.",
+        "operationId": "ApiV3StoreAdminQuestsConfigGetQuestConfig",
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestConfigResponse"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "put": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Update Quest Config (Admin)",
+        "description": "Update quest configuration.",
+        "operationId": "ApiV3StoreAdminQuestsConfigUpdateQuestConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuestConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateQuestConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/users/{user_id}/quest-history": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get Quest History",
+        "description": "Get user's completed quest history.",
+        "operationId": "ApiV3StoreUsersUserIdQuestHistoryGetQuestHistory",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/quests": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get Weekly Quests",
+        "description": "Get current weekly quests with progress.",
+        "operationId": "ApiV3StoreQuestsGetQuests",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserQuestsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/rotation": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Get Current Rotation",
+        "description": "Get currently available items in the rotating store.",
+        "operationId": "ApiV3StoreRotationGetRotation",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/purchase/item": {
+      "post": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Purchase Item",
+        "description": "Purchase an item from the current rotation.",
+        "operationId": "ApiV3StorePurchaseItemPurchaseItem",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemPurchaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemPurchaseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/purchase/keys": {
+      "post": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Purchase Keys",
+        "description": "Purchase lootbox keys with coins.",
+        "operationId": "ApiV3StorePurchaseKeysPurchaseKeys",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyPurchaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyPurchaseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/store/admin/quests/{quest_id}": {
+      "patch": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "Update Quest (Admin)",
+        "description": "Update or deactivate a quest in the pool.",
+        "operationId": "ApiV3StoreAdminQuestsQuestIdUpdateQuest",
+        "parameters": [
+          {
+            "name": "quest_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateQuestResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad request syntax or unsupported method",
@@ -12781,6 +14066,53 @@
   },
   "components": {
     "schemas": {
+      "AdminUpdateUserQuestRequest": {
+        "properties": {
+          "completed": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "quest_data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PatchQuestData"
+              }
+            ]
+          },
+          "progress": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PatchQuestProgress"
+              }
+            ]
+          },
+          "claimed": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "AdminUpdateUserQuestRequest"
+      },
+      "AdminUpdateUserQuestResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "title": "AdminUpdateUserQuestResponse"
+      },
       "ArchivalStatusPatchRequest": {
         "properties": {
           "codes": {
@@ -13083,6 +14415,56 @@
           "key"
         ],
         "title": "ClaimCreateRequest"
+      },
+      "ClaimQuestRequest": {
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "ClaimQuestRequest"
+      },
+      "ClaimQuestResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "quest_name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coins_earned": {
+            "type": "integer"
+          },
+          "xp_earned": {
+            "type": "integer"
+          },
+          "new_coin_balance": {
+            "type": "integer"
+          },
+          "new_xp": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "coins_earned",
+          "new_coin_balance",
+          "new_xp",
+          "success",
+          "xp_earned"
+        ],
+        "title": "ClaimQuestResponse"
       },
       "ClaimResponse": {
         "properties": {
@@ -13807,6 +15189,227 @@
         ],
         "title": "CreatorFull"
       },
+      "DashboardCompletionResponse": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 6,
+            "minLength": 4,
+            "pattern": "^[A-Z0-9]*$"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "also_known_as": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time": {
+            "type": "number"
+          },
+          "screenshot": {
+            "type": "string"
+          },
+          "video": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completion": {
+            "type": "boolean"
+          },
+          "rank": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "medal": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "enum": [
+              "Gold",
+              "Silver",
+              "Bronze",
+              null
+            ]
+          },
+          "map_name": {
+            "type": "string",
+            "enum": [
+              "Circuit Royal",
+              "Runasapi",
+              "Practice Range",
+              "Route 66",
+              "Midtown",
+              "Junkertown",
+              "Colosseo",
+              "Lijiang Tower (Lunar New Year)",
+              "Dorado",
+              "Throne of Anubis",
+              "Castillo",
+              "Blizzard World (Winter)",
+              "Hollywood (Halloween)",
+              "King's Row",
+              "Black Forest (Winter)",
+              "Petra",
+              "Framework",
+              "Eichenwalde",
+              "Workshop Island",
+              "Chateau Guillard (Halloween)",
+              "New Junk City",
+              "Necropolis",
+              "Kanezaka",
+              "Havana",
+              "Oasis",
+              "Ayutthaya",
+              "Volskaya Industries",
+              "Hanamura",
+              "Workshop Expanse",
+              "Hanaoka",
+              "Lijiang Tower",
+              "Busan (Lunar New Year)",
+              "Suravasa",
+              "King's Row (Winter)",
+              "Ecopoint: Antarctica",
+              "Hanamura (Winter)",
+              "Blizzard World",
+              "Chateau Guillard",
+              "Paraiso",
+              "Workshop Green Screen",
+              "Watchpoint: Gibraltar",
+              "Shambali",
+              "Eichenwalde (Halloween)",
+              "Tools",
+              "Nepal",
+              "Samoa",
+              "Horizon Lunar Colony",
+              "Paris",
+              "Esperanca",
+              "Black Forest",
+              "Antarctic Peninsula",
+              "Workshop Chamber",
+              "Hollywood",
+              "New Queen Street",
+              "Rialto",
+              "Busan",
+              "Malevento",
+              "Temple of Anubis",
+              "Ilios",
+              "Ecopoint: Antarctica (Winter)",
+              "Numbani",
+              "Adlersbrunn",
+              "Aatlis",
+              "Arena Victoriae",
+              "Redwood Dam",
+              "Thames District",
+              "Gogadoro",
+              "Powder Keg Mine",
+              "Place Lacroix"
+            ]
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": [
+              "Easy -",
+              "Easy",
+              "Easy +",
+              "Medium -",
+              "Medium",
+              "Medium +",
+              "Hard -",
+              "Hard",
+              "Hard +",
+              "Very Hard -",
+              "Very Hard",
+              "Very Hard +",
+              "Extreme -",
+              "Extreme",
+              "Extreme +",
+              "Hell"
+            ]
+          },
+          "message_id": {
+            "type": "integer"
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Pending",
+              "Verified",
+              "Rejected"
+            ]
+          },
+          "total_results": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "upvotes": {
+            "type": "integer",
+            "default": 0
+          },
+          "id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "completion",
+          "difficulty",
+          "map_name",
+          "message_id",
+          "name",
+          "screenshot",
+          "status",
+          "time",
+          "user_id"
+        ],
+        "title": "DashboardCompletionResponse"
+      },
       "DestroyUserSessionsResponse": {
         "properties": {
           "destroyed_count": {
@@ -13883,6 +15486,64 @@
         ],
         "title": "EmailVerifyRequest"
       },
+      "GenerateQuestRotationResponse": {
+        "properties": {
+          "rotation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "generated": {
+            "type": "boolean"
+          },
+          "auto_claimed_quests": {
+            "type": "integer"
+          },
+          "global_quests_generated": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auto_claimed_quests",
+          "generated",
+          "global_quests_generated",
+          "rotation_id"
+        ],
+        "title": "GenerateQuestRotationResponse"
+      },
+      "GenerateRotationRequest": {
+        "properties": {
+          "item_count": {
+            "type": "integer",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "GenerateRotationRequest"
+      },
+      "GenerateRotationResponse": {
+        "properties": {
+          "rotation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "items_generated": {
+            "type": "integer"
+          },
+          "available_until": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available_until",
+          "items_generated",
+          "rotation_id"
+        ],
+        "title": "GenerateRotationResponse"
+      },
       "GuideFullResponse": {
         "properties": {
           "url": {
@@ -13924,6 +15585,58 @@
           "user_id"
         ],
         "title": "GuideResponse"
+      },
+      "ItemPurchaseRequest": {
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          },
+          "item_name": {
+            "type": "string"
+          },
+          "item_type": {
+            "type": "string"
+          },
+          "key_type": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_name",
+          "item_type",
+          "key_type",
+          "user_id"
+        ],
+        "title": "ItemPurchaseRequest"
+      },
+      "ItemPurchaseResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "item_name": {
+            "type": "string"
+          },
+          "item_type": {
+            "type": "string"
+          },
+          "price_paid": {
+            "type": "integer"
+          },
+          "remaining_coins": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_name",
+          "item_type",
+          "price_paid",
+          "remaining_coins",
+          "success"
+        ],
+        "title": "ItemPurchaseResponse"
       },
       "JobStatusResponse": {
         "properties": {
@@ -13968,6 +15681,117 @@
           "status"
         ],
         "title": "JobStatusResponse"
+      },
+      "KeyPriceInfo": {
+        "properties": {
+          "quantity": {
+            "type": "integer"
+          },
+          "price": {
+            "type": "integer"
+          },
+          "discount_percent": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "discount_percent",
+          "price",
+          "quantity"
+        ],
+        "title": "KeyPriceInfo"
+      },
+      "KeyPricingListResponse": {
+        "properties": {
+          "active_key_type": {
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/KeyPricingResponse"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "required": [
+          "active_key_type",
+          "keys"
+        ],
+        "title": "KeyPricingListResponse"
+      },
+      "KeyPricingResponse": {
+        "properties": {
+          "key_type": {
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/KeyPriceInfo"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_active",
+          "key_type",
+          "prices"
+        ],
+        "title": "KeyPricingResponse"
+      },
+      "KeyPurchaseRequest": {
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          },
+          "key_type": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "enum": [
+              1,
+              3,
+              5
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "key_type",
+          "quantity",
+          "user_id"
+        ],
+        "title": "KeyPurchaseRequest"
+      },
+      "KeyPurchaseResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "keys_purchased": {
+            "type": "integer"
+          },
+          "price_paid": {
+            "type": "integer"
+          },
+          "remaining_coins": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "keys_purchased",
+          "price_paid",
+          "remaining_coins",
+          "success"
+        ],
+        "title": "KeyPurchaseResponse"
       },
       "LinkMapsCreateRequest": {
         "properties": {
@@ -17338,7 +19162,10 @@
               "lootbox_earned",
               "playtest_update",
               "map_edit_approved",
-              "map_edit_rejected"
+              "map_edit_rejected",
+              "quest_complete",
+              "quest_rotation",
+              "quest_rival_mention"
             ]
           },
           "title": {
@@ -17437,7 +19264,10 @@
               "lootbox_earned",
               "playtest_update",
               "map_edit_approved",
-              "map_edit_rejected"
+              "map_edit_rejected",
+              "quest_complete",
+              "quest_rotation",
+              "quest_rival_mention"
             ]
           },
           "title": {
@@ -17509,7 +19339,10 @@
               "lootbox_earned",
               "playtest_update",
               "map_edit_approved",
-              "map_edit_rejected"
+              "map_edit_rejected",
+              "quest_complete",
+              "quest_rotation",
+              "quest_rival_mention"
             ]
           },
           "channel": {
@@ -17550,7 +19383,10 @@
               "lootbox_earned",
               "playtest_update",
               "map_edit_approved",
-              "map_edit_rejected"
+              "map_edit_rejected",
+              "quest_complete",
+              "quest_rotation",
+              "quest_rival_mention"
             ]
           },
           "channels": {
@@ -17707,6 +19543,291 @@
           "message"
         ],
         "title": "PasswordResetRequestResponse"
+      },
+      "PatchQuestData": {
+        "properties": {
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "description": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "difficulty": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "coin_reward": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "xp_reward": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "requirements": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PatchQuestRequirements"
+              }
+            ]
+          },
+          "bounty_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "PatchQuestData"
+      },
+      "PatchQuestProgress": {
+        "properties": {
+          "current": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "percentage": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "completed_map_ids": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "counted_map_ids": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "medals": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "map_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "target_time": {
+            "oneOf": [
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "target_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "medal_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "best_attempt": {
+            "oneOf": [
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "last_attempt": {
+            "oneOf": [
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "rival_user_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "rival_time": {
+            "oneOf": [
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "completed": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "medal_earned": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "PatchQuestProgress"
+      },
+      "PatchQuestRequirements": {
+        "properties": {
+          "type": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "count": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "difficulty": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "category": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "medal_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "map_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "target_time": {
+            "oneOf": [
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "target_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "rival_user_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "rival_time": {
+            "oneOf": [
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "min_count": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "PatchQuestRequirements"
       },
       "PendingMapEditResponse": {
         "properties": {
@@ -18074,6 +20195,82 @@
         ],
         "title": "PublishNewsfeedJobResponse"
       },
+      "PurchaseHistoryItem": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "purchase_type": {
+            "type": "string",
+            "enum": [
+              "key",
+              "item"
+            ]
+          },
+          "item_name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "item_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "key_type": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "price_paid": {
+            "type": "integer"
+          },
+          "purchased_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "key_type",
+          "price_paid",
+          "purchase_type",
+          "purchased_at",
+          "quantity"
+        ],
+        "title": "PurchaseHistoryItem"
+      },
+      "PurchaseHistoryResponse": {
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "purchases": {
+            "items": {
+              "$ref": "#/components/schemas/PurchaseHistoryItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "required": [
+          "purchases",
+          "total"
+        ],
+        "title": "PurchaseHistoryResponse"
+      },
       "QualityUpdateRequest": {
         "properties": {
           "user_id": {
@@ -18105,6 +20302,471 @@
           "value"
         ],
         "title": "QualityValueRequest"
+      },
+      "QuestConfigResponse": {
+        "properties": {
+          "rotation_day": {
+            "type": "integer"
+          },
+          "rotation_hour": {
+            "type": "integer"
+          },
+          "easy_quest_count": {
+            "type": "integer"
+          },
+          "medium_quest_count": {
+            "type": "integer"
+          },
+          "hard_quest_count": {
+            "type": "integer"
+          },
+          "current_rotation_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_rotation_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "next_rotation_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "easy_quest_count",
+          "hard_quest_count",
+          "last_rotation_at",
+          "medium_quest_count",
+          "next_rotation_at",
+          "rotation_day",
+          "rotation_hour"
+        ],
+        "title": "QuestConfigResponse"
+      },
+      "QuestHistoryItem": {
+        "properties": {
+          "progress_id": {
+            "type": "integer"
+          },
+          "quest_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "difficulty": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coin_reward": {
+            "type": "integer",
+            "default": 0
+          },
+          "xp_reward": {
+            "type": "integer",
+            "default": 0
+          },
+          "completed_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "claimed_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coins_rewarded": {
+            "type": "integer",
+            "default": 0
+          },
+          "xp_rewarded": {
+            "type": "integer",
+            "default": 0
+          },
+          "rotation_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bounty_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "progress_id"
+        ],
+        "title": "QuestHistoryItem"
+      },
+      "QuestHistoryResponse": {
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "quests": {
+            "items": {
+              "$ref": "#/components/schemas/QuestHistoryItem"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quests",
+          "total"
+        ],
+        "title": "QuestHistoryResponse"
+      },
+      "QuestProgress": {
+        "properties": {
+          "current": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "percentage": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completed_map_ids": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "counted_map_ids": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "medals": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "map_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_time": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "medal_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "best_attempt": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_attempt": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rival_user_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rival_time": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "completed": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "medal_earned": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "QuestProgress"
+      },
+      "QuestResponse": {
+        "properties": {
+          "progress_id": {
+            "type": "integer"
+          },
+          "quest_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "difficulty": {
+            "type": "string"
+          },
+          "coin_reward": {
+            "type": "integer"
+          },
+          "xp_reward": {
+            "type": "integer"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/QuestProgress"
+          },
+          "completed": {
+            "type": "boolean"
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "bounty_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "claimed",
+          "coin_reward",
+          "completed",
+          "description",
+          "difficulty",
+          "name",
+          "progress",
+          "progress_id",
+          "xp_reward"
+        ],
+        "title": "QuestResponse"
+      },
+      "QuestSummary": {
+        "properties": {
+          "total_quests": {
+            "type": "integer"
+          },
+          "completed": {
+            "type": "integer"
+          },
+          "claimed": {
+            "type": "integer"
+          },
+          "potential_coins": {
+            "type": "integer"
+          },
+          "potential_xp": {
+            "type": "integer"
+          },
+          "earned_coins": {
+            "type": "integer"
+          },
+          "earned_xp": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "claimed",
+          "completed",
+          "earned_coins",
+          "earned_xp",
+          "potential_coins",
+          "potential_xp",
+          "total_quests"
+        ],
+        "title": "QuestSummary"
       },
       "RankCardBadgeSettings": {
         "properties": {
@@ -18497,7 +21159,11 @@
             "type": "string",
             "enum": [
               "Classic",
-              "Winter"
+              "Winter",
+              "Summer",
+              "Halloween",
+              "Spring",
+              "Autumn"
             ]
           },
           "rarity": {
@@ -18533,6 +21199,73 @@
           "type"
         ],
         "title": "RewardTypeResponse"
+      },
+      "RotationItemResponse": {
+        "properties": {
+          "item_name": {
+            "type": "string"
+          },
+          "item_type": {
+            "type": "string"
+          },
+          "key_type": {
+            "type": "string"
+          },
+          "rarity": {
+            "type": "string"
+          },
+          "price": {
+            "type": "integer"
+          },
+          "owned": {
+            "type": "boolean",
+            "default": false
+          },
+          "url": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_name",
+          "item_type",
+          "key_type",
+          "price",
+          "rarity"
+        ],
+        "title": "RotationItemResponse"
+      },
+      "RotationResponse": {
+        "properties": {
+          "rotation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "available_until": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RotationItemResponse"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available_until",
+          "items",
+          "rotation_id"
+        ],
+        "title": "RotationResponse"
       },
       "SendToPlaytestRequest": {
         "properties": {
@@ -18716,6 +21449,32 @@
           "user_id"
         ],
         "title": "StaleChangeRequestResponse"
+      },
+      "StoreConfigResponse": {
+        "properties": {
+          "rotation_period_days": {
+            "type": "integer"
+          },
+          "active_key_type": {
+            "type": "string"
+          },
+          "last_rotation_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "next_rotation_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "active_key_type",
+          "last_rotation_at",
+          "next_rotation_at",
+          "rotation_period_days"
+        ],
+        "title": "StoreConfigResponse"
       },
       "SuspiciousCompletionCreateRequest": {
         "properties": {
@@ -19047,6 +21806,216 @@
         ],
         "title": "UnlinkMapsCreateRequest"
       },
+      "UpdateConfigRequest": {
+        "properties": {
+          "rotation_period_days": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active_key_type": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "UpdateConfigRequest"
+      },
+      "UpdateQuestConfigRequest": {
+        "properties": {
+          "rotation_day": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rotation_hour": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "easy_quest_count": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "medium_quest_count": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hard_quest_count": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "UpdateQuestConfigRequest"
+      },
+      "UpdateQuestConfigResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "updated_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "next_rotation_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "updated_fields"
+        ],
+        "title": "UpdateQuestConfigResponse"
+      },
+      "UpdateQuestRequest": {
+        "properties": {
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "difficulty": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coin_reward": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "xp_reward": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requirements": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_active": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "UpdateQuestRequest"
+      },
+      "UpdateQuestResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "updated_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "updated_fields"
+        ],
+        "title": "UpdateQuestResponse"
+      },
       "UpvoteCreateRequest": {
         "properties": {
           "user_id": {
@@ -19116,7 +22085,11 @@
             "type": "string",
             "enum": [
               "Classic",
-              "Winter"
+              "Winter",
+              "Summer",
+              "Halloween",
+              "Spring",
+              "Autumn"
             ]
           },
           "amount": {
@@ -19129,6 +22102,41 @@
           "key_type"
         ],
         "title": "UserLootboxKeyAmountResponse"
+      },
+      "UserQuestsResponse": {
+        "properties": {
+          "rotation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "available_until": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quests": {
+            "items": {
+              "$ref": "#/components/schemas/QuestResponse"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/QuestSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quests",
+          "rotation_id",
+          "summary"
+        ],
+        "title": "UserQuestsResponse"
       },
       "UserResponse": {
         "properties": {
@@ -19342,6 +22350,16 @@
               "World Record",
               "Other"
             ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -19366,6 +22384,70 @@
           "previous_amount"
         ],
         "title": "XpGrantResponse"
+      },
+      "XpSummaryResponse": {
+        "properties": {
+          "xp": {
+            "type": "integer"
+          },
+          "raw_tier": {
+            "type": "integer"
+          },
+          "normalized_tier": {
+            "type": "integer"
+          },
+          "prestige_level": {
+            "type": "integer"
+          },
+          "current_main_tier_name": {
+            "type": "string"
+          },
+          "current_sub_tier_name": {
+            "type": "string"
+          },
+          "current_full_tier_name": {
+            "type": "string"
+          },
+          "next_main_tier_name": {
+            "type": "string"
+          },
+          "next_sub_tier_name": {
+            "type": "string"
+          },
+          "next_full_tier_name": {
+            "type": "string"
+          },
+          "next_sub_tier_xp_required": {
+            "type": "integer"
+          },
+          "next_sub_tier_xp_total": {
+            "type": "integer"
+          },
+          "next_main_tier_xp_required": {
+            "type": "integer"
+          },
+          "next_main_tier_xp_total": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_full_tier_name",
+          "current_main_tier_name",
+          "current_sub_tier_name",
+          "next_full_tier_name",
+          "next_main_tier_name",
+          "next_main_tier_xp_required",
+          "next_main_tier_xp_total",
+          "next_sub_tier_name",
+          "next_sub_tier_xp_required",
+          "next_sub_tier_xp_total",
+          "normalized_tier",
+          "prestige_level",
+          "raw_tier",
+          "xp"
+        ],
+        "title": "XpSummaryResponse"
       }
     }
   }

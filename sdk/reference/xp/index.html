@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
     
     
       
@@ -2568,6 +2568,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#genjishimada_sdk.xp.XpSummaryResponse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        XpSummaryResponse
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#genjishimada_sdk.xp.__all__" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4074,6 +4085,22 @@
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="reason: str | None = None
+
+  
+      class-attribute
+      instance-attribute
+   (genjishimada_sdk.xp.XpGrantEvent.reason)" href="#genjishimada_sdk.xp.XpGrantEvent.reason">reason</a></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional free-text reason for the grant.</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -4157,6 +4184,32 @@
   </span>
 
 <a href="#genjishimada_sdk.xp.XpGrantEvent.previous_amount" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpGrantEvent.reason" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpGrantEvent.reason" class="headerlink" title="Anchor link to this section">&para;</a></h4>
 
 
     <div class="doc doc-contents ">
@@ -4293,6 +4346,22 @@
               </div>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="reason: str | None = None
+
+  
+      class-attribute
+      instance-attribute
+   (genjishimada_sdk.xp.XpGrantRequest.reason)" href="#genjishimada_sdk.xp.XpGrantRequest.reason">reason</a></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional free-text reason for the grant.</p>
+              </div>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -4326,6 +4395,32 @@
   </span>
 
 <a href="#genjishimada_sdk.xp.XpGrantRequest.amount" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpGrantRequest.reason" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">reason</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpGrantRequest.reason" class="headerlink" title="Anchor link to this section">&para;</a></h4>
 
 
     <div class="doc doc-contents ">
@@ -4513,12 +4608,632 @@
 
 
 
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="genjishimada_sdk.xp.XpSummaryResponse" class="doc doc-heading">
+            <code>XpSummaryResponse</code>
+
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse" class="headerlink" title="Anchor link to this section">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="msgspec.Struct">Struct</span></code></p>
+
+
+
+        <p>Complete XP progression summary for a user.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="xp: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.xp)" href="#genjishimada_sdk.xp.XpSummaryResponse.xp">xp</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Current total XP.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="raw_tier: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.raw_tier)" href="#genjishimada_sdk.xp.XpSummaryResponse.raw_tier">raw_tier</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Absolute tier count (xp / 100).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="normalized_tier: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.normalized_tier)" href="#genjishimada_sdk.xp.XpSummaryResponse.normalized_tier">normalized_tier</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Tier within current prestige ((xp / 100) % 100).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="prestige_level: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.prestige_level)" href="#genjishimada_sdk.xp.XpSummaryResponse.prestige_level">prestige_level</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Prestige cycle count ((xp / 100) / 100).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="current_main_tier_name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.current_main_tier_name)" href="#genjishimada_sdk.xp.XpSummaryResponse.current_main_tier_name">current_main_tier_name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Current main tier label.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="current_sub_tier_name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.current_sub_tier_name)" href="#genjishimada_sdk.xp.XpSummaryResponse.current_sub_tier_name">current_sub_tier_name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Current sub-tier label.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="current_full_tier_name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.current_full_tier_name)" href="#genjishimada_sdk.xp.XpSummaryResponse.current_full_tier_name">current_full_tier_name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Combined current tier label.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="next_main_tier_name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_name)" href="#genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_name">next_main_tier_name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Next main tier label.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="next_sub_tier_name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_name)" href="#genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_name">next_sub_tier_name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Next sub-tier label.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="next_full_tier_name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.next_full_tier_name)" href="#genjishimada_sdk.xp.XpSummaryResponse.next_full_tier_name">next_full_tier_name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Combined next tier label.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="next_sub_tier_xp_required: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_xp_required)" href="#genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_xp_required">next_sub_tier_xp_required</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Remaining XP to reach next sub-tier.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="next_sub_tier_xp_total: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_xp_total)" href="#genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_xp_total">next_sub_tier_xp_total</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Absolute XP threshold for next sub-tier.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="next_main_tier_xp_required: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_xp_required)" href="#genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_xp_required">next_main_tier_xp_required</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Remaining XP to reach next main tier.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="next_main_tier_xp_total: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_xp_total)" href="#genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_xp_total">next_main_tier_xp_total</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Absolute XP threshold for next main tier.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.current_full_tier_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">current_full_tier_name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.current_full_tier_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.current_main_tier_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">current_main_tier_name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.current_main_tier_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.current_sub_tier_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">current_sub_tier_name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.current_sub_tier_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.next_full_tier_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">next_full_tier_name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.next_full_tier_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">next_main_tier_name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_xp_required" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">next_main_tier_xp_required</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_xp_required" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_xp_total" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">next_main_tier_xp_total</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.next_main_tier_xp_total" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">next_sub_tier_name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_xp_required" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">next_sub_tier_xp_required</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_xp_required" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_xp_total" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">next_sub_tier_xp_total</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.next_sub_tier_xp_total" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.normalized_tier" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">normalized_tier</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.normalized_tier" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.prestige_level" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">prestige_level</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.prestige_level" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.raw_tier" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">raw_tier</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.raw_tier" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.xp.XpSummaryResponse.xp" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">xp</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.xp.XpSummaryResponse.xp" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
 <div class="doc doc-object doc-attribute">
 
 
 
 <h3 id="genjishimada_sdk.xp.__all__" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;XP_AMOUNTS&#39;</span><span class="p">,</span> <span class="s1">&#39;XP_TYPES&#39;</span><span class="p">,</span> <span class="s1">&#39;PlayersPerSkillTierResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;PlayersPerXPTierResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;TierChangeResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;XpGrantEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;XpGrantRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;XpGrantResponse&#39;</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">__all__</span> <span class="o">=</span> <span class="p">(</span><span class="s1">&#39;XP_AMOUNTS&#39;</span><span class="p">,</span> <span class="s1">&#39;XP_TYPES&#39;</span><span class="p">,</span> <span class="s1">&#39;PlayersPerSkillTierResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;PlayersPerXPTierResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;TierChangeResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;XpGrantEvent&#39;</span><span class="p">,</span> <span class="s1">&#39;XpGrantRequest&#39;</span><span class="p">,</span> <span class="s1">&#39;XpGrantResponse&#39;</span><span class="p">,</span> <span class="s1">&#39;XpSummaryResponse&#39;</span><span class="p">)</span></code>
 
   <span class="doc doc-labels">
       <small class="doc doc-label doc-label-module-attribute"><code>module-attribute</code></small>
