@@ -358,7 +358,7 @@ class RankCardRepository(BaseRepository):
             ), world_records AS (
                 SELECT r.user_id, count(r.user_id) AS amount FROM ranks r WHERE rank_num = 1 GROUP BY r.user_id
             )
-            SELECT * FROM world_records WHERE user_id=$1;
+            SELECT amount FROM world_records WHERE user_id=$1;
         """
         return await _conn.fetchval(query, user_id) or 0
 
