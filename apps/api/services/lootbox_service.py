@@ -236,6 +236,30 @@ class LootboxService(BaseService):
             Reward response with duplicate flag and coin amount.
         """
         async with self._pool.acquire() as conn, conn.transaction():
+            # Coin rewards are granted directly to the user's balance,
+            # not tracked as collectible items in user_rewards.
+            if reward_type == "coins":
+                coin_amount = int(reward_name)
+                await self._lootbox_repo.add_user_coins(user_id, coin_amount, conn=conn)  # type: ignore[arg-type]
+
+                rewards = await self._lootbox_repo.fetch_all_rewards(
+                    reward_type=reward_type,
+                    key_type=key_type,
+                    rarity=None,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                matching = [r for r in rewards if r["name"] == reward_name]
+                rarity_val = matching[0]["rarity"] if matching else "common"
+
+                return RewardTypeResponse(
+                    name=reward_name,
+                    key_type=key_type,
+                    rarity=rarity_val,
+                    type=reward_type,
+                    duplicate=False,
+                    coin_amount=coin_amount,
+                )
+
             rarity = await self._lootbox_repo.check_user_has_reward(
                 user_id=user_id,
                 reward_type=reward_type,
