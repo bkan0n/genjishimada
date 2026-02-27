@@ -12,6 +12,7 @@ import msgspec
 from asyncpg import Connection, Pool
 from asyncpg.pool import PoolConnectionProxy
 from genjishimada_sdk.lootbox import LootboxKeyType
+from genjishimada_sdk.xp import XpGrantRequest
 from genjishimada_sdk.store import (
     AdminUpdateUserQuestRequest,
     AdminUpdateUserQuestResponse,
@@ -36,6 +37,7 @@ from genjishimada_sdk.store import (
     UserQuestsResponse,
 )
 from litestar.datastructures import State
+from litestar.datastructures.headers import Headers
 
 from repository.lootbox_repository import LootboxRepository
 from repository.store_repository import StoreRepository
@@ -1120,8 +1122,14 @@ class StoreService(BaseService):
                     conn=conn,  # type: ignore[arg-type]
                 )
 
-    async def claim_quest(self, *, user_id: int, progress_id: int) -> ClaimQuestResponse:
-        """Claim a completed quest and grant rewards."""
+    async def claim_quest(self, *, user_id: int, progress_id: int, headers: Headers) -> ClaimQuestResponse:
+        """Claim a completed quest and grant rewards.
+
+        Raises:
+            QuestNotFoundError: If quest progress not found.
+            QuestAlreadyClaimedError: If quest already claimed.
+            QuestNotCompletedError: If quest not yet completed.
+        """
         async with self._pool.acquire() as conn, conn.transaction():
             row = await conn.fetchrow(
                 """
@@ -1170,23 +1178,25 @@ class StoreService(BaseService):
                 coin_reward,
             )
 
-            new_xp = await conn.fetchval(
-                """
-                INSERT INTO lootbox.xp (user_id, amount)
-                VALUES ($1, $2)
-                ON CONFLICT (user_id) DO UPDATE
-                    SET amount = lootbox.xp.amount + EXCLUDED.amount
-                RETURNING amount
-                """,
+        # Grant XP outside the transaction — grant_user_xp acquires its own connection
+        # and publishes to RabbitMQ, so it can't share the outer transaction.
+        if xp_reward > 0:
+            xp_response = await self._lootbox_service.grant_user_xp(
+                headers,
                 user_id,
-                xp_reward,
+                XpGrantRequest(amount=xp_reward, type="Quest"),
             )
+            xp_earned = xp_response.new_amount - xp_response.previous_amount
+            new_xp = xp_response.new_amount
+        else:
+            xp_earned = 0
+            new_xp = 0
 
         return ClaimQuestResponse(
             success=True,
             quest_name=cast("str | None", quest_data.get("name")),
             coins_earned=coin_reward,
-            xp_earned=xp_reward,
+            xp_earned=xp_earned,
             new_coin_balance=new_coins,
             new_xp=new_xp,
         )
