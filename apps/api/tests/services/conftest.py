@@ -209,3 +209,11 @@ def mock_image_storage_service(mocker):
 def mock_notifications_service(mocker):
     """Mock NotificationsService."""
     return mocker.AsyncMock(spec=NotificationsService)
+
+
+@pytest.fixture
+def mock_lootbox_service(mocker):
+    """Mock LootboxService."""
+    from services.lootbox_service import LootboxService
+
+    return mocker.AsyncMock(spec=LootboxService)

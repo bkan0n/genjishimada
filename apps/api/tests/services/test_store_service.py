@@ -19,10 +19,10 @@ class TestStoreServiceRevertQuestProgress:
     """Test quest progress reversion logic."""
 
     async def test_revert_skips_completed_quests(
-        self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mocker
+        self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service, mocker
     ):
         """Completed quests should not be reverted when a completion is unverified."""
-        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo)
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
         service.ensure_user_quests_for_rotation = mocker.AsyncMock()
 
         mock_store_repo.get_active_user_quests.return_value = [
@@ -54,26 +54,26 @@ class TestStoreServiceRevertQuestProgress:
 class TestAdminUpdateUserQuest:
     """Tests for admin_update_user_quest service method."""
 
-    async def test_all_unset_raises_error(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo):
+    async def test_all_unset_raises_error(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service):
         """All-UNSET request raises InvalidQuestPatchError."""
-        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo)
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
         data = AdminUpdateUserQuestRequest()
 
         with pytest.raises(InvalidQuestPatchError):
             await service.admin_update_user_quest(1, 1, data)
 
-    async def test_quest_not_found_raises_error(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo):
+    async def test_quest_not_found_raises_error(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service):
         """Nonexistent progress_id raises QuestNotFoundError."""
-        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo)
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
         mock_store_repo.get_user_quest_progress.return_value = None
         data = AdminUpdateUserQuestRequest(completed=True)
 
         with pytest.raises(QuestNotFoundError):
             await service.admin_update_user_quest(1, 999, data)
 
-    async def test_complete_auto_patches_count_based(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo):
+    async def test_complete_auto_patches_count_based(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service):
         """completed=True on complete_maps quest sets current=target."""
-        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo)
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
         mock_store_repo.get_user_quest_progress.return_value = {
             "quest_data": {"requirements": {"type": "complete_maps", "count": 10}},
             "progress": {"current": 3, "completed_map_ids": [1, 2, 3]},
@@ -87,9 +87,9 @@ class TestAdminUpdateUserQuest:
         assert call_kwargs["progress"]["current"] == 10
         assert call_kwargs["completed_at"] is not None
 
-    async def test_complete_auto_patches_time_based(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo):
+    async def test_complete_auto_patches_time_based(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service):
         """completed=True on beat_time quest sets best_attempt < target_time."""
-        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo)
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
         mock_store_repo.get_user_quest_progress.return_value = {
             "quest_data": {"requirements": {"type": "beat_time", "target_time": 60.0}},
             "progress": {},
@@ -103,9 +103,9 @@ class TestAdminUpdateUserQuest:
         assert call_kwargs["progress"]["best_attempt"] == 59.99
         assert call_kwargs["completed_at"] is not None
 
-    async def test_complete_auto_patches_complete_map(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo):
+    async def test_complete_auto_patches_complete_map(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service):
         """completed=True on complete_map quest sets completed=True in progress."""
-        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo)
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
         mock_store_repo.get_user_quest_progress.return_value = {
             "quest_data": {"requirements": {"type": "complete_map", "map_id": 42}},
             "progress": {"completed": False},
@@ -119,10 +119,10 @@ class TestAdminUpdateUserQuest:
         assert call_kwargs["progress"]["completed"] is True
 
     async def test_explicit_progress_overrides_auto_patch(
-        self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo
+        self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service
     ):
         """Sending both completed=True and explicit progress uses explicit values."""
-        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo)
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
         mock_store_repo.get_user_quest_progress.return_value = {
             "quest_data": {"requirements": {"type": "complete_maps", "count": 10}},
             "progress": {"current": 3},
@@ -135,9 +135,9 @@ class TestAdminUpdateUserQuest:
         call_kwargs = mock_store_repo.admin_update_user_quest.call_args.kwargs
         assert call_kwargs["progress"]["current"] == 7
 
-    async def test_uncomplete_clears_completed_at(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo):
+    async def test_uncomplete_clears_completed_at(self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service):
         """completed=False clears completed_at."""
-        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo)
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
         mock_store_repo.get_user_quest_progress.return_value = {
             "quest_data": {"requirements": {"type": "complete_maps", "count": 10}},
             "progress": {"current": 10},
