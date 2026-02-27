@@ -14,7 +14,7 @@ __all__ = (
     "XpSummaryResponse",
 )
 
-XP_TYPES = Literal["Map Submission", "Playtest", "Guide", "Completion", "Record", "World Record", "Other"]
+XP_TYPES = Literal["Map Submission", "Playtest", "Guide", "Completion", "Record", "World Record", "Quest", "Other"]
 
 XP_AMOUNTS: dict[XP_TYPES, int] = {
     "Map Submission": 30,
