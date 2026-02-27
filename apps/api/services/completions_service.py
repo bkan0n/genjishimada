@@ -60,6 +60,7 @@ from services.exceptions.completions import (
 )
 
 from .base import BaseService
+from .lootbox_service import LootboxService
 from .store_service import StoreService
 from .users_service import UsersService
 
@@ -112,7 +113,8 @@ class CompletionsService(BaseService):
 
         store_repo = StoreRepository(self._pool)
         lootbox_repo = LootboxRepository(self._pool)
-        store_service = StoreService(self._pool, self._state, store_repo, lootbox_repo)
+        lootbox_service = LootboxService(self._pool, self._state, lootbox_repo)
+        store_service = StoreService(self._pool, self._state, store_repo, lootbox_repo, lootbox_service)
         medal_thresholds = await store_repo.get_medal_thresholds(map_meta["map_id"])
         medal = self._compute_medal(float(time), medal_thresholds)
 
@@ -233,7 +235,8 @@ class CompletionsService(BaseService):
 
         store_repo = StoreRepository(self._pool)
         lootbox_repo = LootboxRepository(self._pool)
-        store_service = StoreService(self._pool, self._state, store_repo, lootbox_repo)
+        lootbox_service = LootboxService(self._pool, self._state, lootbox_repo)
+        store_service = StoreService(self._pool, self._state, store_repo, lootbox_repo, lootbox_service)
         remaining_times = await self._completions_repo.fetch_verified_times_for_user_map(
             user_id,
             map_meta["map_id"],
