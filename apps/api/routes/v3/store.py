@@ -261,12 +261,15 @@ class StoreController(litestar.Controller):
     async def claim_quest(
         self,
         store_service: StoreService,
+        request: litestar.Request,
         progress_id: int,
         data: Annotated[ClaimQuestRequest, Body()],
     ) -> ClaimQuestResponse:
         """Claim a completed quest."""
         try:
-            return await store_service.claim_quest(user_id=data.user_id, progress_id=progress_id)
+            return await store_service.claim_quest(
+                user_id=data.user_id, progress_id=progress_id, headers=request.headers
+            )
         except QuestNotFoundError as e:
             raise CustomHTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         except QuestNotCompletedError as e:
