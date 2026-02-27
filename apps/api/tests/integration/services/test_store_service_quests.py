@@ -5,8 +5,10 @@ import msgspec
 from litestar.datastructures import State
 from uuid import uuid4
 
+from litestar.datastructures import Headers
 from repository.lootbox_repository import LootboxRepository
 from repository.store_repository import StoreRepository
+from services.lootbox_service import LootboxService
 from services.store_service import StoreService
 
 pytestmark = [
@@ -21,7 +23,8 @@ async def test_ensure_user_quests_for_rotation_idempotent(asyncpg_pool, create_t
     user_id = await create_test_user()
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     rotation_id = await service.ensure_user_quests_for_rotation(user_id)
     rotation_id_again = await service.ensure_user_quests_for_rotation(user_id)
@@ -71,7 +74,8 @@ async def test_generate_personal_improvement_bounty(asyncpg_pool, create_test_us
 
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     bounty = await service._generate_personal_improvement_bounty(user_id, uuid4())
 
@@ -98,7 +102,8 @@ async def test_generate_rival_challenge_bounty(asyncpg_pool, create_test_user, c
 
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     # Mock the repository methods to ensure rival and beatable map are found
     async def mock_find_rivals(*args, **kwargs):
@@ -144,7 +149,8 @@ async def test_generate_gap_filling_bounty(asyncpg_pool, create_test_user, creat
 
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     bounty = await service._generate_gap_filling_bounty(user_id, uuid4())
 
@@ -160,7 +166,8 @@ async def test_event_matches_complete_difficulty_range(asyncpg_pool):
     """Event matching honors complete_difficulty_range requirements."""
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     requirements = {"type": "complete_difficulty_range", "difficulty": "easy", "min_count": 2}
     assert service._event_matches_quest(requirements, "completion", {"difficulty": "easy"}) is True
@@ -173,7 +180,8 @@ async def test_event_matches_beat_rival(asyncpg_pool):
     """Event matching requires matching map for beat_rival."""
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     requirements = {"type": "beat_rival", "map_id": 101}
     assert service._event_matches_quest(requirements, "completion", {"map_id": 101}) is True
@@ -186,7 +194,8 @@ async def test_calculate_progress_complete_difficulty_range(asyncpg_pool):
     """Progress for complete_difficulty_range counts unique maps."""
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     requirements = {"type": "complete_difficulty_range", "difficulty": "easy", "min_count": 2}
     progress = {"current": 0, "completed_map_ids": []}
@@ -204,7 +213,8 @@ async def test_calculate_progress_beat_rival(asyncpg_pool):
     """Progress for beat_rival tracks best and last attempts."""
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     requirements = {"type": "beat_rival", "map_id": 101, "target_time": 90.0}
     progress = {}
@@ -223,7 +233,8 @@ async def test_is_quest_complete_beat_rival(asyncpg_pool):
     """Beat rival completes when best attempt is under target time."""
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     requirements = {"type": "beat_rival", "target_time": 90.0}
     assert service._is_quest_complete({"best_attempt": 80.0}, requirements) is True
@@ -238,7 +249,8 @@ async def test_update_quest_progress_returns_progress_id(asyncpg_pool, create_te
 
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     async with asyncpg_pool.acquire() as conn:
         await conn.execute("SELECT store.check_and_generate_quest_rotation()")
@@ -313,7 +325,8 @@ async def test_claim_quest_updates_coin_and_xp(asyncpg_pool, create_test_user):
 
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     async with asyncpg_pool.acquire() as conn:
         await conn.execute("SELECT store.check_and_generate_quest_rotation()")
@@ -341,7 +354,8 @@ async def test_claim_quest_updates_coin_and_xp(asyncpg_pool, create_test_user):
             msgspec.json.encode({"completed": True}).decode(),
         )
 
-    result = await service.claim_quest(user_id=user_id, progress_id=progress_id)
+    headers = Headers({"x-pytest-enabled": "1"})
+    result = await service.claim_quest(user_id=user_id, progress_id=progress_id, headers=headers)
 
     assert result.success is True
     assert result.coins_earned == 100
@@ -369,7 +383,8 @@ async def test_admin_update_user_quest_round_trip(asyncpg_pool, create_test_user
 
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     async with asyncpg_pool.acquire() as conn:
         await conn.execute("SELECT store.check_and_generate_quest_rotation()")
@@ -446,7 +461,8 @@ async def test_personal_improvement_bounty_falls_back_when_user_faster_than_perc
 
     store_repo = StoreRepository(asyncpg_pool)
     lootbox_repo = LootboxRepository(asyncpg_pool)
-    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo)
+    lootbox_service = LootboxService(asyncpg_pool, State(), lootbox_repo)
+    service = StoreService(asyncpg_pool, State(), store_repo, lootbox_repo, lootbox_service)
 
     bounty = await service._generate_personal_improvement_bounty(fast_user, uuid4())
 
