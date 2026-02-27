@@ -149,3 +149,88 @@ class TestAdminUpdateUserQuest:
 
         call_kwargs = mock_store_repo.admin_update_user_quest.call_args.kwargs
         assert call_kwargs["completed_at"] is None
+
+
+class TestClaimQuestXpGrant:
+    """Test that claim_quest delegates XP granting to LootboxService."""
+
+    @staticmethod
+    def _make_conn(mocker, mock_pool, fetchrow_return, fetchval_return):
+        """Set up an async mock connection on mock_pool for claim_quest tests."""
+        conn = mocker.AsyncMock()
+        conn.fetchrow.return_value = fetchrow_return
+        conn.fetchval.return_value = fetchval_return
+
+        # transaction() must return a sync context manager (not a coroutine)
+        tx_cm = mocker.MagicMock()
+        tx_cm.__aenter__ = mocker.AsyncMock(return_value=None)
+        tx_cm.__aexit__ = mocker.AsyncMock(return_value=None)
+        conn.transaction = mocker.MagicMock(return_value=tx_cm)
+
+        mock_pool.acquire.return_value.__aenter__ = mocker.AsyncMock(return_value=conn)
+        return conn
+
+    async def test_claim_quest_calls_grant_user_xp(
+        self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service, mocker
+    ):
+        """Claiming a quest delegates XP to LootboxService.grant_user_xp."""
+        from genjishimada_sdk.xp import XpGrantRequest, XpGrantResponse
+
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
+
+        self._make_conn(
+            mocker,
+            mock_pool,
+            fetchrow_return={
+                "quest_data": {"name": "Test Quest", "coin_reward": 100, "xp_reward": 25},
+                "coins_rewarded": 100,
+                "xp_rewarded": 25,
+            },
+            fetchval_return=200,
+        )
+
+        # Mock grant_user_xp response
+        mock_lootbox_service.grant_user_xp.return_value = XpGrantResponse(
+            previous_amount=50,
+            new_amount=75,
+        )
+
+        headers = mocker.MagicMock()
+        result = await service.claim_quest(user_id=123, progress_id=1, headers=headers)
+
+        # Verify grant_user_xp was called with correct args
+        mock_lootbox_service.grant_user_xp.assert_called_once_with(
+            headers,
+            123,
+            XpGrantRequest(amount=25, type="Quest"),
+        )
+
+        assert result.success is True
+        assert result.xp_earned == 25  # 75 - 50
+        assert result.new_xp == 75
+        assert result.coins_earned == 100
+        assert result.new_coin_balance == 200
+
+    async def test_claim_quest_skips_xp_grant_when_zero(
+        self, mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service, mocker
+    ):
+        """Claiming a quest with zero XP reward skips grant_user_xp."""
+        service = StoreService(mock_pool, mock_state, mock_store_repo, mock_lootbox_repo, mock_lootbox_service)
+
+        self._make_conn(
+            mocker,
+            mock_pool,
+            fetchrow_return={
+                "quest_data": {"name": "Coin Only Quest", "coin_reward": 50, "xp_reward": 0},
+                "coins_rewarded": 50,
+                "xp_rewarded": 0,
+            },
+            fetchval_return=150,
+        )
+
+        headers = mocker.MagicMock()
+        result = await service.claim_quest(user_id=123, progress_id=1, headers=headers)
+
+        mock_lootbox_service.grant_user_xp.assert_not_called()
+        assert result.xp_earned == 0
+        assert result.new_xp == 0
