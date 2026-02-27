@@ -40,6 +40,7 @@ from litestar.datastructures import State
 from repository.lootbox_repository import LootboxRepository
 from repository.store_repository import StoreRepository
 from services.base import BaseService
+from services.lootbox_service import LootboxService
 from services.exceptions.store import (
     AlreadyOwnedError,
     InsufficientCoinsError,
@@ -80,6 +81,7 @@ class StoreService(BaseService):
         state: State,
         store_repo: StoreRepository,
         lootbox_repo: LootboxRepository,
+        lootbox_service: LootboxService,
     ) -> None:
         """Initialize service.
 
@@ -88,10 +90,12 @@ class StoreService(BaseService):
             state: Application state.
             store_repo: Store repository instance.
             lootbox_repo: Lootbox repository instance.
+            lootbox_service: Lootbox service for XP grants.
         """
         super().__init__(pool, state)
         self._store_repo = store_repo
         self._lootbox_repo = lootbox_repo
+        self._lootbox_service = lootbox_service
 
     async def _ensure_key_type_exists(
         self, key_type: str, *, conn: Connection | PoolConnectionProxy | None = None
@@ -1417,4 +1421,11 @@ async def provide_store_service(state: State) -> StoreService:
     """
     store_repo = StoreRepository(pool=state.db_pool)
     lootbox_repo = LootboxRepository(pool=state.db_pool)
-    return StoreService(pool=state.db_pool, state=state, store_repo=store_repo, lootbox_repo=lootbox_repo)
+    lootbox_service = LootboxService(pool=state.db_pool, state=state, lootbox_repo=lootbox_repo)
+    return StoreService(
+        pool=state.db_pool,
+        state=state,
+        store_repo=store_repo,
+        lootbox_repo=lootbox_repo,
+        lootbox_service=lootbox_service,
+    )
