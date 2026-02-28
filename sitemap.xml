@@ -2,250 +2,250 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://docs.genji.pk/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/api/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/api/architecture/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/api/authentication/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/api/deployment/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/api/local-development/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/api/openapi/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/architecture/controller-service-repository-pattern/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/bot/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/bot/architecture/core-bot/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/bot/architecture/messaging/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/bot/architecture/services/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/bot/operations/configuration/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/bot/ux/map-search-sqlspec/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/bot/ux/newsfeed-and-embeds/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/contributing/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/contributing/documentation/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/contributing/workflow/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/getting-started/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/getting-started/installation/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/getting-started/quickstart/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/operations/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/operations/backups/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/operations/cloudflare/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/operations/docker-compose/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/operations/identity-and-auth/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/operations/infrastructure/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/operations/monitoring/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/operations/reverse-proxy/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/usage/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/auth/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/change-requests/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/completions/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/difficulties/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/internal/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/logs/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/lootbox/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/maps/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/newsfeed/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/notifications/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/rank-card/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/tags/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/users/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/sdk/reference/xp/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/services/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/services/api/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/services/bot/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/services/database/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/services/ocr/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/services/rabbitmq/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/services/translate/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/backend/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/deployment/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/frontend/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/integrations/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/localization/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/repository-layout/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/runtime-container/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
     <url>
          <loc>https://docs.genji.pk/web/security-and-sessions/</loc>
-         <lastmod>2026-02-27</lastmod>
+         <lastmod>2026-02-28</lastmod>
     </url>
 </urlset>
