@@ -749,7 +749,7 @@ class StoreRepository(BaseRepository):
             WHERE NOT EXISTS (
                 SELECT 1 FROM core.completions c
                 WHERE c.user_id = $1 AND c.map_id = m.id AND c.verified = TRUE AND c.legacy = FALSE
-            )
+            ) AND m.official
             ORDER BY random()
             LIMIT 50
             """,
