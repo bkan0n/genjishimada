@@ -1,7 +1,8 @@
 services:
   postgres-local:
     container_name: genjishimada-db-local
-    image: postgres:17
+    build:
+      context: ./infra/postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: genji
