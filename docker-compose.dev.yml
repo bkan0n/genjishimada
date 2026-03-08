@@ -101,7 +101,8 @@ services:
 
   genjishimada-db-dev:
     container_name: genjishimada-db-dev
-    image: postgres:17
+    build:
+      context: ./infra/postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
