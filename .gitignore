@@ -307,3 +307,5 @@ tmp/
 /.junie/
 /.planning/
 /.claude/
+/apps/bot/.bg-shell/manifest.json
+/skills-lock.json
