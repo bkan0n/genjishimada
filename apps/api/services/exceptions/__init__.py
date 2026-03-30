@@ -1,6 +1,6 @@
 """Service-layer domain exceptions."""
 
-from .auth import (  # noqa: I001
+from .auth import (
     AuthError,
     EmailAlreadyExistsError,
     EmailAlreadyVerifiedError,
@@ -11,12 +11,14 @@ from .auth import (  # noqa: I001
     TokenAlreadyUsedError,
     TokenExpiredError,
     TokenInvalidError,
-    UserNotFoundError,
     UsernameValidationError,
+    UserNotFoundError,
 )
 from .change_requests import (
     ChangeRequestAlreadyExistsError,
     ChangeRequestsError,
+)
+from .change_requests import (
     MapNotFoundError as ChangeRequestsMapNotFoundError,
 )
 from .completions import (
@@ -27,8 +29,17 @@ from .completions import (
     DuplicateQualityVoteError,
     DuplicateUpvoteError,
     DuplicateVerificationError,
-    MapNotFoundError as CompletionsMapNotFoundError,
     SlowerThanPendingError,
+)
+from .completions import (
+    MapNotFoundError as CompletionsMapNotFoundError,
+)
+from .content import (
+    CategoryNotFoundError,
+    ContentError,
+    DifficultyNotFoundError,
+    DuplicateNameError,
+    TechniqueNotFoundError,
 )
 from .lootbox import (
     InsufficientKeysError,
@@ -72,26 +83,32 @@ from .store import (
 from .users import (
     InvalidUserIdError,
     UserAlreadyExistsError,
-    UserNotFoundError as UsersUserNotFoundError,
     UsersError,
+)
+from .users import (
+    UserNotFoundError as UsersUserNotFoundError,
 )
 
 __all__ = [
     "AlreadyInPlaytestError",
     "AlreadyOwnedError",
     "AuthError",
+    "CategoryNotFoundError",
     "ChangeRequestAlreadyExistsError",
     "ChangeRequestsError",
     "ChangeRequestsMapNotFoundError",
     "CompletionNotFoundError",
     "CompletionsError",
     "CompletionsMapNotFoundError",
+    "ContentError",
     "CreatorNotFoundError",
+    "DifficultyNotFoundError",
     "DuplicateCompletionError",
     "DuplicateCreatorError",
     "DuplicateFlagError",
     "DuplicateGuideError",
     "DuplicateMechanicError",
+    "DuplicateNameError",
     "DuplicateQualityVoteError",
     "DuplicateRestrictionError",
     "DuplicateTagsError",
@@ -126,6 +143,7 @@ __all__ = [
     "RotationExpiredError",
     "SlowerThanPendingError",
     "StoreError",
+    "TechniqueNotFoundError",
     "TokenAlreadyUsedError",
     "TokenExpiredError",
     "TokenInvalidError",
