@@ -83,7 +83,10 @@ class TestDeleteCompletionsForPlaytest:
         """Test delete_completions_for_playtest preserves completions submitted before playtest."""
         # Arrange
         map_id = await create_test_map()
-        user_id = await create_test_user()
+        # Use separate users so their completions don't compete under the
+        # per-user-per-map speed trigger (which rejects slower times).
+        old_user_id = await create_test_user()
+        new_user_id = await create_test_user()
 
         # Create completion BEFORE playtest starts
         old_completion_id = await asyncpg_conn.fetchval(
@@ -96,7 +99,7 @@ class TestDeleteCompletionsForPlaytest:
                     now() - interval '1 day')
             RETURNING id
             """,
-            user_id,
+            old_user_id,
             map_id,
         )
 
@@ -121,7 +124,7 @@ class TestDeleteCompletionsForPlaytest:
             VALUES ($1, $2, 30.5, 'https://example.com/new.png', TRUE, TRUE, FALSE)
             RETURNING id
             """,
-            user_id,
+            new_user_id,
             map_id,
         )
 

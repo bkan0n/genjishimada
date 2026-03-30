@@ -251,9 +251,12 @@ class TestFetchMapRecordProgression:
         # Arrange
         code = f"T{uuid4().hex[:5].upper()}"
         map_id = await create_test_map(code)
+        # Use separate users: the speed trigger rejects a slower completion for
+        # the same user+map, so we need two distinct users.
         user_id = await create_test_user()
+        other_user_id = await create_test_user()
 
-        # Create one valid and one invalid time
+        # Create one valid and one invalid time (different users to avoid trigger)
         await asyncpg_conn.execute(
             """
             INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, completion)
@@ -266,7 +269,7 @@ class TestFetchMapRecordProgression:
             INSERT INTO core.completions (map_id, user_id, time, verified, screenshot, completion)
             VALUES ($1, $2, $3, $4, $5, $6)
             """,
-            map_id, user_id, 99999999.99, True, fake.url(), True
+            map_id, other_user_id, 99999999.99, True, fake.url(), True
         )
 
         # Act
