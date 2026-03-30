@@ -498,7 +498,7 @@ class StoreRepository(BaseRepository):
                 m.category
             FROM core.completions c
             JOIN core.maps m ON m.id = c.map_id
-            WHERE c.user_id = $1 AND c.verified = TRUE AND c.legacy = FALSE
+            WHERE c.user_id = $1 AND c.verified = TRUE AND c.legacy = FALSE AND m.archived = FALSE
             GROUP BY c.map_id, m.code, m.map_name, m.difficulty, m.category
             """,
             user_id,
@@ -726,6 +726,7 @@ class StoreRepository(BaseRepository):
             JOIN core.maps m ON m.id = rt.map_id
             WHERE rt.rival_time < ut.user_time
               AND rt.rival_time >= ut.user_time * 0.8
+              AND m.archived = FALSE
             ORDER BY random()
             LIMIT 1
             """,
@@ -749,7 +750,7 @@ class StoreRepository(BaseRepository):
             WHERE NOT EXISTS (
                 SELECT 1 FROM core.completions c
                 WHERE c.user_id = $1 AND c.map_id = m.id AND c.verified = TRUE AND c.legacy = FALSE
-            ) AND m.official
+            ) AND m.official AND m.archived = FALSE
             ORDER BY random()
             LIMIT 50
             """,
