@@ -59,8 +59,8 @@ class ContentRepository(BaseRepository):
     ) -> list[dict]:
         """Fetch all movement techniques with nested tips and videos.
 
-        Joins techniques with categories, difficulties, tips, and videos.
-        Uses json_agg with FILTER to prevent null entries when no tips/videos exist.
+        Uses correlated subqueries for tips and videos to avoid the cartesian
+        product that a dual LEFT JOIN would produce.
 
         Returns:
             list[dict]: Technique rows with nested tips and videos arrays.
@@ -77,40 +77,33 @@ class ContentRepository(BaseRepository):
             t.difficulty_id,
             d.name AS difficulty_name,
             COALESCE(
-                json_agg(
+                (SELECT json_agg(
                     json_build_object(
                         'id', tip.id,
                         'text', tip.text,
                         'sort_order', tip.sort_order
                     ) ORDER BY tip.sort_order
-                ) FILTER (WHERE tip.id IS NOT NULL),
+                )
+                FROM content.movement_tech_tips tip
+                WHERE tip.technique_id = t.id),
                 '[]'::json
             ) AS tips,
             COALESCE(
-                json_agg(
+                (SELECT json_agg(
                     json_build_object(
                         'id', vid.id,
                         'url', vid.url,
                         'caption', vid.caption,
                         'sort_order', vid.sort_order
                     ) ORDER BY vid.sort_order
-                ) FILTER (WHERE vid.id IS NOT NULL),
+                )
+                FROM content.movement_tech_videos vid
+                WHERE vid.technique_id = t.id),
                 '[]'::json
             ) AS videos
         FROM content.movement_techniques t
         LEFT JOIN content.movement_tech_categories c ON t.category_id = c.id
         LEFT JOIN content.movement_tech_difficulties d ON t.difficulty_id = d.id
-        LEFT JOIN content.movement_tech_tips tip ON t.id = tip.technique_id
-        LEFT JOIN content.movement_tech_videos vid ON t.id = vid.technique_id
-        GROUP BY
-            t.id,
-            t.name,
-            t.description,
-            t.display_order,
-            t.category_id,
-            c.name,
-            t.difficulty_id,
-            d.name
         ORDER BY t.display_order
         """
         rows = await _conn.fetch(query)
@@ -611,7 +604,8 @@ class ContentRepository(BaseRepository):
     ) -> dict | None:
         """Fetch a single technique with nested tips and videos by primary key.
 
-        Uses the same json_agg FILTER/COALESCE pattern as fetch_techniques.
+        Uses correlated subqueries for tips and videos to avoid the cartesian
+        product that a dual LEFT JOIN would produce.
 
         Args:
             technique_id: Technique primary key.
@@ -632,41 +626,34 @@ class ContentRepository(BaseRepository):
             t.difficulty_id,
             d.name AS difficulty_name,
             COALESCE(
-                json_agg(
+                (SELECT json_agg(
                     json_build_object(
                         'id', tip.id,
                         'text', tip.text,
                         'sort_order', tip.sort_order
                     ) ORDER BY tip.sort_order
-                ) FILTER (WHERE tip.id IS NOT NULL),
+                )
+                FROM content.movement_tech_tips tip
+                WHERE tip.technique_id = t.id),
                 '[]'::json
             ) AS tips,
             COALESCE(
-                json_agg(
+                (SELECT json_agg(
                     json_build_object(
                         'id', vid.id,
                         'url', vid.url,
                         'caption', vid.caption,
                         'sort_order', vid.sort_order
                     ) ORDER BY vid.sort_order
-                ) FILTER (WHERE vid.id IS NOT NULL),
+                )
+                FROM content.movement_tech_videos vid
+                WHERE vid.technique_id = t.id),
                 '[]'::json
             ) AS videos
         FROM content.movement_techniques t
         LEFT JOIN content.movement_tech_categories c ON t.category_id = c.id
         LEFT JOIN content.movement_tech_difficulties d ON t.difficulty_id = d.id
-        LEFT JOIN content.movement_tech_tips tip ON t.id = tip.technique_id
-        LEFT JOIN content.movement_tech_videos vid ON t.id = vid.technique_id
         WHERE t.id = $1
-        GROUP BY
-            t.id,
-            t.name,
-            t.description,
-            t.display_order,
-            t.category_id,
-            c.name,
-            t.difficulty_id,
-            d.name
         """
         row = await _conn.fetchrow(query, technique_id)
         return dict(row) if row else None
