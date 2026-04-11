@@ -71,6 +71,7 @@ class ContentRepository(BaseRepository):
             t.id,
             t.name,
             t.description,
+            t.instructions,
             t.display_order,
             t.category_id,
             c.name AS category_name,
@@ -465,6 +466,7 @@ class ContentRepository(BaseRepository):
         self,
         name: str,
         description: str | None,
+        instructions: str | None,
         category_id: int | None,
         difficulty_id: int | None,
         *,
@@ -475,30 +477,32 @@ class ContentRepository(BaseRepository):
         Args:
             name: Technique name.
             description: Optional description text.
+            instructions: Optional free-text instructions block.
             category_id: Optional FK to movement_tech_categories.
             difficulty_id: Optional FK to movement_tech_difficulties.
             conn: Optional connection for transaction participation.
 
         Returns:
-            dict: Created technique row (id, name, description, display_order, category_id, difficulty_id).
+            dict: Created technique row (id, name, description, instructions, display_order, category_id, difficulty_id).
 
         Raises:
             ForeignKeyViolationError: If category_id or difficulty_id does not exist.
         """
         _conn = self._get_connection(conn)
         query = """
-        INSERT INTO content.movement_techniques (name, description, category_id, difficulty_id, display_order)
+        INSERT INTO content.movement_techniques (name, description, instructions, category_id, difficulty_id, display_order)
         VALUES (
             $1,
             $2,
             $3,
             $4,
+            $5,
             COALESCE((SELECT MAX(display_order) FROM content.movement_techniques), 0) + 1
         )
-        RETURNING id, name, description, display_order, category_id, difficulty_id
+        RETURNING id, name, description, instructions, display_order, category_id, difficulty_id
         """
         try:
-            row = await _conn.fetchrow(query, name, description, category_id, difficulty_id)
+            row = await _conn.fetchrow(query, name, description, instructions, category_id, difficulty_id)
         except asyncpg.ForeignKeyViolationError as e:
             constraint = extract_constraint_name(e)
             raise ForeignKeyViolationError(
@@ -620,6 +624,7 @@ class ContentRepository(BaseRepository):
             t.id,
             t.name,
             t.description,
+            t.instructions,
             t.display_order,
             t.category_id,
             c.name AS category_name,
@@ -663,6 +668,7 @@ class ContentRepository(BaseRepository):
         technique_id: int,
         name: str,
         description: str | None,
+        instructions: str | None,
         category_id: int | None,
         difficulty_id: int | None,
         *,
@@ -674,6 +680,7 @@ class ContentRepository(BaseRepository):
             technique_id: Technique primary key.
             name: New name.
             description: New description (or None to clear).
+            instructions: New instructions (or None to clear).
             category_id: New category FK (or None).
             difficulty_id: New difficulty FK (or None).
             conn: Optional connection for transaction participation.
@@ -687,12 +694,12 @@ class ContentRepository(BaseRepository):
         _conn = self._get_connection(conn)
         query = """
         UPDATE content.movement_techniques
-        SET name = $1, description = $2, category_id = $3, difficulty_id = $4
-        WHERE id = $5
-        RETURNING id, name, description, display_order, category_id, difficulty_id
+        SET name = $1, description = $2, instructions = $3, category_id = $4, difficulty_id = $5
+        WHERE id = $6
+        RETURNING id, name, description, instructions, display_order, category_id, difficulty_id
         """
         try:
-            row = await _conn.fetchrow(query, name, description, category_id, difficulty_id, technique_id)
+            row = await _conn.fetchrow(query, name, description, instructions, category_id, difficulty_id, technique_id)
         except asyncpg.ForeignKeyViolationError as e:
             constraint = extract_constraint_name(e)
             raise ForeignKeyViolationError(

@@ -81,6 +81,7 @@ class CreateTechniqueRequest(msgspec.Struct, frozen=True):
 
     name: str
     description: str | None = None
+    instructions: str | None = None
     category_id: int | None = None
     difficulty_id: int | None = None
     tips: list[CreateTipInput] = []
@@ -92,6 +93,7 @@ class UpdateTechniqueRequest(msgspec.Struct):
 
     name: str | msgspec.UnsetType = msgspec.UNSET
     description: str | None | msgspec.UnsetType = msgspec.UNSET
+    instructions: str | None | msgspec.UnsetType = msgspec.UNSET
     category_id: int | None | msgspec.UnsetType = msgspec.UNSET
     difficulty_id: int | None | msgspec.UnsetType = msgspec.UNSET
     tips: list[CreateTipInput] | msgspec.UnsetType = msgspec.UNSET
@@ -142,6 +144,7 @@ class TechniqueOut(msgspec.Struct, frozen=True):
     id: int
     name: str
     description: str | None
+    instructions: str | None
     display_order: int
     category_id: int | None
     category_name: str | None
@@ -526,6 +529,7 @@ class MovementTechController(Controller):
             row = await content_service.create_technique(
                 data.name,
                 data.description,
+                data.instructions,
                 data.category_id,
                 data.difficulty_id,
                 tips,
@@ -605,6 +609,7 @@ class MovementTechController(Controller):
                 technique_id,
                 data.name,
                 data.description,
+                data.instructions,
                 data.category_id,
                 data.difficulty_id,
                 tips,

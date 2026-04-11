@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS content.movement_techniques
     id            int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name          text NOT NULL,
     description   text,
+    instructions  text,
     display_order int  NOT NULL,
     category_id   int REFERENCES content.movement_tech_categories (id) ON DELETE SET NULL,
     difficulty_id int REFERENCES content.movement_tech_difficulties (id) ON DELETE SET NULL,

@@ -265,6 +265,7 @@ class ContentService(BaseService):
         self,
         name: str,
         description: str | None,
+        instructions: str | None,
         category_id: int | None,
         difficulty_id: int | None,
         tips: list[dict],
@@ -279,6 +280,7 @@ class ContentService(BaseService):
         Args:
             name: Technique name.
             description: Optional description text.
+            instructions: Optional free-text instructions block.
             category_id: Optional FK to movement_tech_categories.
             difficulty_id: Optional FK to movement_tech_difficulties.
             tips: List of dicts with keys ``text`` and ``sort_order``.
@@ -294,6 +296,7 @@ class ContentService(BaseService):
             row = await self._content_repo.create_technique(
                 name,
                 description,
+                instructions,
                 category_id,
                 difficulty_id,
                 conn=conn,  # type: ignore[arg-type]
@@ -328,6 +331,7 @@ class ContentService(BaseService):
         technique_id: int,
         name: str | msgspec.UnsetType,
         description: str | None | msgspec.UnsetType,
+        instructions: str | None | msgspec.UnsetType,
         category_id: int | None | msgspec.UnsetType,
         difficulty_id: int | None | msgspec.UnsetType,
         tips: list[dict] | msgspec.UnsetType,
@@ -341,6 +345,7 @@ class ContentService(BaseService):
             technique_id: Technique primary key.
             name: New name, or UNSET to leave unchanged.
             description: New description, or UNSET to leave unchanged.
+            instructions: New instructions, or UNSET to leave unchanged.
             category_id: New category FK, or UNSET to leave unchanged.
             difficulty_id: New difficulty FK, or UNSET to leave unchanged.
             tips: New list of tip dicts, or UNSET to leave unchanged.
@@ -361,6 +366,7 @@ class ContentService(BaseService):
 
             resolved_name = current["name"] if isinstance(name, msgspec.UnsetType) else name
             resolved_desc = current["description"] if isinstance(description, msgspec.UnsetType) else description
+            resolved_instr = current["instructions"] if isinstance(instructions, msgspec.UnsetType) else instructions
             resolved_cat = current["category_id"] if isinstance(category_id, msgspec.UnsetType) else category_id
             resolved_diff = current["difficulty_id"] if isinstance(difficulty_id, msgspec.UnsetType) else difficulty_id
 
@@ -368,6 +374,7 @@ class ContentService(BaseService):
                 technique_id,
                 resolved_name,
                 resolved_desc,
+                resolved_instr,
                 resolved_cat,
                 resolved_diff,
                 conn=conn,  # type: ignore[arg-type]
