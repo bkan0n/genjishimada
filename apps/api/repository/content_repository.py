@@ -462,7 +462,7 @@ class ContentRepository(BaseRepository):
     # Technique CRUD + reorder
     # -------------------------------------------------------------------------
 
-    async def create_technique(
+    async def create_technique(  # noqa: PLR0913
         self,
         name: str,
         description: str | None,
@@ -483,14 +483,16 @@ class ContentRepository(BaseRepository):
             conn: Optional connection for transaction participation.
 
         Returns:
-            dict: Created technique row (id, name, description, instructions, display_order, category_id, difficulty_id).
+            dict: Created tech row (id, name, description, instructions, display_order, category_id, difficulty_id).
 
         Raises:
             ForeignKeyViolationError: If category_id or difficulty_id does not exist.
         """
         _conn = self._get_connection(conn)
         query = """
-        INSERT INTO content.movement_techniques (name, description, instructions, category_id, difficulty_id, display_order)
+        INSERT INTO content.movement_techniques (
+            name, description, instructions, category_id, difficulty_id, display_order
+        )
         VALUES (
             $1,
             $2,
