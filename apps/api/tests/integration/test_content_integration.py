@@ -260,6 +260,24 @@ class TestListTechniques:
             for tid in tech_ids:
                 await _delete_technique(asyncpg_conn, tid)
 
+    async def test_instructions_in_list_response(self, test_client, asyncpg_conn):
+        """GET / includes instructions field in each technique object."""
+        create_resp = await test_client.post(
+            f"{BASE}/techniques",
+            json={"name": "TestTech_PUB03_InstrList", "instructions": "List test instructions"},
+        )
+        assert create_resp.status_code == 201
+        tech_id = create_resp.json()["id"]
+        try:
+            response = await test_client.get(f"{BASE}/")
+            assert response.status_code == 200
+            data = response.json()
+            matching = [t for t in data["techniques"] if t["id"] == tech_id]
+            assert len(matching) == 1
+            assert matching[0]["instructions"] == "List test instructions"
+        finally:
+            await _delete_technique(asyncpg_conn, tech_id)
+
 
 # ===========================================================================
 # ACAT-01: Create Category
@@ -876,6 +894,28 @@ class TestCreateTechnique:
         assert row is not None
         await _delete_technique(asyncpg_conn, data["id"])
 
+    async def test_with_instructions(self, test_client, asyncpg_conn):
+        """POST with instructions field returns it in response."""
+        response = await test_client.post(
+            f"{BASE}/techniques",
+            json={"name": "TestTech_ATEC01_Instr", "instructions": "Hold jump then dash forward"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["instructions"] == "Hold jump then dash forward"
+        await _delete_technique(asyncpg_conn, data["id"])
+
+    async def test_without_instructions_returns_null(self, test_client, asyncpg_conn):
+        """POST without instructions field returns instructions as null."""
+        response = await test_client.post(
+            f"{BASE}/techniques",
+            json={"name": "TestTech_ATEC01_NoInstr"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["instructions"] is None
+        await _delete_technique(asyncpg_conn, data["id"])
+
 
 # ===========================================================================
 # ATEC-05: Fetch Technique
@@ -1104,6 +1144,60 @@ class TestUpdateTechnique:
             # Confirm the tip actually exists in the DB under this ID
             row = await asyncpg_conn.fetchrow("SELECT id FROM content.movement_tech_tips WHERE id = $1", tip["id"])
             assert row is not None
+        finally:
+            await _delete_technique(asyncpg_conn, tech_id)
+
+    async def test_update_instructions(self, test_client, asyncpg_conn):
+        """PUT with instructions changes the stored value."""
+        tech_id = await _insert_technique(asyncpg_conn, "TestTech_ATEC02_InstrUpd", 6020)
+        try:
+            response = await test_client.put(
+                f"{BASE}/techniques/{tech_id}",
+                json={"instructions": "Updated instructions text"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["instructions"] == "Updated instructions text"
+        finally:
+            await _delete_technique(asyncpg_conn, tech_id)
+
+    async def test_unset_instructions_preserves_existing(self, test_client, asyncpg_conn):
+        """PUT without instructions key preserves existing value (UNSET semantics)."""
+        # Create technique with instructions via API
+        create_resp = await test_client.post(
+            f"{BASE}/techniques",
+            json={"name": "TestTech_ATEC02_InstrUnset", "instructions": "Original instructions"},
+        )
+        assert create_resp.status_code == 201
+        tech_id = create_resp.json()["id"]
+        try:
+            # Update only the name, omitting instructions entirely
+            response = await test_client.put(
+                f"{BASE}/techniques/{tech_id}",
+                json={"name": "TestTech_ATEC02_InstrUnset_Updated"},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["instructions"] == "Original instructions"
+        finally:
+            await _delete_technique(asyncpg_conn, tech_id)
+
+    async def test_clear_instructions_with_null(self, test_client, asyncpg_conn):
+        """PUT with instructions=null clears the field."""
+        create_resp = await test_client.post(
+            f"{BASE}/techniques",
+            json={"name": "TestTech_ATEC02_InstrClear", "instructions": "To be cleared"},
+        )
+        assert create_resp.status_code == 201
+        tech_id = create_resp.json()["id"]
+        try:
+            response = await test_client.put(
+                f"{BASE}/techniques/{tech_id}",
+                json={"instructions": None},
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["instructions"] is None
         finally:
             await _delete_technique(asyncpg_conn, tech_id)
 
