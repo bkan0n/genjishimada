@@ -1895,8 +1895,7 @@ class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
 
         self.rebuild_data(records)
         self.rebuild_components()
-        if itx.message:
-            await itx.message.edit(view=self)
+        await itx.edit_original_response(view=self)
 
     def build_page_body(self) -> Sequence[ui.Item]:
         """Build the UI components for the current page of records.
