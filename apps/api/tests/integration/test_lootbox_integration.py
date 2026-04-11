@@ -560,6 +560,9 @@ class TestUpdateXpMultiplier:
 
         assert response.status_code == 204
 
+        # Reset to default to avoid polluting other tests (shared DB state)
+        await test_client.post("/api/v3/lootbox/xp/multiplier", json={"value": 1.0})
+
 
 class TestGetXpMultiplier:
     """GET /api/v3/lootbox/xp/multiplier"""
