@@ -104,6 +104,7 @@ class EndpointLogFilter(logging.Filter):
     EXCLUDED_PATHS = ("/healthcheck", "/api/v3/auth/")
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """Filter."""
         msg = record.getMessage()
         return not any(path in msg for path in self.EXCLUDED_PATHS)
 
