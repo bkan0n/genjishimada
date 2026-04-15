@@ -224,3 +224,91 @@ class TestBountyDataSources:
 
         assert uncompleted
         assert completed_map_id not in {row["map_id"] for row in uncompleted}
+
+    async def test_get_user_completions_excludes_archived_maps(
+        self,
+        repository: StoreRepository,
+        asyncpg_conn,
+        unique_user_id,
+        create_test_map,
+    ):
+        """Archived maps must not appear in bounty source data (regression: would generate uncompletable quest)."""
+        await asyncpg_conn.execute(
+            "INSERT INTO core.users (id, nickname, global_name) VALUES ($1, 'User', 'User')",
+            unique_user_id,
+        )
+        active_map_id = await create_test_map()
+        archived_map_id = await create_test_map(archived=True)
+
+        await asyncpg_conn.execute(
+            """
+            INSERT INTO core.completions (map_id, user_id, time, screenshot, verified, legacy)
+            VALUES ($1, $2, 30.0, 'a.png', true, false),
+                   ($3, $2, 25.0, 'b.png', true, false)
+            """,
+            active_map_id,
+            unique_user_id,
+            archived_map_id,
+        )
+
+        completions = await repository.get_user_completions(unique_user_id)
+
+        map_ids = {row["map_id"] for row in completions}
+        assert active_map_id in map_ids
+        assert archived_map_id not in map_ids
+
+    async def test_find_beatable_rival_map_excludes_archived_maps(
+        self,
+        repository: StoreRepository,
+        asyncpg_conn,
+        unique_user_id,
+        create_test_map,
+    ):
+        """Archived maps must not be returned as rival challenge targets (regression: uncompletable quest)."""
+        user_id = unique_user_id
+        rival_id = unique_user_id + 1
+        await asyncpg_conn.execute(
+            "INSERT INTO core.users (id, nickname, global_name) VALUES ($1, 'User', 'User')",
+            user_id,
+        )
+        await asyncpg_conn.execute(
+            "INSERT INTO core.users (id, nickname, global_name) VALUES ($1, 'Rival', 'Rival')",
+            rival_id,
+        )
+
+        archived_map_id = await create_test_map(archived=True)
+
+        # Rival is faster on the archived map — without the fix this would be returned
+        await asyncpg_conn.execute(
+            """
+            INSERT INTO core.completions (map_id, user_id, time, screenshot, verified, legacy)
+            VALUES ($1, $2, 50.0, 'u.png', true, false),
+                   ($1, $3, 40.0, 'r.png', true, false)
+            """,
+            archived_map_id,
+            user_id,
+            rival_id,
+        )
+
+        rival_map = await repository.find_beatable_rival_map(user_id, rival_id)
+
+        assert rival_map is None
+
+    async def test_get_uncompleted_maps_excludes_archived_maps(
+        self,
+        repository: StoreRepository,
+        asyncpg_conn,
+        unique_user_id,
+        create_test_map,
+    ):
+        """Archived maps must not be assigned as gap-filling bounty targets (regression: uncompletable quest)."""
+        await asyncpg_conn.execute(
+            "INSERT INTO core.users (id, nickname, global_name) VALUES ($1, 'User', 'User')",
+            unique_user_id,
+        )
+        archived_map_id = await create_test_map(archived=True)
+
+        uncompleted = await repository.get_uncompleted_maps(unique_user_id)
+
+        assert archived_map_id not in {row["map_id"] for row in uncompleted}
+

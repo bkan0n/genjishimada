@@ -143,7 +143,7 @@ class MapSearchSQLSpecBuilder:
             query = query.from_("core.maps", alias="m")
 
         query = query.join(
-            self._playtest_meta_subquery(),
+            self._playtest_meta_subquery(include_completed=bool(self._filters.playtest_thread_id)),
             on="pm.map_id = m.id AND pm.rn = 1",
             join_type="LEFT",
             alias="pm",
@@ -558,27 +558,31 @@ class MapSearchSQLSpecBuilder:
         )
 
     @staticmethod
-    def _playtest_meta_subquery() -> Select:
+    def _playtest_meta_subquery(*, include_completed: bool = False) -> Select:
         """Return the playtest metadata subquery for the LEFT JOIN.
 
+        Args:
+            include_completed: When True, include completed playtests in the subquery.
+                Used for direct lookups by playtest_thread_id where the playtest
+                may already be completed.
+
         Returns:
-            Select: Subquery providing the latest in-progress metadata per map.
+            Select: Subquery providing playtest metadata per map.
         """
-        return (
-            sql.select(
-                "map_id",
-                "thread_id",
-                "initial_difficulty",
-                "verification_id",
-                "created_at",
-                "updated_at",
-                "completed",
-                "ROW_NUMBER() OVER (PARTITION BY map_id ORDER BY created_at DESC) AS rn",
-                dialect="postgres",
-            )
-            .from_("playtests.meta")
-            .where("completed IS FALSE")
-        )
+        query = sql.select(
+            "map_id",
+            "thread_id",
+            "initial_difficulty",
+            "verification_id",
+            "created_at",
+            "updated_at",
+            "completed",
+            "ROW_NUMBER() OVER (PARTITION BY map_id ORDER BY created_at DESC) AS rn",
+            dialect="postgres",
+        ).from_("playtests.meta")
+        if not include_completed:
+            query.where("completed IS FALSE")
+        return query
 
     @staticmethod
     def _ratings_column() -> str:

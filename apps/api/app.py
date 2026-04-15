@@ -98,10 +98,15 @@ def _jsonb_decoder(value: str) -> object:
     return msgspec.json.decode(value)
 
 
-class HealthcheckEndpointFilter(logging.Filter):
+class EndpointLogFilter(logging.Filter):
+    """Filter out noisy endpoint logs from uvicorn access logger."""
+
+    EXCLUDED_PATHS = ("/healthcheck", "/api/v3/auth/")
+
     def filter(self, record: logging.LogRecord) -> bool:
-        """Filter out healthcheck endpoint logs."""
-        return record.getMessage().find("/healthcheck") == -1
+        """Filter."""
+        msg = record.getMessage()
+        return not any(path in msg for path in self.EXCLUDED_PATHS)
 
 
 def create_app(psql_dsn: str | None = None) -> Litestar:
@@ -201,7 +206,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         middleware=[auth_middleware],
         guards=[scope_guard],
     )
-    logging.getLogger("uvicorn.access").addFilter(HealthcheckEndpointFilter())
+    logging.getLogger("uvicorn.access").addFilter(EndpointLogFilter())
     return _app
 
 
