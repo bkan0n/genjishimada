@@ -22,6 +22,77 @@ if TYPE_CHECKING:
 class TagsRepository(BaseRepository):
     """Repository for tag CRUD and search operations."""
 
+    def _build_select_cols(self, filters: TagsSearchFilters) -> list[str]:
+        """Build SELECT column list based on search filters.
+
+        Args:
+            filters: Search filter parameters.
+
+        Returns:
+            List of SQL column expressions.
+        """
+        select_cols = [
+            "tl.id",
+            "tl.location_id AS guild_id",
+            "tl.name",
+            "tl.owner_id",
+            "(tl.tag_id != t.id) AS is_alias",
+            "t.name AS canonical_name",
+            "t.uses",
+        ]
+        if filters.include_content:
+            select_cols.append("t.content")
+        if filters.include_rank:
+            select_cols.append("ROW_NUMBER() OVER () AS rank")
+        return select_cols
+
+    def _build_where_clauses(self, filters: TagsSearchFilters) -> tuple[list[str], list[object], int]:
+        """Build WHERE clauses and parameter list from search filters.
+
+        Args:
+            filters: Search filter parameters.
+
+        Returns:
+            Tuple of (where_clauses, params, next_param_idx).
+        """
+        where_clauses: list[str] = []
+        params: list[object] = []
+        param_idx = 1
+
+        # Always filter by guild_id (location_id)
+        where_clauses.append(f"tl.location_id = ${param_idx}")
+        params.append(filters.guild_id)
+        param_idx += 1
+
+        # Filter by ID
+        if filters.by_id is not None:
+            where_clauses.append(f"t.id = ${param_idx}")
+            params.append(filters.by_id)
+            param_idx += 1
+
+        # Filter by name (exact or fuzzy)
+        if filters.name is not None:
+            if filters.fuzzy:
+                where_clauses.append(f"tl.name % ${param_idx}")
+            else:
+                where_clauses.append(f"lower(tl.name) = lower(${param_idx})")
+            params.append(filters.name)
+            param_idx += 1
+
+        # Filter by owner
+        if filters.owner_id is not None:
+            where_clauses.append(f"tl.owner_id = ${param_idx}")
+            params.append(filters.owner_id)
+            param_idx += 1
+
+        # Alias filtering
+        if filters.only_aliases:
+            where_clauses.append("tl.tag_id != t.id")
+        elif not filters.include_aliases:
+            where_clauses.append("tl.tag_id = t.id")
+
+        return where_clauses, params, param_idx
+
     async def search_tags(
         self,
         filters: TagsSearchFilters,
@@ -42,59 +113,8 @@ class TagsRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        # Build select columns
-        select_cols = [
-            "tl.id",
-            "tl.location_id AS guild_id",
-            "tl.name",
-            "tl.owner_id",
-            "(tl.tag_id != t.id) AS is_alias",
-            "t.name AS canonical_name",
-            "t.uses",
-        ]
-        if filters.include_content:
-            select_cols.append("t.content")
-        if filters.include_rank:
-            select_cols.append("ROW_NUMBER() OVER () AS rank")
-
-        # Build WHERE clauses
-        where_clauses: list[str] = []
-        params: list[object] = []
-        param_idx = 1
-
-        # Always filter by guild_id (location_id)
-        where_clauses.append(f"tl.location_id = ${param_idx}")
-        params.append(filters.guild_id)
-        param_idx += 1
-
-        # Filter by ID
-        if filters.by_id is not None:
-            where_clauses.append(f"t.id = ${param_idx}")
-            params.append(filters.by_id)
-            param_idx += 1
-
-        # Filter by name (exact or fuzzy)
-        if filters.name is not None:
-            if filters.fuzzy:
-                where_clauses.append(f"tl.name % ${param_idx}")
-                params.append(filters.name)
-                param_idx += 1
-            else:
-                where_clauses.append(f"lower(tl.name) = lower(${param_idx})")
-                params.append(filters.name)
-                param_idx += 1
-
-        # Filter by owner
-        if filters.owner_id is not None:
-            where_clauses.append(f"tl.owner_id = ${param_idx}")
-            params.append(filters.owner_id)
-            param_idx += 1
-
-        # Alias filtering
-        if filters.only_aliases:
-            where_clauses.append("tl.tag_id != t.id")
-        elif not filters.include_aliases:
-            where_clauses.append("tl.tag_id = t.id")
+        select_cols = self._build_select_cols(filters)
+        where_clauses, params, param_idx = self._build_where_clauses(filters)
 
         # Build ORDER BY
         if filters.random:
@@ -124,7 +144,6 @@ class TagsRepository(BaseRepository):
 
         query_parts.append(f"OFFSET ${param_idx}")
         params.append(filters.offset)
-        param_idx += 1
 
         query = "\n".join(query_parts)
         rows = await _conn.fetch(query, *params)
@@ -327,7 +346,7 @@ class TagsRepository(BaseRepository):
             True if the tag was deleted, False if not found.
         """
         _conn = self._get_connection(conn)
-        async with _conn.transaction():
+        async with _conn.transaction():  # pyright: ignore[reportAttributeAccessIssue]
             # Find the tag_id first
             tag_id = await _conn.fetchval(
                 """
@@ -376,7 +395,7 @@ class TagsRepository(BaseRepository):
             Number of tags deleted.
         """
         _conn = self._get_connection(conn)
-        async with _conn.transaction():
+        async with _conn.transaction():  # pyright: ignore[reportAttributeAccessIssue]
             # Delete from tag_lookup first
             await _conn.execute(
                 "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
@@ -414,7 +433,7 @@ class TagsRepository(BaseRepository):
             True if the tag was claimed, False if not found.
         """
         _conn = self._get_connection(conn)
-        async with _conn.transaction():
+        async with _conn.transaction():  # pyright: ignore[reportAttributeAccessIssue]
             # Find the tag_id
             tag_id = await _conn.fetchval(
                 """
@@ -470,7 +489,7 @@ class TagsRepository(BaseRepository):
             True if the tag was transferred, False if not found or not owner.
         """
         _conn = self._get_connection(conn)
-        async with _conn.transaction():
+        async with _conn.transaction():  # pyright: ignore[reportAttributeAccessIssue]
             # Find the tag_id and verify ownership
             tag_id = await _conn.fetchval(
                 """
@@ -584,10 +603,7 @@ class TagsRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         # Choose table based on mode
-        if filters.mode in ("non_aliased", "owned_non_aliased"):
-            table = "public.tags"
-        else:
-            table = "public.tag_lookup"
+        table = "public.tags" if filters.mode in ("non_aliased", "owned_non_aliased") else "public.tag_lookup"
 
         where_clauses: list[str] = []
         params: list[object] = []

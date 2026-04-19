@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from logging import getLogger
-from typing import TYPE_CHECKING
 
 from asyncpg import Pool
 from genjishimada_sdk.tags import (
+    OpAlias,
+    OpClaim,
+    OpCreate,
+    OpEdit,
+    OpIncrementUsage,
+    OpPurge,
+    OpRemove,
+    OpRemoveById,
+    OpTransfer,
     TagOp,
     TagsAutocompleteRequest,
     TagsAutocompleteResponse,
@@ -19,9 +27,6 @@ from litestar.datastructures import State
 
 from repository.tags_repository import TagsRepository
 from services.base import BaseService
-
-if TYPE_CHECKING:
-    pass
 
 log = getLogger(__name__)
 
@@ -73,7 +78,7 @@ class TagsService(BaseService):
         """
         return await self._tags_repo.autocomplete_tags(filters)
 
-    async def _execute_op(self, op: TagOp) -> TagsMutateResult:
+    async def _execute_op(self, op: TagOp) -> TagsMutateResult:  # noqa: PLR0911, PLR0912
         """Dispatch a single tag operation to the appropriate repository method.
 
         Args:
@@ -85,52 +90,75 @@ class TagsService(BaseService):
         try:
             match op.op:
                 case "create":
+                    assert isinstance(op, OpCreate)
                     tag_id = await self._tags_repo.create_tag(
-                        op.guild_id, op.name, op.content, op.owner_id,  # type: ignore[union-attr]
+                        op.guild_id,
+                        op.name,
+                        op.content,
+                        op.owner_id,
                     )
                     return TagsMutateResult(ok=True, tag_id=tag_id, message="Tag created")
 
                 case "alias":
+                    assert isinstance(op, OpAlias)
                     affected = await self._tags_repo.create_alias(
-                        op.guild_id, op.new_name, op.old_name, op.owner_id,  # type: ignore[union-attr]
+                        op.guild_id,
+                        op.new_name,
+                        op.old_name,
+                        op.owner_id,
                     )
                     return TagsMutateResult(ok=True, affected=affected, message="Alias created")
 
                 case "edit":
+                    assert isinstance(op, OpEdit)
                     affected = await self._tags_repo.edit_tag(
-                        op.guild_id, op.name, op.new_content, op.owner_id,  # type: ignore[union-attr]
+                        op.guild_id,
+                        op.name,
+                        op.new_content,
+                        op.owner_id,
                     )
                     return TagsMutateResult(ok=True, affected=affected, message="Tag edited")
 
                 case "remove":
-                    found = await self._tags_repo.remove_tag_by_name(op.guild_id, op.name)  # type: ignore[union-attr]
+                    assert isinstance(op, OpRemove)
+                    found = await self._tags_repo.remove_tag_by_name(op.guild_id, op.name)
                     if not found:
                         return TagsMutateResult(ok=False, message="Tag not found")
                     return TagsMutateResult(ok=True, message="Tag deleted")
 
                 case "remove_by_id":
-                    affected = await self._tags_repo.remove_tag_by_id(op.guild_id, op.tag_id)  # type: ignore[union-attr]
+                    assert isinstance(op, OpRemoveById)
+                    affected = await self._tags_repo.remove_tag_by_id(op.guild_id, op.tag_id)
                     return TagsMutateResult(ok=True, affected=affected, message="Tag deleted")
 
                 case "increment_usage":
-                    await self._tags_repo.increment_usage(op.guild_id, op.name)  # type: ignore[union-attr]
+                    assert isinstance(op, OpIncrementUsage)
+                    await self._tags_repo.increment_usage(op.guild_id, op.name)
                     return TagsMutateResult(ok=True, message="Usage incremented")
 
                 case "transfer":
+                    assert isinstance(op, OpTransfer)
                     found = await self._tags_repo.transfer_tag(
-                        op.guild_id, op.name, op.new_owner_id, op.requester_id,  # type: ignore[union-attr]
+                        op.guild_id,
+                        op.name,
+                        op.new_owner_id,
+                        op.requester_id,
                     )
                     if not found:
                         return TagsMutateResult(ok=False, message="No permission or tag not found")
                     return TagsMutateResult(ok=True, message="Ownership transferred")
 
                 case "purge":
-                    affected = await self._tags_repo.purge_tags(op.guild_id, op.owner_id)  # type: ignore[union-attr]
+                    assert isinstance(op, OpPurge)
+                    affected = await self._tags_repo.purge_tags(op.guild_id, op.owner_id)
                     return TagsMutateResult(ok=True, affected=affected, message="User purged")
 
                 case "claim":
+                    assert isinstance(op, OpClaim)
                     found = await self._tags_repo.claim_tag(
-                        op.guild_id, op.name, op.requester_id,  # type: ignore[union-attr]
+                        op.guild_id,
+                        op.name,
+                        op.requester_id,
                     )
                     if not found:
                         return TagsMutateResult(ok=False, message="Tag not found")
