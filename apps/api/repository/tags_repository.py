@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from asyncpg import Pool
 from genjishimada_sdk.tags import (
     TagRowDTO,
     TagsAutocompleteRequest,
@@ -17,6 +18,7 @@ from .base import BaseRepository
 
 if TYPE_CHECKING:
     from asyncpg import Connection
+    from asyncpg.pool import PoolConnectionProxy
 
 
 class TagsRepository(BaseRepository):
@@ -345,37 +347,40 @@ class TagsRepository(BaseRepository):
         Returns:
             True if the tag was deleted, False if not found.
         """
+
+        async def _do_remove_by_name(c: Connection | PoolConnectionProxy) -> bool:
+            async with c.transaction():
+                tag_id = await c.fetchval(
+                    """
+                    SELECT tl.tag_id
+                    FROM public.tag_lookup tl
+                    WHERE lower(tl.name) = lower($1)
+                      AND tl.location_id = $2
+                    LIMIT 1
+                    """,
+                    name,
+                    guild_id,
+                )
+                if tag_id is None:
+                    return False
+
+                await c.execute(
+                    "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
+                    tag_id,
+                    guild_id,
+                )
+                result = await c.execute(
+                    "DELETE FROM public.tags WHERE id = $1 AND location_id = $2",
+                    tag_id,
+                    guild_id,
+                )
+                return result == "DELETE 1"
+
         _conn = self._get_connection(conn)
-        async with _conn.transaction():  # pyright: ignore[reportAttributeAccessIssue]
-            # Find the tag_id first
-            tag_id = await _conn.fetchval(
-                """
-                SELECT tl.tag_id
-                FROM public.tag_lookup tl
-                WHERE lower(tl.name) = lower($1)
-                  AND tl.location_id = $2
-                LIMIT 1
-                """,
-                name,
-                guild_id,
-            )
-            if tag_id is None:
-                return False
-
-            # Delete from tag_lookup (all entries for this tag)
-            await _conn.execute(
-                "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
-                tag_id,
-                guild_id,
-            )
-
-            # Delete from tags
-            result = await _conn.execute(
-                "DELETE FROM public.tags WHERE id = $1 AND location_id = $2",
-                tag_id,
-                guild_id,
-            )
-            return result == "DELETE 1"
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                return await _do_remove_by_name(acquired)
+        return await _do_remove_by_name(_conn)
 
     async def remove_tag_by_id(
         self,
@@ -394,22 +399,26 @@ class TagsRepository(BaseRepository):
         Returns:
             Number of tags deleted.
         """
-        _conn = self._get_connection(conn)
-        async with _conn.transaction():  # pyright: ignore[reportAttributeAccessIssue]
-            # Delete from tag_lookup first
-            await _conn.execute(
-                "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
-                tag_id,
-                guild_id,
-            )
 
-            # Delete from tags
-            result = await _conn.execute(
-                "DELETE FROM public.tags WHERE id = $1 AND location_id = $2",
-                tag_id,
-                guild_id,
-            )
-            return int(result.split()[-1])
+        async def _do_remove_by_id(c: Connection | PoolConnectionProxy) -> int:
+            async with c.transaction():
+                await c.execute(
+                    "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
+                    tag_id,
+                    guild_id,
+                )
+                result = await c.execute(
+                    "DELETE FROM public.tags WHERE id = $1 AND location_id = $2",
+                    tag_id,
+                    guild_id,
+                )
+                return int(result.split()[-1])
+
+        _conn = self._get_connection(conn)
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                return await _do_remove_by_id(acquired)
+        return await _do_remove_by_id(_conn)
 
     async def claim_tag(
         self,
@@ -432,38 +441,41 @@ class TagsRepository(BaseRepository):
         Returns:
             True if the tag was claimed, False if not found.
         """
+
+        async def _do_claim(c: Connection | PoolConnectionProxy) -> bool:
+            async with c.transaction():
+                tag_id = await c.fetchval(
+                    """
+                    SELECT tl.tag_id
+                    FROM public.tag_lookup tl
+                    WHERE lower(tl.name) = lower($1)
+                      AND tl.location_id = $2
+                    LIMIT 1
+                    """,
+                    name,
+                    guild_id,
+                )
+                if tag_id is None:
+                    return False
+
+                await c.execute(
+                    "UPDATE public.tags SET owner_id = $1 WHERE id = $2",
+                    requester_id,
+                    tag_id,
+                )
+                await c.execute(
+                    "UPDATE public.tag_lookup SET owner_id = $1 WHERE tag_id = $2 AND location_id = $3",
+                    requester_id,
+                    tag_id,
+                    guild_id,
+                )
+                return True
+
         _conn = self._get_connection(conn)
-        async with _conn.transaction():  # pyright: ignore[reportAttributeAccessIssue]
-            # Find the tag_id
-            tag_id = await _conn.fetchval(
-                """
-                SELECT tl.tag_id
-                FROM public.tag_lookup tl
-                WHERE lower(tl.name) = lower($1)
-                  AND tl.location_id = $2
-                LIMIT 1
-                """,
-                name,
-                guild_id,
-            )
-            if tag_id is None:
-                return False
-
-            # Update ownership on tags
-            await _conn.execute(
-                "UPDATE public.tags SET owner_id = $1 WHERE id = $2",
-                requester_id,
-                tag_id,
-            )
-
-            # Update ownership on tag_lookup
-            await _conn.execute(
-                "UPDATE public.tag_lookup SET owner_id = $1 WHERE tag_id = $2 AND location_id = $3",
-                requester_id,
-                tag_id,
-                guild_id,
-            )
-            return True
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                return await _do_claim(acquired)
+        return await _do_claim(_conn)
 
     async def transfer_tag(
         self,
@@ -488,41 +500,44 @@ class TagsRepository(BaseRepository):
         Returns:
             True if the tag was transferred, False if not found or not owner.
         """
+
+        async def _do_transfer(c: Connection | PoolConnectionProxy) -> bool:
+            async with c.transaction():
+                tag_id = await c.fetchval(
+                    """
+                    SELECT tl.tag_id
+                    FROM public.tag_lookup tl
+                    INNER JOIN public.tags t ON tl.tag_id = t.id
+                    WHERE lower(tl.name) = lower($1)
+                      AND tl.location_id = $2
+                      AND t.owner_id = $3
+                    LIMIT 1
+                    """,
+                    name,
+                    guild_id,
+                    requester_id,
+                )
+                if tag_id is None:
+                    return False
+
+                await c.execute(
+                    "UPDATE public.tags SET owner_id = $1 WHERE id = $2",
+                    new_owner_id,
+                    tag_id,
+                )
+                await c.execute(
+                    "UPDATE public.tag_lookup SET owner_id = $1 WHERE tag_id = $2 AND location_id = $3",
+                    new_owner_id,
+                    tag_id,
+                    guild_id,
+                )
+                return True
+
         _conn = self._get_connection(conn)
-        async with _conn.transaction():  # pyright: ignore[reportAttributeAccessIssue]
-            # Find the tag_id and verify ownership
-            tag_id = await _conn.fetchval(
-                """
-                SELECT tl.tag_id
-                FROM public.tag_lookup tl
-                INNER JOIN public.tags t ON tl.tag_id = t.id
-                WHERE lower(tl.name) = lower($1)
-                  AND tl.location_id = $2
-                  AND t.owner_id = $3
-                LIMIT 1
-                """,
-                name,
-                guild_id,
-                requester_id,
-            )
-            if tag_id is None:
-                return False
-
-            # Update ownership on tags
-            await _conn.execute(
-                "UPDATE public.tags SET owner_id = $1 WHERE id = $2",
-                new_owner_id,
-                tag_id,
-            )
-
-            # Update ownership on tag_lookup
-            await _conn.execute(
-                "UPDATE public.tag_lookup SET owner_id = $1 WHERE tag_id = $2 AND location_id = $3",
-                new_owner_id,
-                tag_id,
-                guild_id,
-            )
-            return True
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                return await _do_transfer(acquired)
+        return await _do_transfer(_conn)
 
     async def purge_tags(
         self,
