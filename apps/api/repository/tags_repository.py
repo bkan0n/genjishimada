@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from logging import getLogger
 from typing import TYPE_CHECKING
 
 from genjishimada_sdk.tags import (
@@ -18,8 +17,6 @@ from .base import BaseRepository
 
 if TYPE_CHECKING:
     from asyncpg import Connection
-
-log = getLogger(__name__)
 
 
 class TagsRepository(BaseRepository):
@@ -236,7 +233,7 @@ class TagsRepository(BaseRepository):
         owner_id: int,
         *,
         conn: Connection | None = None,
-    ) -> int | None:
+    ) -> int:
         """Create an alias pointing to an existing tag.
 
         Args:
@@ -247,10 +244,10 @@ class TagsRepository(BaseRepository):
             conn: Optional connection for transaction participation.
 
         Returns:
-            The tag_id of the aliased tag, or None if the original tag was not found.
+            Number of rows inserted.
         """
         _conn = self._get_connection(conn)
-        tag_id: int | None = await _conn.fetchval(
+        res = await _conn.execute(
             """
             INSERT INTO public.tag_lookup (name, owner_id, location_id, tag_id)
             SELECT $1, $3, $4, tl.tag_id
@@ -258,14 +255,13 @@ class TagsRepository(BaseRepository):
             WHERE lower(tl.name) = lower($2)
               AND tl.location_id = $4
             LIMIT 1
-            RETURNING tag_id
             """,
             new_name,
             old_name,
             owner_id,
             guild_id,
         )
-        return tag_id
+        return int(res.split()[-1])
 
     async def edit_tag(
         self,
@@ -275,7 +271,7 @@ class TagsRepository(BaseRepository):
         owner_id: int,
         *,
         conn: Connection | None = None,
-    ) -> bool:
+    ) -> int:
         """Update the content of a tag.
 
         Only the tag owner can edit. Looks up via tag_lookup to resolve aliases.
@@ -288,7 +284,7 @@ class TagsRepository(BaseRepository):
             conn: Optional connection for transaction participation.
 
         Returns:
-            True if the tag was updated, False otherwise.
+            Number of rows affected.
         """
         _conn = self._get_connection(conn)
         result = await _conn.execute(
@@ -309,7 +305,7 @@ class TagsRepository(BaseRepository):
             guild_id,
             owner_id,
         )
-        return result == "UPDATE 1"
+        return int(result.split()[-1])
 
     async def remove_tag_by_name(
         self,
@@ -331,36 +327,36 @@ class TagsRepository(BaseRepository):
             True if the tag was deleted, False if not found.
         """
         _conn = self._get_connection(conn)
+        async with _conn.transaction():
+            # Find the tag_id first
+            tag_id = await _conn.fetchval(
+                """
+                SELECT tl.tag_id
+                FROM public.tag_lookup tl
+                WHERE lower(tl.name) = lower($1)
+                  AND tl.location_id = $2
+                LIMIT 1
+                """,
+                name,
+                guild_id,
+            )
+            if tag_id is None:
+                return False
 
-        # Find the tag_id first
-        tag_id = await _conn.fetchval(
-            """
-            SELECT tl.tag_id
-            FROM public.tag_lookup tl
-            WHERE lower(tl.name) = lower($1)
-              AND tl.location_id = $2
-            LIMIT 1
-            """,
-            name,
-            guild_id,
-        )
-        if tag_id is None:
-            return False
+            # Delete from tag_lookup (all entries for this tag)
+            await _conn.execute(
+                "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
+                tag_id,
+                guild_id,
+            )
 
-        # Delete from tag_lookup (all entries for this tag)
-        await _conn.execute(
-            "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
-            tag_id,
-            guild_id,
-        )
-
-        # Delete from tags
-        result = await _conn.execute(
-            "DELETE FROM public.tags WHERE id = $1 AND location_id = $2",
-            tag_id,
-            guild_id,
-        )
-        return result == "DELETE 1"
+            # Delete from tags
+            result = await _conn.execute(
+                "DELETE FROM public.tags WHERE id = $1 AND location_id = $2",
+                tag_id,
+                guild_id,
+            )
+            return result == "DELETE 1"
 
     async def remove_tag_by_id(
         self,
@@ -368,7 +364,7 @@ class TagsRepository(BaseRepository):
         tag_id: int,
         *,
         conn: Connection | None = None,
-    ) -> bool:
+    ) -> int:
         """Remove a tag and all its lookup entries by tag ID.
 
         Args:
@@ -377,24 +373,24 @@ class TagsRepository(BaseRepository):
             conn: Optional connection for transaction participation.
 
         Returns:
-            True if the tag was deleted, False if not found.
+            Number of tags deleted.
         """
         _conn = self._get_connection(conn)
+        async with _conn.transaction():
+            # Delete from tag_lookup first
+            await _conn.execute(
+                "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
+                tag_id,
+                guild_id,
+            )
 
-        # Delete from tag_lookup first
-        await _conn.execute(
-            "DELETE FROM public.tag_lookup WHERE tag_id = $1 AND location_id = $2",
-            tag_id,
-            guild_id,
-        )
-
-        # Delete from tags
-        result = await _conn.execute(
-            "DELETE FROM public.tags WHERE id = $1 AND location_id = $2",
-            tag_id,
-            guild_id,
-        )
-        return result == "DELETE 1"
+            # Delete from tags
+            result = await _conn.execute(
+                "DELETE FROM public.tags WHERE id = $1 AND location_id = $2",
+                tag_id,
+                guild_id,
+            )
+            return int(result.split()[-1])
 
     async def claim_tag(
         self,
@@ -418,37 +414,37 @@ class TagsRepository(BaseRepository):
             True if the tag was claimed, False if not found.
         """
         _conn = self._get_connection(conn)
+        async with _conn.transaction():
+            # Find the tag_id
+            tag_id = await _conn.fetchval(
+                """
+                SELECT tl.tag_id
+                FROM public.tag_lookup tl
+                WHERE lower(tl.name) = lower($1)
+                  AND tl.location_id = $2
+                LIMIT 1
+                """,
+                name,
+                guild_id,
+            )
+            if tag_id is None:
+                return False
 
-        # Find the tag_id
-        tag_id = await _conn.fetchval(
-            """
-            SELECT tl.tag_id
-            FROM public.tag_lookup tl
-            WHERE lower(tl.name) = lower($1)
-              AND tl.location_id = $2
-            LIMIT 1
-            """,
-            name,
-            guild_id,
-        )
-        if tag_id is None:
-            return False
+            # Update ownership on tags
+            await _conn.execute(
+                "UPDATE public.tags SET owner_id = $1 WHERE id = $2",
+                requester_id,
+                tag_id,
+            )
 
-        # Update ownership on tags
-        await _conn.execute(
-            "UPDATE public.tags SET owner_id = $1 WHERE id = $2",
-            requester_id,
-            tag_id,
-        )
-
-        # Update ownership on tag_lookup
-        await _conn.execute(
-            "UPDATE public.tag_lookup SET owner_id = $1 WHERE tag_id = $2 AND location_id = $3",
-            requester_id,
-            tag_id,
-            guild_id,
-        )
-        return True
+            # Update ownership on tag_lookup
+            await _conn.execute(
+                "UPDATE public.tag_lookup SET owner_id = $1 WHERE tag_id = $2 AND location_id = $3",
+                requester_id,
+                tag_id,
+                guild_id,
+            )
+            return True
 
     async def transfer_tag(
         self,
@@ -474,40 +470,40 @@ class TagsRepository(BaseRepository):
             True if the tag was transferred, False if not found or not owner.
         """
         _conn = self._get_connection(conn)
+        async with _conn.transaction():
+            # Find the tag_id and verify ownership
+            tag_id = await _conn.fetchval(
+                """
+                SELECT tl.tag_id
+                FROM public.tag_lookup tl
+                INNER JOIN public.tags t ON tl.tag_id = t.id
+                WHERE lower(tl.name) = lower($1)
+                  AND tl.location_id = $2
+                  AND t.owner_id = $3
+                LIMIT 1
+                """,
+                name,
+                guild_id,
+                requester_id,
+            )
+            if tag_id is None:
+                return False
 
-        # Find the tag_id and verify ownership
-        tag_id = await _conn.fetchval(
-            """
-            SELECT tl.tag_id
-            FROM public.tag_lookup tl
-            INNER JOIN public.tags t ON tl.tag_id = t.id
-            WHERE lower(tl.name) = lower($1)
-              AND tl.location_id = $2
-              AND t.owner_id = $3
-            LIMIT 1
-            """,
-            name,
-            guild_id,
-            requester_id,
-        )
-        if tag_id is None:
-            return False
+            # Update ownership on tags
+            await _conn.execute(
+                "UPDATE public.tags SET owner_id = $1 WHERE id = $2",
+                new_owner_id,
+                tag_id,
+            )
 
-        # Update ownership on tags
-        await _conn.execute(
-            "UPDATE public.tags SET owner_id = $1 WHERE id = $2",
-            new_owner_id,
-            tag_id,
-        )
-
-        # Update ownership on tag_lookup
-        await _conn.execute(
-            "UPDATE public.tag_lookup SET owner_id = $1 WHERE tag_id = $2 AND location_id = $3",
-            new_owner_id,
-            tag_id,
-            guild_id,
-        )
-        return True
+            # Update ownership on tag_lookup
+            await _conn.execute(
+                "UPDATE public.tag_lookup SET owner_id = $1 WHERE tag_id = $2 AND location_id = $3",
+                new_owner_id,
+                tag_id,
+                guild_id,
+            )
+            return True
 
     async def purge_tags(
         self,
@@ -543,19 +539,16 @@ class TagsRepository(BaseRepository):
         name: str,
         *,
         conn: Connection | None = None,
-    ) -> bool:
+    ) -> None:
         """Increment the usage counter for a tag.
 
         Args:
             guild_id: Discord guild identifier.
             name: Tag name (resolved via tag_lookup).
             conn: Optional connection for transaction participation.
-
-        Returns:
-            True if the tag was found and updated, False otherwise.
         """
         _conn = self._get_connection(conn)
-        result = await _conn.execute(
+        await _conn.execute(
             """
             UPDATE public.tags
             SET uses = uses + 1
@@ -570,7 +563,6 @@ class TagsRepository(BaseRepository):
             name,
             guild_id,
         )
-        return result == "UPDATE 1"
 
     async def autocomplete_tags(
         self,
