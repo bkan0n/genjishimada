@@ -297,15 +297,14 @@ class LootboxRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         query = """
-                DELETE
-                FROM lootbox.user_keys
-                WHERE earned_at = (
-                    SELECT min(earned_at)
+                DELETE FROM lootbox.user_keys
+                WHERE ctid = (
+                    SELECT ctid
                     FROM lootbox.user_keys
                     WHERE user_id = $1::bigint AND key_type = $2::text
-                )
-                  AND user_id = $1::bigint
-                  AND key_type = $2::text \
+                    ORDER BY earned_at ASC
+                    LIMIT 1
+                ) \
                 """
         result = await _conn.execute(query, user_id, key_type)
         return result != "DELETE 0"

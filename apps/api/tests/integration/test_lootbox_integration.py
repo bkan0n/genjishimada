@@ -167,6 +167,40 @@ class TestDrawRandomRewards:
         assert isinstance(data, list)
         assert len(data) == 3
 
+    async def test_draw_consumes_exactly_one_key_when_timestamps_match(
+        self, test_client, create_test_user, asyncpg_conn
+    ):
+        """Drawing rewards consumes exactly one key even when multiple keys share the same earned_at timestamp.
+
+        Reproduces a bug where bulk-purchased keys (inserted in a single transaction)
+        all got the same earned_at due to PostgreSQL's now() returning transaction start
+        time, causing DELETE to remove all of them at once.
+        """
+        user_id = await create_test_user()
+
+        # Insert 3 keys in a single transaction so they share the same earned_at
+        async with asyncpg_conn.transaction():
+            for _ in range(3):
+                await asyncpg_conn.execute(
+                    "INSERT INTO lootbox.user_keys (user_id, key_type) VALUES ($1, $2)",
+                    user_id,
+                    "Classic",
+                )
+
+        # Verify user starts with 3 keys
+        keys_response = await test_client.get(f"/api/v3/lootbox/users/{user_id}/keys")
+        classic = [k for k in keys_response.json() if k["key_type"] == "Classic"]
+        assert classic[0]["amount"] == 3
+
+        # Draw rewards (consumes 1 key)
+        draw_response = await test_client.get(f"/api/v3/lootbox/users/{user_id}/keys/Classic")
+        assert draw_response.status_code == 200
+
+        # Must have exactly 2 keys remaining, not 0
+        keys_after = await test_client.get(f"/api/v3/lootbox/users/{user_id}/keys")
+        classic_after = [k for k in keys_after.json() if k["key_type"] == "Classic"]
+        assert classic_after[0]["amount"] == 2
+
 
 class TestGrantRewardToUser:
     """POST /api/v3/lootbox/users/{user_id}/{key_type}/{reward_type}/{reward_name}
