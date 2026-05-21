@@ -19,14 +19,14 @@ class TestIsMapArchived:
     async def test_archived_map_returns_true(self, repository, create_test_map):
         """Archived map returns True."""
         code = "TARCH1"
-        await create_test_map(code=code, archived=True)
+        await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
         result = await repository.is_map_archived(code)
         assert result is True
 
     async def test_non_archived_map_returns_false(self, repository, create_test_map):
         """Non-archived map returns False."""
         code = "TACT01"
-        await create_test_map(code=code, archived=False)
+        await create_test_map(code=code, archived=False, map_name="King's Row", category="Classic")
         result = await repository.is_map_archived(code)
         assert result is False
 
@@ -42,14 +42,14 @@ class TestHasUnresolvedChangeRequests:
     async def test_no_change_requests_returns_false(self, repository, create_test_map):
         """Map with no CRs returns False."""
         code = "TNOCR"
-        await create_test_map(code=code)
+        await create_test_map(code=code, map_name="King's Row", category="Classic")
         result = await repository.has_unresolved_change_requests(code)
         assert result is False
 
     async def test_unresolved_cr_returns_true(self, repository, create_test_map, create_test_user, asyncpg_pool):
         """Map with unresolved CR returns True."""
         code = "TUCR01"
-        await create_test_map(code=code)
+        await create_test_map(code=code, map_name="King's Row", category="Classic")
         user_id = await create_test_user()
         async with asyncpg_pool.acquire() as conn:
             await conn.execute(
@@ -68,7 +68,7 @@ class TestHasUnresolvedChangeRequests:
     async def test_resolved_cr_returns_false(self, repository, create_test_map, create_test_user, asyncpg_pool):
         """Map with only resolved CRs returns False."""
         code = "TRCR01"
-        await create_test_map(code=code)
+        await create_test_map(code=code, map_name="King's Row", category="Classic")
         user_id = await create_test_user()
         async with asyncpg_pool.acquire() as conn:
             await conn.execute(
@@ -91,7 +91,7 @@ class TestReleaseCode:
     async def test_sets_code_null_and_preserves_original(self, repository, create_test_map, asyncpg_pool):
         """Release sets code=NULL and original_code=old code."""
         code = "TREL01"
-        map_id = await create_test_map(code=code, archived=True)
+        map_id = await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
 
         async with asyncpg_pool.acquire() as conn, conn.transaction():
             await repository.release_code(code, map_id, conn=conn)
@@ -105,7 +105,7 @@ class TestReleaseCode:
     async def test_clears_edit_request_code(self, repository, create_test_map, create_test_user, asyncpg_pool):
         """Release sets edit_requests.code to NULL."""
         code = "TREL02"
-        map_id = await create_test_map(code=code, archived=True)
+        map_id = await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
         user_id = await create_test_user()
 
         # Seed an edit request

@@ -21,7 +21,7 @@ class TestReleaseCodePreconditions:
     async def test_non_archived_map_returns_409(self, test_client, create_test_map):
         """Release code on non-archived map returns 409."""
         code = "TNARC"
-        await create_test_map(code=code, archived=False)
+        await create_test_map(code=code, archived=False, map_name="King's Row", category="Classic")
         response = await test_client.patch(ENDPOINT.format(code=code))
         assert response.status_code == 409
         assert "archived" in response.json()["error"].lower()
@@ -31,7 +31,7 @@ class TestReleaseCodePreconditions:
     ):
         """Release code with unresolved change requests returns 409."""
         code = "TUCR02"
-        await create_test_map(code=code, archived=True)
+        await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
         user_id = await create_test_user()
 
         async with asyncpg_pool.acquire() as conn:
@@ -55,7 +55,7 @@ class TestReleaseCodePreconditions:
     ):
         """Release code succeeds when all CRs are resolved."""
         code = "TRCR02"
-        await create_test_map(code=code, archived=True)
+        await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
         user_id = await create_test_user()
 
         async with asyncpg_pool.acquire() as conn:
@@ -76,7 +76,7 @@ class TestReleaseCodePreconditions:
     async def test_requires_auth(self, unauthenticated_client, create_test_map):
         """Release code without auth returns 401."""
         code = "TAUTH"
-        await create_test_map(code=code, archived=True)
+        await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
         response = await unauthenticated_client.patch(ENDPOINT.format(code=code))
         assert response.status_code == 401
 
@@ -87,7 +87,7 @@ class TestReleaseCodeBehavior:
     async def test_code_becomes_null(self, test_client, create_test_map, asyncpg_pool):
         """After release, map's code is NULL."""
         code = "TREL03"
-        map_id = await create_test_map(code=code, archived=True)
+        map_id = await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
 
         response = await test_client.patch(ENDPOINT.format(code=code))
         assert response.status_code == 204
@@ -101,7 +101,7 @@ class TestReleaseCodeBehavior:
     async def test_lookup_returns_none_after_release(self, test_client, create_test_map, asyncpg_pool):
         """After release, looking up the old code finds nothing."""
         code = "TREL04"
-        await create_test_map(code=code, archived=True)
+        await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
 
         await test_client.patch(ENDPOINT.format(code=code))
 
@@ -113,12 +113,12 @@ class TestReleaseCodeBehavior:
     async def test_released_code_can_be_reused(self, test_client, create_test_map, asyncpg_pool):
         """After release, a new map can be created with the same code."""
         code = "TREL05"
-        old_map_id = await create_test_map(code=code, archived=True)
+        old_map_id = await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
 
         await test_client.patch(ENDPOINT.format(code=code))
 
         # Create a new map with the same code
-        new_map_id = await create_test_map(code=code)
+        new_map_id = await create_test_map(code=code, map_name="King's Row", category="Classic")
 
         assert new_map_id != old_map_id
 
@@ -132,7 +132,7 @@ class TestReleaseCodeBehavior:
     ):
         """After release, edit_requests.code is set to NULL."""
         code = "TREL06"
-        map_id = await create_test_map(code=code, archived=True)
+        map_id = await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
         user_id = await create_test_user()
 
         async with asyncpg_pool.acquire() as conn:
@@ -159,7 +159,7 @@ class TestReleaseCodeBehavior:
     ):
         """After release, change_requests.code is NULL via ON UPDATE CASCADE."""
         code = "TREL07"
-        await create_test_map(code=code, archived=True)
+        await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
         user_id = await create_test_user()
         thread_id = 900000000000000020
 
@@ -187,7 +187,7 @@ class TestReleaseCodeBehavior:
     async def test_original_code_audit_query(self, test_client, create_test_map, asyncpg_pool):
         """Released map is findable by original_code."""
         code = "TREL08"
-        map_id = await create_test_map(code=code, archived=True)
+        map_id = await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
 
         await test_client.patch(ENDPOINT.format(code=code))
 
@@ -205,7 +205,7 @@ class TestReleaseCodeEdgeCases:
     async def test_already_released_returns_404(self, test_client, create_test_map):
         """Releasing an already-released map returns 404 (code is NULL)."""
         code = "TREL09"
-        await create_test_map(code=code, archived=True)
+        await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
 
         # First release succeeds
         response = await test_client.patch(ENDPOINT.format(code=code))
@@ -218,10 +218,10 @@ class TestReleaseCodeEdgeCases:
     async def test_linked_map_auto_unlinks(self, test_client, create_test_map, asyncpg_pool):
         """Releasing a map that another map links to auto-unlinks via cascade."""
         target_code = "TREL10"
-        target_id = await create_test_map(code=target_code, archived=True)
+        target_id = await create_test_map(code=target_code, archived=True, map_name="King's Row", category="Classic")
 
         linker_code = "TLNK01"
-        linker_id = await create_test_map(code=linker_code)
+        linker_id = await create_test_map(code=linker_code, map_name="King's Row", category="Classic")
 
         # Set up the link
         async with asyncpg_pool.acquire() as conn:
@@ -246,7 +246,7 @@ class TestReleaseCodeEdgeCases:
     ):
         """Completions remain accessible by map_id after code release."""
         code = "TREL11"
-        map_id = await create_test_map(code=code, archived=True)
+        map_id = await create_test_map(code=code, archived=True, map_name="King's Row", category="Classic")
         user_id = await create_test_user()
         comp_id = await create_test_completion(user_id, map_id)
 
