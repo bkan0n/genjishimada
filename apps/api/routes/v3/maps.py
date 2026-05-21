@@ -63,7 +63,9 @@ from services.exceptions.maps import (
     GuideNotFoundError,
     LinkedMapError,
     MapCodeExistsError,
+    MapNotArchivedError,
     MapNotFoundError,
+    UnresolvedChangeRequestsError,
 )
 from services.lootbox_service import LootboxService, provide_lootbox_service
 from services.maps_service import MapsService, provide_maps_service
@@ -779,6 +781,51 @@ class MapsController(Controller):
             raise CustomHTTPException(
                 detail=str(e),
                 status_code=HTTP_404_NOT_FOUND,
+            ) from e
+
+    @patch(
+        "/{code:str}/release-code",
+        summary="Release Map Code",
+        status_code=HTTP_204_NO_CONTENT,
+        opt={"required_scopes": {"maps:write"}},
+    )
+    async def release_code_endpoint(
+        self,
+        code: OverwatchCode,
+        maps_service: MapsService,
+    ) -> Response[None]:
+        """Release an archived map's code for reuse.
+
+        Args:
+            code: Map code to release.
+            maps_service: Maps service.
+
+        Returns:
+            Empty response with 204 status.
+
+        Raises:
+            CustomHTTPException: On error.
+        """
+        try:
+            await maps_service.release_code(code)
+            return Response(None, status_code=HTTP_204_NO_CONTENT)
+
+        except MapNotFoundError as e:
+            raise CustomHTTPException(
+                detail=f"No map found with code: {code}",
+                status_code=HTTP_404_NOT_FOUND,
+            ) from e
+
+        except MapNotArchivedError as e:
+            raise CustomHTTPException(
+                detail=f"Map {code} must be archived before releasing its code",
+                status_code=HTTP_409_CONFLICT,
+            ) from e
+
+        except UnresolvedChangeRequestsError as e:
+            raise CustomHTTPException(
+                detail=f"Map {code} has unresolved change requests",
+                status_code=HTTP_409_CONFLICT,
             ) from e
 
     @post(
