@@ -1971,7 +1971,7 @@ class MapsService(BaseService):
             raise UnresolvedChangeRequestsError(code, count=0)
 
         async with self._pool.acquire() as conn, conn.transaction():
-            await self._maps_repo.release_code(code, map_id, conn=conn)
+            await self._maps_repo.release_code(code, map_id, conn=conn)  # type: ignore[arg-type]
 
 
 async def provide_maps_service(
