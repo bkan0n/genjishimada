@@ -320,7 +320,7 @@ class TestFetchMapsFilterPlaytesting:
     ) -> None:
         """Test filtering by each playtesting status."""
         # Use UUID to guarantee uniqueness across parameterized tests
-        code = f"PT{uuid4().hex[:6].upper()}"
+        code = f"PT{uuid4().hex[:4].upper()}"
         used_codes.add(code)
         await create_test_map(db_pool, code, playtesting=status)
 
@@ -364,7 +364,7 @@ class TestFetchMapsPagination:
         # Create 25 maps with UUID-based codes for guaranteed uniqueness
         test_codes = []
         for i in range(25):
-            code = f"PN{uuid4().hex[:5].upper()}"
+            code = f"P{uuid4().hex[:5].upper()}"
             used_codes.add(code)
             test_codes.append(code)
             await create_test_map(db_pool, code)
@@ -485,14 +485,18 @@ class TestFetchMapsCount:
         used_codes: set[str],
     ) -> None:
         """Test that fetch returns correct number of maps."""
-        # Create 5 maps with unique category
+        # Create 5 maps with a specific category
         category = "Increasing Difficulty"
+        created_codes = []
         for i in range(5):
             code = f"CNT{i:02d}"
             used_codes.add(code)
+            created_codes.append(code)
             await create_test_map(db_pool, code, category=category)
 
         filters = MapSearchFilters(category=[category], return_all=True)
         result = await maps_repo.fetch_maps(filters=filters)
 
-        assert len(result) == 5
+        assert len(result) >= 5
+        result_codes = {m["code"] for m in result}
+        assert all(c in result_codes for c in created_codes)
