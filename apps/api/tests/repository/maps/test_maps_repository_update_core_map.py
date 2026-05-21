@@ -325,7 +325,7 @@ async def test_transaction_commit_persists_changes(
     existing_map: dict[str, Any],
 ) -> None:
     """Test that update within a committed transaction persists."""
-    new_map_name = "Transaction Map"
+    new_map_name = "Dorado"
 
     async with db_pool.acquire() as conn:
         async with conn.transaction():

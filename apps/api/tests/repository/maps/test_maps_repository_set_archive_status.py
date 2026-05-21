@@ -100,7 +100,7 @@ async def create_test_map(
             RETURNING id
             """,
             code,
-            "Test Map",
+            "King's Row",
             "Classic",
             10,
             True,

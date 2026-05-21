@@ -549,7 +549,7 @@ class TestCreateEditRequestRoundTrip:
         """Round-trip test: create edit request and retrieve it."""
         user_id = await create_test_user()
         code = unique_map_code
-        await create_test_map(code=code, difficulty="Medium", name="Test Map")
+        await create_test_map(code=code, difficulty="Medium", map_name="King's Row", category="Classic")
 
         # Create edit request with specific changes
         payload = {

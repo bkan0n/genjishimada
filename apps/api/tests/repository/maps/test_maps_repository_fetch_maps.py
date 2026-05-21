@@ -486,7 +486,7 @@ class TestFetchMapsCount:
     ) -> None:
         """Test that fetch returns correct number of maps."""
         # Create 5 maps with unique category
-        category = "CountTest"
+        category = "Increasing Difficulty"
         for i in range(5):
             code = f"CNT{i:02d}"
             used_codes.add(code)

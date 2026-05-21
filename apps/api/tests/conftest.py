@@ -351,8 +351,8 @@ async def create_test_map(
 
         # Default values
         data = {
-            "map_name": fake.random_element(elements=get_args(OverwatchMap)),
-            "category": fake.random_element(elements=get_args(MapCategory)),
+            "map_name": "Hanamura",
+            "category": "Classic",
             "checkpoints": fake.random_int(min=1, max=50),
             "official": True,
             "playtesting": "Approved",
