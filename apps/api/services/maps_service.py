@@ -484,19 +484,7 @@ class MapsService(BaseService):
 
         if single:
             return msgspec.convert(result, MapResponse, from_attributes=True)
-        try:
-            return msgspec.convert(result, list[MapResponse], from_attributes=True)
-        except msgspec.ValidationError:
-            for i, row in enumerate(result):
-                log.error(
-                    "Map at index %s: code=%r (len=%s), category=%r, map_name=%r",
-                    i,
-                    row.get("code"),
-                    len(row.get("code", "")) if row.get("code") else 0,
-                    row.get("category"),
-                    row.get("map_name"),
-                )
-            raise
+        return msgspec.convert(result, list[MapResponse], from_attributes=True)
 
     async def fetch_partial_map(self, code: OverwatchCode) -> MapPartialResponse:
         """Fetch partial map data.
