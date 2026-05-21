@@ -208,15 +208,15 @@ class TestFetchMapsFilterCategory:
     ) -> None:
         """Test filtering by single category."""
         # Create maps with different categories
-        strive_code = "STRV1"
-        used_codes.add(strive_code)
-        await create_test_map(db_pool, strive_code, category="Strive")
+        other_code = "STRV1"
+        used_codes.add(other_code)
+        await create_test_map(db_pool, other_code, category="Other")
 
-        filters = MapSearchFilters(category=["Strive"])
+        filters = MapSearchFilters(category=["Other"])
         result = await maps_repo.fetch_maps(filters=filters)
 
-        assert all(m["category"] == "Strive" for m in result)
-        assert any(m["code"] == strive_code for m in result)
+        assert all(m["category"] == "Other" for m in result)
+        assert any(m["code"] == other_code for m in result)
 
     @pytest.mark.asyncio
     async def test_filter_by_multiple_categories(
@@ -228,18 +228,18 @@ class TestFetchMapsFilterCategory:
         """Test filtering by multiple categories."""
         # Create maps
         classic_code = "CLAS1"
-        strive_code = "STRV2"
+        other_code = "STRV2"
         used_codes.add(classic_code)
-        used_codes.add(strive_code)
+        used_codes.add(other_code)
 
         await create_test_map(db_pool, classic_code, category="Classic")
-        await create_test_map(db_pool, strive_code, category="Strive")
+        await create_test_map(db_pool, other_code, category="Other")
 
-        filters = MapSearchFilters(category=["Classic", "Strive"])
+        filters = MapSearchFilters(category=["Classic", "Other"])
         result = await maps_repo.fetch_maps(filters=filters)
 
         categories = {m["category"] for m in result}
-        assert categories.issubset({"Classic", "Strive"})
+        assert categories.issubset({"Classic", "Other"})
 
 
 # ==============================================================================
@@ -460,12 +460,12 @@ class TestFetchMapsMultipleFilters:
         """Test combining category and official filters."""
         code = "CMB01"
         used_codes.add(code)
-        await create_test_map(db_pool, code, category="Strive", official=True)
+        await create_test_map(db_pool, code, category="Other", official=True)
 
-        filters = MapSearchFilters(category=["Strive"], official=True)
+        filters = MapSearchFilters(category=["Other"], official=True)
         result = await maps_repo.fetch_maps(filters=filters)
 
-        assert all(m["category"] == "Strive" for m in result)
+        assert all(m["category"] == "Other" for m in result)
         assert all(m["official"] is True for m in result)
 
 

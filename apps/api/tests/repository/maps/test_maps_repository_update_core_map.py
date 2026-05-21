@@ -198,7 +198,7 @@ async def test_update_multiple_fields(
     """Test updating multiple fields at once."""
     updates = {
         "map_name": "Ilios",
-        "category": "Strive",
+        "category": "Other",
         "checkpoints": 15,
         "official": False,
     }
@@ -279,7 +279,7 @@ async def test_update_timestamps_are_automatic(
     await asyncio.sleep(0.1)
 
     # Update the map
-    await maps_repo.update_core_map(existing_map["code"], {"map_name": "Updated"})
+    await maps_repo.update_core_map(existing_map["code"], {"map_name": "Dorado"})
 
     # Get new timestamps
     async with db_pool.acquire() as conn:

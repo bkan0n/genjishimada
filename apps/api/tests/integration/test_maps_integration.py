@@ -143,7 +143,7 @@ class TestSearchMaps:
 
         response = await test_client.get(
             "/api/v3/maps/",
-            params={"map_name": ["Nepal", "Hanamura"]},
+            params={"map_name": ["Nepal", "Hanamura"], "page_size": 100},
         )
 
         assert response.status_code == 200
@@ -392,7 +392,7 @@ class TestCreateMap:
             "code": code,
             "map_name": "Nepal",
             "checkpoints": 20,
-            "category": "Ranked",
+            "category": "Classic",
             "creator_ids": [user_id],
         }
 
@@ -483,7 +483,7 @@ class TestCreateMap:
             "code": unique_map_code,
             "map_name": "Nepal",
             "checkpoints": 20,
-            "category": "Ranked",
+            "category": "Classic",
         }
 
         response = await unauthenticated_client.post("/api/v3/maps/", json=payload)
