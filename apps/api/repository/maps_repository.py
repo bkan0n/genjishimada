@@ -1631,6 +1631,72 @@ class MapsRepository(BaseRepository):
         rows = await _conn.fetch(query, user_id)
         return [dict(row) for row in rows]
 
+    async def is_map_archived(
+        self,
+        code: str,
+        *,
+        conn: Connection | None = None,
+    ) -> bool | None:
+        """Check if a map is archived.
+
+        Args:
+            code: Map code.
+            conn: Optional connection.
+
+        Returns:
+            True if archived, False if not, None if map doesn't exist.
+        """
+        _conn = self._get_connection(conn)
+        return await _conn.fetchval("SELECT archived FROM core.maps WHERE code = $1", code)
+
+    async def has_unresolved_change_requests(
+        self,
+        code: str,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Check if a map has unresolved change requests.
+
+        Args:
+            code: Map code.
+            conn: Optional connection.
+
+        Returns:
+            True if unresolved change requests exist.
+        """
+        _conn = self._get_connection(conn)
+        return await _conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM public.change_requests WHERE code = $1 AND resolved IS FALSE)",
+            code,
+        )
+
+    async def release_code(
+        self,
+        code: str,
+        map_id: int,
+        *,
+        conn: Connection,
+    ) -> None:
+        """Release a map's code for reuse.
+
+        Sets code to NULL and preserves it in original_code.
+        Must be called within a transaction.
+
+        Args:
+            code: Map code to release.
+            map_id: Map ID (for edit_requests cleanup).
+            conn: Connection (required, must be in a transaction).
+        """
+        await conn.execute(
+            "UPDATE maps.edit_requests SET code = NULL WHERE code = $1 AND map_id = $2",
+            code,
+            map_id,
+        )
+        await conn.execute(
+            "UPDATE core.maps SET original_code = code, code = NULL WHERE code = $1 AND archived = TRUE",
+            code,
+        )
+
 
 async def provide_maps_repository(state: State) -> MapsRepository:
     """Litestar DI provider for repository.
