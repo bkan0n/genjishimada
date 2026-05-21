@@ -79,9 +79,11 @@ from services.exceptions.maps import (
     GuideNotFoundError,
     LinkedMapError,
     MapCodeExistsError,
+    MapNotArchivedError,
     MapNotFoundError,
     MapValidationError,
     PendingEditRequestExistsError,
+    UnresolvedChangeRequestsError,
 )
 from utilities.jobs import wait_for_job_completion
 from utilities.map_search import MapSearchFilters
@@ -1941,6 +1943,35 @@ class MapsService(BaseService):
         )
 
         await notification_service.create_and_dispatch(notification_data, headers)
+
+    async def release_code(self, code: str) -> None:
+        """Release a map code for reuse.
+
+        The map must be archived and have no unresolved change requests.
+        Sets the map's code to NULL and preserves it in original_code.
+
+        Args:
+            code: Map code to release.
+
+        Raises:
+            MapNotFoundError: If map doesn't exist.
+            MapNotArchivedError: If map is not archived.
+            UnresolvedChangeRequestsError: If open change requests exist.
+        """
+        map_id = await self._maps_repo.lookup_map_id(code)
+        if map_id is None:
+            raise MapNotFoundError(code)
+
+        is_archived = await self._maps_repo.is_map_archived(code)
+        if not is_archived:
+            raise MapNotArchivedError(code)
+
+        has_open_crs = await self._maps_repo.has_unresolved_change_requests(code)
+        if has_open_crs:
+            raise UnresolvedChangeRequestsError(code, count=0)
+
+        async with self._pool.acquire() as conn, conn.transaction():
+            await self._maps_repo.release_code(code, map_id, conn=conn)
 
 
 async def provide_maps_service(
