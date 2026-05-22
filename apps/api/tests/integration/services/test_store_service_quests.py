@@ -113,7 +113,7 @@ async def test_generate_rival_challenge_bounty(asyncpg_pool, create_test_user, c
         return {
             "map_id": map_id,
             "code": "TEST1",
-            "map_name": "Test Map",
+            "map_name": "King's Row",
             "rival_time": 85.0,
             "user_time": 100.0,
         }

@@ -153,3 +153,27 @@ class InvalidEditResolutionError(MapsError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+# Release code errors
+
+
+class MapNotArchivedError(MapsError):
+    """Map must be archived before its code can be released."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(
+            f"Map {code} is not archived",
+            code=code,
+        )
+
+
+class UnresolvedChangeRequestsError(MapsError):
+    """Cannot release code while unresolved change requests exist."""
+
+    def __init__(self, code: str, count: int) -> None:
+        super().__init__(
+            f"Map {code} has {count} unresolved change request(s)",
+            code=code,
+            count=count,
+        )

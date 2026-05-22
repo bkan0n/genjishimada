@@ -438,6 +438,9 @@ class MapSearchSQLSpecBuilder:
         Args:
             query: Select builder to mutate with WHERE conditions.
         """
+        # Exclude released maps (code set to NULL after release-code operation)
+        query.where_is_not_null("m.code")
+
         if self._filters.code:
             query.where_eq("m.code", self._filters.code)
 

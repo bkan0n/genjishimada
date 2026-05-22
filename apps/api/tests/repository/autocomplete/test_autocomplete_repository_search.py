@@ -183,7 +183,7 @@ class TestGetSimilarMapCodes:
     ) -> None:
         """Test that prefix matches are prioritized over similarity matches."""
         # Arrange - create maps with specific prefix
-        prefix = f"AUTO{uuid4().hex[:4].upper()}"
+        prefix = f"A{uuid4().hex[:3].upper()}"
         code1 = f"{prefix}A"
         code2 = f"{prefix}B"
         global_code_tracker.add(code1)

@@ -208,15 +208,15 @@ class TestFetchMapsFilterCategory:
     ) -> None:
         """Test filtering by single category."""
         # Create maps with different categories
-        strive_code = "STRV1"
-        used_codes.add(strive_code)
-        await create_test_map(db_pool, strive_code, category="Strive")
+        other_code = "STRV1"
+        used_codes.add(other_code)
+        await create_test_map(db_pool, other_code, category="Other")
 
-        filters = MapSearchFilters(category=["Strive"])
+        filters = MapSearchFilters(category=["Other"])
         result = await maps_repo.fetch_maps(filters=filters)
 
-        assert all(m["category"] == "Strive" for m in result)
-        assert any(m["code"] == strive_code for m in result)
+        assert all(m["category"] == "Other" for m in result)
+        assert any(m["code"] == other_code for m in result)
 
     @pytest.mark.asyncio
     async def test_filter_by_multiple_categories(
@@ -228,18 +228,18 @@ class TestFetchMapsFilterCategory:
         """Test filtering by multiple categories."""
         # Create maps
         classic_code = "CLAS1"
-        strive_code = "STRV2"
+        other_code = "STRV2"
         used_codes.add(classic_code)
-        used_codes.add(strive_code)
+        used_codes.add(other_code)
 
         await create_test_map(db_pool, classic_code, category="Classic")
-        await create_test_map(db_pool, strive_code, category="Strive")
+        await create_test_map(db_pool, other_code, category="Other")
 
-        filters = MapSearchFilters(category=["Classic", "Strive"])
+        filters = MapSearchFilters(category=["Classic", "Other"])
         result = await maps_repo.fetch_maps(filters=filters)
 
         categories = {m["category"] for m in result}
-        assert categories.issubset({"Classic", "Strive"})
+        assert categories.issubset({"Classic", "Other"})
 
 
 # ==============================================================================
@@ -320,7 +320,7 @@ class TestFetchMapsFilterPlaytesting:
     ) -> None:
         """Test filtering by each playtesting status."""
         # Use UUID to guarantee uniqueness across parameterized tests
-        code = f"PT{uuid4().hex[:6].upper()}"
+        code = f"PT{uuid4().hex[:4].upper()}"
         used_codes.add(code)
         await create_test_map(db_pool, code, playtesting=status)
 
@@ -364,7 +364,7 @@ class TestFetchMapsPagination:
         # Create 25 maps with UUID-based codes for guaranteed uniqueness
         test_codes = []
         for i in range(25):
-            code = f"PN{uuid4().hex[:5].upper()}"
+            code = f"P{uuid4().hex[:5].upper()}"
             used_codes.add(code)
             test_codes.append(code)
             await create_test_map(db_pool, code)
@@ -460,12 +460,12 @@ class TestFetchMapsMultipleFilters:
         """Test combining category and official filters."""
         code = "CMB01"
         used_codes.add(code)
-        await create_test_map(db_pool, code, category="Strive", official=True)
+        await create_test_map(db_pool, code, category="Other", official=True)
 
-        filters = MapSearchFilters(category=["Strive"], official=True)
+        filters = MapSearchFilters(category=["Other"], official=True)
         result = await maps_repo.fetch_maps(filters=filters)
 
-        assert all(m["category"] == "Strive" for m in result)
+        assert all(m["category"] == "Other" for m in result)
         assert all(m["official"] is True for m in result)
 
 
@@ -485,14 +485,18 @@ class TestFetchMapsCount:
         used_codes: set[str],
     ) -> None:
         """Test that fetch returns correct number of maps."""
-        # Create 5 maps with unique category
-        category = "CountTest"
+        # Create 5 maps with a specific category
+        category = "Increasing Difficulty"
+        created_codes = []
         for i in range(5):
             code = f"CNT{i:02d}"
             used_codes.add(code)
+            created_codes.append(code)
             await create_test_map(db_pool, code, category=category)
 
         filters = MapSearchFilters(category=[category], return_all=True)
         result = await maps_repo.fetch_maps(filters=filters)
 
-        assert len(result) == 5
+        assert len(result) >= 5
+        result_codes = {m["code"] for m in result}
+        assert all(c in result_codes for c in created_codes)

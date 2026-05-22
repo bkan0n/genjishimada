@@ -169,8 +169,8 @@ class TestCheckCodeExistsArchivedHidden:
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """,
                 code,
-                "Archived Map",
-                "Hanamura",
+                "King's Row",
+                "Classic",
                 10,
                 True,
                 "Approved",
@@ -202,8 +202,8 @@ class TestCheckCodeExistsArchivedHidden:
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """,
                 code,
-                "Hidden Map",
-                "Hanamura",
+                "King's Row",
+                "Classic",
                 10,
                 True,
                 "Approved",
@@ -245,8 +245,8 @@ class TestCheckCodeExistsTransaction:
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     """,
                     code,
-                    "Transaction Map",
-                    "Hanamura",
+                    "King's Row",
+                    "Classic",
                     10,
                     True,
                     "Approved",
@@ -279,8 +279,8 @@ class TestCheckCodeExistsTransaction:
                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                         """,
                         code,
-                        "Rollback Map",
-                        "Hanamura",
+                        "King's Row",
+                        "Classic",
                         10,
                         True,
                         "Approved",

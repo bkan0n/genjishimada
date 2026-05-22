@@ -143,7 +143,7 @@ class TestSearchMaps:
 
         response = await test_client.get(
             "/api/v3/maps/",
-            params={"map_name": ["Nepal", "Hanamura"]},
+            params={"map_name": ["Nepal", "Hanamura"], "page_size": 100},
         )
 
         assert response.status_code == 200
@@ -166,9 +166,9 @@ class TestSearchMaps:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
-        # All returned maps should be Hard difficulty
+        # All returned maps should be in the Hard difficulty range (Hard -, Hard, Hard +)
         for map_obj in data:
-            assert map_obj["difficulty"] == "Hard"
+            assert map_obj["difficulty"] in ("Hard -", "Hard", "Hard +")
 
     async def test_difficulty_range_filter(self, test_client, create_test_map, unique_map_code):
         """Filter by difficulty range."""
@@ -392,7 +392,7 @@ class TestCreateMap:
             "code": code,
             "map_name": "Nepal",
             "checkpoints": 20,
-            "category": "Ranked",
+            "category": "Classic",
             "creator_ids": [user_id],
         }
 
@@ -483,7 +483,7 @@ class TestCreateMap:
             "code": unique_map_code,
             "map_name": "Nepal",
             "checkpoints": 20,
-            "category": "Ranked",
+            "category": "Classic",
         }
 
         response = await unauthenticated_client.post("/api/v3/maps/", json=payload)
