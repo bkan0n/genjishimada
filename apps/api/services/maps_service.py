@@ -349,6 +349,8 @@ class MapsService(BaseService):
             core_updates["title"] = data.title
         if data.hidden is not msgspec.UNSET:
             core_updates["hidden"] = data.hidden
+        if data.official is not msgspec.UNSET:
+            core_updates["official"] = data.official
         if data.archived is not msgspec.UNSET:
             core_updates["archived"] = data.archived
         if data.playtesting is not msgspec.UNSET:
