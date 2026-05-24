@@ -967,6 +967,7 @@ class MapsRepository(BaseRepository):
             FROM core.maps
             WHERE hidden IS NOT TRUE
               AND archived IS NOT TRUE
+              AND code IS NOT NULL
         ),
 
         clicks AS (
@@ -1415,7 +1416,7 @@ class MapsRepository(BaseRepository):
             """
             SELECT id, code, message_id
             FROM maps.edit_requests
-            WHERE accepted IS NULL
+            WHERE accepted IS NULL AND code IS NOT NULL
             ORDER BY created_at
             """
         )

@@ -61,6 +61,7 @@ class CompletionsRepository(BaseRepository):
                 difficulty,
                 raw_difficulty
             FROM core.maps
+            WHERE code IS NOT NULL
         ), latest_per_user_all AS (
             SELECT DISTINCT ON (c.user_id, c.map_id)
                 c.user_id,
@@ -269,7 +270,7 @@ class CompletionsRepository(BaseRepository):
                     md.silver,
                     md.bronze
                 FROM ranked r
-                JOIN core.maps m ON m.id = r.map_id
+                JOIN core.maps m ON m.id = r.map_id AND m.code IS NOT NULL
                 LEFT JOIN maps.medals md ON md.map_id = r.map_id
             ),
             user_names AS (
@@ -702,7 +703,7 @@ class CompletionsRepository(BaseRepository):
                 m.difficulty  AS difficulty,
                 m.map_name
             FROM core.completions c
-            JOIN core.maps m ON m.id = c.map_id
+            JOIN core.maps m ON m.id = c.map_id AND m.code IS NOT NULL
             WHERE c.id = $1
         ),
         latest_per_user AS (
@@ -944,7 +945,7 @@ class CompletionsRepository(BaseRepository):
             FALSE AS suspicious,
             count(*) OVER () AS total_results
         FROM core.completions c
-        JOIN core.maps m ON m.id = c.map_id
+        JOIN core.maps m ON m.id = c.map_id AND m.code IS NOT NULL
         JOIN core.users u ON u.id = c.user_id
         LEFT JOIN users.overwatch_usernames ow ON ow.user_id = u.id AND ow.is_primary
         LEFT JOIN maps.medals med ON med.map_id = m.id
@@ -1091,7 +1092,7 @@ class CompletionsRepository(BaseRepository):
             END AS status,
             count(*) OVER () AS total_results
         FROM core.completions c
-        JOIN core.maps m ON m.id = c.map_id
+        JOIN core.maps m ON m.id = c.map_id AND m.code IS NOT NULL
         JOIN core.users u ON u.id = c.user_id
         LEFT JOIN users.overwatch_usernames ow ON ow.user_id = u.id AND ow.is_primary
         LEFT JOIN maps.medals med ON med.map_id = m.id
@@ -1310,7 +1311,7 @@ class CompletionsRepository(BaseRepository):
                     c.legacy_medal,
                     c.inserted_at
                 FROM core.completions c
-                JOIN core.maps m ON m.id = c.map_id
+                JOIN core.maps m ON m.id = c.map_id AND m.code IS NOT NULL
                 {where_sql}
                 ORDER BY c.user_id, c.map_id, c.inserted_at DESC
             ),
@@ -1404,7 +1405,7 @@ class CompletionsRepository(BaseRepository):
                     c.*,
                     RANK() OVER (PARTITION BY c.map_id ORDER BY c.time, c.inserted_at) AS rank
                 FROM core.completions c
-                JOIN core.maps m ON m.id = c.map_id
+                JOIN core.maps m ON m.id = c.map_id AND m.code IS NOT NULL
                 {where_sql}
             )
             SELECT
@@ -1846,7 +1847,7 @@ class CompletionsRepository(BaseRepository):
         query = """
             SELECT c.user_id, m.code, c.time as old_time, c.verified as old_verified
             FROM core.completions c
-            LEFT JOIN core.maps m ON m.id = c.map_id
+            LEFT JOIN core.maps m ON m.id = c.map_id AND m.code IS NOT NULL
             WHERE c.id = $1
         """
         row = await _conn.fetchrow(query, completion_id)

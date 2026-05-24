@@ -163,7 +163,8 @@ class AutocompleteRepository(BaseRepository):
 
         query = """
             SELECT code FROM core.maps
-            WHERE ($2::bool IS NULL OR archived = $2) AND
+            WHERE code IS NOT NULL AND
+            ($2::bool IS NULL OR archived = $2) AND
             ($3::bool IS NULL OR hidden = $3) AND
             ($4::playtest_status IS NULL OR playtesting = $4)
             ORDER BY
@@ -206,7 +207,8 @@ class AutocompleteRepository(BaseRepository):
 
         query = """
             SELECT code FROM core.maps
-            WHERE ($2::bool IS NULL OR archived = $2) AND
+            WHERE code IS NOT NULL AND
+            ($2::bool IS NULL OR archived = $2) AND
             ($3::bool IS NULL OR hidden = $3) AND
             ($4::playtest_status IS NULL OR playtesting = $4)
             ORDER BY
