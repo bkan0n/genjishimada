@@ -134,7 +134,6 @@ async def get_user_rank_data(conn: Connection, user_id: int) -> list[RankDetailR
             LEFT JOIN maps.medals mm ON uc.map_id = mm.map_id
             WHERE uc.user_id = $1
               AND m.official = TRUE
-              AND m.archived = FALSE
               AND m.playtesting = 'Approved'
     ),
     counts_data AS (
