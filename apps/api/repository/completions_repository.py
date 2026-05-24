@@ -1221,7 +1221,7 @@ class CompletionsRepository(BaseRepository):
         )
         SELECT EXISTS(
             SELECT 1 FROM core.completions c
-            LEFT JOIN target_map tm ON c.map_id = tm.map_id
+            INNER JOIN target_map tm ON c.map_id = tm.map_id
             WHERE user_id=$2 AND NOT legacy AND wr_xp_check
         )
         """
