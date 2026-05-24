@@ -498,7 +498,8 @@ class StoreRepository(BaseRepository):
                 m.category
             FROM core.completions c
             JOIN core.maps m ON m.id = c.map_id
-            WHERE c.user_id = $1 AND c.verified = TRUE AND c.legacy = FALSE AND m.archived = FALSE AND m.code IS NOT NULL
+            WHERE c.user_id = $1 AND c.verified = TRUE AND c.legacy = FALSE
+              AND m.archived = FALSE AND m.code IS NOT NULL
             GROUP BY c.map_id, m.code, m.map_name, m.difficulty, m.category
             """,
             user_id,
