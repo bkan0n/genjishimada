@@ -272,9 +272,9 @@ class TestGetPopularCreators:
         assert isinstance(data, list)
         if data:
             item = data[0]
-            assert "creator_name" in item
+            assert "name" in item
             assert "average_quality" in item
-            assert isinstance(item["creator_name"], str)
+            assert isinstance(item["name"], str)
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get popular creators without auth returns 401."""
