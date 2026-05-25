@@ -5,7 +5,14 @@ from __future__ import annotations
 from asyncpg import Pool
 from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, Rank
 from genjishimada_sdk.helpers import sanitize_string
-from genjishimada_sdk.rank_card import AvatarResponse, BackgroundResponse, RankCardBadgeSettings, RankCardResponse
+from genjishimada_sdk.rank_card import (
+    RANK_CARD_FILTER_MAP,
+    AvatarResponse,
+    BackgroundResponse,
+    RankCardBadgeSettings,
+    RankCardFilter,
+    RankCardResponse,
+)
 from genjishimada_sdk.users import RankDetailResponse
 from litestar.datastructures import State
 
@@ -209,11 +216,14 @@ class RankCardService(BaseService):
                 highest = DIFFICULTY_TO_RANK_MAP[row.difficulty]
         return highest
 
-    async def get_rank_card_data(self, user_id: int) -> RankCardResponse:
+    async def get_rank_card_data(
+        self, user_id: int, *, map_filter: RankCardFilter = "official_playable"
+    ) -> RankCardResponse:
         """Assemble all rank card data for a user.
 
         Args:
             user_id: User ID.
+            map_filter: Filter preset controlling which maps are included in stats.
 
         Returns:
             Complete rank card information including ranks, nickname, avatar,
@@ -223,16 +233,21 @@ class RankCardService(BaseService):
             UserNotFoundError: If user does not exist.
         """
         await self._ensure_user_exists(user_id)
+        official, playable_only = RANK_CARD_FILTER_MAP[map_filter]
 
         async with self._pool.acquire() as conn:
-            rank_data = await get_user_rank_data(conn, user_id)  # type: ignore[arg-type]
+            rank_data = await get_user_rank_data(conn, user_id, official=official, playable_only=playable_only)  # type: ignore[arg-type]
             nickname = await self._rank_card_repo.fetch_nickname(user_id, conn=conn)  # type: ignore[arg-type]
             background_row = await self._rank_card_repo.fetch_background(user_id, conn=conn)  # type: ignore[arg-type]
             maps_count = await self._rank_card_repo.fetch_maps_created_count(user_id, conn=conn)  # type: ignore[arg-type]
             playtests_count = await self._rank_card_repo.fetch_playtests_voted_count(user_id, conn=conn)  # type: ignore[arg-type]
             world_records = await self._rank_card_repo.fetch_world_record_count(user_id, conn=conn)  # type: ignore[arg-type]
             avatar_row = await self._rank_card_repo.fetch_avatar(user_id, conn=conn)  # type: ignore[arg-type]
-            totals = await self._rank_card_repo.fetch_map_totals(conn=conn)  # type: ignore[arg-type]
+            totals = await self._rank_card_repo.fetch_map_totals(
+                official=official,
+                playable_only=playable_only,
+                conn=conn,  # type: ignore[arg-type]
+            )
             xp_data = await self._rank_card_repo.fetch_community_rank_xp(user_id, conn=conn)  # type: ignore[arg-type]
 
         badges = await self.get_badges(user_id)

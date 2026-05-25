@@ -4,10 +4,16 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from genjishimada_sdk.rank_card import AvatarResponse, BackgroundResponse, RankCardBadgeSettings, RankCardResponse
+from genjishimada_sdk.rank_card import (
+    AvatarResponse,
+    BackgroundResponse,
+    RankCardBadgeSettings,
+    RankCardFilter,
+    RankCardResponse,
+)
 from litestar import Controller, get, put
 from litestar.di import Provide
-from litestar.params import Body
+from litestar.params import Body, Parameter
 from litestar.response import Response
 from litestar.status_codes import HTTP_204_NO_CONTENT, HTTP_404_NOT_FOUND
 from msgspec import Struct
@@ -55,6 +61,13 @@ class RankCardController(Controller):
         self,
         rank_card_service: RankCardService,
         user_id: int,
+        map_filter: Annotated[
+            RankCardFilter,
+            Parameter(
+                query="filter",
+                description="Filter preset for which maps to include in stats.",
+            ),
+        ] = "official_playable",
     ) -> RankCardResponse:
         """Get the full rank card payload for a user.
 
@@ -64,12 +77,13 @@ class RankCardController(Controller):
         Args:
             rank_card_service: Service dependency.
             user_id: Target user ID from the URL path.
+            map_filter: Filter preset controlling which maps are included.
 
         Returns:
             The complete rank card model ready for rendering (200 OK).
         """
         try:
-            return await rank_card_service.get_rank_card_data(user_id)
+            return await rank_card_service.get_rank_card_data(user_id, map_filter=map_filter)
         except UserNotFoundError as e:
             raise CustomHTTPException(detail=e.message, status_code=HTTP_404_NOT_FOUND)
 

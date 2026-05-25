@@ -1,15 +1,28 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from msgspec import Struct
 
 from .difficulties import DifficultyTop
 from .helpers import sanitize_string
 
+RankCardFilter = Literal["official_playable", "official_all", "unofficial_playable", "unofficial_all"]
+
+RANK_CARD_FILTER_MAP: dict[RankCardFilter, tuple[bool, bool]] = {
+    "official_playable": (True, True),
+    "official_all": (True, False),
+    "unofficial_playable": (False, True),
+    "unofficial_all": (False, False),
+}
+
 __all__ = (
+    "RANK_CARD_FILTER_MAP",
     "AvatarResponse",
     "BackgroundResponse",
     "RankCardBadgeSettings",
     "RankCardDifficultiesData",
+    "RankCardFilter",
     "RankCardResponse",
 )
 

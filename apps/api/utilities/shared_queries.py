@@ -79,12 +79,20 @@ async def get_map_mastery_data(
     return msgspec.convert(rows, list[MapMasteryResponse])
 
 
-async def get_user_rank_data(conn: Connection, user_id: int) -> list[RankDetailResponse]:
+async def get_user_rank_data(
+    conn: Connection,
+    user_id: int,
+    *,
+    official: bool = True,
+    playable_only: bool = True,
+) -> list[RankDetailResponse]:
     """Compute rank details for a user based on verified completions and medal thresholds.
 
     Args:
         conn (Connection): Asyncpg connection
         user_id (int): The ID of the user.
+        official: Whether to filter for official maps (True) or non-official (False).
+        playable_only: When True, exclude archived maps and require approved playtesting.
 
     Returns:
         list[RankDetailResponse]: Per-difficulty counts and rank-met flags.
@@ -133,9 +141,9 @@ async def get_user_rank_data(conn: Connection, user_id: int) -> list[RankDetailR
             LEFT JOIN core.maps m ON uc.map_id = m.id
             LEFT JOIN maps.medals mm ON uc.map_id = mm.map_id
             WHERE uc.user_id = $1
-              AND m.official = TRUE
-              AND m.archived = FALSE
-              AND m.playtesting = 'Approved'
+              AND m.official = $2
+              AND ($3::boolean IS FALSE OR m.archived = FALSE)
+              AND ($3::boolean IS FALSE OR m.playtesting = 'Approved')
     ),
     counts_data AS (
         SELECT
@@ -175,5 +183,5 @@ async def get_user_rank_data(conn: Connection, user_id: int) -> list[RankDetailR
             WHEN 'Hell' THEN 6
         END;
     """
-    rows = await conn.fetch(query, user_id)
+    rows = await conn.fetch(query, user_id, official, playable_only)
     return msgspec.convert(rows, list[RankDetailResponse])

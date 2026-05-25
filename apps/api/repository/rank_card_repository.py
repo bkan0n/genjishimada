@@ -301,11 +301,15 @@ class RankCardRepository(BaseRepository):
     async def fetch_map_totals(
         self,
         *,
+        official: bool = True,
+        playable_only: bool = True,
         conn: Connection | None = None,
     ) -> list[dict]:
-        """Get total count of official, non-archived maps by difficulty.
+        """Get total count of maps by difficulty with configurable filters.
 
         Args:
+            official: Whether to filter for official maps (True) or non-official (False).
+            playable_only: When True, exclude archived maps and require approved playtesting.
             conn: Optional connection for transaction participation.
 
         Returns:
@@ -318,13 +322,13 @@ class RankCardRepository(BaseRepository):
                 regexp_replace(m.difficulty::text, '\s*[-+]\s*$', '') AS base_difficulty,
                 count(*) AS total
             FROM core.maps AS m
-            WHERE m.official = TRUE
-                AND m.archived = FALSE
-                AND m.playtesting = 'Approved'
+            WHERE m.official = $1
+                AND ($2::boolean IS FALSE OR m.archived = FALSE)
+                AND ($2::boolean IS FALSE OR m.playtesting = 'Approved')
             GROUP BY base_difficulty
             ORDER BY base_difficulty
         """
-        rows = await _conn.fetch(query)
+        rows = await _conn.fetch(query, official, playable_only)
         return [dict(row) for row in rows]
 
     async def fetch_world_record_count(
