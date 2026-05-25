@@ -319,6 +319,7 @@ class RankCardRepository(BaseRepository):
                 count(*) AS total
             FROM core.maps AS m
             WHERE m.official = TRUE
+                AND m.archived = FALSE
                 AND m.playtesting = 'Approved'
             GROUP BY base_difficulty
             ORDER BY base_difficulty
