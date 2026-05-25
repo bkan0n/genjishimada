@@ -10387,6 +10387,26 @@
             },
             "required": true,
             "deprecated": false
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "official_playable",
+                "official_all",
+                "unofficial_playable",
+                "unofficial_all"
+              ],
+              "description": "Filter preset for which maps to include in stats.",
+              "default": "official_playable"
+            },
+            "description": "Filter preset for which maps to include in stats.",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
           }
         ],
         "responses": {
