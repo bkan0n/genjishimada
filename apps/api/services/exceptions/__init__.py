@@ -82,6 +82,7 @@ from .store import (
 )
 from .tournaments import (
     CategoryLockedError,
+    CategoryNameExistsError,
     CycleAlreadyActiveError,
     CycleNotActiveError,
     CycleNotFoundError,
@@ -107,6 +108,7 @@ __all__ = [
     "AlreadyOwnedError",
     "AuthError",
     "CategoryLockedError",
+    "CategoryNameExistsError",
     "CategoryNotFoundError",
     "ChangeRequestAlreadyExistsError",
     "ChangeRequestsError",
