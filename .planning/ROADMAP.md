@@ -49,10 +49,10 @@ Plans:
   2. Domain exception classes exist in `services/exceptions/tournaments.py` covering tournament-specific error conditions
   3. Repository exception mappings cover tournament-specific constraint violations
   4. SDK types pass lint and type-check (`just lint-sdk`)
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 02-01-PLAN.md -- SDK tournaments.py module with all msgspec Structs and type aliases
+- [x] 02-01-PLAN.md -- SDK tournaments.py module with all msgspec Structs and type aliases
 - [ ] 02-02-PLAN.md -- Domain exception hierarchy and barrel __init__.py updates
 
 ### Phase 3: Repository Layer
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Database Schema & Migrations | 1/1 | Complete   | 2026-05-29 |
-| 2. SDK Types & Domain Exceptions | 0/2 | Planned | - |
+| 2. SDK Types & Domain Exceptions | 1/2 | In Progress|  |
 | 3. Repository Layer | 0/0 | Not started | - |
 | 4. Config & Category Management | 0/0 | Not started | - |
 | 5. Map Selection & Blacklist | 0/0 | Not started | - |
