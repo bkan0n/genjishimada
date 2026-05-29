@@ -448,17 +448,19 @@ class TournamentRepository(BaseRepository):
         difficulties: list[str],
         blacklist_weeks: int,
         *,
+        exclude_map_ids: list[int] | None = None,
         conn: Connection | None = None,
     ) -> list[dict]:
         """Fetch maps eligible for tournament selection.
 
         Filters to official, non-archived maps matching the category's
         difficulties, excluding maps used in any tournament cycle within
-        the blacklist window.
+        the blacklist window and maps in pending cycles.
 
         Args:
             difficulties: List of DifficultyTop values to match.
             blacklist_weeks: Number of weeks for map cooldown.
+            exclude_map_ids: Optional list of map IDs to exclude (for reroll).
             conn: Optional connection for transaction support.
 
         Returns:
@@ -477,9 +479,18 @@ class TournamentRepository(BaseRepository):
                   FROM tournaments.cycles cy
                   WHERE cy.started_at > now() - make_interval(weeks => $2)
               )
-            ORDER BY random()
+              AND m.id NOT IN (
+                  SELECT cy.map_id
+                  FROM tournaments.cycles cy
+                  WHERE cy.status = 'pending'
+              )
         """
-        rows = await _conn.fetch(query, difficulties, blacklist_weeks)
+        args: list[object] = [difficulties, blacklist_weeks]
+        if exclude_map_ids:
+            query += "              AND m.id != ALL($3::int[])\n"
+            args.append(exclude_map_ids)
+        query += "            ORDER BY random()\n"
+        rows = await _conn.fetch(query, *args)
         return [dict(row) for row in rows]
 
     async def fetch_least_recently_used_map(
@@ -513,6 +524,74 @@ class TournamentRepository(BaseRepository):
             LIMIT 1
         """
         row = await _conn.fetchrow(query, difficulties)
+        return dict(row) if row else None
+
+    async def fetch_pending_cycle(
+        self,
+        category_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch the pending cycle for a category with joined map details.
+
+        Args:
+            category_id: Category ID to look up.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Pending cycle dict with map details, or None if no pending cycle.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT cy.id, cy.category_id, cy.map_id, cy.status,
+                   cy.started_at, cy.ended_at, cy.created_at,
+                   m.code AS map_code, m.map_name, m.difficulty AS map_difficulty
+            FROM tournaments.cycles cy
+            JOIN core.maps m ON m.id = cy.map_id
+            WHERE cy.category_id = $1 AND cy.status = 'pending'
+            LIMIT 1
+        """
+        row = await _conn.fetchrow(query, category_id)
+        return dict(row) if row else None
+
+    async def delete_cycle(
+        self,
+        cycle_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Delete a tournament cycle by ID.
+
+        Args:
+            cycle_id: Cycle ID to delete.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            True if a cycle was deleted, False if not found.
+        """
+        _conn = self._get_connection(conn)
+        query = "DELETE FROM tournaments.cycles WHERE id = $1 RETURNING id"
+        result = await _conn.fetchval(query, cycle_id)
+        return result is not None
+
+    async def fetch_map_by_code(
+        self,
+        map_code: str,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch a map from core.maps by its workshop code.
+
+        Args:
+            map_code: Workshop code of the map.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Map dict with id, code, map_name, difficulty, or None if not found.
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT id, code, map_name, difficulty FROM core.maps WHERE code = $1"
+        row = await _conn.fetchrow(query, map_code)
         return dict(row) if row else None
 
     # =========================================================================
