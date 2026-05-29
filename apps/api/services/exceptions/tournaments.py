@@ -22,6 +22,13 @@ class CategoryLockedError(TournamentsError):
         )
 
 
+class CategoryNameExistsError(TournamentsError):
+    """A tournament category with this name already exists."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"A tournament category named '{name}' already exists.", name=name)
+
+
 class CategoryNotFoundError(TournamentsError):
     """Tournament category does not exist."""
 

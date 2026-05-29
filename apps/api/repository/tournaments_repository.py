@@ -259,7 +259,7 @@ class TournamentRepository(BaseRepository):
         category_id: int,
         *,
         conn: Connection | None = None,
-    ) -> bool:
+    ) -> int | None:
         """Check if a category has an active or finalizing cycle.
 
         Args:
@@ -267,19 +267,18 @@ class TournamentRepository(BaseRepository):
             conn: Optional connection for transaction support.
 
         Returns:
-            True if an active or finalizing cycle exists.
+            Cycle ID if an active or finalizing cycle exists, None otherwise.
         """
         _conn = self._get_connection(conn)
-        exists = await _conn.fetchval(
+        return await _conn.fetchval(
             """
-            SELECT 1
+            SELECT id
             FROM tournaments.cycles
             WHERE category_id = $1 AND status IN ('active', 'finalizing')
             LIMIT 1
             """,
             category_id,
         )
-        return bool(exists)
 
     # =========================================================================
     # Cycles
