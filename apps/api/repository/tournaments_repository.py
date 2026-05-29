@@ -582,6 +582,209 @@ class TournamentRepository(BaseRepository):
             raise RepoFKError(constraint_name, "tournaments.streaks", str(e)) from e
 
     # =========================================================================
+    # Completions
+    # =========================================================================
+
+    async def create_tournament_completion(  # noqa: PLR0913
+        self,
+        cycle_id: int,
+        user_id: int,
+        map_id: int,
+        time: float,
+        screenshot: str,
+        video: str | None = None,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Create a tournament completion record.
+
+        Args:
+            cycle_id: Cycle the completion belongs to.
+            user_id: User submitting the completion.
+            map_id: Map that was completed.
+            time: Completion time in seconds.
+            screenshot: Screenshot proof URL.
+            video: Optional video proof URL.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Created tournament completion as dict.
+
+        Raises:
+            UniqueConstraintViolationError: If duplicate submission for cycle/user/timestamp.
+            RepoFKError: If cycle_id, user_id, or map_id doesn't exist.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, video)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+        """
+        try:
+            row = await _conn.fetchrow(query, cycle_id, user_id, map_id, time, screenshot, video)
+            return dict(row) if row else {}
+        except UniqueViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise UniqueConstraintViolationError(constraint_name, "tournaments.completions", str(e)) from e
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "tournaments.completions", str(e)) from e
+
+    async def cross_write_to_core(  # noqa: PLR0913
+        self,
+        tournament_completion_id: int,
+        user_id: int,
+        map_id: int,
+        time: float,
+        screenshot: str,
+        video: str | None = None,
+        *,
+        conn: Connection | None = None,
+    ) -> int | None:
+        """Conditionally write tournament completion to core.completions.
+
+        Only inserts when tournament time is strictly faster than the user's
+        current best non-legacy time for this map. The CTE pre-checks to
+        avoid triggering enforce_speed_rules_nonlegacy_only() errors.
+
+        Args:
+            tournament_completion_id: ID of the tournament completion record.
+            user_id: User ID.
+            map_id: Map ID.
+            time: Completion time in seconds.
+            screenshot: Screenshot proof URL.
+            video: Optional video proof URL.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The new core.completions ID if inserted, None if skipped (time not faster).
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            WITH current_best AS (
+                SELECT MIN(c.time) AS best_time
+                FROM core.completions c
+                WHERE c.user_id = $2
+                  AND c.map_id = $3
+                  AND c.legacy = FALSE
+            ),
+            should_insert AS (
+                SELECT
+                    CASE
+                        WHEN cb.best_time IS NULL THEN TRUE
+                        WHEN $4 < cb.best_time THEN TRUE
+                        ELSE FALSE
+                    END AS do_insert
+                FROM current_best cb
+            ),
+            map_flags AS (
+                SELECT
+                    m.official,
+                    (m.playtesting = 'In Progress') AS in_playtest
+                FROM core.maps m
+                WHERE m.id = $3
+            ),
+            computed AS (
+                SELECT
+                    (mf.in_playtest
+                     OR $6::text IS NULL OR $6::text = ''
+                     OR NOT mf.official) AS completion_flag
+                FROM map_flags mf
+            )
+            INSERT INTO core.completions (
+                map_id, user_id, time, screenshot, video,
+                completion, tournament_completion_id
+            )
+            SELECT $3, $2, $4, $5, $6, co.completion_flag, $1
+            FROM should_insert si
+            CROSS JOIN computed co
+            WHERE si.do_insert = TRUE
+            RETURNING id
+        """
+        return await _conn.fetchval(
+            query,
+            tournament_completion_id,  # $1
+            user_id,  # $2
+            map_id,  # $3
+            time,  # $4
+            screenshot,  # $5
+            video,  # $6
+        )
+
+    async def fetch_leaderboard(
+        self,
+        cycle_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch ranked leaderboard for a tournament cycle.
+
+        Returns best-per-user submissions ranked by tier-then-time:
+        verified completions outrank unverified, fastest time wins within tier.
+
+        Args:
+            cycle_id: Cycle to fetch leaderboard for.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of ranked leaderboard entry dicts.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            WITH best_per_user AS (
+                SELECT DISTINCT ON (tc.user_id)
+                    tc.user_id,
+                    tc.time,
+                    tc.verified,
+                    tc.completion
+                FROM tournaments.completions tc
+                WHERE tc.cycle_id = $1
+                ORDER BY tc.user_id, tc.verified DESC, tc.time ASC
+            )
+            SELECT
+                RANK() OVER (ORDER BY bpu.verified DESC, bpu.time ASC)::int AS rank,
+                bpu.user_id,
+                COALESCE(u.global_name, u.nickname, 'Unknown') AS name,
+                bpu.time::float AS time,
+                bpu.verified,
+                bpu.completion
+            FROM best_per_user bpu
+            JOIN core.users u ON u.id = bpu.user_id
+            ORDER BY bpu.verified DESC, bpu.time ASC
+        """
+        rows = await _conn.fetch(query, cycle_id)
+        return [dict(row) for row in rows]
+
+    async def fetch_user_completion(
+        self,
+        cycle_id: int,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch a user's best tournament completion for a cycle.
+
+        Returns the best submission ranked by verified status then time.
+
+        Args:
+            cycle_id: Cycle to look up.
+            user_id: User to look up.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Best completion dict or None if user hasn't submitted.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT * FROM tournaments.completions
+            WHERE cycle_id = $1 AND user_id = $2
+            ORDER BY verified DESC, time ASC
+            LIMIT 1
+        """
+        row = await _conn.fetchrow(query, cycle_id, user_id)
+        return dict(row) if row else None
+
+    # =========================================================================
     # Pending Transitions
     # =========================================================================
 
