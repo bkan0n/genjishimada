@@ -115,7 +115,7 @@ Plans:
   4. Admin can reroll a specific category's next map or explicitly choose a map via the API
   5. When the eligible pool is exhausted, the system falls back to the least-recently-used map and logs a warning
 
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -124,7 +124,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 05-02-PLAN.md -- Service business logic and controller endpoints for map selection
+- [x] 05-02-PLAN.md -- Service business logic and controller endpoints for map selection
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -214,7 +214,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 2. SDK Types & Domain Exceptions | 2/2 | Complete   | 2026-05-29 |
 | 3. Repository Layer | 2/2 | Complete   | 2026-05-29 |
 | 4. Config & Category Management | 2/2 | Complete   | 2026-05-29 |
-| 5. Map Selection & Blacklist | 1/3 | In progress | - |
+| 5. Map Selection & Blacklist | 2/3 | In Progress|  |
 | 6. Submission Flow & Leaderboard | 0/0 | Not started | - |
 | 7. Automatic Cycle Transitions | 0/0 | Not started | - |
 | 8. Rewards Engine | 0/0 | Not started | - |

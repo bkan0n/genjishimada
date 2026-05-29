@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-05-29T23:50:34Z"
-last_activity: 2026-05-29 -- Phase 05 Plan 01 complete
+last_updated: "2026-05-29T23:57:08.133Z"
+last_activity: 2026-05-29
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 10
-  completed_plans: 8
-  percent: 45
+  completed_plans: 9
+  percent: 40
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-29)
 ## Current Position
 
 Phase: 05 (Map Selection & Blacklist) — EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 05
-Last activity: 2026-05-29 -- Phase 05 Plan 01 complete
+Plan: 3 of 3
+Status: Ready to execute
+Last activity: 2026-05-29
 
-Progress: [██████████] 100%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 02 P01 | 2min | 2 tasks | 2 files |
 | Phase 02 P02 | 3min | 2 tasks | 2 files |
 | Phase 05 P01 | 3min | 2 tasks | 4 files |
+| Phase 05 P02 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ Recent decisions affecting current work:
 - [Phase ?]: JSONB columns modeled as typed sub-structs (PlacementXpTier, StreakXpTier) for compile-time validation
 - [Phase ?]: Used aliased barrel import (TournamentsCategoryNotFoundError) matching existing CompletionsMapNotFoundError convention
 - [Phase 05]: Conditional SQL query building pattern for optional exclude_map_ids in fetch_eligible_maps
+- [Phase 05]: Used re.sub difficulty normalization for choose_map validation, matching SQL regexp_replace pattern
+- [Phase 05]: choose_map silently replaces existing pending cycle rather than requiring explicit reroll first
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-29T23:50:34Z
-Stopped at: Completed 05-01-PLAN.md
-Resume file: .planning/phases/05-map-selection-blacklist/05-02-PLAN.md
+Last session: 2026-05-29T23:57:08.129Z
+Stopped at: Completed 05-02-PLAN.md
+Resume file: .planning/phases/05-map-selection-blacklist/05-03-PLAN.md
