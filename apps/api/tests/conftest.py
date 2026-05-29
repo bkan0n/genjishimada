@@ -47,6 +47,7 @@ def pytest_configure(config: Any) -> None:
     config.addinivalue_line("markers", "domain_store: Tests for store domain")
     config.addinivalue_line("markers", "domain_content: Tests for content domain")
     config.addinivalue_line("markers", "domain_tags: Tests for tags domain")
+    config.addinivalue_line("markers", "domain_tournaments: Tests for tournaments domain")
 
 
 MIGRATIONS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "migrations"))

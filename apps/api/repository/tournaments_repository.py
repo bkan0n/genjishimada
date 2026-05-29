@@ -476,7 +476,7 @@ class TournamentRepository(BaseRepository):
               AND m.id NOT IN (
                   SELECT cy.map_id
                   FROM tournaments.cycles cy
-                  WHERE cy.started_at > now() - ($2 || ' weeks')::interval
+                  WHERE cy.started_at > now() - make_interval(weeks => $2)
               )
             ORDER BY random()
         """
