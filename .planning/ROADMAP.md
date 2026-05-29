@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Database Schema & Migrations** - Create the tournaments PostgreSQL schema with all tables, constraints, and indexes (completed 2026-05-29)
 - [x] **Phase 2: SDK Types & Domain Exceptions** - Define shared msgspec Structs and domain exception hierarchy for the tournament system (completed 2026-05-29)
-- [ ] **Phase 3: Repository Layer** - Implement raw SQL data access for all tournament operations
+- [x] **Phase 3: Repository Layer** - Implement raw SQL data access for all tournament operations (completed 2026-05-29)
 - [ ] **Phase 4: Config & Category Management** - Service and controller layer for tournament configuration and category CRUD
 - [ ] **Phase 5: Map Selection & Blacklist** - Random map selection engine with cooldown window, pre-roll, and admin reroll
 - [ ] **Phase 6: Submission Flow & Leaderboard** - Tournament completion submissions with tier-then-time ranking, cross-write, and leaderboard
@@ -64,7 +64,11 @@ Plans:
   2. Repository methods follow the existing pattern (optional `conn` parameter, `self._get_connection(conn)`, positional `$N` parameters)
   3. Cross-write query uses a CTE that checks current best time before inserting into `core.completions`, avoiding the speed enforcement trigger
   4. Leaderboard query uses `RANK() OVER (ORDER BY verification_tier DESC, time ASC)` for tier-then-time ranking
-**Plans**: TBD
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 03-01-PLAN.md -- TournamentRepository class with all 22 SQL methods
+- [x] 03-02-PLAN.md -- Tournament repository test suite with fixtures and coverage
 
 ### Phase 4: Config & Category Management
 **Goal**: Admins can create, read, update, and manage tournament configuration and difficulty-based categories through the API
@@ -75,7 +79,11 @@ Plans:
   2. Admin can create, list, update, and delete tournament categories with difficulty groupings
   3. Category modifications are rejected with a clear error when a cycle is currently active for that category
   4. Non-admin API requests to config/category endpoints are rejected by scope guard
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md -- TournamentService with config and category business logic, exception additions, repo tweak
+- [ ] 04-02-PLAN.md -- TournamentsController with 7 REST endpoints and integration tests
 
 ### Phase 5: Map Selection & Blacklist
 **Goal**: The system can randomly select eligible maps for each category while respecting the blacklist cooldown window, and admins can preview and override selections
@@ -156,8 +164,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 |-------|----------------|--------|-----------|
 | 1. Database Schema & Migrations | 1/1 | Complete   | 2026-05-29 |
 | 2. SDK Types & Domain Exceptions | 2/2 | Complete   | 2026-05-29 |
-| 3. Repository Layer | 0/0 | Not started | - |
-| 4. Config & Category Management | 0/0 | Not started | - |
+| 3. Repository Layer | 2/2 | Complete   | 2026-05-29 |
+| 4. Config & Category Management | 0/2 | Planned | - |
 | 5. Map Selection & Blacklist | 0/0 | Not started | - |
 | 6. Submission Flow & Leaderboard | 0/0 | Not started | - |
 | 7. Automatic Cycle Transitions | 0/0 | Not started | - |
