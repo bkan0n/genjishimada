@@ -9,8 +9,10 @@ from genjishimada_sdk.tournaments import (
     TournamentCategoryCreateRequest,
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
+    TournamentChooseMapRequest,
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
+    TournamentNextCycleResponse,
 )
 from litestar.di import Provide
 from litestar.params import Body, Parameter
@@ -21,6 +23,7 @@ from litestar.status_codes import (
     HTTP_204_NO_CONTENT,
     HTTP_404_NOT_FOUND,
     HTTP_409_CONFLICT,
+    HTTP_422_UNPROCESSABLE_ENTITY,
 )
 
 from repository.tournaments_repository import provide_tournament_repository
@@ -28,6 +31,10 @@ from services.exceptions.tournaments import (
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
+    MapNotEligibleError,
+    NoEligibleMapsError,
+    PendingCycleAlreadyExistsError,
+    PendingCycleNotFoundError,
 )
 from services.tournament_service import TournamentService, provide_tournament_service
 from utilities.errors import CustomHTTPException
@@ -243,5 +250,164 @@ class TournamentsController(litestar.Controller):
         except CategoryLockedError as e:
             raise CustomHTTPException(
                 status_code=HTTP_409_CONFLICT,
+                detail=str(e),
+            ) from e
+
+    @litestar.get(
+        path="/categories/{category_id:int}/next-cycle",
+        summary="Preview Next Cycle",
+        description="Preview the pending next cycle for a category.",
+        opt={"required_scopes": {"tournaments:read"}},
+    )
+    async def get_next_cycle(
+        self,
+        tournament_service: TournamentService,
+        category_id: Annotated[int, Parameter(description="Category ID")],
+    ) -> TournamentNextCycleResponse:
+        """Preview the pending next cycle.
+
+        Args:
+            tournament_service: Tournament service.
+            category_id: Category ID.
+
+        Returns:
+            Pending cycle preview with map details.
+
+        Raises:
+            CustomHTTPException: 404 if category or pending cycle not found.
+        """
+        try:
+            return await tournament_service.get_next_cycle(category_id)
+        except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except PendingCycleNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+
+    @litestar.post(
+        path="/categories/{category_id:int}/select-map",
+        summary="Select Map",
+        description="Trigger random map selection for next cycle.",
+        status_code=HTTP_201_CREATED,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def select_map(
+        self,
+        tournament_service: TournamentService,
+        category_id: Annotated[int, Parameter(description="Category ID")],
+    ) -> TournamentNextCycleResponse:
+        """Trigger random map selection for next cycle.
+
+        Args:
+            tournament_service: Tournament service.
+            category_id: Category ID.
+
+        Returns:
+            Created pending cycle with map details.
+
+        Raises:
+            CustomHTTPException: 404 if category not found, 409 if pending exists, 422 if no eligible maps.
+        """
+        try:
+            return await tournament_service.select_map(category_id)
+        except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except PendingCycleAlreadyExistsError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_409_CONFLICT,
+                detail=str(e),
+            ) from e
+        except NoEligibleMapsError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            ) from e
+
+    @litestar.post(
+        path="/categories/{category_id:int}/reroll",
+        summary="Reroll Map",
+        description="Delete current pending cycle and select a new map.",
+        status_code=HTTP_201_CREATED,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def reroll_map(
+        self,
+        tournament_service: TournamentService,
+        category_id: Annotated[int, Parameter(description="Category ID")],
+    ) -> TournamentNextCycleResponse:
+        """Delete current pending cycle and select a new map.
+
+        Args:
+            tournament_service: Tournament service.
+            category_id: Category ID.
+
+        Returns:
+            New pending cycle with map details.
+
+        Raises:
+            CustomHTTPException: 404 if category or pending not found, 422 if no eligible maps.
+        """
+        try:
+            return await tournament_service.reroll_map(category_id)
+        except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except PendingCycleNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except NoEligibleMapsError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            ) from e
+
+    @litestar.patch(
+        path="/categories/{category_id:int}/next-cycle",
+        summary="Choose Map",
+        description="Explicitly set the map for next cycle.",
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def choose_map(
+        self,
+        tournament_service: TournamentService,
+        category_id: Annotated[int, Parameter(description="Category ID")],
+        data: Annotated[TournamentChooseMapRequest, Body(title="Choose Map")],
+    ) -> TournamentNextCycleResponse:
+        """Explicitly set the map for next cycle.
+
+        Args:
+            tournament_service: Tournament service.
+            category_id: Category ID.
+            data: Request with the map code.
+
+        Returns:
+            Pending cycle with chosen map details.
+
+        Raises:
+            CustomHTTPException: 404 if category not found, 422 if map not eligible.
+        """
+        try:
+            return await tournament_service.choose_map(category_id, data)
+        except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except MapNotEligibleError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(e),
             ) from e
