@@ -95,7 +95,12 @@ Plans:
   3. Next-cycle maps are pre-generated and stored so admins can preview them before the cycle starts
   4. Admin can reroll a specific category's next map or explicitly choose a map via the API
   5. When the eligible pool is exhausted, the system falls back to the least-recently-used map and logs a warning
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md -- SDK structs, domain exceptions, and repository methods for map selection
+- [ ] 05-02-PLAN.md -- Service business logic and controller endpoints for map selection
+- [ ] 05-03-PLAN.md -- Service unit tests and integration tests for map selection
 
 ### Phase 6: Submission Flow & Leaderboard
 **Goal**: Players can submit tournament completions and view per-cycle leaderboards, with tournament times that beat personal bests automatically written to core completions
@@ -166,7 +171,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 2. SDK Types & Domain Exceptions | 2/2 | Complete   | 2026-05-29 |
 | 3. Repository Layer | 2/2 | Complete   | 2026-05-29 |
 | 4. Config & Category Management | 2/2 | Complete   | 2026-05-29 |
-| 5. Map Selection & Blacklist | 0/0 | Not started | - |
+| 5. Map Selection & Blacklist | 0/3 | Not started | - |
 | 6. Submission Flow & Leaderboard | 0/0 | Not started | - |
 | 7. Automatic Cycle Transitions | 0/0 | Not started | - |
 | 8. Rewards Engine | 0/0 | Not started | - |
