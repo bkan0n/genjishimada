@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import re
+from logging import getLogger
+
 import msgspec
 from asyncpg import Pool
 from genjishimada_sdk.tournaments import (
     TournamentCategoryCreateRequest,
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
+    TournamentChooseMapRequest,
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
+    TournamentNextCycleResponse,
 )
 from litestar.datastructures import State
 
@@ -20,7 +25,13 @@ from services.exceptions.tournaments import (
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
+    MapNotEligibleError,
+    NoEligibleMapsError,
+    PendingCycleAlreadyExistsError,
+    PendingCycleNotFoundError,
 )
+
+log = getLogger(__name__)
 
 
 class TournamentService(BaseService):
@@ -216,6 +227,235 @@ class TournamentService(BaseService):
             )
         if not deleted:
             raise CategoryNotFoundError(category_id)
+
+    async def select_map(self, category_id: int) -> TournamentNextCycleResponse:
+        """Trigger random map selection for the next cycle.
+
+        Acquires a connection so the pending-check, config fetch, map selection,
+        and cycle creation all happen on the same connection, preventing TOCTOU races.
+
+        Args:
+            category_id: Category ID to select a map for.
+
+        Returns:
+            Pending cycle preview with joined map details.
+
+        Raises:
+            PendingCycleAlreadyExistsError: If a pending cycle already exists.
+            CategoryNotFoundError: If the category does not exist.
+            NoEligibleMapsError: If no eligible maps are found and LRU fallback also fails.
+        """
+        async with self._pool.acquire() as conn:
+            existing = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is not None:
+                raise PendingCycleAlreadyExistsError(category_id)
+
+            config = await self._tournament_repo.fetch_config(
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            eligible = await self._tournament_repo.fetch_eligible_maps(
+                category["difficulties"],
+                config["blacklist_weeks"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            if eligible:
+                selected = eligible[0]
+            else:
+                log.warning("[!] Eligible map pool exhausted for category %s, using LRU fallback", category_id)
+                selected = await self._tournament_repo.fetch_least_recently_used_map(
+                    category["difficulties"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if selected is None:
+                    raise NoEligibleMapsError(category_id)
+
+            await self._tournament_repo.create_cycle(
+                category_id,
+                selected["id"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            result = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        return msgspec.convert(result, TournamentNextCycleResponse)
+
+    async def get_next_cycle(self, category_id: int) -> TournamentNextCycleResponse:
+        """Preview the pending next cycle for a category.
+
+        Args:
+            category_id: Category ID to look up.
+
+        Returns:
+            Pending cycle preview with joined map details.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            PendingCycleNotFoundError: If no pending cycle exists.
+        """
+        category = await self._tournament_repo.fetch_category(category_id)
+        if category is None:
+            raise CategoryNotFoundError(category_id)
+
+        row = await self._tournament_repo.fetch_pending_cycle(category_id)
+        if row is None:
+            raise PendingCycleNotFoundError(category_id)
+
+        return msgspec.convert(row, TournamentNextCycleResponse)
+
+    async def reroll_map(self, category_id: int) -> TournamentNextCycleResponse:
+        """Delete the current pending cycle and select a new map.
+
+        Acquires a connection so all operations happen atomically.
+
+        Args:
+            category_id: Category ID to reroll for.
+
+        Returns:
+            New pending cycle preview with joined map details.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            PendingCycleNotFoundError: If no pending cycle exists to reroll.
+            NoEligibleMapsError: If no eligible maps are found and LRU fallback also fails.
+        """
+        async with self._pool.acquire() as conn:
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            existing = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is None:
+                raise PendingCycleNotFoundError(category_id)
+
+            old_map_id = existing["map_id"]
+            old_cycle_id = existing["id"]
+
+            await self._tournament_repo.delete_cycle(
+                old_cycle_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            config = await self._tournament_repo.fetch_config(
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            eligible = await self._tournament_repo.fetch_eligible_maps(
+                category["difficulties"],
+                config["blacklist_weeks"],
+                exclude_map_ids=[old_map_id],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            if eligible:
+                selected = eligible[0]
+            else:
+                log.warning("[!] Eligible map pool exhausted for category %s, using LRU fallback", category_id)
+                selected = await self._tournament_repo.fetch_least_recently_used_map(
+                    category["difficulties"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if selected is None:
+                    raise NoEligibleMapsError(category_id)
+
+            await self._tournament_repo.create_cycle(
+                category_id,
+                selected["id"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            result = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        return msgspec.convert(result, TournamentNextCycleResponse)
+
+    async def choose_map(
+        self,
+        category_id: int,
+        data: TournamentChooseMapRequest,
+    ) -> TournamentNextCycleResponse:
+        """Explicitly set the map for the next cycle.
+
+        Validates the map exists and its difficulty matches the category,
+        then creates (or replaces) the pending cycle.
+
+        Args:
+            category_id: Category ID to set the map for.
+            data: Request containing the map code.
+
+        Returns:
+            Pending cycle preview with joined map details.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            MapNotEligibleError: If the map is not found or its difficulty doesn't match.
+        """
+        async with self._pool.acquire() as conn:
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            map_row = await self._tournament_repo.fetch_map_by_code(
+                data.map_code,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if map_row is None:
+                raise MapNotEligibleError(0, reason=f"Map with code '{data.map_code}' not found.")
+
+            base_difficulty = re.sub(r"\s*[-+]\s*$", "", map_row["difficulty"])
+            if base_difficulty not in category["difficulties"]:
+                raise MapNotEligibleError(
+                    map_row["id"],
+                    reason=f"Map difficulty '{map_row['difficulty']}' does not match category difficulties.",
+                )
+
+            existing = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is not None:
+                await self._tournament_repo.delete_cycle(
+                    existing["id"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+
+            await self._tournament_repo.create_cycle(
+                category_id,
+                map_row["id"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            result = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        return msgspec.convert(result, TournamentNextCycleResponse)
 
 
 async def provide_tournament_service(
