@@ -89,6 +89,9 @@ from .tournaments import (
     DuplicateTournamentCompletionError,
     MapNotEligibleError,
     NoCycleActiveError,
+    NoEligibleMapsError,
+    PendingCycleAlreadyExistsError,
+    PendingCycleNotFoundError,
     TournamentsError,
 )
 from .tournaments import (
@@ -156,7 +159,10 @@ __all__ = [
     "MapsError",
     "MasteryUpdateFailedError",
     "NoCycleActiveError",
+    "NoEligibleMapsError",
     "PasswordValidationError",
+    "PendingCycleAlreadyExistsError",
+    "PendingCycleNotFoundError",
     "PendingEditRequestExistsError",
     "PlaytestError",
     "PlaytestNotFoundError",

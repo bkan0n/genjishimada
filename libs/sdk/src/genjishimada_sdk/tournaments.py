@@ -13,6 +13,7 @@ __all__ = (
     "TournamentCategoryCreateRequest",
     "TournamentCategoryPatchRequest",
     "TournamentCategoryResponse",
+    "TournamentChooseMapRequest",
     "TournamentCompletionCreateRequest",
     "TournamentCompletionCreatedEvent",
     "TournamentCompletionResponse",
@@ -23,6 +24,7 @@ __all__ = (
     "TournamentCycleResultsResponse",
     "TournamentCycleStartedEvent",
     "TournamentLeaderboardEntryResponse",
+    "TournamentNextCycleResponse",
     "TournamentStreakResponse",
     "TournamentXpGrantEvent",
 )
@@ -190,6 +192,40 @@ class TournamentCycleResponse(Struct):
     started_at: dt.datetime | None
     ended_at: dt.datetime | None
     created_at: dt.datetime
+
+
+class TournamentNextCycleResponse(Struct):
+    """Preview of a pending next-cycle map for admin review.
+
+    Attributes:
+        id: Cycle identifier.
+        category_id: Category this cycle belongs to.
+        map_id: Map selected for this cycle.
+        map_code: Workshop code of the selected map.
+        map_name: Display name of the selected map.
+        map_difficulty: Difficulty rating of the selected map.
+        status: Current lifecycle status (always 'pending' for next-cycle previews).
+        created_at: When the cycle record was created.
+    """
+
+    id: int
+    category_id: int
+    map_id: int
+    map_code: str
+    map_name: str
+    map_difficulty: str
+    status: CycleStatus
+    created_at: dt.datetime
+
+
+class TournamentChooseMapRequest(Struct):
+    """Request payload for explicitly choosing a map for next cycle.
+
+    Attributes:
+        map_code: Workshop code of the map to select.
+    """
+
+    map_code: str
 
 
 # ---------------------------------------------------------------------------

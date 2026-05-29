@@ -87,3 +87,31 @@ class NoCycleActiveError(TournamentsError):
 
     def __init__(self, category_id: int) -> None:
         super().__init__("No active cycle exists for this category.", category_id=category_id)
+
+
+class NoEligibleMapsError(TournamentsError):
+    """No eligible maps found for the category's difficulty grouping."""
+
+    def __init__(self, category_id: int) -> None:
+        super().__init__(
+            "No eligible maps found. Consider reducing blacklist_weeks or adding more maps "
+            "matching the category's difficulties.",
+            category_id=category_id,
+        )
+
+
+class PendingCycleAlreadyExistsError(TournamentsError):
+    """A pending cycle already exists for this category."""
+
+    def __init__(self, category_id: int) -> None:
+        super().__init__(
+            "A pending cycle already exists for this category. Use reroll to replace it.",
+            category_id=category_id,
+        )
+
+
+class PendingCycleNotFoundError(TournamentsError):
+    """No pending cycle exists for this category."""
+
+    def __init__(self, category_id: int) -> None:
+        super().__init__("No pending cycle exists for this category.", category_id=category_id)
