@@ -13,7 +13,7 @@ Build a recurring tournament system for Genji Parkour as a new domain within the
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Database Schema & Migrations** - Create the tournaments PostgreSQL schema with all tables, constraints, and indexes (completed 2026-05-29)
-- [ ] **Phase 2: SDK Types & Domain Exceptions** - Define shared msgspec Structs and domain exception hierarchy for the tournament system
+- [x] **Phase 2: SDK Types & Domain Exceptions** - Define shared msgspec Structs and domain exception hierarchy for the tournament system (completed 2026-05-29)
 - [ ] **Phase 3: Repository Layer** - Implement raw SQL data access for all tournament operations
 - [ ] **Phase 4: Config & Category Management** - Service and controller layer for tournament configuration and category CRUD
 - [ ] **Phase 5: Map Selection & Blacklist** - Random map selection engine with cooldown window, pre-roll, and admin reroll
@@ -49,11 +49,11 @@ Plans:
   2. Domain exception classes exist in `services/exceptions/tournaments.py` covering tournament-specific error conditions
   3. Repository exception mappings cover tournament-specific constraint violations
   4. SDK types pass lint and type-check (`just lint-sdk`)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 02-01-PLAN.md -- SDK tournaments.py module with all msgspec Structs and type aliases
-- [ ] 02-02-PLAN.md -- Domain exception hierarchy and barrel __init__.py updates
+- [x] 02-02-PLAN.md -- Domain exception hierarchy and barrel __init__.py updates
 
 ### Phase 3: Repository Layer
 **Goal**: Raw SQL data access exists for every tournament database operation so the service layer can be built without touching SQL directly
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Database Schema & Migrations | 1/1 | Complete   | 2026-05-29 |
-| 2. SDK Types & Domain Exceptions | 1/2 | In Progress|  |
+| 2. SDK Types & Domain Exceptions | 2/2 | Complete   | 2026-05-29 |
 | 3. Repository Layer | 0/0 | Not started | - |
 | 4. Config & Category Management | 0/0 | Not started | - |
 | 5. Map Selection & Blacklist | 0/0 | Not started | - |
