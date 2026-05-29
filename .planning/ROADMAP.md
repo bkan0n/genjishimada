@@ -79,10 +79,10 @@ Plans:
   2. Admin can create, list, update, and delete tournament categories with difficulty groupings
   3. Category modifications are rejected with a clear error when a cycle is currently active for that category
   4. Non-admin API requests to config/category endpoints are rejected by scope guard
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 04-01-PLAN.md -- TournamentService with config and category business logic, exception additions, repo tweak
+- [x] 04-01-PLAN.md -- TournamentService with config and category business logic, exception additions, repo tweak
 - [ ] 04-02-PLAN.md -- TournamentsController with 7 REST endpoints and integration tests
 
 ### Phase 5: Map Selection & Blacklist
@@ -165,7 +165,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 1. Database Schema & Migrations | 1/1 | Complete   | 2026-05-29 |
 | 2. SDK Types & Domain Exceptions | 2/2 | Complete   | 2026-05-29 |
 | 3. Repository Layer | 2/2 | Complete   | 2026-05-29 |
-| 4. Config & Category Management | 0/2 | Planned | - |
+| 4. Config & Category Management | 1/2 | In Progress|  |
 | 5. Map Selection & Blacklist | 0/0 | Not started | - |
 | 6. Submission Flow & Leaderboard | 0/0 | Not started | - |
 | 7. Automatic Cycle Transitions | 0/0 | Not started | - |
