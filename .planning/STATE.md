@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-05-29T23:45:28.060Z"
-last_activity: 2026-05-29 -- Phase 05 planning complete
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-05-29T23:50:34Z"
+last_activity: 2026-05-29 -- Phase 05 Plan 01 complete
 progress:
   total_phases: 10
   completed_phases: 4
   total_plans: 10
-  completed_plans: 7
-  percent: 40
+  completed_plans: 8
+  percent: 45
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-29)
 
 **Core value:** Give the Genji Parkour community a persistent, competitive cycle that keeps players engaged week-over-week through fresh map challenges, leaderboard competition, and visible champion recognition.
-**Current focus:** Phase 04 — config-category-management
+**Current focus:** Phase 05 — Map Selection & Blacklist
 
 ## Current Position
 
-Phase: 04 (config-category-management) — EXECUTING
-Plan: 1 of 2
-Status: Ready to execute
-Last activity: 2026-05-29 -- Phase 05 planning complete
+Phase: 05 (Map Selection & Blacklist) — EXECUTING
+Plan: 2 of 3
+Status: Executing Phase 05
+Last activity: 2026-05-29 -- Phase 05 Plan 01 complete
 
 Progress: [██████████] 100%
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 *Updated after each plan completion*
 | Phase 02 P01 | 2min | 2 tasks | 2 files |
 | Phase 02 P02 | 3min | 2 tasks | 2 files |
+| Phase 05 P01 | 3min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ Recent decisions affecting current work:
 - [Phase ?]: All 4 tournament RabbitMQ event types defined upfront in SDK to prevent churn across phases 3-10
 - [Phase ?]: JSONB columns modeled as typed sub-structs (PlacementXpTier, StreakXpTier) for compile-time validation
 - [Phase ?]: Used aliased barrel import (TournamentsCategoryNotFoundError) matching existing CompletionsMapNotFoundError convention
+- [Phase 05]: Conditional SQL query building pattern for optional exclude_map_ids in fetch_eligible_maps
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-29T23:22:18.612Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-map-selection-blacklist/05-CONTEXT.md
+Last session: 2026-05-29T23:50:34Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: .planning/phases/05-map-selection-blacklist/05-02-PLAN.md
