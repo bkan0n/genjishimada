@@ -98,6 +98,7 @@ from genjishimada_sdk.tags import (
     TagsSearchFilters,
     TagsSearchResponse,
 )
+from genjishimada_sdk.tournaments import TournamentCategoryResponse
 from genjishimada_sdk.users import (
     OverwatchUsernamesResponse,
     OverwatchUsernamesUpdateRequest,
@@ -1662,6 +1663,15 @@ class APIService:
         """Get upvotes count."""
         r = Route("GET", "/completions/upvoting/{message_id}", message_id=message_id)
         return self._request(r, response_model=int)
+
+    def get_tournament_category(self, category_id: int) -> Response[TournamentCategoryResponse]:
+        """Get a tournament category by ID.
+
+        Returns:
+            Response[TournamentCategoryResponse]: The tournament category.
+        """
+        r = Route("GET", "/tournaments/categories/{category_id}", category_id=category_id)
+        return self._request(r, response_model=TournamentCategoryResponse)
 
     def claim_idempotency(self, data: ClaimCreateRequest) -> Response[ClaimResponse]:
         """Claim an idempotency key for a queue message action."""
