@@ -38,6 +38,7 @@ from services.exceptions.tournaments import (
     PendingCycleNotFoundError,
     SlowerTimeError,
 )
+from services.tournament_reward_service import TournamentRewardService
 
 log = getLogger(__name__)
 
@@ -50,6 +51,7 @@ class TournamentService(BaseService):
         pool: Pool,
         state: State,
         tournament_repo: TournamentRepository,
+        reward_service: TournamentRewardService | None = None,
     ) -> None:
         """Initialize service.
 
@@ -57,9 +59,13 @@ class TournamentService(BaseService):
             pool: AsyncPG connection pool.
             state: Application state.
             tournament_repo: Tournament repository instance.
+            reward_service: Reward service for participation XP grants. Optional so
+                existing unit tests can construct the service without it; the DI
+                provider always supplies one in production.
         """
         super().__init__(pool, state)
         self._tournament_repo = tournament_repo
+        self._reward_service = reward_service
 
     async def get_config(self) -> TournamentConfigResponse:
         """Get tournament configuration.
@@ -506,6 +512,8 @@ class TournamentService(BaseService):
             if existing is not None and data.time >= existing["time"]:
                 raise SlowerTimeError(current_best=existing["time"], submitted_time=data.time)
 
+            is_first_completion = existing is None
+
             row = await self._tournament_repo.create_tournament_completion(
                 cycle_id=cycle_id,
                 user_id=data.user_id,
@@ -527,6 +535,20 @@ class TournamentService(BaseService):
             )
 
             log.info("[->] Tournament completion submitted for cycle %s by user %s", cycle_id, data.user_id)
+
+            # RWD-01: grant participation XP once per (cycle, user). The
+            # existing-is-None gate is the "first ever this cycle" signal (the
+            # insert above happens after the check); the 08-01 ledger makes a
+            # replay a no-op even if this path were reached again. The grant runs
+            # inside this open transaction so the ledger claim + lootbox.xp upsert
+            # + completion insert commit (or roll back) together.
+            if is_first_completion and self._reward_service is not None:
+                await self._reward_service.award_participation(
+                    cycle=cycle,
+                    user_id=data.user_id,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                log.info("[✓] Participation XP granted for cycle %s to user %s", cycle_id, data.user_id)
 
         return msgspec.convert(row, TournamentCompletionResponse)
 
@@ -576,14 +598,17 @@ class TournamentService(BaseService):
 async def provide_tournament_service(
     state: State,
     tournament_repo: TournamentRepository,
+    tournament_reward_service: TournamentRewardService,
 ) -> TournamentService:
     """Litestar DI provider for tournament service.
 
     Args:
         state: Application state containing the database pool.
         tournament_repo: Tournament repository instance.
+        tournament_reward_service: Reward service for participation XP grants,
+            resolved from the controller's dependencies dict.
 
     Returns:
         TournamentService instance.
     """
-    return TournamentService(state.db_pool, state, tournament_repo)
+    return TournamentService(state.db_pool, state, tournament_repo, tournament_reward_service)

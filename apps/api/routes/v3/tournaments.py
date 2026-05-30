@@ -30,6 +30,7 @@ from litestar.status_codes import (
     HTTP_422_UNPROCESSABLE_ENTITY,
 )
 
+from repository.lootbox_repository import provide_lootbox_repository
 from repository.tournaments_repository import provide_tournament_repository
 from services.exceptions.tournaments import (
     CategoryLockedError,
@@ -43,6 +44,7 @@ from services.exceptions.tournaments import (
     PendingCycleNotFoundError,
     SlowerTimeError,
 )
+from services.tournament_reward_service import provide_tournament_reward_service
 from services.tournament_service import TournamentService, provide_tournament_service
 from utilities.errors import CustomHTTPException
 
@@ -54,6 +56,8 @@ class TournamentsController(litestar.Controller):
     path = "/tournaments"
     dependencies = {
         "tournament_repo": Provide(provide_tournament_repository),
+        "lootbox_repo": Provide(provide_lootbox_repository),
+        "tournament_reward_service": Provide(provide_tournament_reward_service),
         "tournament_service": Provide(provide_tournament_service),
     }
 
