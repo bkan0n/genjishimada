@@ -117,8 +117,31 @@ def _install_bot_stub_modules() -> None:
         sys.modules["extensions._queue_registry"] = qr_mod
 
 
+def _load_bot_conftest() -> ModuleType:
+    """Load the bot test conftest by path to reuse its Fake guild/role/member trio.
+
+    A bare ``import conftest`` resolves to the top-level ``apps/api/conftest.py`` under
+    pytest's rootdir, not this package's conftest, so we load the fakes explicitly.
+    """
+    module_name = "bot_test_conftest"
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+    path = pathlib.Path(__file__).resolve().parent / "conftest.py"
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 _tournaments = _load_tournaments_module()
 TournamentHandler = _tournaments.TournamentHandler
+
+_bot_conftest = _load_bot_conftest()
+FakeGuild = _bot_conftest.FakeGuild
+FakeMember = _bot_conftest.FakeMember
+FakeRole = _bot_conftest.FakeRole
 
 
 def _make_handler(bot_api: AsyncMock, channel: Any, guild: Any | None = None) -> Any:
@@ -219,7 +242,6 @@ async def test_cycle_completed_posts_results_embed(
     mock_api: AsyncMock, sample_category: TournamentCategoryResponse
 ) -> None:
     """DSC-02: cycle_completed posts ONE Top-3 results embed with a winner ping and NO XP line."""
-    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
 
     winner = FakeMember(member_id=111)
     role = FakeRole(role_id=sample_category.champion_role_id)
@@ -252,7 +274,6 @@ async def test_cycle_completed_posts_results_embed(
 @pytest.mark.asyncio
 async def test_cycle_completed_results_embed_empty_standings(mock_api: AsyncMock) -> None:
     """DSC-02: empty standings render a 'No submissions' podium and do not crash."""
-    from conftest import FakeGuild, FakeRole  # type: ignore  # noqa: PLC0415
 
     role = FakeRole(role_id=999000111)
     guild = FakeGuild(roles={role.id: role}, members={})
@@ -278,7 +299,6 @@ async def test_champion_role_transfer_strips_all_then_grants(
     mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """DSC-03 / RWD-03: strip champion role from ALL holders, then grant it to the winner."""
-    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
 
     stale1 = FakeMember(member_id=901)
     stale2 = FakeMember(member_id=902)
@@ -305,7 +325,6 @@ async def test_champion_role_transfer_strips_all_then_grants(
 @pytest.mark.asyncio
 async def test_champion_vacant_when_no_winner(mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
     """DSC-03 / RWD-03: winner_user_id None strips all holders and grants to no one (D-05)."""
-    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
 
     stale1 = FakeMember(member_id=901)
     stale2 = FakeMember(member_id=902)
@@ -331,7 +350,6 @@ async def test_champion_member_left_guild_does_not_crash(
     mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """DSC-03 / RWD-03: winner set but get_member None → log + continue, no crash, no grant."""
-    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
 
     stale1 = FakeMember(member_id=901)
     role = FakeRole(role_id=999000111, members=[stale1])
@@ -354,7 +372,6 @@ async def test_role_ops_stagger_to_respect_rate_limits(
     mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """DSC-03 / RWD-03: an inter-op delay (asyncio.sleep) occurs between member role edits."""
-    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
 
     stale1 = FakeMember(member_id=901)
     stale2 = FakeMember(member_id=902)
