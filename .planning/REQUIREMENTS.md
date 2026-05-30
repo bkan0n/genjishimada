@@ -9,7 +9,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Cycle Management
 
-- [ ] **CYCLE-01**: Automatic cycle transitions at scheduled times (pg_cron or API lifespan task)
+- [x] **CYCLE-01**: Automatic cycle transitions at scheduled times (pg_cron or API lifespan task)
 - [ ] **CYCLE-02**: Configurable tournament categories with admin-defined difficulty groupings
 - [ ] **CYCLE-03**: Per-category cycle frequency (weekly or biweekly)
 - [x] **CYCLE-04**: Map blacklist with configurable N-week cooldown window
@@ -85,7 +85,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CYCLE-01 | Phase 7 | Pending |
+| CYCLE-01 | Phase 7 | Complete |
 | CYCLE-02 | Phase 4 | Pending |
 | CYCLE-03 | Phase 4 | Pending |
 | CYCLE-04 | Phase 5 | Complete |
