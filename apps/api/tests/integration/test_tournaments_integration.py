@@ -167,6 +167,45 @@ class TestGetCategory:
         assert response.status_code == 404
 
 
+class TestGetStreak:
+    """GET /api/v3/tournaments/streaks/{user_id}"""
+
+    async def test_get_existing_streak(self, test_client, asyncpg_pool, create_test_user):
+        """GET with a seeded streak row returns 200 + struct body."""
+        user_id = await create_test_user(nickname=f"Streaker{uuid4().hex[:6]}")
+
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO tournaments.streaks (user_id, current_streak, max_streak)
+                VALUES ($1, 3, 5)
+                """,
+                user_id,
+            )
+
+        response = await test_client.get(f"{BASE}/streaks/{user_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["user_id"] == user_id
+        assert data["current_streak"] == 3
+        assert data["max_streak"] == 5
+
+    async def test_get_nonexistent_returns_404(self, test_client, create_test_user):
+        """GET for a user with no streak row returns 404 (D-04 zero-mapping is bot-side)."""
+        user_id = await create_test_user(nickname=f"NoStreak{uuid4().hex[:6]}")
+
+        response = await test_client.get(f"{BASE}/streaks/{user_id}")
+
+        assert response.status_code == 404
+
+    async def test_rejected_without_auth(self, unauthenticated_client):
+        """GET /streaks without the tournaments:read scope returns 401."""
+        response = await unauthenticated_client.get(f"{BASE}/streaks/1")
+
+        assert response.status_code == 401
+
+
 class TestUpdateCategory:
     """PATCH /api/v3/tournaments/categories/{id}"""
 

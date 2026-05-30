@@ -12,6 +12,7 @@ from services.exceptions.tournaments import (
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
     SlowerTimeError,
+    StreakNotFoundError,
 )
 from services.tournament_service import TournamentService
 
@@ -68,6 +69,15 @@ _pending = lambda **kw: {
     "started_at": None,
     "ended_at": None,
     "created_at": "2026-01-01T00:00:00",
+    **kw,
+}
+_streak = lambda **kw: {
+    "id": 1,
+    "user_id": 100,
+    "current_streak": 3,
+    "max_streak": 5,
+    "last_cycle_id": 7,
+    "updated_at": "2026-01-01T00:00:00",
     **kw,
 }
 
@@ -470,3 +480,28 @@ class TestListCycles:
             limit=10,
             offset=5,
         )
+
+
+class TestGetStreak:
+    """Tests for TournamentService.get_streak."""
+
+    async def test_returns_streak_on_row(self, mock_pool, mock_state, mock_tournament_repo):
+        """Returns a TournamentStreakResponse when the repo returns a row."""
+        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
+
+        mock_tournament_repo.fetch_streak.return_value = _streak(user_id=100, current_streak=3, max_streak=5)
+
+        result = await service.get_streak(100)
+
+        assert result.user_id == 100
+        assert result.current_streak == 3
+        assert result.max_streak == 5
+
+    async def test_raises_when_absent(self, mock_pool, mock_state, mock_tournament_repo):
+        """Raises StreakNotFoundError when the repo returns None (mirrors get_category)."""
+        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
+
+        mock_tournament_repo.fetch_streak.return_value = None
+
+        with pytest.raises(StreakNotFoundError):
+            await service.get_streak(999)
