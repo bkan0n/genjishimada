@@ -10,8 +10,12 @@ from genjishimada_sdk.tournaments import (
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
+    TournamentCompletionCreateRequest,
+    TournamentCompletionResponse,
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
+    TournamentCycleListResponse,
+    TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
 )
 from litestar.di import Provide
@@ -31,10 +35,13 @@ from services.exceptions.tournaments import (
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
+    CycleNotActiveError,
+    CycleNotFoundError,
     MapNotEligibleError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
+    SlowerTimeError,
 )
 from services.tournament_service import TournamentService, provide_tournament_service
 from utilities.errors import CustomHTTPException
@@ -411,3 +418,99 @@ class TournamentsController(litestar.Controller):
                 status_code=HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(e),
             ) from e
+
+    @litestar.post(
+        path="/cycles/{cycle_id:int}/submit",
+        summary="Submit Tournament Completion",
+        status_code=HTTP_201_CREATED,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def submit_completion(
+        self,
+        tournament_service: TournamentService,
+        cycle_id: Annotated[int, Parameter(description="Cycle ID")],
+        data: Annotated[TournamentCompletionCreateRequest, Body(title="Submission")],
+    ) -> TournamentCompletionResponse:
+        """Submit a tournament completion for a cycle.
+
+        Args:
+            tournament_service: Tournament service.
+            cycle_id: Cycle to submit for.
+            data: Completion submission data.
+
+        Returns:
+            Created tournament completion.
+
+        Raises:
+            CustomHTTPException: 404 if cycle not found, 409 if cycle not active or time not faster.
+        """
+        try:
+            return await tournament_service.submit_completion(cycle_id, data)
+        except CycleNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except CycleNotActiveError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_409_CONFLICT,
+                detail=str(e),
+            ) from e
+        except SlowerTimeError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_409_CONFLICT,
+                detail=str(e),
+            ) from e
+
+    @litestar.get(
+        path="/cycles/{cycle_id:int}/leaderboard",
+        summary="Get Tournament Leaderboard",
+        opt={"required_scopes": {"tournaments:read"}},
+    )
+    async def get_leaderboard(
+        self,
+        tournament_service: TournamentService,
+        cycle_id: Annotated[int, Parameter(description="Cycle ID")],
+    ) -> list[TournamentLeaderboardEntryResponse]:
+        """Get the ranked leaderboard for a tournament cycle.
+
+        Args:
+            tournament_service: Tournament service.
+            cycle_id: Cycle to fetch leaderboard for.
+
+        Returns:
+            List of ranked leaderboard entries.
+        """
+        return await tournament_service.get_leaderboard(cycle_id)
+
+    @litestar.get(
+        path="/cycles",
+        summary="List Tournament Cycles",
+        opt={"required_scopes": {"tournaments:read"}},
+    )
+    async def list_cycles(
+        self,
+        tournament_service: TournamentService,
+        status: Annotated[str | None, Parameter(description="Filter by cycle status", required=False)] = None,
+        category_id: Annotated[int | None, Parameter(description="Filter by category ID", required=False)] = None,
+        limit: Annotated[int, Parameter(description="Max results", ge=1, le=100)] = 20,
+        offset: Annotated[int, Parameter(description="Result offset", ge=0)] = 0,
+    ) -> TournamentCycleListResponse:
+        """List tournament cycles with optional filters.
+
+        Args:
+            tournament_service: Tournament service.
+            status: Optional cycle status filter.
+            category_id: Optional category ID filter.
+            limit: Maximum number of results (1-100).
+            offset: Result offset for pagination.
+
+        Returns:
+            Paginated cycle list with winner info.
+        """
+        return await tournament_service.list_cycles(
+            status=status,
+            category_id=category_id,
+            limit=limit,
+            offset=offset,
+        )
