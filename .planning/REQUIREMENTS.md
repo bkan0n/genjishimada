@@ -31,7 +31,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **RWD-01**: Flat participation XP bonus on first submission per cycle
 - [x] **RWD-02**: Configurable placement-based XP bonuses (admin sets N tiers and amounts)
-- [ ] **RWD-03**: Discord champion role per category, transferred to cycle winner
+- [x] **RWD-03**: Discord champion role per category, transferred to cycle winner
 - [x] **RWD-04**: Weekly participation streak tracking (maintained by submitting in any category)
 - [x] **RWD-05**: Streak-based XP bonuses at configurable streak thresholds
 
@@ -39,13 +39,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **ADM-01**: Admin API endpoints for tournament configuration CRUD
 - [ ] **ADM-02**: Admin API endpoints for category management
-- [ ] **ADM-03**: Admin Discord slash commands for tournament actions
+- [x] **ADM-03**: Admin Discord slash commands for tournament actions
 
 ### Discord Integration
 
-- [ ] **DSC-01**: Automated new-cycle announcement with map details
-- [ ] **DSC-02**: Automated cycle results announcement with standings
-- [ ] **DSC-03**: Automated champion role transfer announcements
+- [x] **DSC-01**: Automated new-cycle announcement with map details
+- [x] **DSC-02**: Automated cycle results announcement with standings
+- [x] **DSC-03**: Automated champion role transfer announcements
 
 ## v2 Requirements
 
@@ -101,15 +101,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SUB-06 | Phase 6 | Pending |
 | RWD-01 | Phase 8 | Complete |
 | RWD-02 | Phase 8 | Complete |
-| RWD-03 | Phase 9 | Pending |
+| RWD-03 | Phase 9 | Complete |
 | RWD-04 | Phase 8 | Complete |
 | RWD-05 | Phase 8 | Complete |
 | ADM-01 | Phase 4 | Pending |
 | ADM-02 | Phase 4 | Pending |
-| ADM-03 | Phase 10 | Pending |
-| DSC-01 | Phase 9 | Pending |
-| DSC-02 | Phase 9 | Pending |
-| DSC-03 | Phase 9 | Pending |
+| ADM-03 | Phase 10 | Complete |
+| DSC-01 | Phase 9 | Complete |
+| DSC-02 | Phase 9 | Complete |
+| DSC-03 | Phase 9 | Complete |
 
 **Coverage:**
 - v1 requirements: 25 total

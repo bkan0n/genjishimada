@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Submission Flow & Leaderboard** - Tournament completion submissions with tier-then-time ranking, cross-write, and leaderboard (completed 2026-05-30)
 - [x] **Phase 7: Automatic Cycle Transitions** - pg_cron scheduled transitions with outbox bridge pattern and placement computation (completed 2026-05-30)
 - [x] **Phase 8: Rewards Engine** - Participation XP, placement XP, streak tracking, and streak bonuses (completed 2026-05-30)
-- [ ] **Phase 9: Bot Queue Consumers & Announcements** - RabbitMQ consumers for tournament events, Discord announcements, and champion role transfers
+- [x] **Phase 9: Bot Queue Consumers & Announcements** - RabbitMQ consumers for tournament events, Discord announcements, and champion role transfers
 - [ ] **Phase 10: Bot Slash Commands** - Discord slash commands for tournament info, leaderboard, and admin actions
 
 ## Phase Details
@@ -222,7 +222,15 @@ Plans:
   4. Role operations are staggered to avoid Discord rate limiting when multiple categories transition simultaneously
   5. Queue consumers use cycle-scoped idempotency keys to prevent duplicate announcements on retry
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+**Wave 1**
+
+- [x] 09-01-PLAN.md -- Bot config (channels.tournament) + APIService get_tournament_category wrapper + Wave 0 test scaffolding
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 09-02-PLAN.md -- TournamentHandler extension: two idempotent consumers, new-cycle + results embeds, champion role transfer, public bot.tournaments wiring
 
 ### Phase 10: Bot Slash Commands
 
@@ -236,7 +244,17 @@ Plans:
   3. Players can check their participation streak via a slash command
   4. Admins can trigger a map reroll for a category's next cycle via a slash command
 
-**Plans**: TBD
+**Plans:** 1/3 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 10-01-PLAN.md — API streak GET endpoint + TournamentService.get_streak + tests (D-01)
+- [ ] 10-02-PLAN.md — Bot APIService tournament wrappers + CategoryTransformer autocomplete (D-09)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 10-03-PLAN.md — /tournament info/leaderboard/streak GroupCog + /tournament-reroll admin command + setup wiring + bot tests
 
 ## Progress
 
@@ -254,4 +272,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Automatic Cycle Transitions | 3/3 | Complete    | 2026-05-30 |
 | 8. Rewards Engine | 3/3 | Complete   | 2026-05-30 |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
-| 10. Bot Slash Commands | 0/0 | Not started | - |
+| 10. Bot Slash Commands | 1/3 | In Progress|  |
