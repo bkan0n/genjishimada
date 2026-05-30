@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Map Selection & Blacklist** - Random map selection engine with cooldown window, pre-roll, and admin reroll (completed 2026-05-30)
 - [x] **Phase 6: Submission Flow & Leaderboard** - Tournament completion submissions with tier-then-time ranking, cross-write, and leaderboard (completed 2026-05-30)
 - [x] **Phase 7: Automatic Cycle Transitions** - pg_cron scheduled transitions with outbox bridge pattern and placement computation (completed 2026-05-30)
-- [ ] **Phase 8: Rewards Engine** - Participation XP, placement XP, streak tracking, and streak bonuses
+- [x] **Phase 8: Rewards Engine** - Participation XP, placement XP, streak tracking, and streak bonuses (completed 2026-05-30)
 - [ ] **Phase 9: Bot Queue Consumers & Announcements** - RabbitMQ consumers for tournament events, Discord announcements, and champion role transfers
 - [ ] **Phase 10: Bot Slash Commands** - Discord slash commands for tournament info, leaderboard, and admin actions
 
@@ -194,7 +194,7 @@ Plans:
   3. A player's participation streak increments when they submit in at least one category per cycle, and resets to zero if they miss a cycle
   4. Streak-based XP bonuses are granted when a player's streak reaches admin-configured thresholds
 
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -203,11 +203,11 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 08-02-PLAN.md -- conn-accepting XP grant helper + TournamentRewardService (participation/placement/streak) + unit tests
+- [x] 08-02-PLAN.md -- conn-accepting XP grant helper + TournamentRewardService (participation/placement/streak) + unit tests
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 08-03-PLAN.md -- Wire participation (submit) + placement/streak (outbox) hooks + reset sweep + integration tests
+- [x] 08-03-PLAN.md -- Wire participation (submit) + placement/streak (outbox) hooks + reset sweep + integration tests
 
 ### Phase 9: Bot Queue Consumers & Announcements
 
@@ -252,6 +252,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 5. Map Selection & Blacklist | 3/3 | Complete   | 2026-05-30 |
 | 6. Submission Flow & Leaderboard | 2/2 | Complete   | 2026-05-30 |
 | 7. Automatic Cycle Transitions | 3/3 | Complete    | 2026-05-30 |
-| 8. Rewards Engine | 1/3 | In Progress|  |
+| 8. Rewards Engine | 3/3 | Complete   | 2026-05-30 |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
 | 10. Bot Slash Commands | 0/0 | Not started | - |
