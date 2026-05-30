@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: SDK Types & Domain Exceptions** - Define shared msgspec Structs and domain exception hierarchy for the tournament system (completed 2026-05-29)
 - [x] **Phase 3: Repository Layer** - Implement raw SQL data access for all tournament operations (completed 2026-05-29)
 - [x] **Phase 4: Config & Category Management** - Service and controller layer for tournament configuration and category CRUD (completed 2026-05-29)
-- [ ] **Phase 5: Map Selection & Blacklist** - Random map selection engine with cooldown window, pre-roll, and admin reroll
+- [x] **Phase 5: Map Selection & Blacklist** - Random map selection engine with cooldown window, pre-roll, and admin reroll (completed 2026-05-30)
 - [ ] **Phase 6: Submission Flow & Leaderboard** - Tournament completion submissions with tier-then-time ranking, cross-write, and leaderboard
 - [ ] **Phase 7: Automatic Cycle Transitions** - pg_cron scheduled transitions with outbox bridge pattern and placement computation
 - [ ] **Phase 8: Rewards Engine** - Participation XP, placement XP, streak tracking, and streak bonuses
@@ -115,7 +115,7 @@ Plans:
   4. Admin can reroll a specific category's next map or explicitly choose a map via the API
   5. When the eligible pool is exhausted, the system falls back to the least-recently-used map and logs a warning
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -128,7 +128,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 05-03-PLAN.md -- Service unit tests and integration tests for map selection
+- [x] 05-03-PLAN.md -- Service unit tests and integration tests for map selection
 
 ### Phase 6: Submission Flow & Leaderboard
 
@@ -214,7 +214,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 2. SDK Types & Domain Exceptions | 2/2 | Complete   | 2026-05-29 |
 | 3. Repository Layer | 2/2 | Complete   | 2026-05-29 |
 | 4. Config & Category Management | 2/2 | Complete   | 2026-05-29 |
-| 5. Map Selection & Blacklist | 2/3 | In Progress|  |
+| 5. Map Selection & Blacklist | 3/3 | Complete   | 2026-05-30 |
 | 6. Submission Flow & Leaderboard | 0/0 | Not started | - |
 | 7. Automatic Cycle Transitions | 0/0 | Not started | - |
 | 8. Rewards Engine | 0/0 | Not started | - |
