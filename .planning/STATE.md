@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 7 context gathered
-last_updated: "2026-05-30T04:01:16.567Z"
+status: executing
+stopped_at: context exhaustion at 89% (2026-05-30)
+last_updated: "2026-05-30T15:05:27.450Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 10
   completed_phases: 7
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 18
+  completed_plans: 16
   percent: 70
 ---
 
@@ -21,22 +21,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-29)
 
 **Core value:** Give the Genji Parkour community a persistent, competitive cycle that keeps players engaged week-over-week through fresh map challenges, leaderboard competition, and visible champion recognition.
-**Current focus:** Phase 7 — automatic-cycle-transitions
+**Current focus:** Phase 08 — rewards-engine
 
 ## Current Position
 
-Phase: 7 (automatic-cycle-transitions) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 08 (rewards-engine) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-05-30
 
-Progress: [██████████] 100%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 3
+- Total plans completed: 6
 - Average duration: -
 - Total execution time: 0 hours
 
@@ -46,6 +46,7 @@ Progress: [██████████] 100%
 |-------|-------|-------|----------|
 | 01 | 1 | - | - |
 | 06 | 2 | - | - |
+| 7 | 3 | - | - |
 
 **Recent Trend:**
 
@@ -61,6 +62,7 @@ Progress: [██████████] 100%
 | Phase 07 P01 | 15m | 2 tasks | 2 files |
 | Phase 07 P02 | 12m | 3 tasks | 3 files |
 | Phase 07 P03 | 40m | 3 tasks | 4 files |
+| Phase 08 P01 | 3min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -82,6 +84,9 @@ Recent decisions affecting current work:
 - [Phase ?]: D-10/D-11/D-12: outbox poller is a Litestar lifespan asyncio task (10s cadence) selecting FOR UPDATE SKIP LOCKED and marking published in the same transaction; publish-before-mark gives at-least-once
 - [Phase ?]: 07-03: widened migration 0021 v_winner to bigint to fix Discord-snowflake overflow in the placement-snapshot winner
 - [Phase ?]: 07-03: tournament integration tests use property/membership assertions for the session- and xdist-shared DB; poller tested via a monkeypatched publish_message seam (equivalent to X-PYTEST-ENABLED skip)
+- [Phase ?]: [Phase 08]: 08-01 tournament XP grants reuse the generic XpGrantEvent (type='Tournament'), overriding CONTEXT Decision F
+- [Phase ?]: [Phase 08]: 08-01 xp_grants UNIQUE(cycle_id, user_id, reason) is the only double-grant guard since api.xp.grant is in IGNORE_IDEMPOTENCY
+- [Phase ?]: [Phase 08]: 08-01 advance_streak is a new reset-capable method (dedupe via last_cycle_id IS DISTINCT FROM); upsert_streak is increment-only
 
 ### Pending Todos
 
@@ -103,6 +108,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-30T04:01:02.305Z
-Stopped at: Phase 7 context gathered
+Last session: 2026-05-30T15:05:21.772Z
+Stopped at: context exhaustion at 89% (2026-05-30)
 Resume file: None

@@ -194,7 +194,20 @@ Plans:
   3. A player's participation streak increments when they submit in at least one category per cycle, and resets to zero if they miss a cycle
   4. Streak-based XP bonuses are granted when a player's streak reaches admin-configured thresholds
 
-**Plans**: TBD
+**Plans:** 1/3 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 08-01-PLAN.md -- Migration 0022 grants ledger, XP_TYPES "Tournament" member, reward repository methods
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 08-02-PLAN.md -- conn-accepting XP grant helper + TournamentRewardService (participation/placement/streak) + unit tests
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 08-03-PLAN.md -- Wire participation (submit) + placement/streak (outbox) hooks + reset sweep + integration tests
 
 ### Phase 9: Bot Queue Consumers & Announcements
 
@@ -238,7 +251,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 4. Config & Category Management | 2/2 | Complete   | 2026-05-29 |
 | 5. Map Selection & Blacklist | 3/3 | Complete   | 2026-05-30 |
 | 6. Submission Flow & Leaderboard | 2/2 | Complete   | 2026-05-30 |
-| 7. Automatic Cycle Transitions | 3/3 | Complete   | 2026-05-30 |
-| 8. Rewards Engine | 0/0 | Not started | - |
+| 7. Automatic Cycle Transitions | 3/3 | Complete    | 2026-05-30 |
+| 8. Rewards Engine | 1/3 | In Progress|  |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
 | 10. Bot Slash Commands | 0/0 | Not started | - |

@@ -29,11 +29,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Rewards & Recognition
 
-- [ ] **RWD-01**: Flat participation XP bonus on first submission per cycle
-- [ ] **RWD-02**: Configurable placement-based XP bonuses (admin sets N tiers and amounts)
+- [x] **RWD-01**: Flat participation XP bonus on first submission per cycle
+- [x] **RWD-02**: Configurable placement-based XP bonuses (admin sets N tiers and amounts)
 - [ ] **RWD-03**: Discord champion role per category, transferred to cycle winner
-- [ ] **RWD-04**: Weekly participation streak tracking (maintained by submitting in any category)
-- [ ] **RWD-05**: Streak-based XP bonuses at configurable streak thresholds
+- [x] **RWD-04**: Weekly participation streak tracking (maintained by submitting in any category)
+- [x] **RWD-05**: Streak-based XP bonuses at configurable streak thresholds
 
 ### Admin & API
 
@@ -99,11 +99,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SUB-04 | Phase 6 | Pending |
 | SUB-05 | Phase 6 | Pending |
 | SUB-06 | Phase 6 | Pending |
-| RWD-01 | Phase 8 | Pending |
-| RWD-02 | Phase 8 | Pending |
+| RWD-01 | Phase 8 | Complete |
+| RWD-02 | Phase 8 | Complete |
 | RWD-03 | Phase 9 | Pending |
-| RWD-04 | Phase 8 | Pending |
-| RWD-05 | Phase 8 | Pending |
+| RWD-04 | Phase 8 | Complete |
+| RWD-05 | Phase 8 | Complete |
 | ADM-01 | Phase 4 | Pending |
 | ADM-02 | Phase 4 | Pending |
 | ADM-03 | Phase 10 | Pending |
