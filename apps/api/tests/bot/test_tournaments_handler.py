@@ -42,79 +42,81 @@ def _repo_root() -> pathlib.Path:
 
 
 def _load_tournaments_module() -> ModuleType:
-    """Load apps/bot/extensions/tournaments.py by file path as an isolated module.
+    """Load apps/bot/extensions/tournaments.py with the REAL bot ``utilities`` graph.
 
-    Loading by path avoids importing apps/bot's full extension graph (discord.py,
-    aio_pika, the bot ``core`` package) which is not on the apps/api test path. The
-    module is registered in ``sys.modules`` so any forward-ref annotations resolve.
+    Plan 10-03 added command cogs to tournaments.py that import
+    ``utilities.transformers`` / ``utilities.paginator`` / ``utilities.errors`` (and
+    ``discord.ext.commands``). Those import cleanly from the apps/bot tree, so we load the
+    real ``utilities`` package rather than stubbing it. The only piece we still stub is
+    ``extensions._queue_registry.queue_consumer`` — its real wrapper expects a raw
+    ``message`` to decode, whereas these tests invoke the handler body with an
+    already-decoded event, so the stub returns the raw handler unwrapped.
+
+    To avoid polluting sibling tests (apps/api has its own ``utilities`` package), the
+    ``utilities``/``extensions`` package trees are snapshotted, evicted while apps/bot is
+    on ``sys.path``, then restored in ``finally``.
     """
     module_name = "bot_extensions_tournaments"
     if module_name in sys.modules:
         return sys.modules[module_name]
 
-    # The tournaments module imports a handful of bot-internal packages
-    # (utilities.base.BaseHandler, extensions._queue_registry, core). Those are not
-    # importable from the apps/api test path, so we pre-register lightweight stand-ins
-    # before exec'ing the module. We only need the symbols the module references at
-    # import time, not their behavior — the tests invoke the handler logic directly.
-    _install_bot_stub_modules()
-
     bot_root = _repo_root() / "apps" / "bot"
-    if str(bot_root) not in sys.path:
-        sys.path.insert(0, str(bot_root))
+    snapshot = {
+        k: v
+        for k, v in sys.modules.items()
+        if k in ("utilities", "extensions") or k.startswith(("utilities.", "extensions."))
+    }
+    try:
+        for key in snapshot:
+            del sys.modules[key]
+        if str(bot_root) not in sys.path:
+            sys.path.insert(0, str(bot_root))
 
-    module_path = bot_root / "extensions" / "tournaments.py"
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
+        # Stub only the queue registry so the handler bodies are invokable directly.
+        _install_queue_registry_stub()
+
+        module_path = bot_root / "extensions" / "tournaments.py"
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        for key in list(sys.modules):
+            if key in ("utilities", "extensions") or key.startswith(("utilities.", "extensions.")):
+                del sys.modules[key]
+        sys.modules.update(snapshot)
 
 
-def _install_bot_stub_modules() -> None:
-    """Register minimal stand-ins for bot-internal modules the handler imports.
+def _install_queue_registry_stub() -> None:
+    """Stub ``extensions._queue_registry.queue_consumer`` as a no-op pass-through.
 
-    ``tournaments.py`` imports ``BaseHandler`` (from utilities.base) and
-    ``queue_consumer`` (from extensions._queue_registry). The real packages pull in
-    discord.py / aio_pika graphs; for unit tests we provide trivial substitutes so the
-    module imports cleanly and the handler body can be called directly.
+    The real wrapper expects a raw RabbitMQ ``message`` it decodes into the struct; these
+    tests invoke the handler body with an already-decoded event, so the stub decorator
+    returns the original handler unwrapped (attaching the metadata RabbitHandler reads).
+    A minimal ``extensions`` package shell is registered so the ``from
+    extensions._queue_registry import queue_consumer`` import resolves to the stub rather
+    than the real (aio_pika-importing) module.
     """
-    if "utilities" not in sys.modules:
-        utilities_pkg = ModuleType("utilities")
-        utilities_pkg.__path__ = []  # mark as package
-        sys.modules["utilities"] = utilities_pkg
+    extensions_pkg = ModuleType("extensions")
+    extensions_pkg.__path__ = []  # type: ignore[attr-defined]
+    sys.modules["extensions"] = extensions_pkg
 
-    if "utilities.base" not in sys.modules:
-        base_mod = ModuleType("utilities.base")
+    qr_mod = ModuleType("extensions._queue_registry")
 
-        class _BaseHandler:
-            def __init__(self, bot: Any) -> None:
-                self.bot = bot
+    def _queue_consumer(queue_name: str, *, struct_type: Any, idempotent: bool = False, **_: Any):  # noqa: ANN202
+        def decorator(fn):  # noqa: ANN001, ANN202
+            fn._queue_name = queue_name
+            fn._struct_type = struct_type
+            fn._idempotent = idempotent
+            return fn
 
-        base_mod.BaseHandler = _BaseHandler  # type: ignore[attr-defined]
-        sys.modules["utilities.base"] = base_mod
+        return decorator
 
-    if "extensions" not in sys.modules:
-        extensions_pkg = ModuleType("extensions")
-        extensions_pkg.__path__ = []
-        sys.modules["extensions"] = extensions_pkg
-
-    if "extensions._queue_registry" not in sys.modules:
-        qr_mod = ModuleType("extensions._queue_registry")
-
-        def _queue_consumer(queue_name: str, *, struct_type: Any, idempotent: bool = False, **_: Any):  # noqa: ANN202
-            def decorator(fn):  # noqa: ANN001, ANN202
-                fn._queue_name = queue_name
-                fn._struct_type = struct_type
-                fn._idempotent = idempotent
-                return fn
-
-            return decorator
-
-        qr_mod.queue_consumer = _queue_consumer  # type: ignore[attr-defined]
-        sys.modules["extensions._queue_registry"] = qr_mod
+    qr_mod.queue_consumer = _queue_consumer  # type: ignore[attr-defined]
+    sys.modules["extensions._queue_registry"] = qr_mod
 
 
 def _load_bot_conftest() -> ModuleType:
