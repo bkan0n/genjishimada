@@ -143,7 +143,16 @@ Plans:
   4. A per-cycle leaderboard endpoint returns ranked standings for a given cycle
   5. A tournament history/archive endpoint returns past cycles with their results and standings
 
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 06-01-PLAN.md -- Domain exceptions, SDK structs, repository fetch_cycles method, and service methods (submit, leaderboard, cycles list)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 06-02-PLAN.md -- Controller endpoints, service unit tests, and integration tests
 
 ### Phase 7: Automatic Cycle Transitions
 
@@ -215,7 +224,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 3. Repository Layer | 2/2 | Complete   | 2026-05-29 |
 | 4. Config & Category Management | 2/2 | Complete   | 2026-05-29 |
 | 5. Map Selection & Blacklist | 3/3 | Complete   | 2026-05-30 |
-| 6. Submission Flow & Leaderboard | 0/0 | Not started | - |
+| 6. Submission Flow & Leaderboard | 0/2 | Planning complete | - |
 | 7. Automatic Cycle Transitions | 0/0 | Not started | - |
 | 8. Rewards Engine | 0/0 | Not started | - |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
