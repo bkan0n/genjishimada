@@ -94,7 +94,13 @@ async def publish_pending_transitions(state: State) -> None:
         state: Application state holding ``db_pool`` (acquires its own connection,
             never a request-scoped one) and ``mq_channel_pool``.
     """
-    pool: Pool = state.db_pool
+    pool: Pool | None = state.get("db_pool")
+    if pool is None:
+        # Defensive readiness guard: on a fresh cold start the asyncpg lifespan
+        # (entered after the poller's lifespan) may not have populated db_pool yet.
+        # No-op cleanly rather than raising -- the next ~10s tick retries.
+        log.debug("[!] outbox poll skipped: db_pool not ready")
+        return
     service = TournamentOutboxService(pool, state)
     repository = TournamentRepository(pool)
     lootbox_repo = LootboxRepository(pool)

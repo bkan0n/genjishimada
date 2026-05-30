@@ -85,13 +85,18 @@ async def tournament_outbox_poller(_app: Litestar) -> AsyncGenerator[None, None]
         )
 
         while True:
+            # Sleep precedes the first poll so the asyncpg lifespan (entered after
+            # this poller's lifespan) has populated state.db_pool before the first
+            # publish -- avoids the cold-start db_pool race. The cadence stays ~10s
+            # (D-12): one poll per loop after each sleep, and this sleep is also the
+            # cancellation point the lifespan finally relies on (D-08).
+            await asyncio.sleep(10)
             try:
                 await publish_pending_transitions(_app.state)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 log.exception("[!] tournament outbox poll failed")
-            await asyncio.sleep(10)
 
     task = asyncio.create_task(_loop())
     try:
