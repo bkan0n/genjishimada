@@ -244,13 +244,13 @@ Plans:
   3. Players can check their participation streak via a slash command
   4. Admins can trigger a map reroll for a category's next cycle via a slash command
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 10-01-PLAN.md — API streak GET endpoint + TournamentService.get_streak + tests (D-01)
-- [ ] 10-02-PLAN.md — Bot APIService tournament wrappers + CategoryTransformer autocomplete (D-09)
+- [x] 10-02-PLAN.md — Bot APIService tournament wrappers + CategoryTransformer autocomplete (D-09)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -272,4 +272,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Automatic Cycle Transitions | 3/3 | Complete    | 2026-05-30 |
 | 8. Rewards Engine | 3/3 | Complete   | 2026-05-30 |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
-| 10. Bot Slash Commands | 1/3 | In Progress|  |
+| 10. Bot Slash Commands | 2/3 | In Progress|  |

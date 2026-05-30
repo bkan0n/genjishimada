@@ -21,24 +21,35 @@ private attribute would silently never register the consumers.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
+import os
+from http import HTTPStatus
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Sequence
 
 import discord
-from discord import TextChannel
+from discord import TextChannel, app_commands, ui
+from discord.ext import commands
+from genjishimada_sdk.maps import OverwatchCode
 from genjishimada_sdk.tournaments import (
     TournamentCategoryResponse,
+    TournamentChooseMapRequest,
     TournamentCycleCompletedEvent,
     TournamentCycleStartedEvent,
+    TournamentLeaderboardEntryResponse,
 )
 
 from extensions._queue_registry import queue_consumer
-from utilities.base import BaseHandler
+from utilities import transformers
+from utilities.base import BaseCog, BaseHandler
+from utilities.errors import APIHTTPError, UserFacingError
+from utilities.paginator import StaticPaginatorView
 
 if TYPE_CHECKING:
     from aio_pika.abc import AbstractIncomingMessage
 
     import core
+    from utilities._types import GenjiItx
 
 log = getLogger(__name__)
 
@@ -228,6 +239,242 @@ class TournamentHandler(BaseHandler):
         return winner
 
 
+class TournamentLeaderboardPaginator(StaticPaginatorView[Any]):
+    """Static, in-memory leaderboard paginator (10 entries per page — D-13).
+
+    Pages are built eagerly in ``__init__`` (``StaticPaginatorView`` calls
+    ``rebuild_data`` + ``rebuild_components`` immediately, no separate ``.initialize()``).
+    Rows render numeric ``<@user_id>`` mentions ONLY — the free-text ``entry.name`` is
+    never interpolated into a mention (OQ2 / threat T-10-10: mention-injection
+    mitigation, matching the Phase-9 results embed).
+    """
+
+    def __init__(self, title: str, entries: Sequence[TournamentLeaderboardEntryResponse]) -> None:
+        """Initialize the leaderboard paginator.
+
+        Args:
+            title: Heading shown at the top of every page.
+            entries: Full ranked leaderboard (must be non-empty — callers
+                short-circuit the empty case before constructing the view to avoid a
+                zero-page modulo-by-zero on navigation).
+        """
+        super().__init__(title, entries, page_size=10)
+
+    def build_page_body(self) -> Sequence[ui.Item]:
+        """Render the current page as a single text block of ranked rows.
+
+        Returns:
+            Sequence[ui.Item]: One ``TextDisplay`` with the page's rows.
+        """
+        lines = [
+            f"`#{entry.rank}` <@{entry.user_id}> — {entry.time:.2f}s" for entry in self.get_current_page_data()
+        ]
+        return [ui.TextDisplay("\n".join(lines))]
+
+
+@app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
+class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
+    """Player-facing ``/tournament`` slash commands (info, leaderboard, streak — D-05).
+
+    All responses are ephemeral (D-10): each subcommand defers ``ephemeral=True`` as its
+    first line so per-user data is only ever visible to the invoker (threats T-10-08 /
+    T-10-09).
+    """
+
+    def __init__(self, bot: core.Genji) -> None:
+        """Store the running bot instance.
+
+        Args:
+            bot: The running Genji bot.
+        """
+        self.bot = bot
+
+    @app_commands.command(name="info")
+    async def info(
+        self,
+        itx: GenjiItx,
+        category: app_commands.Transform[int, transformers.CategoryTransformer],
+    ) -> None:
+        """Show the active cycle's rich card for a category (D-08 / D-11 / D-12).
+
+        Args:
+            itx: The interaction context.
+            category: The tournament category (resolved to its id by the transformer).
+        """
+        await itx.response.defer(ephemeral=True)
+        log.debug("[→] [Tournament] /tournament info category=%s user=%s", category, itx.user.id)
+
+        category_data = await itx.client.api.get_tournament_category(category)
+        cycles = (await itx.client.api.list_tournament_cycles(status="active", category_id=category)).cycles
+        if not cycles:
+            await itx.edit_original_response(content=f"No active cycle for {category_data.name} right now.")
+            return
+
+        active = cycles[0]
+        map_data = await itx.client.api.get_map(code=active.map_code)
+
+        embed = discord.Embed(
+            title=f"Active Tournament Cycle: {category_data.name}",
+            description=(
+                f"**Map:** [{active.map_name}]({_WORKSHOP_URL.format(code=active.map_code)}) (`{active.map_code}`)"
+            ),
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(name="Difficulty", value=str(map_data.difficulty), inline=True)
+        embed.add_field(name="Category", value=category_data.name, inline=True)
+
+        # OQ1: the cycles list has no ends_at — compute it locally from started_at and the
+        # category's cadence (weekly → 7d, biweekly → 14d). No API change required.
+        if active.started_at is not None:
+            ends_at = active.started_at + dt.timedelta(days=7 if category_data.cycle_frequency == "weekly" else 14)
+            embed.add_field(
+                name="Ends",
+                value=f"{discord.utils.format_dt(ends_at, 'R')} ({discord.utils.format_dt(ends_at, 'F')})",
+                inline=False,
+            )
+
+        if map_data.map_banner:
+            embed.set_thumbnail(url=map_data.map_banner)
+
+        await itx.edit_original_response(embed=embed)
+        log.info("[✓] [Tournament] /tournament info rendered for cycle=%s", active.id)
+
+    @app_commands.command(name="leaderboard")
+    async def leaderboard(
+        self,
+        itx: GenjiItx,
+        category: app_commands.Transform[int, transformers.CategoryTransformer],
+    ) -> None:
+        """Show the active cycle leaderboard, paginated 10-per-page (D-16).
+
+        Args:
+            itx: The interaction context.
+            category: The tournament category (resolved to its id by the transformer).
+        """
+        await itx.response.defer(ephemeral=True)
+        log.debug("[→] [Tournament] /tournament leaderboard category=%s user=%s", category, itx.user.id)
+
+        category_data = await itx.client.api.get_tournament_category(category)
+        cycles = (await itx.client.api.list_tournament_cycles(status="active", category_id=category)).cycles
+        if not cycles:
+            await itx.edit_original_response(content="No active cycle for that category right now.")
+            return
+
+        active = cycles[0]
+        entries = await itx.client.api.get_tournament_leaderboard(active.id)
+
+        # Pitfall 1: an empty leaderboard would build a zero-page StaticPaginatorView,
+        # and navigation does modulo by the page count → ZeroDivisionError. Short-circuit
+        # the friendly empty message BEFORE constructing the view.
+        if not entries:
+            await itx.edit_original_response(content="No submissions yet — be the first!")
+            return
+
+        view = TournamentLeaderboardPaginator(f"{category_data.name} — Leaderboard", entries)
+        await itx.edit_original_response(view=view)
+        view.original_interaction = itx
+        log.info("[✓] [Tournament] /tournament leaderboard rendered for cycle=%s", active.id)
+
+    @app_commands.command(name="streak")
+    async def streak(self, itx: GenjiItx) -> None:
+        """Show the invoker's own participation streak (self-only — D-02 / D-03).
+
+        The streak endpoint 404s when no record exists (Plan 10-01); the bot owns the
+        zero-state mapping (D-04): a 404 renders current 0 / max 0 with encouraging copy.
+        Any other status propagates.
+
+        Args:
+            itx: The interaction context.
+        """
+        await itx.response.defer(ephemeral=True)
+        log.debug("[→] [Tournament] /tournament streak user=%s", itx.user.id)
+
+        current = 0
+        maximum = 0
+        try:
+            streak_data = await itx.client.api.get_tournament_streak(itx.user.id)
+            current = streak_data.current_streak
+            maximum = streak_data.max_streak
+        except APIHTTPError as e:
+            # D-04: only the documented "no streak record" 404 maps to zero-state; any
+            # other HTTP error is a genuine fault and must NOT be swallowed.
+            if e.status != HTTPStatus.NOT_FOUND:
+                raise
+
+        embed = discord.Embed(title="Your Tournament Streak", color=discord.Color.green())
+        embed.add_field(name="Current Streak", value=str(current), inline=True)
+        embed.add_field(name="Max Streak", value=str(maximum), inline=True)
+        if current == 0 and maximum == 0:
+            embed.description = "Submit in a cycle to start your streak!"
+
+        await itx.edit_original_response(embed=embed)
+        log.info("[✓] [Tournament] /tournament streak rendered for user=%s", itx.user.id)
+
+
+class TournamentRerollCog(BaseCog):
+    """Hosts the flat ``/tournament-reroll`` admin command (D-06).
+
+    Kept OUT of the ``/tournament`` group: ``default_member_permissions`` applies at the
+    top-level command/group and cannot cleanly mix open player subcommands with a locked
+    admin one, so reroll is a separate flat guild command.
+    """
+
+    @app_commands.command(name="tournament-reroll")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
+    @app_commands.default_permissions(manage_guild=True)
+    async def tournament_reroll(
+        self,
+        itx: GenjiItx,
+        category: app_commands.Transform[int, transformers.CategoryTransformer],
+        code: app_commands.Transform[OverwatchCode, transformers.CodeAllTransformer] | None = None,
+    ) -> None:
+        """Reroll (random) or explicitly choose the next-cycle map for a category.
+
+        The authoritative access control is the bot-side Mod/Sensei role check below
+        (D-07 / threat T-10-07): the bot's single full-scope API key does NOT distinguish
+        Discord callers, and ``default_member_permissions`` is only a UI hint.
+
+        Args:
+            itx: The interaction context.
+            category: The tournament category (resolved to its id by the transformer).
+            code: Optional explicit map code (D-15); when omitted a random reroll runs (D-14).
+        """
+        await itx.response.defer(ephemeral=True)
+
+        assert isinstance(itx.user, discord.Member) and itx.guild
+        is_mod = (
+            itx.user.get_role(itx.client.config.roles.admin.mod) is not None
+            or itx.user.get_role(itx.client.config.roles.admin.sensei) is not None
+        )
+        if not is_mod:
+            # D-07: THE authoritative gate. Raised before any API write so a non-admin
+            # never triggers a reroll (asserted by the reroll_gate unit test).
+            raise UserFacingError("This command is for moderators only.")
+
+        log.debug("[→] [Tournament] /tournament-reroll category=%s code=%s by=%s", category, code, itx.user.id)
+        if code is None:
+            result = await itx.client.api.reroll_next_cycle(category)  # D-14: random
+        else:
+            result = await itx.client.api.choose_next_cycle(category, TournamentChooseMapRequest(map_code=code))
+
+        embed = discord.Embed(title="Next-Cycle Map Updated", color=discord.Color.blurple())
+        embed.description = (
+            f"**Map:** [{result.map_name}]({_WORKSHOP_URL.format(code=result.map_code)}) (`{result.map_code}`)"
+        )
+        embed.add_field(name="Difficulty", value=str(result.map_difficulty), inline=True)
+        await itx.edit_original_response(embed=embed)
+        log.info("[✓] [Tournament] /tournament-reroll set next-cycle map %s for category=%s", result.map_code, category)
+
+
 async def setup(bot: core.Genji) -> None:
-    """Register the tournament handler as a PUBLIC bot attribute (Pitfall 1)."""
+    """Register the tournament handler + slash command cogs.
+
+    Keeps the PUBLIC ``bot.tournaments`` handler attribute (Pitfall 1 — RabbitHandler
+    discovers queue consumers by walking ``dir(bot)``) and adds the player command group
+    and the flat reroll command as SEPARATE cogs (Pitfall 7 — never assign a cog over
+    ``bot.tournaments``). Staying in this module keeps both cogs inside the EXTENSIONS
+    sort that loads before ``rabbit.py``.
+    """
     bot.tournaments = TournamentHandler(bot)
+    await bot.add_cog(TournamentCommandCog(bot))
+    await bot.add_cog(TournamentRerollCog(bot))
