@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+from typing import TYPE_CHECKING
 
 import msgspec
 from asyncpg import Pool
@@ -14,13 +15,23 @@ from genjishimada_sdk.lootbox import (
     UserLootboxKeyAmountResponse,
     UserRewardResponse,
 )
-from genjishimada_sdk.xp import TierChangeResponse, XpGrantEvent, XpGrantRequest, XpGrantResponse, XpSummaryResponse
+from genjishimada_sdk.xp import (
+    XP_TYPES,
+    TierChangeResponse,
+    XpGrantEvent,
+    XpGrantRequest,
+    XpGrantResponse,
+    XpSummaryResponse,
+)
 from litestar.datastructures import State
 from litestar.datastructures.headers import Headers
 
 from repository.lootbox_repository import LootboxRepository
 from services.base import BaseService
 from services.exceptions.lootbox import InsufficientKeysError
+
+if TYPE_CHECKING:
+    from asyncpg import Connection
 
 log = logging.getLogger(__name__)
 
@@ -370,28 +381,42 @@ class LootboxService(BaseService):
 
         return results
 
-    async def grant_user_xp(
+    async def grant_xp(
         self,
         headers: Headers,
         user_id: int,
-        data: XpGrantRequest,
+        amount: int,
+        type: XP_TYPES,  # noqa: A002
+        reason: str | None = None,
+        *,
+        conn: Connection | None = None,
     ) -> XpGrantResponse:
-        """Grant XP to a user and publish event to RabbitMQ.
+        """Grant XP to a user and publish event to RabbitMQ (transaction-aware).
+
+        When a ``conn`` is supplied the lootbox.xp write participates in the
+        caller's transaction (no second connection is acquired), letting an
+        upstream ledger claim + this XP write commit atomically. The
+        ``api.xp.grant`` publish is a post-write notification — its amounts come
+        from the lootbox.xp write — and degrades gracefully on broker failure.
 
         Args:
             headers: Request headers for idempotency.
             user_id: Target user ID.
-            data: XP grant request.
+            amount: Base XP amount to grant.
+            type: Category describing why XP is granted.
+            reason: Optional free-text reason for the grant.
+            conn: Optional connection for transaction participation.
 
         Returns:
-            XP grant response.
+            XP grant response with previous/new amounts.
         """
-        multiplier = await self._lootbox_repo.fetch_xp_multiplier()
+        multiplier = await self._lootbox_repo.fetch_xp_multiplier(conn=conn)
 
         result = await self._lootbox_repo.upsert_user_xp(
             user_id=user_id,
-            xp_amount=data.amount,
+            xp_amount=amount,
             multiplier=float(multiplier),
+            conn=conn,
         )
 
         response = XpGrantResponse(
@@ -401,13 +426,14 @@ class LootboxService(BaseService):
 
         event = XpGrantEvent(
             user_id=user_id,
-            amount=data.amount,
-            type=data.type,
+            amount=amount,
+            type=type,
             previous_amount=result["previous_amount"],
             new_amount=result["new_amount"],
-            reason=data.reason,
+            reason=reason,
         )
 
+        log.debug("[→] Publishing XP grant for user %s (type=%s, amount=%s)", user_id, type, amount)
         await self.publish_message(
             routing_key="api.xp.grant",
             data=event,
@@ -415,6 +441,27 @@ class LootboxService(BaseService):
         )
 
         return response
+
+    async def grant_user_xp(
+        self,
+        headers: Headers,
+        user_id: int,
+        data: XpGrantRequest,
+    ) -> XpGrantResponse:
+        """Grant XP to a user and publish event to RabbitMQ.
+
+        Thin wrapper over grant_xp preserving the request-driven entry point
+        (no caller connection — acquires its own as before).
+
+        Args:
+            headers: Request headers for idempotency.
+            user_id: Target user ID.
+            data: XP grant request.
+
+        Returns:
+            XP grant response.
+        """
+        return await self.grant_xp(headers, user_id, data.amount, data.type, data.reason)
 
     async def update_xp_multiplier(self, multiplier: float) -> None:
         """Update the global XP multiplier.
