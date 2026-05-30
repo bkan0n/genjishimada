@@ -407,11 +407,19 @@ class TournamentCycleStartedEvent(Struct):
         cycle_id: Identifier of the started cycle.
         category_id: Category the cycle belongs to.
         map_id: Map selected for the cycle.
+        map_code: Workshop code of the selected map.
+        map_name: Display name of the selected map.
+        started_at: When the cycle became active.
+        ends_at: Computed end time for the cycle based on its frequency.
     """
 
     cycle_id: int
     category_id: int
     map_id: int
+    map_code: str
+    map_name: str
+    started_at: dt.datetime
+    ends_at: dt.datetime
 
 
 class TournamentCycleCompletedEvent(Struct):
@@ -420,10 +428,14 @@ class TournamentCycleCompletedEvent(Struct):
     Attributes:
         cycle_id: Identifier of the completed cycle.
         category_id: Category the cycle belongs to.
+        standings: Final ranked leaderboard entries snapshotted at finalization.
+        winner_user_id: User ID of the rank-1 winner, or None if no submissions.
     """
 
     cycle_id: int
     category_id: int
+    standings: list[TournamentLeaderboardEntryResponse]
+    winner_user_id: int | None
 
 
 class TournamentCompletionCreatedEvent(Struct):
