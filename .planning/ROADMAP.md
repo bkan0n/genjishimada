@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Repository Layer** - Implement raw SQL data access for all tournament operations (completed 2026-05-29)
 - [x] **Phase 4: Config & Category Management** - Service and controller layer for tournament configuration and category CRUD (completed 2026-05-29)
 - [x] **Phase 5: Map Selection & Blacklist** - Random map selection engine with cooldown window, pre-roll, and admin reroll (completed 2026-05-30)
-- [ ] **Phase 6: Submission Flow & Leaderboard** - Tournament completion submissions with tier-then-time ranking, cross-write, and leaderboard
+- [x] **Phase 6: Submission Flow & Leaderboard** - Tournament completion submissions with tier-then-time ranking, cross-write, and leaderboard (completed 2026-05-30)
 - [ ] **Phase 7: Automatic Cycle Transitions** - pg_cron scheduled transitions with outbox bridge pattern and placement computation
 - [ ] **Phase 8: Rewards Engine** - Participation XP, placement XP, streak tracking, and streak bonuses
 - [ ] **Phase 9: Bot Queue Consumers & Announcements** - RabbitMQ consumers for tournament events, Discord announcements, and champion role transfers
@@ -143,16 +143,16 @@ Plans:
   4. A per-cycle leaderboard endpoint returns ranked standings for a given cycle
   5. A tournament history/archive endpoint returns past cycles with their results and standings
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md -- Domain exceptions, SDK structs, repository fetch_cycles method, and service methods (submit, leaderboard, cycles list)
+- [x] 06-01-PLAN.md -- Domain exceptions, SDK structs, repository fetch_cycles method, and service methods (submit, leaderboard, cycles list)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-02-PLAN.md -- Controller endpoints, service unit tests, and integration tests
+- [x] 06-02-PLAN.md -- Controller endpoints, service unit tests, and integration tests
 
 ### Phase 7: Automatic Cycle Transitions
 
@@ -224,7 +224,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 3. Repository Layer | 2/2 | Complete   | 2026-05-29 |
 | 4. Config & Category Management | 2/2 | Complete   | 2026-05-29 |
 | 5. Map Selection & Blacklist | 3/3 | Complete   | 2026-05-30 |
-| 6. Submission Flow & Leaderboard | 0/2 | Planning complete | - |
+| 6. Submission Flow & Leaderboard | 2/2 | Complete   | 2026-05-30 |
 | 7. Automatic Cycle Transitions | 0/0 | Not started | - |
 | 8. Rewards Engine | 0/0 | Not started | - |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
