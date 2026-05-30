@@ -310,3 +310,222 @@ class TestUnauthenticated:
         response = await unauthenticated_client.get(f"{BASE}/config")
 
         assert response.status_code == 401
+
+
+class TestSelectMapEndpoint:
+    """Tests for POST /api/v3/tournaments/categories/{id}/select-map"""
+
+    async def test_select_map_creates_pending_cycle(self, test_client, asyncpg_pool, create_test_map):
+        """Select-map creates a pending cycle with map details."""
+        name = f"SelMap {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        # Set blacklist_weeks to 0 to avoid interference
+        await test_client.patch(f"{BASE}/config", json={"blacklist_weeks": 0})
+
+        # Create an eligible map with matching difficulty
+        await create_test_map(difficulty="Easy")
+
+        response = await test_client.post(f"{BASE}/categories/{category_id}/select-map")
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "map_code" in data
+        assert "map_name" in data
+        assert "map_difficulty" in data
+        assert data["status"] == "pending"
+
+    async def test_select_map_returns_409_when_pending_exists(self, test_client, asyncpg_pool, create_test_map):
+        """Select-map returns 409 when a pending cycle already exists."""
+        name = f"SelDup {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        # Set blacklist_weeks to 0
+        await test_client.patch(f"{BASE}/config", json={"blacklist_weeks": 0})
+
+        map_id = await create_test_map(difficulty="Easy")
+
+        # Insert a pending cycle directly
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO tournaments.cycles (category_id, map_id) VALUES ($1, $2)",
+                category_id,
+                map_id,
+            )
+
+        response = await test_client.post(f"{BASE}/categories/{category_id}/select-map")
+
+        assert response.status_code == 409
+
+    async def test_select_map_category_not_found(self, test_client):
+        """Select-map returns 404 for nonexistent category."""
+        response = await test_client.post(f"{BASE}/categories/999999/select-map")
+
+        assert response.status_code == 404
+
+
+class TestGetNextCycleEndpoint:
+    """Tests for GET /api/v3/tournaments/categories/{id}/next-cycle"""
+
+    async def test_preview_existing_pending(self, test_client, asyncpg_pool, create_test_map):
+        """GET next-cycle returns pending cycle with map details."""
+        name = f"Preview {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        map_id = await create_test_map(difficulty="Easy")
+
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                "INSERT INTO tournaments.cycles (category_id, map_id) VALUES ($1, $2)",
+                category_id,
+                map_id,
+            )
+
+        response = await test_client.get(f"{BASE}/categories/{category_id}/next-cycle")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "map_code" in data
+        assert data["status"] == "pending"
+
+    async def test_preview_no_pending_returns_404(self, test_client):
+        """GET next-cycle returns 404 when no pending cycle exists."""
+        name = f"NoPend {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        response = await test_client.get(f"{BASE}/categories/{category_id}/next-cycle")
+
+        assert response.status_code == 404
+
+    async def test_preview_category_not_found(self, test_client):
+        """GET next-cycle returns 404 for nonexistent category."""
+        response = await test_client.get(f"{BASE}/categories/999999/next-cycle")
+
+        assert response.status_code == 404
+
+
+class TestRerollEndpoint:
+    """Tests for POST /api/v3/tournaments/categories/{id}/reroll"""
+
+    async def test_reroll_changes_map(self, test_client, asyncpg_pool, create_test_map):
+        """Reroll replaces the pending cycle with a new map selection."""
+        name = f"Reroll {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        # Set blacklist_weeks to 0 to avoid interference
+        await test_client.patch(f"{BASE}/config", json={"blacklist_weeks": 0})
+
+        # Create multiple eligible maps so reroll can pick a different one
+        await create_test_map(difficulty="Easy")
+        await create_test_map(difficulty="Easy")
+
+        # Select initial map
+        select_resp = await test_client.post(f"{BASE}/categories/{category_id}/select-map")
+        assert select_resp.status_code == 201
+
+        # Reroll
+        response = await test_client.post(f"{BASE}/categories/{category_id}/reroll")
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["status"] == "pending"
+        assert "map_code" in data
+
+    async def test_reroll_no_pending_returns_404(self, test_client):
+        """Reroll returns 404 when no pending cycle exists."""
+        name = f"RerollNone {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        response = await test_client.post(f"{BASE}/categories/{category_id}/reroll")
+
+        assert response.status_code == 404
+
+
+class TestChooseMapEndpoint:
+    """Tests for PATCH /api/v3/tournaments/categories/{id}/next-cycle"""
+
+    async def test_choose_map_sets_specific_map(self, test_client, asyncpg_pool, create_test_map):
+        """Choose-map creates pending cycle with the specified map."""
+        name = f"Choose {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        map_id = await create_test_map(difficulty="Easy")
+
+        # Get the map code from DB
+        async with asyncpg_pool.acquire() as conn:
+            map_code = await conn.fetchval("SELECT code FROM core.maps WHERE id = $1", map_id)
+
+        response = await test_client.patch(
+            f"{BASE}/categories/{category_id}/next-cycle",
+            json={"map_code": map_code},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["map_code"] == map_code
+
+    async def test_choose_map_invalid_code_returns_422(self, test_client):
+        """Choose-map returns 422 for nonexistent map code."""
+        name = f"ChooseInv {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        response = await test_client.patch(
+            f"{BASE}/categories/{category_id}/next-cycle",
+            json={"map_code": "ZZZZZ"},
+        )
+
+        assert response.status_code == 422
+
+    async def test_choose_map_difficulty_mismatch_returns_422(self, test_client, asyncpg_pool, create_test_map):
+        """Choose-map returns 422 when map difficulty does not match category."""
+        name = f"ChooseMis {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Very Hard"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        # Create a map with "Easy" difficulty (mismatches "Very Hard" category)
+        map_id = await create_test_map(difficulty="Easy")
+
+        async with asyncpg_pool.acquire() as conn:
+            map_code = await conn.fetchval("SELECT code FROM core.maps WHERE id = $1", map_id)
+
+        response = await test_client.patch(
+            f"{BASE}/categories/{category_id}/next-cycle",
+            json={"map_code": map_code},
+        )
+
+        assert response.status_code == 422
