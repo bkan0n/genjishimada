@@ -29,7 +29,7 @@ class TestTournamentsSchema:
             assert row == 1
 
     async def test_tournaments_tables_exist(self, asyncpg_pool):
-        """All 6 tournament tables exist in the tournaments schema."""
+        """All 7 tournament tables exist in the tournaments schema."""
         async with asyncpg_pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -47,6 +47,7 @@ class TestTournamentsSchema:
                 "completions",
                 "streaks",
                 "pending_transitions",
+                "xp_grants",
             }
 
     async def test_config_singleton_constraint(self, asyncpg_pool):
