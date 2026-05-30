@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-05-30T03:37:50.758Z"
+last_updated: "2026-05-30T03:43:32.900Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 10
   completed_phases: 6
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
   percent: 60
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-29)
 ## Current Position
 
 Phase: 7 (automatic-cycle-transitions) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-30
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [█████████░] 87%
 | Phase 05 P02 | 2min | 2 tasks | 2 files |
 | Phase 05 P03 | 5min | 2 tasks | 3 files |
 | Phase 07 P01 | 15m | 2 tasks | 2 files |
+| Phase 07 P02 | 12m | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,7 @@ Recent decisions affecting current work:
 - [Phase 05]: choose_map silently replaces existing pending cycle rather than requiring explicit reroll first
 - [Phase ?]: D-02: cycle transitions use pg_try_advisory_xact_lock(2025070100) (transaction-level, auto-release, non-blocking no-op)
 - [Phase ?]: D-06: select_eligible_map SQL helper mirrors Phase 5 Python selection to keep the transition atomic
+- [Phase ?]: D-10/D-11/D-12: outbox poller is a Litestar lifespan asyncio task (10s cadence) selecting FOR UPDATE SKIP LOCKED and marking published in the same transaction; publish-before-mark gives at-least-once
 
 ### Pending Todos
 
@@ -98,6 +100,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-30T03:37:46.525Z
+Last session: 2026-05-30T03:43:24.929Z
 Stopped at: Phase 7 context gathered
 Resume file: None

@@ -167,7 +167,7 @@ Plans:
   4. The API polls the outbox and publishes RabbitMQ events for each pending transition
   5. Concurrent transition attempts are prevented by PostgreSQL advisory locks
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -176,7 +176,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-02-PLAN.md -- Outbox bridge: FOR UPDATE SKIP LOCKED hardening, outbox poller service, lifespan wiring
+- [x] 07-02-PLAN.md -- Outbox bridge: FOR UPDATE SKIP LOCKED hardening, outbox poller service, lifespan wiring
 
 **Wave 3** *(blocked on Waves 1-2 completion)*
 
@@ -238,7 +238,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 4. Config & Category Management | 2/2 | Complete   | 2026-05-29 |
 | 5. Map Selection & Blacklist | 3/3 | Complete   | 2026-05-30 |
 | 6. Submission Flow & Leaderboard | 2/2 | Complete   | 2026-05-30 |
-| 7. Automatic Cycle Transitions | 1/3 | In Progress|  |
+| 7. Automatic Cycle Transitions | 2/3 | In Progress|  |
 | 8. Rewards Engine | 0/0 | Not started | - |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
 | 10. Bot Slash Commands | 0/0 | Not started | - |
