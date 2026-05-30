@@ -988,10 +988,18 @@ class TournamentRepository(BaseRepository):
         *,
         conn: Connection | None = None,
     ) -> list[dict]:
-        """Fetch all unpublished pending transitions.
+        """Fetch all unpublished pending transitions, locking the selected rows.
+
+        The query appends ``FOR UPDATE SKIP LOCKED`` so concurrent pollers (e.g.
+        multiple API instances) never select the same outbox row. Callers MUST
+        invoke this within an open ``conn.transaction()`` for the row lock to be
+        meaningful: the lock is held only for the duration of that transaction,
+        and the matching ``mark_transition_published`` UPDATE must run in the
+        same transaction so the lock survives until the row is marked published.
 
         Args:
-            conn: Optional connection for transaction support.
+            conn: Optional connection for transaction support. Should be a
+                connection inside an open transaction so the row lock holds.
 
         Returns:
             List of unpublished transition dicts ordered by creation time.
@@ -1001,6 +1009,7 @@ class TournamentRepository(BaseRepository):
             SELECT * FROM tournaments.pending_transitions
             WHERE published = FALSE
             ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
         """
         rows = await _conn.fetch(query)
         return [dict(row) for row in rows]
