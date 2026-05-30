@@ -232,6 +232,68 @@ class TestPublishFailure:
         assert await _published(asyncpg_pool, bad) is False
 
 
+class TestCycleEndRewardHook:
+    """The poller invokes cycle-end rewards + the reset sweep on cycle_completed rows (08-03)."""
+
+    async def test_cycle_completed_invokes_award_cycle_end(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_cycle,
+        create_test_map,
+    ):
+        """A cycle_completed row drives award_cycle_end with the built event + conn."""
+        import services.tournament_reward_service as reward_module
+
+        category_id, map_id, cycle_id = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
+        await _seed_transition(
+            asyncpg_pool, cycle_id, "cycle_completed", _completed_payload(cycle_id, category_id)
+        )
+
+        _stub_publish(monkeypatch)
+        captured: list[int] = []
+
+        async def _fake_award(self, event, *, conn):  # noqa: ANN001
+            captured.append(event.cycle_id)
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        assert cycle_id in captured
+
+    async def test_cycle_started_does_not_invoke_award_cycle_end(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_cycle,
+        create_test_map,
+    ):
+        """A cycle_started row never invokes a reward call."""
+        import services.tournament_reward_service as reward_module
+
+        category_id, map_id, cycle_id = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
+        await _seed_transition(
+            asyncpg_pool, cycle_id, "cycle_started", _started_payload(cycle_id, category_id, map_id)
+        )
+
+        _stub_publish(monkeypatch)
+        captured: list[int] = []
+
+        async def _fake_award(self, event, *, conn):  # noqa: ANN001
+            captured.append(event.cycle_id)
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        assert cycle_id not in captured
+
+
 class TestBuildEvent:
     """_build_event rejects unknown event types (defense for the routing map)."""
 
