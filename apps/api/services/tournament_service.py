@@ -21,6 +21,7 @@ from genjishimada_sdk.tournaments import (
     TournamentCycleWithWinnerResponse,
     TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
+    TournamentStreakResponse,
 )
 from litestar.datastructures import State
 
@@ -38,6 +39,7 @@ from services.exceptions.tournaments import (
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
     SlowerTimeError,
+    StreakNotFoundError,
 )
 from services.tournament_reward_service import TournamentRewardService
 
@@ -153,6 +155,23 @@ class TournamentService(BaseService):
         if row is None:
             raise CategoryNotFoundError(category_id)
         return msgspec.convert(row, TournamentCategoryResponse)
+
+    async def get_streak(self, user_id: int) -> TournamentStreakResponse:
+        """Get a single user's participation streak.
+
+        Args:
+            user_id: User ID.
+
+        Returns:
+            User participation streak.
+
+        Raises:
+            StreakNotFoundError: If no streak record exists for the user.
+        """
+        row = await self._tournament_repo.fetch_streak(user_id)
+        if row is None:
+            raise StreakNotFoundError(user_id)
+        return msgspec.convert(row, TournamentStreakResponse)
 
     async def update_category(
         self,

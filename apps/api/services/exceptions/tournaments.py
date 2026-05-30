@@ -138,3 +138,10 @@ class SlowerTimeError(TournamentsError):
             current_best=current_best,
             submitted_time=submitted_time,
         )
+
+
+class StreakNotFoundError(TournamentsError):
+    """User tournament streak record does not exist."""
+
+    def __init__(self, user_id: int) -> None:
+        super().__init__("Tournament streak record not found.", user_id=user_id)

@@ -17,6 +17,7 @@ from genjishimada_sdk.tournaments import (
     TournamentCycleListResponse,
     TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
+    TournamentStreakResponse,
 )
 from litestar.di import Provide
 from litestar.params import Body, Parameter
@@ -43,6 +44,7 @@ from services.exceptions.tournaments import (
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
     SlowerTimeError,
+    StreakNotFoundError,
 )
 from services.tournament_reward_service import provide_tournament_reward_service
 from services.tournament_service import TournamentService, provide_tournament_service
@@ -182,6 +184,37 @@ class TournamentsController(litestar.Controller):
         try:
             return await tournament_service.get_category(category_id)
         except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+
+    @litestar.get(
+        path="/streaks/{user_id:int}",
+        summary="Get User Streak",
+        description="Get a single user's tournament participation streak.",
+        opt={"required_scopes": {"tournaments:read"}},
+    )
+    async def get_streak(
+        self,
+        tournament_service: TournamentService,
+        user_id: Annotated[int, Parameter(description="User ID")],
+    ) -> TournamentStreakResponse:
+        """Get a user's tournament participation streak.
+
+        Args:
+            tournament_service: Tournament service.
+            user_id: User ID.
+
+        Returns:
+            User participation streak.
+
+        Raises:
+            CustomHTTPException: 404 if no streak record exists for the user.
+        """
+        try:
+            return await tournament_service.get_streak(user_id)
+        except StreakNotFoundError as e:
             raise CustomHTTPException(
                 status_code=HTTP_404_NOT_FOUND,
                 detail=str(e),
