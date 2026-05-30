@@ -529,3 +529,304 @@ class TestChooseMapEndpoint:
         )
 
         assert response.status_code == 422
+
+
+class TestSubmitCompletionEndpoint:
+    """Tests for POST /api/v3/tournaments/cycles/{id}/submit"""
+
+    async def _setup_active_cycle(self, test_client, asyncpg_pool, create_test_map, create_test_user):
+        """Helper to create a category, map, active cycle, and user.
+
+        Returns (category_id, map_id, cycle_id, user_id).
+        """
+        name = f"Submit {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        map_id = await create_test_map(difficulty="Easy")
+        user_id = await create_test_user(nickname=f"Player{uuid4().hex[:6]}")
+
+        async with asyncpg_pool.acquire() as conn:
+            cycle_id = await conn.fetchval(
+                """
+                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at)
+                VALUES ($1, $2, 'active', NOW())
+                RETURNING id
+                """,
+                category_id,
+                map_id,
+            )
+
+        return category_id, map_id, cycle_id, user_id
+
+    async def test_submit_returns_201(self, test_client, asyncpg_pool, create_test_map, create_test_user):
+        """Valid submission returns 201 with completion data."""
+        _, _, cycle_id, user_id = await self._setup_active_cycle(
+            test_client, asyncpg_pool, create_test_map, create_test_user
+        )
+
+        response = await test_client.post(
+            f"{BASE}/cycles/{cycle_id}/submit",
+            json={
+                "user_id": user_id,
+                "time": 42.5,
+                "screenshot": "https://example.com/s.png",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "id" in data
+        assert data["cycle_id"] == cycle_id
+        assert data["time"] == 42.5
+
+    async def test_submit_faster_time_accepted(self, test_client, asyncpg_pool, create_test_map, create_test_user):
+        """Faster time submission succeeds after initial submission."""
+        _, _, cycle_id, user_id = await self._setup_active_cycle(
+            test_client, asyncpg_pool, create_test_map, create_test_user
+        )
+
+        first = await test_client.post(
+            f"{BASE}/cycles/{cycle_id}/submit",
+            json={"user_id": user_id, "time": 50.0, "screenshot": "https://example.com/s.png"},
+        )
+        assert first.status_code == 201
+
+        second = await test_client.post(
+            f"{BASE}/cycles/{cycle_id}/submit",
+            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s2.png"},
+        )
+        assert second.status_code == 201
+
+    async def test_submit_slower_time_rejected(self, test_client, asyncpg_pool, create_test_map, create_test_user):
+        """Slower time submission returns 409."""
+        _, _, cycle_id, user_id = await self._setup_active_cycle(
+            test_client, asyncpg_pool, create_test_map, create_test_user
+        )
+
+        first = await test_client.post(
+            f"{BASE}/cycles/{cycle_id}/submit",
+            json={"user_id": user_id, "time": 30.0, "screenshot": "https://example.com/s.png"},
+        )
+        assert first.status_code == 201
+
+        second = await test_client.post(
+            f"{BASE}/cycles/{cycle_id}/submit",
+            json={"user_id": user_id, "time": 35.0, "screenshot": "https://example.com/s2.png"},
+        )
+        assert second.status_code == 409
+
+    async def test_submit_to_completed_cycle_rejected(
+        self, test_client, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """Submission to completed cycle returns 409."""
+        name = f"Completed {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        map_id = await create_test_map(difficulty="Easy")
+        user_id = await create_test_user(nickname=f"Player{uuid4().hex[:6]}")
+
+        async with asyncpg_pool.acquire() as conn:
+            cycle_id = await conn.fetchval(
+                """
+                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at, ended_at)
+                VALUES ($1, $2, 'completed', NOW() - INTERVAL '7 days', NOW())
+                RETURNING id
+                """,
+                category_id,
+                map_id,
+            )
+
+        response = await test_client.post(
+            f"{BASE}/cycles/{cycle_id}/submit",
+            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s.png"},
+        )
+        assert response.status_code == 409
+
+    async def test_cross_write_sets_fk(self, test_client, asyncpg_pool, create_test_map, create_test_user):
+        """SUB-04: Cross-write sets tournament_completion_id FK on core.completions."""
+        _, map_id, cycle_id, user_id = await self._setup_active_cycle(
+            test_client, asyncpg_pool, create_test_map, create_test_user
+        )
+
+        response = await test_client.post(
+            f"{BASE}/cycles/{cycle_id}/submit",
+            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s.png"},
+        )
+        assert response.status_code == 201
+        tournament_completion_id = response.json()["id"]
+
+        async with asyncpg_pool.acquire() as conn:
+            core_fk = await conn.fetchval(
+                """
+                SELECT tournament_completion_id
+                FROM core.completions
+                WHERE user_id = $1 AND map_id = $2
+                ORDER BY inserted_at DESC
+                LIMIT 1
+                """,
+                user_id,
+                map_id,
+            )
+
+        assert core_fk is not None
+        assert core_fk == tournament_completion_id
+
+
+class TestLeaderboardEndpoint:
+    """Tests for GET /api/v3/tournaments/cycles/{id}/leaderboard"""
+
+    async def test_leaderboard_returns_200(self, test_client, asyncpg_pool, create_test_map, create_test_user):
+        """Leaderboard returns ranked entries after submission."""
+        name = f"LB {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        map_id = await create_test_map(difficulty="Easy")
+        user_id = await create_test_user(nickname=f"LBPlayer{uuid4().hex[:6]}")
+
+        async with asyncpg_pool.acquire() as conn:
+            cycle_id = await conn.fetchval(
+                """
+                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at)
+                VALUES ($1, $2, 'active', NOW())
+                RETURNING id
+                """,
+                category_id,
+                map_id,
+            )
+
+        await test_client.post(
+            f"{BASE}/cycles/{cycle_id}/submit",
+            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s.png"},
+        )
+
+        response = await test_client.get(f"{BASE}/cycles/{cycle_id}/leaderboard")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        assert "rank" in data[0]
+        assert "user_id" in data[0]
+        assert "name" in data[0]
+        assert "time" in data[0]
+
+    async def test_empty_leaderboard(self, test_client, asyncpg_pool, create_test_map):
+        """Empty cycle returns 200 with empty list."""
+        name = f"EmptyLB {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        map_id = await create_test_map(difficulty="Easy")
+
+        async with asyncpg_pool.acquire() as conn:
+            cycle_id = await conn.fetchval(
+                """
+                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at)
+                VALUES ($1, $2, 'active', NOW())
+                RETURNING id
+                """,
+                category_id,
+                map_id,
+            )
+
+        response = await test_client.get(f"{BASE}/cycles/{cycle_id}/leaderboard")
+
+        assert response.status_code == 200
+        assert response.json() == []
+
+
+class TestCycleListingEndpoint:
+    """Tests for GET /api/v3/tournaments/cycles"""
+
+    async def test_list_cycles_returns_200(self, test_client, asyncpg_pool, create_test_map):
+        """Cycle listing returns 200 with total and cycles list."""
+        name = f"CycleList {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        map_id = await create_test_map(difficulty="Easy")
+
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at, ended_at)
+                VALUES ($1, $2, 'completed', NOW() - INTERVAL '7 days', NOW())
+                """,
+                category_id,
+                map_id,
+            )
+
+        response = await test_client.get(f"{BASE}/cycles")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data
+        assert "cycles" in data
+        assert data["total"] >= 1
+
+    async def test_list_cycles_status_filter(self, test_client, asyncpg_pool, create_test_map):
+        """Status filter returns only matching cycles."""
+        name = f"Filter {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        map_id = await create_test_map(difficulty="Easy")
+
+        async with asyncpg_pool.acquire() as conn:
+            # Insert one active cycle
+            await conn.execute(
+                """
+                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at)
+                VALUES ($1, $2, 'active', NOW())
+                """,
+                category_id,
+                map_id,
+            )
+            # Insert one completed cycle (need another map to avoid conflicts)
+            map_id2 = await create_test_map(difficulty="Easy")
+            await conn.execute(
+                """
+                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at, ended_at)
+                VALUES ($1, $2, 'completed', NOW() - INTERVAL '7 days', NOW())
+                """,
+                category_id,
+                map_id2,
+            )
+
+        response = await test_client.get(f"{BASE}/cycles?status=completed")
+
+        assert response.status_code == 200
+        data = response.json()
+        for cycle in data["cycles"]:
+            assert cycle["status"] == "completed"
+
+    async def test_list_cycles_pagination(self, test_client, asyncpg_pool, create_test_map):
+        """Pagination limits results to requested count."""
+        response = await test_client.get(f"{BASE}/cycles?limit=1&offset=0")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data
+        assert "cycles" in data
+        assert len(data["cycles"]) <= 1
