@@ -381,7 +381,7 @@ class LootboxService(BaseService):
 
         return results
 
-    async def grant_xp(
+    async def grant_xp(  # noqa: PLR0913
         self,
         headers: Headers,
         user_id: int,
