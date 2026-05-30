@@ -83,8 +83,7 @@ class TournamentHandler(BaseHandler):
         embed = discord.Embed(
             title=f"New Tournament Cycle: {category.name}",
             description=(
-                f"**Map:** [{event.map_name}]({_WORKSHOP_URL.format(code=event.map_code)}) "
-                f"(`{event.map_code}`)"
+                f"**Map:** [{event.map_name}]({_WORKSHOP_URL.format(code=event.map_code)}) (`{event.map_code}`)"
             ),
             color=discord.Color.blurple(),
         )
