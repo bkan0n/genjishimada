@@ -265,6 +265,7 @@ class TestCycleEndRewardHook:
 
         async def _fake_award(self, event, *, conn):  # noqa: ANN001
             captured.append(event.cycle_id)
+            return []
 
         monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
         state = State({"db_pool": asyncpg_pool})
@@ -303,6 +304,7 @@ class TestCycleEndRewardHook:
 
         async def _fake_award(self, event, *, conn):  # noqa: ANN001
             captured.append(event.cycle_id)
+            return []
 
         monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
         state = State({"db_pool": asyncpg_pool})

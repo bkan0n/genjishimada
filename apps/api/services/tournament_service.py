@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from logging import getLogger
+from typing import TYPE_CHECKING
 
 import msgspec
 from asyncpg import Pool
@@ -39,6 +40,9 @@ from services.exceptions.tournaments import (
     SlowerTimeError,
 )
 from services.tournament_reward_service import TournamentRewardService
+
+if TYPE_CHECKING:
+    from genjishimada_sdk.xp import XpGrantEvent
 
 log = getLogger(__name__)
 
@@ -494,6 +498,7 @@ class TournamentService(BaseService):
             CycleNotActiveError: If the cycle is not active.
             SlowerTimeError: If submitted time is not faster than current best.
         """
+        pending_xp_events: list[XpGrantEvent] = []
         async with self._pool.acquire() as conn, conn.transaction():
             cycle = await self._tournament_repo.fetch_cycle(
                 cycle_id,
@@ -541,14 +546,21 @@ class TournamentService(BaseService):
             # insert above happens after the check); the 08-01 ledger makes a
             # replay a no-op even if this path were reached again. The grant runs
             # inside this open transaction so the ledger claim + lootbox.xp upsert
-            # + completion insert commit (or roll back) together.
+            # + completion insert commit (or roll back) together. The xp.grant
+            # NOTIFICATION is deferred (collected here) and published only after
+            # this transaction commits, so a rollback never tells the bot about XP
+            # that was erased (CR-02).
             if is_first_completion and self._reward_service is not None:
-                await self._reward_service.award_participation(
+                pending_xp_events = await self._reward_service.award_participation(
                     cycle=cycle,
                     user_id=data.user_id,
                     conn=conn,  # type: ignore[arg-type]
                 )
                 log.info("[✓] Participation XP granted for cycle %s to user %s", cycle_id, data.user_id)
+
+        # Transaction committed: now safe to publish the XP grant notification.
+        if pending_xp_events and self._reward_service is not None:
+            await self._reward_service.publish_xp_events(pending_xp_events)
 
         return msgspec.convert(row, TournamentCompletionResponse)
 

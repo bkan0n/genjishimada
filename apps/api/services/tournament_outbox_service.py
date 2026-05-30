@@ -13,6 +13,7 @@ duplicates harmless downstream.
 from __future__ import annotations
 
 from logging import getLogger
+from typing import TYPE_CHECKING
 
 import msgspec
 from asyncpg import Pool
@@ -27,6 +28,9 @@ from repository.tournaments_repository import TournamentRepository
 from services.base import BaseService
 from services.lootbox_service import LootboxService
 from services.tournament_reward_service import TournamentRewardService
+
+if TYPE_CHECKING:
+    from genjishimada_sdk.xp import XpGrantEvent
 
 log = getLogger(__name__)
 
@@ -102,6 +106,7 @@ async def publish_pending_transitions(state: State) -> None:
         lootbox_repo=lootbox_repo,
         lootbox_service=lootbox_service,
     )
+    pending_xp_events: list[XpGrantEvent] = []
     async with pool.acquire() as conn, conn.transaction():
         rows = await repository.fetch_unpublished_transitions(conn=conn)  # type: ignore[arg-type]
         for row in rows:
@@ -112,11 +117,18 @@ async def publish_pending_transitions(state: State) -> None:
             # (Option A) before the publish/mark. award_cycle_end is replay-safe via
             # the 08-01 ledger, so a re-delivered cycle_completed row grants no
             # duplicate XP. No second scheduler — this rides the ~10s poller.
+            # The non-idempotent xp.grant NOTIFICATIONS are collected and published
+            # only AFTER this transaction commits (CR-02): a rollback (e.g. a
+            # mark_transition_published failure) must not notify the bot about XP
+            # that rolled back and will be re-granted on the next poll.
             if row["event_type"] == "cycle_completed" and isinstance(event, TournamentCycleCompletedEvent):
-                await reward_service.award_cycle_end(event, conn=conn)  # type: ignore[arg-type]
+                pending_xp_events += await reward_service.award_cycle_end(event, conn=conn)  # type: ignore[arg-type]
                 await _reset_non_participant_streaks(repository, event, conn=conn)  # type: ignore[arg-type]
                 log.info("[✓] cycle-end rewards processed for cycle %s", event.cycle_id)
 
+            # The api.tournament.* event is idempotent (cycle-scoped key) and rides
+            # the existing at-least-once outbox contract, so it stays inside the
+            # transaction (publish-before-mark). Only the xp.grant events defer.
             await service.publish_message(
                 routing_key=routing_key,
                 data=event,
@@ -125,6 +137,10 @@ async def publish_pending_transitions(state: State) -> None:
             )
             await repository.mark_transition_published(row["id"], conn=conn)  # type: ignore[arg-type]
             log.info("[→] published %s for cycle %s", row["event_type"], row["cycle_id"])
+
+    # Transaction committed: publish the deferred, non-idempotent XP grant
+    # notifications. Best-effort (the XP is already durably persisted).
+    await reward_service.publish_xp_events(pending_xp_events)
 
 
 async def _reset_non_participant_streaks(

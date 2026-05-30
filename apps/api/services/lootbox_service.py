@@ -390,14 +390,22 @@ class LootboxService(BaseService):
         reason: str | None = None,
         *,
         conn: Connection | None = None,
+        pending_events: list[XpGrantEvent] | None = None,
     ) -> XpGrantResponse:
         """Grant XP to a user and publish event to RabbitMQ (transaction-aware).
 
         When a ``conn`` is supplied the lootbox.xp write participates in the
         caller's transaction (no second connection is acquired), letting an
-        upstream ledger claim + this XP write commit atomically. The
-        ``api.xp.grant`` publish is a post-write notification — its amounts come
-        from the lootbox.xp write — and degrades gracefully on broker failure.
+        upstream ledger claim + this XP write commit atomically.
+
+        The ``api.xp.grant`` event is a post-write notification (its amounts come
+        from the lootbox.xp write). When ``pending_events`` is supplied the publish
+        is DEFERRED: the event is appended to that list instead of published, so a
+        transactional caller can publish it only AFTER its transaction commits.
+        This prevents notifying the bot about XP that a later rollback would erase
+        (and that a replay would re-grant). When ``pending_events`` is None the
+        event publishes immediately, as the request-driven path expects; the
+        broker publish degrades gracefully on failure.
 
         Args:
             headers: Request headers for idempotency.
@@ -406,6 +414,9 @@ class LootboxService(BaseService):
             type: Category describing why XP is granted.
             reason: Optional free-text reason for the grant.
             conn: Optional connection for transaction participation.
+            pending_events: Optional collector. When provided, the built event is
+                appended here for post-commit publishing instead of being
+                published inline (see :meth:`publish_xp_events`).
 
         Returns:
             XP grant response with previous/new amounts.
@@ -433,6 +444,11 @@ class LootboxService(BaseService):
             reason=reason,
         )
 
+        if pending_events is not None:
+            # Defer: caller publishes via publish_xp_events after it commits.
+            pending_events.append(event)
+            return response
+
         log.debug("[→] Publishing XP grant for user %s (type=%s, amount=%s)", user_id, type, amount)
         await self.publish_message(
             routing_key="api.xp.grant",
@@ -441,6 +457,39 @@ class LootboxService(BaseService):
         )
 
         return response
+
+    async def publish_xp_events(self, events: list[XpGrantEvent], headers: Headers | None = None) -> None:
+        """Publish deferred ``api.xp.grant`` events after their transaction commits.
+
+        Used with :meth:`grant_xp`'s ``pending_events`` collector. Each publish is
+        a post-write notification, so a broker failure is logged and skipped
+        rather than raised — the XP is already durably committed, and re-raising
+        here cannot un-commit it. Callers invoke this only AFTER the transaction
+        that produced ``events`` has committed.
+
+        Args:
+            events: Deferred XP grant events to publish.
+            headers: Optional request headers for idempotency.
+        """
+        for event in events:
+            log.debug(
+                "[→] Publishing deferred XP grant for user %s (type=%s, amount=%s)",
+                event.user_id,
+                event.type,
+                event.amount,
+            )
+            try:
+                await self.publish_message(
+                    routing_key="api.xp.grant",
+                    data=event,
+                    headers=headers or Headers({}),
+                )
+            except Exception:  # notification is best-effort post-commit; XP already persisted
+                log.exception(
+                    "[!] Failed to publish committed XP grant for user %s (type=%s) — XP persisted; notice dropped",
+                    event.user_id,
+                    event.type,
+                )
 
     async def grant_user_xp(
         self,
