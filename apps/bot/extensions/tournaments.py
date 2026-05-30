@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 import discord
 from discord import TextChannel
 from genjishimada_sdk.tournaments import (
+    TournamentCategoryResponse,
     TournamentCycleCompletedEvent,
     TournamentCycleStartedEvent,
 )
@@ -125,7 +126,7 @@ class TournamentHandler(BaseHandler):
         category = await self.bot.api.get_tournament_category(event.category_id)
 
         # 1) Champion role transfer FIRST (Pitfall 5).
-        winner = await self._transfer_champion_role(event, category)
+        await self._transfer_champion_role(event, category)
 
         # 2) Build + post the single results embed LAST.
         embed = discord.Embed(title=f"{category.name} — Cycle Results", color=discord.Color.gold())
@@ -134,7 +135,11 @@ class TournamentHandler(BaseHandler):
         ]
         embed.add_field(name="Podium", value="\n".join(podium_lines) or "No submissions", inline=False)
 
+        # The announcement (embed field, content ping, and allow-list) is driven by the
+        # EVENT's winner — the source of truth for who won — not by the role-transfer side
+        # effect, so the ping stays consistent even if the role grant could not complete.
         content: str | None = None
+        allowed_users: list[discord.abc.Snowflake] = []
         if event.winner_user_id is not None:
             embed.add_field(
                 name="Champion",
@@ -142,38 +147,56 @@ class TournamentHandler(BaseHandler):
                 inline=False,
             )
             content = f"<@{event.winner_user_id}>"
+            allowed_users = [discord.Object(id=event.winner_user_id)]
 
-        allowed_mentions = discord.AllowedMentions(
-            users=[winner] if winner is not None else [],
-            everyone=False,
-            roles=False,
-        )
+        allowed_mentions = discord.AllowedMentions(users=allowed_users, everyone=False, roles=False)
         await self.announcement_channel.send(content=content, embed=embed, allowed_mentions=allowed_mentions)
         log.info("[✓] [Tournament] posted results embed for cycle=%s", event.cycle_id)
 
     async def _transfer_champion_role(
         self,
         event: TournamentCycleCompletedEvent,
-        category: object,
+        category: TournamentCategoryResponse,
     ) -> discord.Member | None:
         """Strip the champion role from all holders then grant it to the winner.
 
         Returns the winner ``Member`` when the role was granted, else None (no role
         configured, no winner, or the winner left the guild).
         """
-        role = self.guild.get_role(category.champion_role_id)  # type: ignore[attr-defined]
-        if role is None:
-            log.warning(
-                "[!] [Tournament] champion role %s not found in guild; skipping transfer (cycle=%s)",
-                category.champion_role_id,  # type: ignore[attr-defined]
+        # No champion role configured for this category (champion_role_id is int | None):
+        # nothing to transfer. This is a configuration state, NOT an operational fault, so
+        # it is logged distinctly from a configured-but-missing role below.
+        if category.champion_role_id is None:
+            log.info(
+                "[✓] [Tournament] no champion role configured for category %s; skipping transfer (cycle=%s)",
+                category.name,
                 event.cycle_id,
             )
             return None
 
-        # D-04: strip from ALL current holders (self-healing), staggered (Pitfall 2).
-        reason_reset = f"Tournament {category.name} cycle {event.cycle_id} reset"  # type: ignore[attr-defined]
+        role = self.guild.get_role(category.champion_role_id)
+        if role is None:
+            log.warning(
+                "[!] [Tournament] champion role %s not found in guild; skipping transfer (cycle=%s)",
+                category.champion_role_id,
+                event.cycle_id,
+            )
+            return None
+
+        # D-04: strip from ALL current holders (self-healing), staggered (Pitfall 2). Each
+        # strip is isolated: a single member that can't be edited (role hierarchy / transient
+        # 403) is logged and skipped rather than crashing the handler — crashing would DLQ a
+        # valid event and re-strip every holder on each retry (Pitfall 3).
+        reason_reset = f"Tournament {category.name} cycle {event.cycle_id} reset"
         for holder in list(role.members):
-            await holder.remove_roles(role, reason=reason_reset)
+            try:
+                await holder.remove_roles(role, reason=reason_reset)
+            except discord.HTTPException:
+                log.warning(
+                    "[!] [Tournament] failed to strip champion role from %s; continuing (cycle=%s)",
+                    holder.id,
+                    event.cycle_id,
+                )
             await asyncio.sleep(_ROLE_OP_DELAY)
 
         # D-05: no winner → leave the role vacant.
@@ -191,10 +214,16 @@ class TournamentHandler(BaseHandler):
             )
             return None
 
-        await winner.add_roles(
-            role,
-            reason=f"Champion of {category.name}, cycle {event.cycle_id}",  # type: ignore[attr-defined]
-        )
+        try:
+            await winner.add_roles(role, reason=f"Champion of {category.name}, cycle {event.cycle_id}")
+        except discord.HTTPException:
+            log.warning(
+                "[!] [Tournament] failed to grant champion role to %s; role left vacant (cycle=%s)",
+                event.winner_user_id,
+                event.cycle_id,
+            )
+            return None
+
         log.info("[✓] [Tournament] granted champion role to %s for cycle=%s", event.winner_user_id, event.cycle_id)
         return winner
 

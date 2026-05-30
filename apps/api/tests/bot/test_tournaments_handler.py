@@ -346,6 +346,29 @@ async def test_champion_vacant_when_no_winner(mock_api: AsyncMock, monkeypatch: 
 
 
 @pytest.mark.asyncio
+async def test_champion_no_role_configured_skips_transfer(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CR-01: champion_role_id None (no role configured) → skip transfer, still post results."""
+    import msgspec
+
+    mock_api.get_tournament_category.return_value = msgspec.structs.replace(sample_category, champion_role_id=None)
+    role = FakeRole(role_id=999000111, members=[FakeMember(member_id=901)])
+    guild = FakeGuild(roles={role.id: role}, members={111: FakeMember(member_id=111)})
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel, guild=guild)
+
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+
+    event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
+    # No champion role configured: must not raise, must not touch any role, still posts results.
+    await handler._on_cycle_completed(event, None)
+
+    assert role.members[0].remove_roles_calls == []  # no strip attempted
+    assert len(channel.send_calls) == 1  # results embed still posts
+
+
+@pytest.mark.asyncio
 async def test_champion_member_left_guild_does_not_crash(
     mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
