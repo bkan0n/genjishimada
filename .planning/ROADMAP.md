@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Automatic Cycle Transitions** - pg_cron scheduled transitions with outbox bridge pattern and placement computation (completed 2026-05-30)
 - [x] **Phase 8: Rewards Engine** - Participation XP, placement XP, streak tracking, and streak bonuses (completed 2026-05-30)
 - [x] **Phase 9: Bot Queue Consumers & Announcements** - RabbitMQ consumers for tournament events, Discord announcements, and champion role transfers
-- [ ] **Phase 10: Bot Slash Commands** - Discord slash commands for tournament info, leaderboard, and admin actions
+- [x] **Phase 10: Bot Slash Commands** - Discord slash commands for tournament info, leaderboard, and admin actions (completed 2026-05-30)
 
 ## Phase Details
 
@@ -115,7 +115,7 @@ Plans:
   4. Admin can reroll a specific category's next map or explicitly choose a map via the API
   5. When the eligible pool is exhausted, the system falls back to the least-recently-used map and logs a warning
 
-**Plans:** 3/3 plans complete
+**Plans:** 4 plans (3 complete + 1 gap closure)
 
 Plans:
 **Wave 1**
@@ -182,6 +182,10 @@ Plans:
 
 - [x] 07-03-PLAN.md -- Transition, selection-parity, and outbox-poller integration tests
 
+**Gap Closure (07-UAT Test 1)**
+
+- [ ] 07-04-PLAN.md -- Fix cold-start db_pool lifespan race in outbox poller (defer first poll + readiness guard + regression test)
+
 ### Phase 8: Rewards Engine
 
 **Goal**: Players earn XP for tournament participation and placements, and maintain weekly streaks that grant bonus XP at configurable thresholds
@@ -244,7 +248,7 @@ Plans:
   3. Players can check their participation streak via a slash command
   4. Admins can trigger a map reroll for a category's next cycle via a slash command
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -254,7 +258,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 10-03-PLAN.md — /tournament info/leaderboard/streak GroupCog + /tournament-reroll admin command + setup wiring + bot tests
+- [x] 10-03-PLAN.md — /tournament info/leaderboard/streak GroupCog + /tournament-reroll admin command + setup wiring + bot tests
 
 ## Progress
 
@@ -272,4 +276,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Automatic Cycle Transitions | 3/3 | Complete    | 2026-05-30 |
 | 8. Rewards Engine | 3/3 | Complete   | 2026-05-30 |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
-| 10. Bot Slash Commands | 2/3 | In Progress|  |
+| 10. Bot Slash Commands | 3/3 | Complete   | 2026-05-30 |

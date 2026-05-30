@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 10 context gathered
-last_updated: "2026-05-30T19:59:11.537Z"
+status: verifying
+stopped_at: Completed 07-04-PLAN.md (gap closure)
+last_updated: "2026-05-30T22:30:00Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 23
-  completed_plans: 22
-  percent: 90
+  completed_plans: 23
+  percent: 100
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-05-29)
 
 Phase: 10 (bot-slash-commands) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
-Last activity: 2026-05-30
+Status: Phase complete — ready for verification
+Last activity: 2026-05-30 - Completed quick task 260530-mu5: add just recipes for local infrastructure
 
-Progress: [██████████] 96%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -70,6 +70,8 @@ Progress: [██████████] 96%
 | Phase 09 P02 | 18min | 3 tasks | 3 files |
 | Phase 10 P01 | 13min | 2 tasks | 5 files |
 | Phase 10 P02 | 4min | 2 tasks | 2 files |
+| Phase 10 P03 | 7min | 3 tasks | 3 files |
+| Phase 07 P04 | 8min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -109,6 +111,11 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 10]: 10-01 get_streak mirrors get_category three-tier hierarchy — service raises StreakNotFoundError(TournamentsError), route converts to 404; endpoint 404s on absent (D-04 zero-mapping is bot-side, Plan 10-03)
 - [Phase ?]: [Phase 10]: 10-02 six tournament APIService wrappers are sync def returning self._request; choose_next_cycle uses PATCH /next-cycle (controller verb, overriding CONTEXT D-15 POST mention)
 - [Phase ?]: [Phase 10]: 10-02 CategoryTransformer mirrors UserTransformer (digit fast-path + live autocomplete capped at 25, no cache); name miss raises UserFacingError
+- [Phase ?]: [Phase 10]: 10-03 /tournament is a GroupCog (info/leaderboard/streak); /tournament-reroll is a SEPARATE flat command (default_member_permissions applies at top-level, can't mix open+locked subcommands)
+- [Phase ?]: [Phase 10]: 10-03 authoritative reroll gate is bot-side itx.user.get_role(mod/sensei) raising UserFacingError; default_member_permissions is a UI hint only (bot key is full-scope)
+- [Phase ?]: [Phase 10]: 10-03 bot owns streak 404->zero-state (except APIHTTPError + e.status==NOT_FOUND -> 0/0); empty leaderboard short-circuits before paginator (zero-page modulo guard)
+- [Phase ?]: [Phase 10]: 10-03 TournamentLeaderboardPaginator is StaticPaginatorView[Any]; both bot test files share a real-utilities loader with sys.modules snapshot/restore
+- [Phase 07]: 07-04 fixed cold-start db_pool race: poller _loop sleeps before its first poll (asyncpg lifespan is plugin-appended after the poller's) + publish_pending_transitions guards state.get('db_pool') with a clean no-op; cadence/cancellation/semantics unchanged
 
 ### Pending Todos
 
@@ -120,6 +127,12 @@ None yet.
 - Research flag: Phase 7 (Cycle Transitions) outbox bridge pattern is architecturally novel for this codebase -- needs validation during planning
 - Verification tier mapping: existing completions use boolean `verified` + `video` presence, tournament needs integer tiers -- resolve during Phase 1 schema design
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260530-mu5 | add just recipes for local infrastructure (infra-up, infra-down, infra-logs) | 2026-05-30 | d178334 | [260530-mu5-add-just-recipes-for-local-infrastructur](./quick/260530-mu5-add-just-recipes-for-local-infrastructur/) |
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone close:
@@ -130,6 +143,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-30T19:59:06.961Z
-Stopped at: Phase 10 context gathered
+Last session: 2026-05-30T20:13:34.581Z
+Stopped at: Completed 07-04-PLAN.md (gap closure)
 Resume file: None
