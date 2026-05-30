@@ -314,6 +314,26 @@ class TestCycleEndRewardHook:
         assert cycle_id not in captured
 
 
+class TestPoolNotReady:
+    """publish_pending_transitions no-ops cleanly when db_pool is absent (07-04).
+
+    Regression for the cold-start lifespan race: the poller's first tick could run
+    before the asyncpg lifespan populated state.db_pool. The defensive readiness
+    guard must return early (no exception, no publish) rather than raising.
+    """
+
+    async def test_publish_noops_when_db_pool_absent(self, monkeypatch: pytest.MonkeyPatch):
+        """With no db_pool in state the call returns normally and never publishes."""
+        state = State({})  # empty -- no db_pool key
+        calls = _stub_publish(monkeypatch)
+
+        # Must not raise (KeyError/AttributeError) -- the guard returns early.
+        await publish_pending_transitions(state)
+
+        # The guard returned before any publish / DB acquire.
+        assert calls == []
+
+
 class TestBuildEvent:
     """_build_event rejects unknown event types (defense for the routing map)."""
 
