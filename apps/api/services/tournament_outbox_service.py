@@ -22,8 +22,11 @@ from genjishimada_sdk.tournaments import (
 )
 from litestar.datastructures import Headers, State
 
+from repository.lootbox_repository import LootboxRepository
 from repository.tournaments_repository import TournamentRepository
 from services.base import BaseService
+from services.lootbox_service import LootboxService
+from services.tournament_reward_service import TournamentRewardService
 
 log = getLogger(__name__)
 
@@ -90,10 +93,30 @@ async def publish_pending_transitions(state: State) -> None:
     pool: Pool = state.db_pool
     service = TournamentOutboxService(pool, state)
     repository = TournamentRepository(pool)
+    lootbox_repo = LootboxRepository(pool)
+    lootbox_service = LootboxService(pool=pool, state=state, lootbox_repo=lootbox_repo)
+    reward_service = TournamentRewardService(
+        pool=pool,
+        state=state,
+        tournament_repo=repository,
+        lootbox_repo=lootbox_repo,
+        lootbox_service=lootbox_service,
+    )
     async with pool.acquire() as conn, conn.transaction():
         rows = await repository.fetch_unpublished_transitions(conn=conn)  # type: ignore[arg-type]
         for row in rows:
             routing_key, event = _build_event(row)
+
+            # RWD-02/04/05: on a finalizing cycle, grant placement + streak rewards
+            # and reset non-participant streaks INSIDE this outbox transaction
+            # (Option A) before the publish/mark. award_cycle_end is replay-safe via
+            # the 08-01 ledger, so a re-delivered cycle_completed row grants no
+            # duplicate XP. No second scheduler — this rides the ~10s poller.
+            if row["event_type"] == "cycle_completed" and isinstance(event, TournamentCycleCompletedEvent):
+                await reward_service.award_cycle_end(event, conn=conn)  # type: ignore[arg-type]
+                await _reset_non_participant_streaks(repository, event, conn=conn)  # type: ignore[arg-type]
+                log.info("[✓] cycle-end rewards processed for cycle %s", event.cycle_id)
+
             await service.publish_message(
                 routing_key=routing_key,
                 data=event,
@@ -102,3 +125,33 @@ async def publish_pending_transitions(state: State) -> None:
             )
             await repository.mark_transition_published(row["id"], conn=conn)  # type: ignore[arg-type]
             log.info("[→] published %s for cycle %s", row["event_type"], row["cycle_id"])
+
+
+async def _reset_non_participant_streaks(
+    repository: TournamentRepository,
+    event: TournamentCycleCompletedEvent,
+    *,
+    conn: object,
+) -> None:
+    """Reset streaks to 0 for every tracked user who did not participate this cycle.
+
+    award_cycle_end advances streaks only for the finalizing cycle's participants
+    (it cannot see the full tracked-user set). This sweep — owned by 08-03 — closes
+    that gap: it reads the full streak roster via fetch_all_streak_user_ids (08-01)
+    and calls advance_streak(participated=False) for every tracked user NOT in
+    fetch_cycle_participants, resetting current_streak to 0 and stamping
+    last_cycle_id. The advance_streak ``last_cycle_id IS DISTINCT FROM`` guard keeps
+    the multi-category dedupe intact (a participant already stamped with this cycle
+    is never reset here because they are excluded as a participant).
+
+    Args:
+        repository: Tournament repository (streak roster + participants + advance).
+        event: Cycle-completed event carrying the finalizing cycle_id.
+        conn: Active outbox connection for transactional participation.
+    """
+    all_tracked = set(await repository.fetch_all_streak_user_ids(conn=conn))  # type: ignore[arg-type]
+    participants = set(await repository.fetch_cycle_participants(event.cycle_id, conn=conn))  # type: ignore[arg-type]
+    non_participants = all_tracked - participants
+    for user_id in non_participants:
+        await repository.advance_streak(user_id, event.cycle_id, False, conn=conn)  # type: ignore[arg-type]
+        log.debug("[!] streak reset to 0 for non-participant %s (cycle %s)", user_id, event.cycle_id)

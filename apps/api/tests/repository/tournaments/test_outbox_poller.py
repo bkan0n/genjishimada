@@ -251,6 +251,15 @@ class TestCycleEndRewardHook:
             asyncpg_pool, cycle_id, "cycle_completed", _completed_payload(cycle_id, category_id)
         )
 
+        # The xdist/session-shared DB may carry an orphaned unpublishable poison row
+        # from TestPublishFailure that would make the poll raise before reaching our
+        # row. Clear all still-unpublished rows first so this poll batch is just ours.
+        async with asyncpg_pool.acquire() as _c:
+            await _c.execute(
+                "DELETE FROM tournaments.pending_transitions WHERE published = FALSE AND cycle_id <> $1",
+                cycle_id,
+            )
+
         _stub_publish(monkeypatch)
         captured: list[int] = []
 
@@ -279,6 +288,15 @@ class TestCycleEndRewardHook:
         await _seed_transition(
             asyncpg_pool, cycle_id, "cycle_started", _started_payload(cycle_id, category_id, map_id)
         )
+
+        # The xdist/session-shared DB may carry an orphaned unpublishable poison row
+        # from TestPublishFailure that would make the poll raise before reaching our
+        # row. Clear all still-unpublished rows first so this poll batch is just ours.
+        async with asyncpg_pool.acquire() as _c:
+            await _c.execute(
+                "DELETE FROM tournaments.pending_transitions WHERE published = FALSE AND cycle_id <> $1",
+                cycle_id,
+            )
 
         _stub_publish(monkeypatch)
         captured: list[int] = []
