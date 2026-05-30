@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -64,6 +66,40 @@ async def rabbitmq_connection(_app: Litestar) -> AsyncGenerator[None, None]:
 
         _app.state.mq_channel_pool = channel_pool
     yield
+
+
+@asynccontextmanager
+async def tournament_outbox_poller(_app: Litestar) -> AsyncGenerator[None, None]:
+    """Poll the tournaments outbox and publish pending transition events.
+
+    Runs a background asyncio task for the lifetime of the app that drives
+    ``publish_pending_transitions`` on a ~10s cadence (D-12), consuming the
+    every-minute pg_cron outbox writes. The broad ``except`` keeps the loop
+    alive so one bad row does not kill polling (captured by Sentry); the task is
+    cancelled and awaited on shutdown for a clean exit (D-10).
+    """
+
+    async def _loop() -> None:
+        from services.tournament_outbox_service import (  # noqa: PLC0415  # local import avoids circular import
+            publish_pending_transitions,
+        )
+
+        while True:
+            try:
+                await publish_pending_transitions(_app.state)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("[!] tournament outbox poll failed")
+            await asyncio.sleep(10)
+
+    task = asyncio.create_task(_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 def default_exception_handler(_: Request, exc: Exception) -> Response:
@@ -201,7 +237,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
             HTTP_500_INTERNAL_SERVER_ERROR: internal_server_error_handler,
         },
         listeners=listeners,
-        lifespan=[rabbitmq_connection],
+        lifespan=[rabbitmq_connection, tournament_outbox_poller],
         logging_config=logging_config,
         middleware=[auth_middleware],
         guards=[scope_guard],
