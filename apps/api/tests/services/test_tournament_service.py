@@ -352,6 +352,48 @@ class TestSubmitCompletion:
             )
 
 
+class TestSubmitParticipationHook:
+    """Tests for the participation-XP hook wired into submit_completion (08-03)."""
+
+    async def test_first_completion_awards_participation(self, mock_pool, mock_state, mock_tournament_repo, mocker):
+        """First completion (existing is None) calls award_participation inside the txn with conn."""
+        reward_service = mocker.AsyncMock()
+        service = TournamentService(mock_pool, mock_state, mock_tournament_repo, reward_service)
+
+        mock_tournament_repo.fetch_cycle.return_value = _cycle()
+        mock_tournament_repo.fetch_user_completion.return_value = None
+        mock_tournament_repo.create_tournament_completion.return_value = _completion()
+        mock_tournament_repo.cross_write_to_core.return_value = 999
+
+        await service.submit_completion(
+            1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
+        )
+
+        reward_service.award_participation.assert_awaited_once()
+        call = reward_service.award_participation.await_args
+        assert call.kwargs["user_id"] == 100
+        assert call.kwargs["cycle"]["id"] == 1
+        assert "conn" in call.kwargs
+
+    async def test_repeat_completion_does_not_award_participation(
+        self, mock_pool, mock_state, mock_tournament_repo, mocker
+    ):
+        """A faster repeat submission (existing is not None) does not re-trigger participation."""
+        reward_service = mocker.AsyncMock()
+        service = TournamentService(mock_pool, mock_state, mock_tournament_repo, reward_service)
+
+        mock_tournament_repo.fetch_cycle.return_value = _cycle()
+        mock_tournament_repo.fetch_user_completion.return_value = _completion(time=50.0)
+        mock_tournament_repo.create_tournament_completion.return_value = _completion(time=42.5)
+        mock_tournament_repo.cross_write_to_core.return_value = 999
+
+        await service.submit_completion(
+            1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
+        )
+
+        reward_service.award_participation.assert_not_awaited()
+
+
 class TestGetLeaderboard:
     """Tests for TournamentService.get_leaderboard."""
 
