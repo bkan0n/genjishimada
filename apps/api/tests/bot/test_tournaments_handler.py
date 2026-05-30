@@ -1,7 +1,7 @@
-"""Wave 0 stubs for the tournament announcement handler (Plan 09-02 fills these in).
+"""Unit tests for the tournament announcement handler (Plan 09-02).
 
-Each stub maps to one behavior in the Phase 9 VALIDATION map and is named so the
-documented ``-k`` selector picks exactly one test:
+Each test maps to one behavior in the Phase 9 VALIDATION map and is named so the
+documented ``-k`` selector picks exactly one group:
 
 - ``-k cycle_started``     → DSC-01: new-cycle embed posted after fetching category + map
 - ``-k results_embed``     → DSC-02: Top-3 results embed (no XP line, D-03)
@@ -10,42 +10,423 @@ documented ``-k`` selector picks exactly one test:
 - ``-k stagger``           → DSC-03 / RWD-03: role ops staggered to respect Discord rate limits
 - ``-k idempotency``       → DSC-01/02: cycle-scoped dedupe; claim released on failure
 
-Stubs are marked ``xfail(strict=False)`` so they collect and skip-red without breaking the
-suite until Plan 09-02 implements the handler.
+The handler body is invoked directly with injected fakes (mock ``bot.api``, a fake
+announcement channel, the conftest fake guild/role/member trio). The ``@queue_consumer``
+wrapper's pytest-header short-circuit covers the live RabbitMQ path; these tests exercise
+the underlying handler logic.
 """
 
 from __future__ import annotations
 
+import datetime as dt
+import importlib.util
+import pathlib
+import sys
+from types import ModuleType, SimpleNamespace
+from typing import TYPE_CHECKING, Any
+from unittest.mock import AsyncMock
+
 import pytest
+from genjishimada_sdk.tournaments import (
+    TournamentCycleCompletedEvent,
+    TournamentCycleStartedEvent,
+    TournamentLeaderboardEntryResponse,
+)
 
-pytestmark = pytest.mark.xfail(reason="implemented in 09-02", strict=False)
+if TYPE_CHECKING:
+    from genjishimada_sdk.tournaments import TournamentCategoryResponse
 
 
-def test_cycle_started_posts_new_cycle_embed() -> None:
+def _repo_root() -> pathlib.Path:
+    return pathlib.Path(__file__).resolve().parents[4]
+
+
+def _load_tournaments_module() -> ModuleType:
+    """Load apps/bot/extensions/tournaments.py by file path as an isolated module.
+
+    Loading by path avoids importing apps/bot's full extension graph (discord.py,
+    aio_pika, the bot ``core`` package) which is not on the apps/api test path. The
+    module is registered in ``sys.modules`` so any forward-ref annotations resolve.
+    """
+    module_name = "bot_extensions_tournaments"
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+
+    # The tournaments module imports a handful of bot-internal packages
+    # (utilities.base.BaseHandler, extensions._queue_registry, core). Those are not
+    # importable from the apps/api test path, so we pre-register lightweight stand-ins
+    # before exec'ing the module. We only need the symbols the module references at
+    # import time, not their behavior — the tests invoke the handler logic directly.
+    _install_bot_stub_modules()
+
+    bot_root = _repo_root() / "apps" / "bot"
+    if str(bot_root) not in sys.path:
+        sys.path.insert(0, str(bot_root))
+
+    module_path = bot_root / "extensions" / "tournaments.py"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _install_bot_stub_modules() -> None:
+    """Register minimal stand-ins for bot-internal modules the handler imports.
+
+    ``tournaments.py`` imports ``BaseHandler`` (from utilities.base) and
+    ``queue_consumer`` (from extensions._queue_registry). The real packages pull in
+    discord.py / aio_pika graphs; for unit tests we provide trivial substitutes so the
+    module imports cleanly and the handler body can be called directly.
+    """
+    if "utilities" not in sys.modules:
+        utilities_pkg = ModuleType("utilities")
+        utilities_pkg.__path__ = []  # mark as package
+        sys.modules["utilities"] = utilities_pkg
+
+    if "utilities.base" not in sys.modules:
+        base_mod = ModuleType("utilities.base")
+
+        class _BaseHandler:
+            def __init__(self, bot: Any) -> None:
+                self.bot = bot
+
+        base_mod.BaseHandler = _BaseHandler  # type: ignore[attr-defined]
+        sys.modules["utilities.base"] = base_mod
+
+    if "extensions" not in sys.modules:
+        extensions_pkg = ModuleType("extensions")
+        extensions_pkg.__path__ = []
+        sys.modules["extensions"] = extensions_pkg
+
+    if "extensions._queue_registry" not in sys.modules:
+        qr_mod = ModuleType("extensions._queue_registry")
+
+        def _queue_consumer(queue_name: str, *, struct_type: Any, idempotent: bool = False, **_: Any):  # noqa: ANN202
+            def decorator(fn):  # noqa: ANN001, ANN202
+                fn._queue_name = queue_name
+                fn._struct_type = struct_type
+                fn._idempotent = idempotent
+                return fn
+
+            return decorator
+
+        qr_mod.queue_consumer = _queue_consumer  # type: ignore[attr-defined]
+        sys.modules["extensions._queue_registry"] = qr_mod
+
+
+_tournaments = _load_tournaments_module()
+TournamentHandler = _tournaments.TournamentHandler
+
+
+def _make_handler(bot_api: AsyncMock, channel: Any, guild: Any | None = None) -> Any:
+    """Build a TournamentHandler bypassing BaseHandler async init.
+
+    BaseHandler.__init__ spawns an asyncio task to resolve the guild/channel after the
+    bot is ready; we side-step that and inject the resolved attributes directly.
+    """
+    handler = object.__new__(TournamentHandler)
+    handler.bot = SimpleNamespace(api=bot_api)
+    handler.announcement_channel = channel
+    if guild is not None:
+        handler.guild = guild
+    return handler
+
+
+class FakeChannel:
+    """A fake TextChannel recording send() calls."""
+
+    def __init__(self) -> None:
+        self.send_calls: list[dict[str, Any]] = []
+
+    async def send(self, *args: Any, **kwargs: Any) -> None:
+        self.send_calls.append({"args": args, "kwargs": kwargs})
+
+
+def _started_event() -> TournamentCycleStartedEvent:
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    return TournamentCycleStartedEvent(
+        cycle_id=42,
+        category_id=1,
+        map_id=7,
+        map_code="ABCD1",
+        map_name="Hanamura",
+        started_at=now,
+        ends_at=now + dt.timedelta(days=7),
+    )
+
+
+def _standings() -> list[TournamentLeaderboardEntryResponse]:
+    return [
+        TournamentLeaderboardEntryResponse(rank=1, user_id=111, name="alice", time=10.5, verified=True, completion=True),
+        TournamentLeaderboardEntryResponse(rank=2, user_id=222, name="bob", time=12.0, verified=True, completion=True),
+        TournamentLeaderboardEntryResponse(rank=3, user_id=333, name="cara", time=13.5, verified=True, completion=True),
+        TournamentLeaderboardEntryResponse(rank=4, user_id=444, name="dan", time=20.0, verified=True, completion=True),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# DSC-01: cycle_started
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_cycle_started_posts_new_cycle_embed(mock_api: AsyncMock, sample_map: SimpleNamespace) -> None:
     """DSC-01: cycle_started consumer fetches category + map and posts the new-cycle embed."""
-    raise NotImplementedError("Plan 09-02: implement cycle_started handler behavior test")
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel)
+    event = _started_event()
+
+    await handler._on_cycle_started(event, None)
+
+    mock_api.get_tournament_category.assert_awaited_once_with(event.category_id)
+    mock_api.get_map.assert_awaited_once_with(code=event.map_code)
+    assert len(channel.send_calls) == 1
+    embed = channel.send_calls[0]["kwargs"]["embed"]
+    rendered = (embed.title or "") + (embed.description or "")
+    rendered += "".join(f"{f.name}{f.value}" for f in embed.fields)
+    assert "Hanamura" in rendered
+    assert "Hard" in rendered  # difficulty + category name
+    assert event.map_code in rendered  # workshop code surfaced
+    assert "workshop.codes" in rendered  # clickable link
+    # thumbnail set from the (non-null) banner
+    assert embed.thumbnail.url == sample_map.map_banner
 
 
-def test_cycle_completed_posts_results_embed() -> None:
-    """DSC-02: cycle_completed consumer posts the Top-3 results embed (no XP line)."""
-    raise NotImplementedError("Plan 09-02: implement results_embed behavior test")
+@pytest.mark.asyncio
+async def test_cycle_started_no_thumbnail_when_banner_none(mock_api: AsyncMock) -> None:
+    """DSC-01: a null map_banner does not crash; embed still posts with no thumbnail."""
+    mock_api.get_map.return_value = SimpleNamespace(difficulty="Hard", map_name="Hanamura", map_banner=None)
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel)
+
+    await handler._on_cycle_started(_started_event(), None)
+
+    assert len(channel.send_calls) == 1
+    embed = channel.send_calls[0]["kwargs"]["embed"]
+    assert embed.thumbnail.url is None
 
 
-def test_champion_role_transfer_strips_all_then_grants() -> None:
-    """DSC-03 / RWD-03: strip champion role from all holders, then grant it to the winner."""
-    raise NotImplementedError("Plan 09-02: implement champion_role transfer behavior test")
+# ---------------------------------------------------------------------------
+# DSC-02 / D-03 / D-06: results_embed
+# ---------------------------------------------------------------------------
 
 
-def test_champion_vacant_when_no_winner() -> None:
-    """DSC-03 / RWD-03: winner_user_id is None strips all holders and leaves the role vacant."""
-    raise NotImplementedError("Plan 09-02: implement champion_vacant behavior test")
+@pytest.mark.asyncio
+async def test_cycle_completed_posts_results_embed(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse
+) -> None:
+    """DSC-02: cycle_completed posts ONE Top-3 results embed with a winner ping and NO XP line."""
+    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
+
+    winner = FakeMember(member_id=111)
+    role = FakeRole(role_id=sample_category.champion_role_id)
+    guild = FakeGuild(roles={role.id: role}, members={111: winner})
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel, guild=guild)
+
+    event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
+    await handler._on_cycle_completed(event, None)
+
+    assert len(channel.send_calls) == 1
+    call = channel.send_calls[0]
+    embed = call["kwargs"]["embed"]
+    rendered = (embed.title or "") + (embed.description or "")
+    rendered += "".join(f"{f.name}{f.value}" for f in embed.fields)
+    # Top-3 standings present, rank-4 absent
+    assert "<@111>" in rendered and "<@222>" in rendered and "<@333>" in rendered
+    assert "<@444>" not in rendered
+    # crowned Champion line folded in
+    assert "Champion" in rendered
+    # NO XP line anywhere
+    assert "XP" not in rendered.upper().replace("EXPERIENCE", "")
+    # winner pinged via content; allowed_mentions restricts to the winner only
+    assert call["kwargs"]["content"] == "<@111>"
+    allowed = call["kwargs"]["allowed_mentions"]
+    assert allowed.everyone is False
+    assert allowed.roles is False
 
 
-def test_role_ops_stagger_to_respect_rate_limits() -> None:
-    """DSC-03 / RWD-03: role add/remove operations are staggered to avoid Discord rate limits."""
-    raise NotImplementedError("Plan 09-02: implement stagger behavior test")
+@pytest.mark.asyncio
+async def test_cycle_completed_results_embed_empty_standings(mock_api: AsyncMock) -> None:
+    """DSC-02: empty standings render a 'No submissions' podium and do not crash."""
+    from conftest import FakeGuild, FakeRole  # type: ignore  # noqa: PLC0415
+
+    role = FakeRole(role_id=999000111)
+    guild = FakeGuild(roles={role.id: role}, members={})
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel, guild=guild)
+
+    event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=[], winner_user_id=None)
+    await handler._on_cycle_completed(event, None)
+
+    assert len(channel.send_calls) == 1
+    embed = channel.send_calls[0]["kwargs"]["embed"]
+    rendered = "".join(f"{f.name}{f.value}" for f in embed.fields)
+    assert "No submissions" in rendered
 
 
-def test_idempotency_skips_duplicate_and_releases_claim_on_failure() -> None:
-    """DSC-01/02: cycle-scoped idempotency skips duplicates and releases the claim on failure."""
-    raise NotImplementedError("Plan 09-02: implement idempotency behavior test")
+# ---------------------------------------------------------------------------
+# DSC-03 / RWD-03: champion_role + champion_vacant + stagger
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_champion_role_transfer_strips_all_then_grants(
+    mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DSC-03 / RWD-03: strip champion role from ALL holders, then grant it to the winner."""
+    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
+
+    stale1 = FakeMember(member_id=901)
+    stale2 = FakeMember(member_id=902)
+    winner = FakeMember(member_id=111)
+    role = FakeRole(role_id=999000111, members=[stale1, stale2])
+    guild = FakeGuild(roles={role.id: role}, members={111: winner})
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel, guild=guild)
+
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+
+    event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
+    await handler._on_cycle_completed(event, None)
+
+    # both stale holders stripped, each with a reason
+    assert len(stale1.remove_roles_calls) == 1
+    assert stale1.remove_roles_calls[0]["reason"]
+    assert len(stale2.remove_roles_calls) == 1
+    # winner granted, with a reason
+    assert len(winner.add_roles_calls) == 1
+    assert winner.add_roles_calls[0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_champion_vacant_when_no_winner(mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    """DSC-03 / RWD-03: winner_user_id None strips all holders and grants to no one (D-05)."""
+    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
+
+    stale1 = FakeMember(member_id=901)
+    stale2 = FakeMember(member_id=902)
+    role = FakeRole(role_id=999000111, members=[stale1, stale2])
+    guild = FakeGuild(roles={role.id: role}, members={})
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel, guild=guild)
+
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+
+    event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=[], winner_user_id=None)
+    await handler._on_cycle_completed(event, None)
+
+    assert len(stale1.remove_roles_calls) == 1
+    assert len(stale2.remove_roles_calls) == 1
+    # nobody granted the role
+    assert stale1.add_roles_calls == []
+    assert stale2.add_roles_calls == []
+
+
+@pytest.mark.asyncio
+async def test_champion_member_left_guild_does_not_crash(
+    mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DSC-03 / RWD-03: winner set but get_member None → log + continue, no crash, no grant."""
+    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
+
+    stale1 = FakeMember(member_id=901)
+    role = FakeRole(role_id=999000111, members=[stale1])
+    guild = FakeGuild(roles={role.id: role}, members={})  # winner 111 not in cache
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel, guild=guild)
+
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+
+    event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
+    # must not raise (would DLQ a valid event)
+    await handler._on_cycle_completed(event, None)
+
+    assert len(stale1.remove_roles_calls) == 1
+    assert len(channel.send_calls) == 1  # results embed still posts
+
+
+@pytest.mark.asyncio
+async def test_role_ops_stagger_to_respect_rate_limits(
+    mock_api: AsyncMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DSC-03 / RWD-03: an inter-op delay (asyncio.sleep) occurs between member role edits."""
+    from conftest import FakeGuild, FakeMember, FakeRole  # type: ignore  # noqa: PLC0415
+
+    stale1 = FakeMember(member_id=901)
+    stale2 = FakeMember(member_id=902)
+    winner = FakeMember(member_id=111)
+    role = FakeRole(role_id=999000111, members=[stale1, stale2])
+    guild = FakeGuild(roles={role.id: role}, members={111: winner})
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel, guild=guild)
+
+    sleep_mock = AsyncMock()
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", sleep_mock)
+
+    event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
+    await handler._on_cycle_completed(event, None)
+
+    # at least one stagger sleep per stale-holder strip
+    assert sleep_mock.await_count >= 2
+    sleep_mock.assert_awaited_with(_tournaments._ROLE_OP_DELAY)
+
+
+# ---------------------------------------------------------------------------
+# Idempotency (via the real @queue_consumer wrapper)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_idempotency_skips_duplicate_and_releases_claim_on_failure() -> None:
+    """DSC-01/02: duplicate message_id skips the body; a handler exception releases the claim."""
+    # Exercise the REAL queue_consumer wrapper (not the stub) so the idempotency
+    # claim/skip/release path is what is under test.
+    bot_root = _repo_root() / "apps" / "bot"
+    if str(bot_root) not in sys.path:
+        sys.path.insert(0, str(bot_root))
+    qr_path = bot_root / "extensions" / "_queue_registry.py"
+    spec = importlib.util.spec_from_file_location("real_queue_registry", qr_path)
+    assert spec is not None and spec.loader is not None
+    qr = importlib.util.module_from_spec(spec)
+    sys.modules["real_queue_registry"] = qr
+    spec.loader.exec_module(qr)
+
+    body = TournamentCycleCompletedEvent(cycle_id=1, category_id=1, standings=[], winner_user_id=None)
+    import msgspec  # noqa: PLC0415
+
+    encoded = msgspec.json.encode(body)
+
+    class FakeMessage:
+        def __init__(self) -> None:
+            self.headers: dict[str, Any] = {}
+            self.body = encoded
+            self.message_id = "tournament:cycle_completed:1"
+
+    # --- duplicate skip ---
+    body_called: list[int] = []
+
+    @qr.queue_consumer("api.tournament.cycle_completed", struct_type=TournamentCycleCompletedEvent, idempotent=True)
+    async def _h_skip(self: Any, event: Any, message: Any) -> None:  # noqa: ANN401
+        body_called.append(1)
+
+    api_dup = AsyncMock()
+    api_dup.claim_idempotency.return_value = SimpleNamespace(claimed=False)
+    svc_dup = SimpleNamespace(bot=SimpleNamespace(api=api_dup))
+    await _h_skip(svc_dup, FakeMessage())
+    assert body_called == []  # body never ran for a duplicate
+
+    # --- release on failure ---
+    @qr.queue_consumer("api.tournament.cycle_completed", struct_type=TournamentCycleCompletedEvent, idempotent=True)
+    async def _h_fail(self: Any, event: Any, message: Any) -> None:  # noqa: ANN401
+        raise RuntimeError("boom")
+
+    api_fail = AsyncMock()
+    api_fail.claim_idempotency.return_value = SimpleNamespace(claimed=True)
+    svc_fail = SimpleNamespace(bot=SimpleNamespace(api=api_fail))
+    with pytest.raises(RuntimeError):
+        await _h_fail(svc_fail, FakeMessage())
+    api_fail.delete_claimed_idempotency.assert_awaited_once()
