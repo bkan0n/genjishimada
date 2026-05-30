@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Config & Category Management** - Service and controller layer for tournament configuration and category CRUD (completed 2026-05-29)
 - [x] **Phase 5: Map Selection & Blacklist** - Random map selection engine with cooldown window, pre-roll, and admin reroll (completed 2026-05-30)
 - [x] **Phase 6: Submission Flow & Leaderboard** - Tournament completion submissions with tier-then-time ranking, cross-write, and leaderboard (completed 2026-05-30)
-- [ ] **Phase 7: Automatic Cycle Transitions** - pg_cron scheduled transitions with outbox bridge pattern and placement computation
+- [x] **Phase 7: Automatic Cycle Transitions** - pg_cron scheduled transitions with outbox bridge pattern and placement computation (completed 2026-05-30)
 - [ ] **Phase 8: Rewards Engine** - Participation XP, placement XP, streak tracking, and streak bonuses
 - [ ] **Phase 9: Bot Queue Consumers & Announcements** - RabbitMQ consumers for tournament events, Discord announcements, and champion role transfers
 - [ ] **Phase 10: Bot Slash Commands** - Discord slash commands for tournament info, leaderboard, and admin actions
@@ -167,7 +167,7 @@ Plans:
   4. The API polls the outbox and publishes RabbitMQ events for each pending transition
   5. Concurrent transition attempts are prevented by PostgreSQL advisory locks
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -180,7 +180,7 @@ Plans:
 
 **Wave 3** *(blocked on Waves 1-2 completion)*
 
-- [ ] 07-03-PLAN.md -- Transition, selection-parity, and outbox-poller integration tests
+- [x] 07-03-PLAN.md -- Transition, selection-parity, and outbox-poller integration tests
 
 ### Phase 8: Rewards Engine
 
@@ -238,7 +238,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 4. Config & Category Management | 2/2 | Complete   | 2026-05-29 |
 | 5. Map Selection & Blacklist | 3/3 | Complete   | 2026-05-30 |
 | 6. Submission Flow & Leaderboard | 2/2 | Complete   | 2026-05-30 |
-| 7. Automatic Cycle Transitions | 2/3 | In Progress|  |
+| 7. Automatic Cycle Transitions | 3/3 | Complete   | 2026-05-30 |
 | 8. Rewards Engine | 0/0 | Not started | - |
 | 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
 | 10. Bot Slash Commands | 0/0 | Not started | - |
