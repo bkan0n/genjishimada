@@ -138,23 +138,23 @@ class TestDeleteCategory:
 
 
 class TestCheckActiveCycleForCategory:
-    async def test_no_active_cycle_returns_false(
+    async def test_no_active_cycle_returns_none(
         self, repository: TournamentRepository, create_test_category, create_test_cycle, create_test_map
     ):
         category_id = await create_test_category()
         map_id = await create_test_map()
         await create_test_cycle(category_id, map_id, status="pending")
         result = await repository.check_active_cycle_for_category(category_id)
-        assert result is False
+        assert result is None
 
-    async def test_active_cycle_returns_true(
+    async def test_active_cycle_returns_cycle_id(
         self, repository: TournamentRepository, create_test_category, create_test_cycle, create_test_map
     ):
         category_id = await create_test_category()
         map_id = await create_test_map()
         await create_test_cycle(category_id, map_id, status="active")
         result = await repository.check_active_cycle_for_category(category_id)
-        assert result is True
+        assert isinstance(result, int)
 
 
 # =============================================================================
