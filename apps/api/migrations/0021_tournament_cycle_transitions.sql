@@ -101,7 +101,7 @@ DECLARE
     v_due         record;
     v_pending     record;
     v_standings   jsonb;
-    v_winner      int;
+    v_winner      bigint;  -- core.users.id is a Discord snowflake (bigint); int overflows
     v_next_map    int;
     v_inline_map  int;
     v_new_cycle   int;
