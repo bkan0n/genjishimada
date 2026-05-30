@@ -737,6 +737,147 @@ class TournamentRepository(BaseRepository):
             constraint_name = extract_constraint_name(e) or "unknown"
             raise RepoFKError(constraint_name, "tournaments.streaks", str(e)) from e
 
+    async def advance_streak(
+        self,
+        user_id: int,
+        cycle_id: int,
+        participated: bool,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Advance a user's participation streak for a cycle (reset-capable).
+
+        Unlike upsert_streak (increment-only), this method handles both the
+        participant and non-participant paths the 08-03 reset sweep needs:
+
+        - Participant (participated=True): increments current_streak by 1 and
+          bumps max_streak via GREATEST, but ONLY when last_cycle_id IS DISTINCT
+          FROM the given cycle. This dedupe guard (Pitfall 1) prevents a user who
+          played two simultaneous categories from incrementing twice per window.
+          last_cycle_id is set to cycle_id either way.
+        - Non-participant (participated=False): resets current_streak to 0 and
+          sets last_cycle_id to cycle_id.
+
+        Args:
+            user_id: User ID.
+            cycle_id: Current cycle ID.
+            participated: Whether the user submitted in this cycle.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Updated streak dict (user_id, current_streak, max_streak,
+            last_cycle_id, updated_at).
+
+        Raises:
+            RepoFKError: If user_id or cycle_id doesn't exist.
+        """
+        _conn = self._get_connection(conn)
+        if participated:
+            query = """
+                INSERT INTO tournaments.streaks (user_id, current_streak, max_streak, last_cycle_id, updated_at)
+                VALUES ($1, 1, 1, $2, now())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    current_streak = CASE
+                        WHEN tournaments.streaks.last_cycle_id IS DISTINCT FROM $2
+                        THEN tournaments.streaks.current_streak + 1
+                        ELSE tournaments.streaks.current_streak
+                    END,
+                    max_streak = CASE
+                        WHEN tournaments.streaks.last_cycle_id IS DISTINCT FROM $2
+                        THEN GREATEST(tournaments.streaks.max_streak, tournaments.streaks.current_streak + 1)
+                        ELSE tournaments.streaks.max_streak
+                    END,
+                    last_cycle_id = $2,
+                    updated_at = now()
+                RETURNING user_id, current_streak, max_streak, last_cycle_id, updated_at
+            """
+        else:
+            query = """
+                INSERT INTO tournaments.streaks (user_id, current_streak, max_streak, last_cycle_id, updated_at)
+                VALUES ($1, 0, 0, $2, now())
+                ON CONFLICT (user_id) DO UPDATE SET
+                    current_streak = 0,
+                    last_cycle_id = $2,
+                    updated_at = now()
+                RETURNING user_id, current_streak, max_streak, last_cycle_id, updated_at
+            """
+        try:
+            row = await _conn.fetchrow(query, user_id, cycle_id)
+            return dict(row) if row else {}
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "tournaments.streaks", str(e)) from e
+
+    async def fetch_all_streak_user_ids(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[int]:
+        """Fetch every user_id tracked in tournaments.streaks.
+
+        The 08-03 outbox reset sweep iterates this full tracked-user set and
+        subtracts the cycle's participants (in Python) to find non-participants
+        whose streaks must reset to 0. No WHERE clause by design.
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of user_ids (empty when no streaks exist).
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT user_id FROM tournaments.streaks"
+        rows = await _conn.fetch(query)
+        return [r["user_id"] for r in rows]
+
+    # =========================================================================
+    # XP Grants (idempotency ledger)
+    # =========================================================================
+
+    async def claim_xp_grant(  # noqa: PLR0913
+        self,
+        cycle_id: int,
+        user_id: int,
+        reason: str,
+        amount: int,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Idempotently claim an XP-grant ledger row.
+
+        Inserts into tournaments.xp_grants with ON CONFLICT DO NOTHING. The first
+        call for a (cycle_id, user_id, reason) wins the claim and returns True; a
+        replayed finalization or outbox re-delivery returns False, so the caller
+        skips the grant. This is the only real double-grant guard because
+        api.xp.grant is in IGNORE_IDEMPOTENCY.
+
+        Args:
+            cycle_id: Cycle the grant belongs to.
+            user_id: User receiving the grant.
+            reason: Grant category (participation, placement, streak).
+            amount: XP amount for this claim.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            True if this call won the claim (first time), False if already claimed.
+
+        Raises:
+            RepoFKError: If cycle_id or user_id doesn't exist.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO tournaments.xp_grants (cycle_id, user_id, reason, amount)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (cycle_id, user_id, reason) DO NOTHING
+            RETURNING id
+        """
+        try:
+            row = await _conn.fetchval(query, cycle_id, user_id, reason, amount)
+            return row is not None
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "tournaments.xp_grants", str(e)) from e
+
     # =========================================================================
     # Completions
     # =========================================================================
@@ -939,6 +1080,30 @@ class TournamentRepository(BaseRepository):
         """
         row = await _conn.fetchrow(query, cycle_id, user_id)
         return dict(row) if row else None
+
+    async def fetch_cycle_participants(
+        self,
+        cycle_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[int]:
+        """Fetch the distinct user_ids who submitted in a cycle.
+
+        Drives streak recomputation: participants get their streaks advanced and
+        the complement (tracked users not in this set) gets reset to 0 by the
+        08-03 sweep.
+
+        Args:
+            cycle_id: Cycle to look up.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Distinct list of participant user_ids (empty for a zero-participant cycle).
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT DISTINCT user_id FROM tournaments.completions WHERE cycle_id = $1"
+        rows = await _conn.fetch(query, cycle_id)
+        return [r["user_id"] for r in rows]
 
     # =========================================================================
     # Pending Transitions
