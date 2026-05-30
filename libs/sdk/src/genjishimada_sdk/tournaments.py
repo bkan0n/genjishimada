@@ -20,9 +20,11 @@ __all__ = (
     "TournamentConfigPatchRequest",
     "TournamentConfigResponse",
     "TournamentCycleCompletedEvent",
+    "TournamentCycleListResponse",
     "TournamentCycleResponse",
     "TournamentCycleResultsResponse",
     "TournamentCycleStartedEvent",
+    "TournamentCycleWithWinnerResponse",
     "TournamentLeaderboardEntryResponse",
     "TournamentNextCycleResponse",
     "TournamentStreakResponse",
@@ -226,6 +228,50 @@ class TournamentChooseMapRequest(Struct):
     """
 
     map_code: str
+
+
+class TournamentCycleWithWinnerResponse(Struct):
+    """Tournament cycle with joined map details and rank-1 winner info.
+
+    Attributes:
+        id: Cycle identifier.
+        category_id: Category this cycle belongs to.
+        map_id: Map selected for this cycle.
+        map_code: Workshop code of the selected map.
+        map_name: Display name of the selected map.
+        map_difficulty: Difficulty rating of the selected map.
+        status: Current lifecycle status.
+        started_at: When the cycle became active.
+        ended_at: When the cycle was finalized.
+        created_at: When the cycle record was created.
+        winner_name: Display name of the rank-1 winner, or None if no submissions.
+        winner_user_id: User ID of the rank-1 winner, or None if no submissions.
+    """
+
+    id: int
+    category_id: int
+    map_id: int
+    map_code: str
+    map_name: str
+    map_difficulty: str
+    status: CycleStatus
+    started_at: dt.datetime | None
+    ended_at: dt.datetime | None
+    created_at: dt.datetime
+    winner_name: str | None
+    winner_user_id: int | None
+
+
+class TournamentCycleListResponse(Struct):
+    """Paginated list of tournament cycles with winner info.
+
+    Attributes:
+        total: Total number of cycles matching the query.
+        cycles: List of cycles for the current page.
+    """
+
+    total: int
+    cycles: list[TournamentCycleWithWinnerResponse]
 
 
 # ---------------------------------------------------------------------------

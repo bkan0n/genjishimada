@@ -72,6 +72,18 @@ class DuplicateTournamentCompletionError(TournamentsError):
         )
 
 
+class MapMismatchError(TournamentsError):
+    """Map submitted does not match the cycle's assigned map."""
+
+    def __init__(self, cycle_id: int, expected_map_id: int, submitted_map_id: int) -> None:
+        super().__init__(
+            f"Map mismatch: cycle {cycle_id} uses map {expected_map_id}, not {submitted_map_id}.",
+            cycle_id=cycle_id,
+            expected_map_id=expected_map_id,
+            submitted_map_id=submitted_map_id,
+        )
+
+
 class MapNotEligibleError(TournamentsError):
     """Map is not eligible for tournament selection."""
 
@@ -115,3 +127,14 @@ class PendingCycleNotFoundError(TournamentsError):
 
     def __init__(self, category_id: int) -> None:
         super().__init__("No pending cycle exists for this category.", category_id=category_id)
+
+
+class SlowerTimeError(TournamentsError):
+    """Submitted time is not faster than the user's current best."""
+
+    def __init__(self, current_best: float, submitted_time: float) -> None:
+        super().__init__(
+            f"Submitted time ({submitted_time}s) is not faster than your current best ({current_best}s).",
+            current_best=current_best,
+            submitted_time=submitted_time,
+        )

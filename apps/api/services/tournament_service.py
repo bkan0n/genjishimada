@@ -12,8 +12,13 @@ from genjishimada_sdk.tournaments import (
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
+    TournamentCompletionCreateRequest,
+    TournamentCompletionResponse,
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
+    TournamentCycleListResponse,
+    TournamentCycleWithWinnerResponse,
+    TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
 )
 from litestar.datastructures import State
@@ -25,10 +30,13 @@ from services.exceptions.tournaments import (
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
+    CycleNotActiveError,
+    CycleNotFoundError,
     MapNotEligibleError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
+    SlowerTimeError,
 )
 
 log = getLogger(__name__)
@@ -456,6 +464,113 @@ class TournamentService(BaseService):
             )
 
         return msgspec.convert(result, TournamentNextCycleResponse)
+
+    async def submit_completion(
+        self,
+        cycle_id: int,
+        data: TournamentCompletionCreateRequest,
+    ) -> TournamentCompletionResponse:
+        """Submit a tournament completion for a cycle.
+
+        Validates the cycle is active, checks if the submitted time is faster
+        than the user's current best, inserts the tournament completion, and
+        cross-writes to core.completions -- all within a single transaction.
+
+        Args:
+            cycle_id: Cycle to submit for.
+            data: Completion submission data.
+
+        Returns:
+            Created tournament completion.
+
+        Raises:
+            CycleNotFoundError: If the cycle does not exist.
+            CycleNotActiveError: If the cycle is not active.
+            SlowerTimeError: If submitted time is not faster than current best.
+        """
+        async with self._pool.acquire() as conn, conn.transaction():
+            cycle = await self._tournament_repo.fetch_cycle(
+                cycle_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if cycle is None:
+                raise CycleNotFoundError(cycle_id)
+            if cycle["status"] != "active":
+                raise CycleNotActiveError(cycle_id, cycle["status"])
+
+            existing = await self._tournament_repo.fetch_user_completion(
+                cycle_id,
+                data.user_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is not None and data.time >= existing["time"]:
+                raise SlowerTimeError(current_best=existing["time"], submitted_time=data.time)
+
+            row = await self._tournament_repo.create_tournament_completion(
+                cycle_id=cycle_id,
+                user_id=data.user_id,
+                map_id=cycle["map_id"],
+                time=data.time,
+                screenshot=data.screenshot,
+                video=data.video,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            await self._tournament_repo.cross_write_to_core(
+                tournament_completion_id=row["id"],
+                user_id=data.user_id,
+                map_id=cycle["map_id"],
+                time=data.time,
+                screenshot=data.screenshot,
+                video=data.video,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            log.info("[->] Tournament completion submitted for cycle %s by user %s", cycle_id, data.user_id)
+
+        return msgspec.convert(row, TournamentCompletionResponse)
+
+    async def get_leaderboard(self, cycle_id: int) -> list[TournamentLeaderboardEntryResponse]:
+        """Get the ranked leaderboard for a tournament cycle.
+
+        Args:
+            cycle_id: Cycle to fetch leaderboard for.
+
+        Returns:
+            List of ranked leaderboard entries.
+        """
+        rows = await self._tournament_repo.fetch_leaderboard(cycle_id)
+        return [msgspec.convert(row, TournamentLeaderboardEntryResponse) for row in rows]
+
+    async def list_cycles(
+        self,
+        *,
+        status: str | None = None,
+        category_id: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> TournamentCycleListResponse:
+        """List tournament cycles with optional filters and winner info.
+
+        Args:
+            status: Optional cycle status filter.
+            category_id: Optional category ID filter.
+            limit: Maximum number of results.
+            offset: Result offset for pagination.
+
+        Returns:
+            Paginated cycle list with winner info.
+        """
+        total, rows = await self._tournament_repo.fetch_cycles(
+            status=status,
+            category_id=category_id,
+            limit=limit,
+            offset=offset,
+        )
+        return TournamentCycleListResponse(
+            total=total,
+            cycles=[msgspec.convert(row, TournamentCycleWithWinnerResponse) for row in rows],
+        )
 
 
 async def provide_tournament_service(

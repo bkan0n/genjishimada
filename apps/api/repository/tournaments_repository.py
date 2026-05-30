@@ -439,6 +439,84 @@ class TournamentRepository(BaseRepository):
         )
         return total or 0, [dict(row) for row in rows]
 
+    async def fetch_cycles(
+        self,
+        *,
+        status: str | None = None,
+        category_id: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+        conn: Connection | None = None,
+    ) -> tuple[int, list[dict]]:
+        """Fetch paginated cycles with optional filters and winner info.
+
+        Joins core.maps for map details and uses a LEFT JOIN LATERAL
+        subquery to find the rank-1 winner per cycle.
+
+        Args:
+            status: Optional cycle status filter.
+            category_id: Optional category ID filter.
+            limit: Maximum number of results.
+            offset: Result offset for pagination.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Tuple of (total_count, list of cycle dicts with map and winner info).
+        """
+        _conn = self._get_connection(conn)
+
+        conditions: list[str] = []
+        args: list[object] = []
+        idx = 1
+
+        if status is not None:
+            conditions.append(f"cy.status = ${idx}")
+            args.append(status)
+            idx += 1
+
+        if category_id is not None:
+            conditions.append(f"cy.category_id = ${idx}")
+            args.append(category_id)
+            idx += 1
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+        count_query = f"SELECT COUNT(*) FROM tournaments.cycles cy {where_clause}"
+        total = await _conn.fetchval(count_query, *args)
+
+        data_query = f"""
+            SELECT
+                cy.id, cy.category_id, cy.map_id,
+                m.code AS map_code, m.map_name, m.difficulty AS map_difficulty,
+                cy.status, cy.started_at, cy.ended_at, cy.created_at,
+                w.name AS winner_name, w.user_id AS winner_user_id
+            FROM tournaments.cycles cy
+            JOIN core.maps m ON m.id = cy.map_id
+            LEFT JOIN LATERAL (
+                SELECT
+                    COALESCE(u.global_name, u.nickname, 'Unknown') AS name,
+                    bpu.user_id
+                FROM (
+                    SELECT DISTINCT ON (tc2.user_id)
+                        tc2.user_id, tc2.verified, tc2.time
+                    FROM tournaments.completions tc2
+                    WHERE tc2.cycle_id = cy.id
+                    ORDER BY tc2.user_id, tc2.verified DESC, tc2.time ASC
+                ) bpu
+                JOIN core.users u ON u.id = bpu.user_id
+                ORDER BY bpu.verified DESC, bpu.time ASC
+                LIMIT 1
+            ) w ON TRUE
+            {where_clause}
+            ORDER BY cy.created_at DESC
+            LIMIT ${idx} OFFSET ${idx + 1}
+        """
+        args.append(limit)
+        args.append(offset)
+
+        rows = await _conn.fetch(data_query, *args)
+        return total or 0, [dict(row) for row in rows]
+
     # =========================================================================
     # Map Selection
     # =========================================================================
