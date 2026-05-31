@@ -72,11 +72,13 @@ def _load_rabbit_module() -> ModuleType:
         for k, v in sys.modules.items()
         if k in ("utilities", "extensions") or k.startswith(("utilities.", "extensions."))
     }
+    inserted_path = False
     try:
         for key in snapshot:
             del sys.modules[key]
         if str(bot_root) not in sys.path:
             sys.path.insert(0, str(bot_root))
+            inserted_path = True
 
         _install_queue_registry_stub()
 
@@ -89,6 +91,12 @@ def _load_rabbit_module() -> ModuleType:
         spec.loader.exec_module(module)
         return module
     finally:
+        # Remove the apps/bot path entry we added so sibling bot tests (which do their own
+        # path-insertion) re-resolve ``utilities`` against the bot tree cleanly. Leaving
+        # apps/bot permanently on sys.path lets apps/api's ``utilities`` package shadow the
+        # bot's when test_tournaments_handler.py path-loads later in the same session.
+        if inserted_path and str(bot_root) in sys.path:
+            sys.path.remove(str(bot_root))
         for key in list(sys.modules):
             if key in ("utilities", "extensions") or key.startswith(("utilities.", "extensions.")):
                 del sys.modules[key]
