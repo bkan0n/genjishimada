@@ -275,7 +275,7 @@ Plans:
   5. Participation XP and a verified leaderboard standing are granted only on verification; unverified runs rank below verified ones
   6. The `core.completions` "latest = fastest" invariant is preserved — no slower-than-PB tournament rows are inserted into `core.completions`
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -293,7 +293,7 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [x] 11-04-PLAN.md — Remove the verification-skipping bypass route + service method; repoint seed script; rewrite submit-asserting tests (D-05)
-- [ ] 11-05-PLAN.md — Bot wiring: Accept/Reject view + completion-created/verification-changed consumers + api_service methods + handler tests
+- [x] 11-05-PLAN.md — Bot wiring: Accept/Reject view + completion-created/verification-changed consumers + api_service methods + handler tests
 
 ## Progress
 
@@ -312,4 +312,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 8. Rewards Engine | 3/3 | Complete   | 2026-05-30 |
 | 9. Bot Queue Consumers & Announcements | 3/3 | Complete   | 2026-05-31 |
 | 10. Bot Slash Commands | 3/3 | Complete   | 2026-05-30 |
-| 11. Tournament Verification Flow | 4/5 | In Progress|  |
+| 11. Tournament Verification Flow | 5/5 | Complete   | 2026-05-31 |

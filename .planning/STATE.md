@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 11-04-PLAN.md (bypass removed, SC-4 regression green)
-last_updated: "2026-05-31T22:55:05.009Z"
+last_updated: "2026-05-31T23:01:14.730Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 11
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 30
-  completed_plans: 29
-  percent: 91
+  completed_plans: 30
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-29)
 ## Current Position
 
 Phase: 11 (tournament-verification-flow) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-05-31
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -77,6 +77,7 @@ Progress: [██████████] 97%
 | Phase 11 P02 | 35min | 2 tasks | 5 files |
 | Phase 11 P03 | 22min | 2 tasks | 8 files |
 | Phase 11 P04 | 18min | 2 tasks | 9 files |
+| Phase 11 P05 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 11]: 11-03 fetch_tournament_completion added (was absent); TournamentService imported at completions_service module top (no circular dep — tournament_service imports nothing from completions)
 - [Phase 11]: 11-04 removed the verification-skipping bypass (D-05): POST /cycles/{id}/submit route + TournamentService.submit_completion + SDK TournamentCompletionCreateRequest + orphaned SlowerTimeError exception all deleted; PB-path helpers (cross_write_to_core/create_tournament_completion) + verify-path (award_participation/publish_xp_events/verify_tournament_completion) preserved
 - [Phase 11]: 11-04 seed-tournament-local.sh repointed to a normal POST /api/v3/completions/ on the active cycle's map (auto-detect verified pipeline); participation-XP regression moved from submit to verify; TestSubmissionRejection rewritten to assert get_active_cycle_by_map_id is active-only
+- [Phase ?]: [Phase 11]: 11-05 bot D-04 video path — TournamentVerificationView with distinct custom_ids tournament:accept/reject posts to the SHARED mod verification queue; Accept/Reject route to verify/reject_tournament_completion (bot never writes DB); reject sends no reason payload (11-03 endpoint takes none); both consumers idempotent
 
 ### Pending Todos
 
@@ -159,6 +161,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-31T22:54:29.665Z
+Last session: 2026-05-31T23:01:10.503Z
 Stopped at: Completed 11-04-PLAN.md (bypass removed, SC-4 regression green)
 Resume file: None
