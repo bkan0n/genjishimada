@@ -806,15 +806,28 @@ class CompletionsService(BaseService):
         """
         if self._tournament_repo is None:
             return None
-        row = await self._tournament_repo.create_tournament_completion(
-            cycle_id=active_cycle["id"],
-            user_id=data.user_id,
-            map_id=active_cycle["map_id"],
-            time=data.time,
-            screenshot=data.screenshot,
-            video=data.video,
-            conn=conn,
-        )
+        # CR-01: this runs on the submit hot path (both the PB and D-07 non-PB
+        # call sites). The 0020 unique constraint on
+        # tournaments.completions (cycle_id, user_id, inserted_at) and the cycle/
+        # map FKs can fire here; translate them to the same domain exceptions
+        # insert_completion uses so a duplicate surfaces as 409 (not a raw 500),
+        # mirroring the core-completion path.
+        try:
+            row = await self._tournament_repo.create_tournament_completion(
+                cycle_id=active_cycle["id"],
+                user_id=data.user_id,
+                map_id=active_cycle["map_id"],
+                time=data.time,
+                screenshot=data.screenshot,
+                video=data.video,
+                conn=conn,
+            )
+        except UniqueConstraintViolationError as e:
+            raise DuplicateCompletionError(user_id=data.user_id, map_code=data.code) from e
+        except ForeignKeyViolationError as e:
+            if "user_id" in e.constraint_name:
+                raise CompletionNotFoundError(data.user_id) from e
+            raise MapNotFoundError(data.code) from e
         return row.get("id") if row else None
 
     async def _dispatch_non_pb_tournament(  # noqa: PLR0913

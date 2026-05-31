@@ -336,6 +336,84 @@ async def test_non_pb_path_submission_creates_tournament_row_without_core_row() 
     completions_repo.set_completion_tournament_link.assert_not_awaited()
 
 
+async def test_non_pb_duplicate_tournament_row_raises_duplicate_not_500() -> None:
+    """CR-01: a duplicate tournament row on the non-PB path surfaces as 409, not 500.
+
+    The 0020 unique constraint on tournaments.completions (cycle_id, user_id,
+    inserted_at) can fire when create_tournament_completion runs. It must be
+    translated to DuplicateCompletionError (mapped to 409) rather than escaping
+    the submit transaction as a raw repository error (500).
+    """
+    from asyncpg.exceptions import CheckViolationError
+
+    from repository.exceptions import UniqueConstraintViolationError
+    from services.exceptions.completions import DuplicateCompletionError
+
+    service, completions_repo, tournament_repo, _ = _make_service()
+    completions_repo.get_pending_verification.return_value = None
+    completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+    completions_repo.insert_completion.side_effect = CheckViolationError("speed trigger")
+    completions_repo.fetch_suspicious_flags.return_value = []
+    tournament_repo.get_active_cycle_by_map_id.return_value = {
+        "id": 42,
+        "category_id": 3,
+        "map_id": 777,
+        "status": "active",
+    }
+    tournament_repo.create_tournament_completion.side_effect = UniqueConstraintViolationError(
+        "completions_cycle_id_user_id_inserted_at_key", "completions"
+    )
+
+    with pytest.raises(DuplicateCompletionError):
+        await service.submit_completion(
+            data=CompletionCreateRequest(
+                user_id=123,
+                code="ABC123",
+                time=99.0,
+                screenshot="https://example.com/s.png",
+                video=None,
+            ),
+            request=_request(),
+            notifications=AsyncMock(),
+            users=AsyncMock(),
+        )
+
+
+async def test_pb_duplicate_tournament_row_raises_duplicate_not_500() -> None:
+    """CR-01: a duplicate tournament row on the PB path surfaces as 409, not 500."""
+    from repository.exceptions import UniqueConstraintViolationError
+    from services.exceptions.completions import DuplicateCompletionError
+
+    service, completions_repo, tournament_repo, _ = _make_service()
+    completions_repo.get_pending_verification.return_value = None
+    completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+    completions_repo.insert_completion.return_value = 5001
+    completions_repo.fetch_suspicious_flags.return_value = []
+    tournament_repo.get_active_cycle_by_map_id.return_value = {
+        "id": 42,
+        "category_id": 3,
+        "map_id": 777,
+        "status": "active",
+    }
+    tournament_repo.create_tournament_completion.side_effect = UniqueConstraintViolationError(
+        "completions_cycle_id_user_id_inserted_at_key", "completions"
+    )
+
+    with pytest.raises(DuplicateCompletionError):
+        await service.submit_completion(
+            data=CompletionCreateRequest(
+                user_id=123,
+                code="ABC123",
+                time=5.0,
+                screenshot="https://example.com/s.png",
+                video=None,
+            ),
+            request=_request(),
+            notifications=AsyncMock(),
+            users=AsyncMock(),
+        )
+
+
 async def test_verify_tournament_completion_flips_row_and_awards_xp() -> None:
     """verify_tournament_completion flips verified + grants one participation XP (SC-2 mod path/D-06).
 

@@ -1704,6 +1704,10 @@ class TestVerifyCompletionTournamentSideEffect:
         service, tournament_repo, reward_service = _tournament_service(
             mocker, mock_pool, mock_state, mock_completions_repo
         )
+        # old_verified=False flips this run False->True, which also runs the
+        # quest-progress branch; stub that helper so the test isolates tournament
+        # propagation rather than the unrelated quest/medal/lootbox chain.
+        mocker.patch.object(service, "_update_quest_progress_for_completion", mocker.AsyncMock())
         conn = mocker.AsyncMock()
         mock_completions_repo.check_completion_exists.return_value = True
         mock_completions_repo.fetch_completion_for_moderation.return_value = {
@@ -1780,6 +1784,10 @@ class TestVerifyCompletionTournamentSideEffect:
         service, tournament_repo, reward_service = _tournament_service(
             mocker, mock_pool, mock_state, mock_completions_repo
         )
+        # old_verified=False flips this run False->True, which also runs the
+        # quest-progress branch; stub that helper so the test isolates the
+        # no-side-effect assertion rather than the unrelated quest chain.
+        mocker.patch.object(service, "_update_quest_progress_for_completion", mocker.AsyncMock())
         conn = mocker.AsyncMock()
         mock_completions_repo.check_completion_exists.return_value = True
         mock_completions_repo.fetch_completion_for_moderation.return_value = {
