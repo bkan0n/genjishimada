@@ -14,7 +14,6 @@ __all__ = (
     "TournamentCategoryPatchRequest",
     "TournamentCategoryResponse",
     "TournamentChooseMapRequest",
-    "TournamentCompletionCreateRequest",
     "TournamentCompletionCreatedEvent",
     "TournamentCompletionResponse",
     "TournamentConfigPatchRequest",
@@ -327,22 +326,6 @@ class TournamentCycleResultsResponse(Struct):
 # ---------------------------------------------------------------------------
 # Completion types
 # ---------------------------------------------------------------------------
-
-
-class TournamentCompletionCreateRequest(Struct):
-    """Request payload for submitting a tournament completion.
-
-    Attributes:
-        user_id: Identifier of the submitting user.
-        time: Completion time in seconds.
-        screenshot: Proof screenshot URL.
-        video: Optional video proof URL.
-    """
-
-    user_id: int
-    time: float
-    screenshot: str
-    video: str | None = None
 
 
 class TournamentCompletionResponse(Struct):

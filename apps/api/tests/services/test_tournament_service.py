@@ -2,16 +2,13 @@
 
 import pytest
 
-from genjishimada_sdk.tournaments import TournamentChooseMapRequest, TournamentCompletionCreateRequest
+from genjishimada_sdk.tournaments import TournamentChooseMapRequest
 from services.exceptions.tournaments import (
     CategoryNotFoundError,
-    CycleNotActiveError,
-    CycleNotFoundError,
     MapNotEligibleError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
-    SlowerTimeError,
     StreakNotFoundError,
 )
 from services.tournament_service import TournamentService
@@ -279,129 +276,34 @@ class TestGetNextCycle:
             await service.get_next_cycle(1)
 
 
-class TestSubmitCompletion:
-    """Tests for TournamentService.submit_completion."""
+class TestSubmitBypassRemoved:
+    """SC-4: the verification-skipping bypass (route + service method + SDK request) is gone (D-05)."""
 
-    async def test_submit_happy_path(self, mock_pool, mock_state, mock_tournament_repo):
-        """First submission for cycle succeeds and triggers cross-write."""
-        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
+    def test_service_has_no_submit_completion(self):
+        """TournamentService no longer exposes the bypass submit_completion method."""
+        assert not hasattr(TournamentService, "submit_completion")
 
-        mock_tournament_repo.fetch_cycle.return_value = _cycle()
-        mock_tournament_repo.fetch_user_completion.return_value = None
-        mock_tournament_repo.create_tournament_completion.return_value = _completion()
-        mock_tournament_repo.cross_write_to_core.return_value = 999
+    def test_create_request_not_importable(self):
+        """TournamentCompletionCreateRequest was removed from the SDK (no unverified write payload)."""
+        import genjishimada_sdk.tournaments as sdk_tournaments
 
-        result = await service.submit_completion(
-            1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
-        )
-
-        assert result.id == 1
-        mock_tournament_repo.create_tournament_completion.assert_called_once()
-        mock_tournament_repo.cross_write_to_core.assert_called_once()
-
-    async def test_submit_faster_replaces(self, mock_pool, mock_state, mock_tournament_repo):
-        """Faster time than existing submission succeeds."""
-        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
-
-        mock_tournament_repo.fetch_cycle.return_value = _cycle()
-        mock_tournament_repo.fetch_user_completion.return_value = _completion(time=50.0)
-        mock_tournament_repo.create_tournament_completion.return_value = _completion(time=42.5)
-        mock_tournament_repo.cross_write_to_core.return_value = 999
-
-        result = await service.submit_completion(
-            1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
-        )
-
-        assert result.time == 42.5
-        mock_tournament_repo.create_tournament_completion.assert_called_once()
-
-    async def test_rejects_slower_time(self, mock_pool, mock_state, mock_tournament_repo):
-        """Slower time than current best raises SlowerTimeError."""
-        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
-
-        mock_tournament_repo.fetch_cycle.return_value = _cycle()
-        mock_tournament_repo.fetch_user_completion.return_value = _completion(time=30.0)
-
-        with pytest.raises(SlowerTimeError):
-            await service.submit_completion(
-                1, TournamentCompletionCreateRequest(user_id=100, time=35.0, screenshot="https://example.com/s.png")
+        assert not hasattr(sdk_tournaments, "TournamentCompletionCreateRequest")
+        with pytest.raises(ImportError):
+            from genjishimada_sdk.tournaments import (  # noqa: F401
+                TournamentCompletionCreateRequest,
             )
 
-    async def test_rejects_equal_time(self, mock_pool, mock_state, mock_tournament_repo):
-        """Equal time to current best raises SlowerTimeError (not faster)."""
-        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
+    def test_pb_path_helpers_preserved(self):
+        """The PB-path repo helpers reused by the verified pipeline remain available."""
+        from repository.tournaments_repository import TournamentRepository
 
-        mock_tournament_repo.fetch_cycle.return_value = _cycle()
-        mock_tournament_repo.fetch_user_completion.return_value = _completion(time=42.5)
+        assert hasattr(TournamentRepository, "cross_write_to_core")
+        assert hasattr(TournamentRepository, "create_tournament_completion")
 
-        with pytest.raises(SlowerTimeError):
-            await service.submit_completion(
-                1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
-            )
-
-    async def test_cycle_not_active(self, mock_pool, mock_state, mock_tournament_repo):
-        """Submission to non-active cycle raises CycleNotActiveError."""
-        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
-
-        mock_tournament_repo.fetch_cycle.return_value = _cycle(status="completed")
-
-        with pytest.raises(CycleNotActiveError):
-            await service.submit_completion(
-                1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
-            )
-
-    async def test_cycle_not_found(self, mock_pool, mock_state, mock_tournament_repo):
-        """Submission to nonexistent cycle raises CycleNotFoundError."""
-        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
-
-        mock_tournament_repo.fetch_cycle.return_value = None
-
-        with pytest.raises(CycleNotFoundError):
-            await service.submit_completion(
-                1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
-            )
-
-
-class TestSubmitParticipationHook:
-    """Tests for the participation-XP hook wired into submit_completion (08-03)."""
-
-    async def test_first_completion_awards_participation(self, mock_pool, mock_state, mock_tournament_repo, mocker):
-        """First completion (existing is None) calls award_participation inside the txn with conn."""
-        reward_service = mocker.AsyncMock()
-        service = TournamentService(mock_pool, mock_state, mock_tournament_repo, reward_service)
-
-        mock_tournament_repo.fetch_cycle.return_value = _cycle()
-        mock_tournament_repo.fetch_user_completion.return_value = None
-        mock_tournament_repo.create_tournament_completion.return_value = _completion()
-        mock_tournament_repo.cross_write_to_core.return_value = 999
-
-        await service.submit_completion(
-            1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
-        )
-
-        reward_service.award_participation.assert_awaited_once()
-        call = reward_service.award_participation.await_args
-        assert call.kwargs["user_id"] == 100
-        assert call.kwargs["cycle"]["id"] == 1
-        assert "conn" in call.kwargs
-
-    async def test_repeat_completion_does_not_award_participation(
-        self, mock_pool, mock_state, mock_tournament_repo, mocker
-    ):
-        """A faster repeat submission (existing is not None) does not re-trigger participation."""
-        reward_service = mocker.AsyncMock()
-        service = TournamentService(mock_pool, mock_state, mock_tournament_repo, reward_service)
-
-        mock_tournament_repo.fetch_cycle.return_value = _cycle()
-        mock_tournament_repo.fetch_user_completion.return_value = _completion(time=50.0)
-        mock_tournament_repo.create_tournament_completion.return_value = _completion(time=42.5)
-        mock_tournament_repo.cross_write_to_core.return_value = 999
-
-        await service.submit_completion(
-            1, TournamentCompletionCreateRequest(user_id=100, time=42.5, screenshot="https://example.com/s.png")
-        )
-
-        reward_service.award_participation.assert_not_awaited()
+    def test_verify_path_methods_preserved(self):
+        """The verified-path methods (11-03) remain on the service."""
+        assert hasattr(TournamentService, "verify_tournament_completion")
+        assert hasattr(TournamentService, "reject_tournament_completion")
 
 
 class TestGetLeaderboard:

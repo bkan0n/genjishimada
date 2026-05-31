@@ -15,15 +15,11 @@ import asyncpg
 import msgspec
 import pytest
 from genjishimada_sdk.tournaments import (
-    TournamentCompletionCreateRequest,
     TournamentCycleCompletedEvent,
     TournamentCycleStartedEvent,
 )
-from litestar.datastructures import State
 
 from repository.tournaments_repository import TournamentRepository
-from services.exceptions.tournaments import CycleNotActiveError
-from services.tournament_service import TournamentService
 
 pytestmark = [pytest.mark.domain_tournaments]
 
@@ -257,31 +253,45 @@ class TestAdvisoryLock:
 
 
 class TestSubmissionRejection:
-    """Submissions rejected once status is finalizing/completed (regression guard)."""
+    """Submissions are auto-detected ONLY for active cycles (D-05 regression guard).
 
-    async def test_submission_rejected_during_finalizing(
+    The bypass submit endpoint/method is gone (D-05); the only tournament write
+    is the verified pipeline, which keys off ``get_active_cycle_by_map_id``. That
+    lookup matches ``status = 'active'`` ONLY, so a completion on a map whose
+    cycle is finalizing/completed is never recorded as a tournament submission.
+    """
+
+    async def test_finalizing_cycle_not_auto_detected(
         self,
         asyncpg_pool: asyncpg.Pool,
         create_test_category,
         create_test_cycle,
         create_test_map,
-        create_test_user,
     ):
-        """submit_completion raises CycleNotActiveError when the cycle is finalizing."""
+        """get_active_cycle_by_map_id returns None for a finalizing cycle (no auto-detect write)."""
         category = await create_test_category(cycle_frequency="weekly")
         map_id = await create_test_map(difficulty="Medium")
-        cycle = await create_test_cycle(category, map_id, status="finalizing", started_at=_days_ago(1))
-        user_id = await create_test_user()
+        await create_test_cycle(category, map_id, status="finalizing", started_at=_days_ago(1))
 
-        service = TournamentService(asyncpg_pool, State({}), TournamentRepository(asyncpg_pool))
-        request = TournamentCompletionCreateRequest(
-            user_id=user_id,
-            time=12.34,
-            screenshot="https://example.com/s.png",
-        )
+        repo = TournamentRepository(asyncpg_pool)
+        assert await repo.get_active_cycle_by_map_id(map_id) is None
 
-        with pytest.raises(CycleNotActiveError):
-            await service.submit_completion(cycle, request)
+    async def test_active_cycle_is_auto_detected(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        create_test_category,
+        create_test_cycle,
+        create_test_map,
+    ):
+        """An active cycle for the map IS matched by the auto-detect lookup."""
+        category = await create_test_category(cycle_frequency="weekly")
+        map_id = await create_test_map(difficulty="Medium")
+        cycle = await create_test_cycle(category, map_id, status="active", started_at=_days_ago(1))
+
+        repo = TournamentRepository(asyncpg_pool)
+        match = await repo.get_active_cycle_by_map_id(map_id)
+        assert match is not None
+        assert match["id"] == cycle
 
 
 class TestMissingPendingEdge:

@@ -2,8 +2,9 @@
 
 These drive the two wired hook points end-to-end against a real database:
 
-- Participation XP attaches to ``submit_completion``'s first-completion branch
-  (08-03 Task 1) and is exercised here via the submit endpoint.
+- Participation XP attaches to the tournament VERIFY path (11-02/11-03 D-04a/D-06)
+  and is exercised here by submitting a normal completion on the active cycle's
+  map (auto-detected, recorded unverified) and then hitting the verify endpoint.
 - Placement + streak rewards and the non-participant reset sweep attach to
   ``publish_pending_transitions`` for ``cycle_completed`` rows (08-03 Task 2),
   driven here by seeding a ``cycle_completed`` pending_transitions row and calling
@@ -169,12 +170,12 @@ async def _xp_amount(asyncpg_pool, user_id: int) -> int:
 
 
 class TestParticipationGrant:
-    """RWD-01: participation XP granted atomically on first completion via submit."""
+    """RWD-01: participation XP is granted on VERIFY (D-04a/D-06), never on the unverified submit."""
 
-    async def test_first_submission_grants_participation_once(
+    async def test_submit_then_verify_grants_participation_once(
         self, test_client, asyncpg_pool, monkeypatch, create_test_map, create_test_user
     ):
-        """First submit writes a participation ledger row + lootbox.xp; repeat does not."""
+        """A normal completion on the cycle map records an unverified row (no XP); verifying grants it once."""
         _stub_publish(monkeypatch)
 
         category_id = await _seed_category(asyncpg_pool, participation_xp=25)
@@ -182,20 +183,39 @@ class TestParticipationGrant:
         user_id = await create_test_user(nickname=f"Part{uuid4().hex[:6]}")
         cycle_id = await _seed_cycle(asyncpg_pool, category_id, map_id, status="active")
 
-        first = await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 50.0, "screenshot": "https://example.com/s.png"},
+        async with asyncpg_pool.acquire() as conn:
+            map_code = await conn.fetchval("SELECT code FROM core.maps WHERE id = $1", map_id)
+
+        # Auto-detected tournament submission via the verified pipeline: recorded UNVERIFIED, no XP yet.
+        submit = await test_client.post(
+            "/api/v3/completions/",
+            json={
+                "user_id": user_id,
+                "code": map_code,
+                "time": 50.0,
+                "video": None,
+                "screenshot": "https://example.com/s.png",
+            },
         )
-        assert first.status_code == 201
+        assert submit.status_code == 201
+        assert await _grant_count(asyncpg_pool, cycle_id) == 0
+        assert await _xp_amount(asyncpg_pool, user_id) == 0
+
+        async with asyncpg_pool.acquire() as conn:
+            tc_id = await conn.fetchval(
+                "SELECT id FROM tournaments.completions WHERE cycle_id = $1 AND user_id = $2",
+                cycle_id,
+                user_id,
+            )
+
+        # Verifying the tournament row grants participation XP exactly once (ledger idempotent).
+        first_verify = await test_client.patch(f"{BASE}/completions/{tc_id}/verify")
+        assert first_verify.status_code == 200
         assert await _grant_count(asyncpg_pool, cycle_id) == 1
         assert await _xp_amount(asyncpg_pool, user_id) == 25
 
-        # A faster repeat submission does not re-trigger participation (existing is not None).
-        second = await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 42.0, "screenshot": "https://example.com/s2.png"},
-        )
-        assert second.status_code == 201
+        second_verify = await test_client.patch(f"{BASE}/completions/{tc_id}/verify")
+        assert second_verify.status_code == 200
         assert await _grant_count(asyncpg_pool, cycle_id) == 1
         assert await _xp_amount(asyncpg_pool, user_id) == 25
 

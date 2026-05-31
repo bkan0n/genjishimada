@@ -570,13 +570,19 @@ class TestChooseMapEndpoint:
         assert response.status_code == 422
 
 
-class TestSubmitCompletionEndpoint:
-    """Tests for POST /api/v3/tournaments/cycles/{id}/submit"""
+class TestSubmitBypassRemoved:
+    """SC-4: the verification-skipping bypass endpoint is gone (D-05).
+
+    The only remaining tournament write is the verified pipeline: a NORMAL
+    completion POST on the active cycle's map is auto-detected as a tournament
+    submission. The PB run is recorded UNVERIFIED (verified=FALSE) and only
+    flips verified after the verify endpoint/OCR runs.
+    """
 
     async def _setup_active_cycle(self, test_client, asyncpg_pool, create_test_map, create_test_user):
-        """Helper to create a category, map, active cycle, and user.
+        """Create a category, map, active cycle, and user.
 
-        Returns (category_id, map_id, cycle_id, user_id).
+        Returns (category_id, map_id, map_code, cycle_id, user_id).
         """
         name = f"Submit {uuid4().hex[:8]}"
         create_resp = await test_client.post(
@@ -589,6 +595,7 @@ class TestSubmitCompletionEndpoint:
         user_id = await create_test_user(nickname=f"Player{uuid4().hex[:6]}")
 
         async with asyncpg_pool.acquire() as conn:
+            map_code = await conn.fetchval("SELECT code FROM core.maps WHERE id = $1", map_id)
             cycle_id = await conn.fetchval(
                 """
                 INSERT INTO tournaments.cycles (category_id, map_id, status, started_at)
@@ -599,110 +606,74 @@ class TestSubmitCompletionEndpoint:
                 map_id,
             )
 
-        return category_id, map_id, cycle_id, user_id
+        return category_id, map_id, map_code, cycle_id, user_id
 
-    async def test_submit_returns_201(self, test_client, asyncpg_pool, create_test_map, create_test_user):
-        """Valid submission returns 201 with completion data."""
-        _, _, cycle_id, user_id = await self._setup_active_cycle(
+    async def test_old_submit_endpoint_returns_404(
+        self, test_client, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """The removed POST /cycles/{id}/submit bypass endpoint no longer exists (404)."""
+        _, _, _, cycle_id, user_id = await self._setup_active_cycle(
             test_client, asyncpg_pool, create_test_map, create_test_user
         )
 
         response = await test_client.post(
             f"{BASE}/cycles/{cycle_id}/submit",
+            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s.png"},
+        )
+
+        assert response.status_code == 404
+
+    async def test_normal_completion_on_cycle_map_writes_unverified_tournament_row(
+        self, test_client, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """A normal completion POST on the cycle's map records an UNVERIFIED tournament row (SUB-01)."""
+        _, map_id, map_code, cycle_id, user_id = await self._setup_active_cycle(
+            test_client, asyncpg_pool, create_test_map, create_test_user
+        )
+
+        response = await test_client.post(
+            "/api/v3/completions/",
             json={
                 "user_id": user_id,
+                "code": map_code,
                 "time": 42.5,
+                "video": None,
                 "screenshot": "https://example.com/s.png",
             },
         )
 
         assert response.status_code == 201
-        data = response.json()
-        assert "id" in data
-        assert data["cycle_id"] == cycle_id
-        assert data["time"] == 42.5
-
-    async def test_submit_faster_time_accepted(self, test_client, asyncpg_pool, create_test_map, create_test_user):
-        """Faster time submission succeeds after initial submission."""
-        _, _, cycle_id, user_id = await self._setup_active_cycle(
-            test_client, asyncpg_pool, create_test_map, create_test_user
+        verified = await asyncpg_pool.fetchval(
+            "SELECT verified FROM tournaments.completions WHERE cycle_id = $1 AND user_id = $2",
+            cycle_id,
+            user_id,
         )
-
-        first = await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 50.0, "screenshot": "https://example.com/s.png"},
-        )
-        assert first.status_code == 201
-
-        second = await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s2.png"},
-        )
-        assert second.status_code == 201
-
-    async def test_submit_slower_time_rejected(self, test_client, asyncpg_pool, create_test_map, create_test_user):
-        """Slower time submission returns 409."""
-        _, _, cycle_id, user_id = await self._setup_active_cycle(
-            test_client, asyncpg_pool, create_test_map, create_test_user
-        )
-
-        first = await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 30.0, "screenshot": "https://example.com/s.png"},
-        )
-        assert first.status_code == 201
-
-        second = await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 35.0, "screenshot": "https://example.com/s2.png"},
-        )
-        assert second.status_code == 409
-
-    async def test_submit_to_completed_cycle_rejected(
-        self, test_client, asyncpg_pool, create_test_map, create_test_user
-    ):
-        """Submission to completed cycle returns 409."""
-        name = f"Completed {uuid4().hex[:8]}"
-        create_resp = await test_client.post(
-            f"{BASE}/categories",
-            json={"name": name, "difficulties": ["Easy"]},
-        )
-        category_id = create_resp.json()["id"]
-
-        map_id = await create_test_map(difficulty="Easy")
-        user_id = await create_test_user(nickname=f"Player{uuid4().hex[:6]}")
-
-        async with asyncpg_pool.acquire() as conn:
-            cycle_id = await conn.fetchval(
-                """
-                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at, ended_at)
-                VALUES ($1, $2, 'completed', NOW() - INTERVAL '7 days', NOW())
-                RETURNING id
-                """,
-                category_id,
-                map_id,
-            )
-
-        response = await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s.png"},
-        )
-        assert response.status_code == 409
+        assert verified is False
 
     async def test_cross_write_sets_fk(self, test_client, asyncpg_pool, create_test_map, create_test_user):
-        """SUB-04: Cross-write sets tournament_completion_id FK on core.completions."""
-        _, map_id, cycle_id, user_id = await self._setup_active_cycle(
+        """SUB-04: the auto-detected PB run sets tournament_completion_id FK on core.completions."""
+        _, map_id, map_code, cycle_id, user_id = await self._setup_active_cycle(
             test_client, asyncpg_pool, create_test_map, create_test_user
         )
 
         response = await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s.png"},
+            "/api/v3/completions/",
+            json={
+                "user_id": user_id,
+                "code": map_code,
+                "time": 42.5,
+                "video": None,
+                "screenshot": "https://example.com/s.png",
+            },
         )
         assert response.status_code == 201
-        tournament_completion_id = response.json()["id"]
 
         async with asyncpg_pool.acquire() as conn:
+            tournament_completion_id = await conn.fetchval(
+                "SELECT id FROM tournaments.completions WHERE cycle_id = $1 AND user_id = $2",
+                cycle_id,
+                user_id,
+            )
             core_fk = await conn.fetchval(
                 """
                 SELECT tournament_completion_id
@@ -745,10 +716,18 @@ class TestLeaderboardEndpoint:
                 map_id,
             )
 
-        await test_client.post(
-            f"{BASE}/cycles/{cycle_id}/submit",
-            json={"user_id": user_id, "time": 42.5, "screenshot": "https://example.com/s.png"},
-        )
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, verified)
+                VALUES ($1, $2, $3, $4, $5, TRUE)
+                """,
+                cycle_id,
+                user_id,
+                map_id,
+                42.5,
+                "https://example.com/s.png",
+            )
 
         response = await test_client.get(f"{BASE}/cycles/{cycle_id}/leaderboard")
 

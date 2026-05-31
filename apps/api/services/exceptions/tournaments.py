@@ -129,17 +129,6 @@ class PendingCycleNotFoundError(TournamentsError):
         super().__init__("No pending cycle exists for this category.", category_id=category_id)
 
 
-class SlowerTimeError(TournamentsError):
-    """Submitted time is not faster than the user's current best."""
-
-    def __init__(self, current_best: float, submitted_time: float) -> None:
-        super().__init__(
-            f"Submitted time ({submitted_time}s) is not faster than your current best ({current_best}s).",
-            current_best=current_best,
-            submitted_time=submitted_time,
-        )
-
-
 class StreakNotFoundError(TournamentsError):
     """User tournament streak record does not exist."""
 
