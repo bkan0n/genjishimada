@@ -260,10 +260,34 @@ Plans:
 
 - [x] 10-03-PLAN.md — /tournament info/leaderboard/streak GroupCog + /tournament-reroll admin command + setup wiring + bot tests
 
+### Phase 11: Tournament Verification Flow
+
+**Goal**: Tournament times are earned through the same verification pipeline as normal completions — the verification-skipping bypass is removed — and verified tournament-relevant runs (including valid runs slower than a player's all-time PB) reach the tournament leaderboard via auto-detection on normal submission
+**Depends on**: Phase 6 (submission/cross-write/leaderboard), Phase 9 (bot tournament consumers)
+**Requirements**: SUB-01
+**Success Criteria** (what must be TRUE):
+
+  1. A normal verified completion on an active cycle's map appears on that cycle's leaderboard with no separate tournament submission step
+  2. A valid tournament run slower than the player's all-time PB still gets verified (OCR or mod review) and is recorded as their tournament time, kept only if it is their fastest tournament-window time
+  3. A run that is both a new PB and on the active tournament map is verified exactly once (single embed/verdict) and marks both the core and tournament records verified
+  4. The bypass endpoint `POST /api/v3/tournaments/cycles/{cycle_id}/submit` no longer exists and no code path writes a tournament completion without verification
+  5. Participation XP and a verified leaderboard standing are granted only on verification; unverified runs rank below verified ones
+  6. The `core.completions` "latest = fastest" invariant is preserved — no slower-than-PB tournament rows are inserted into `core.completions`
+
+**Plans:** 5 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — Foundation contracts: tournament repo lookups, SDK events, RabbitMQ queues + DLQs, SC-2/SC-3 test scaffold
+- [ ] 11-02-PLAN.md — Auto-detect hook in submit_completion + PB path + D-07 slower-than-PB relax + verify_completion side-effect (D-01/D-03/D-04/D-04a/D-07)
+- [ ] 11-03-PLAN.md — Non-PB verification surface: OCR variant + tournament verify/reject endpoints + participation XP on verify (D-02/D-04/D-06)
+- [ ] 11-04-PLAN.md — Remove the verification-skipping bypass route + service method; repoint seed script; rewrite submit-asserting tests (D-05)
+- [ ] 11-05-PLAN.md — Bot wiring: Accept/Reject view + completion-created/verification-changed consumers + api_service methods + handler tests
+
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -275,5 +299,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 6. Submission Flow & Leaderboard | 2/2 | Complete   | 2026-05-30 |
 | 7. Automatic Cycle Transitions | 3/3 | Complete    | 2026-05-30 |
 | 8. Rewards Engine | 3/3 | Complete   | 2026-05-30 |
-| 9. Bot Queue Consumers & Announcements | 0/0 | Not started | - |
+| 9. Bot Queue Consumers & Announcements | 3/3 | Complete   | 2026-05-31 |
 | 10. Bot Slash Commands | 3/3 | Complete   | 2026-05-30 |
+| 11. Tournament Verification Flow | 0/5 | Planning | - |
