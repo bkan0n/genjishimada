@@ -28,9 +28,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 from genjishimada_sdk.tournaments import (
+    TournamentCompletionCreatedEvent,
     TournamentCycleCompletedEvent,
     TournamentCycleStartedEvent,
     TournamentLeaderboardEntryResponse,
+    TournamentVerificationChangedEvent,
 )
 
 if TYPE_CHECKING:
@@ -472,3 +474,191 @@ async def test_idempotency_skips_duplicate_and_releases_claim_on_failure() -> No
     with pytest.raises(RuntimeError):
         await _h_fail(svc_fail, FakeMessage())
     api_fail.delete_claimed_idempotency.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# SUB-01 / D-04: non-PB tournament mod-review surface (Plan 11-05)
+# ---------------------------------------------------------------------------
+
+TournamentVerificationView = _tournaments.TournamentVerificationView
+TournamentVerificationAcceptButton = _tournaments.TournamentVerificationAcceptButton
+TournamentVerificationRejectButton = _tournaments.TournamentVerificationRejectButton
+
+
+def _make_verification_handler(bot_api: AsyncMock, verification_channel: Any) -> Any:
+    """Build a TournamentHandler with the verification channel injected."""
+    handler = object.__new__(TournamentHandler)
+    handler.bot = SimpleNamespace(api=bot_api)
+    handler.verification_channel = verification_channel
+    return handler
+
+
+def _created_event() -> TournamentCompletionCreatedEvent:
+    return TournamentCompletionCreatedEvent(
+        completion_id=77,
+        cycle_id=42,
+        user_id=111,
+        time=12.34,
+        video="https://example.com/run.mp4",
+        screenshot="https://example.com/proof.png",
+    )
+
+
+class _FakeInteractionResponse:
+    """Records defer()/send_modal() interaction-response calls."""
+
+    def __init__(self) -> None:
+        self.deferred: list[dict[str, Any]] = []
+        self.sent_modals: list[Any] = []
+
+    async def defer(self, *args: Any, **kwargs: Any) -> None:
+        self.deferred.append({"args": args, "kwargs": kwargs})
+
+    async def send_modal(self, modal: Any) -> None:
+        self.sent_modals.append(modal)
+
+
+class _FakeMessage:
+    """A fake message recording edit() calls."""
+
+    def __init__(self) -> None:
+        self.edit_calls: list[dict[str, Any]] = []
+
+    async def edit(self, *args: Any, **kwargs: Any) -> None:
+        self.edit_calls.append({"args": args, "kwargs": kwargs})
+
+
+class _FakeFollowup:
+    def __init__(self) -> None:
+        self.sends: list[dict[str, Any]] = []
+
+    async def send(self, *args: Any, **kwargs: Any) -> None:
+        self.sends.append({"args": args, "kwargs": kwargs})
+
+
+class _FakeButtonInteraction:
+    """A fake interaction sufficient for the Accept/Reject button callbacks."""
+
+    def __init__(self, api: AsyncMock) -> None:
+        self.response = _FakeInteractionResponse()
+        self.message = _FakeMessage()
+        self.followup = _FakeFollowup()
+        self.edit_original_calls: list[dict[str, Any]] = []
+        self.user = SimpleNamespace(id=111)
+        self.client = SimpleNamespace(api=api)
+
+    async def edit_original_response(self, *args: Any, **kwargs: Any) -> None:
+        self.edit_original_calls.append({"args": args, "kwargs": kwargs})
+
+
+@pytest.mark.asyncio
+async def test_completion_created_posts_accept_reject_view() -> None:
+    """SUB-01: the completion-created consumer posts an Accept/Reject view to the queue."""
+    api = AsyncMock()
+    channel = FakeChannel()
+    handler = _make_verification_handler(api, channel)
+
+    await handler._on_completion_created(_created_event(), None)
+
+    assert len(channel.send_calls) == 1
+    kwargs = channel.send_calls[0]["kwargs"]
+    view = kwargs["view"]
+    assert isinstance(view, TournamentVerificationView)
+    assert view.completion_id == 77
+    # mention-injection mitigation on the posted card
+    allowed = kwargs["allowed_mentions"]
+    assert allowed.everyone is False
+    assert allowed.roles is False
+
+
+@pytest.mark.asyncio
+async def test_accept_button_calls_verify_tournament_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SUB-01 / D-04: clicking Accept routes the verdict to verify_tournament_completion."""
+    api = AsyncMock()
+    api.verify_tournament_completion.return_value = SimpleNamespace(id="job-1")
+    monkeypatch.setattr(
+        _tournaments, "poll_job_until_complete", AsyncMock(return_value=SimpleNamespace(status="succeeded"))
+    )
+
+    bot = SimpleNamespace(api=api)
+    view = TournamentVerificationView(_created_event(), bot)  # type: ignore[arg-type]
+    button = next(c for c in view.walk_children() if isinstance(c, TournamentVerificationAcceptButton))
+    itx = _FakeButtonInteraction(api)
+
+    await button.callback(itx)  # type: ignore[arg-type]
+
+    api.verify_tournament_completion.assert_awaited_once_with(77)
+    api.reject_tournament_completion.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reject_button_calls_reject_tournament_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SUB-01 / D-04: clicking Reject (with a reason) routes to reject_tournament_completion."""
+    api = AsyncMock()
+    bot = SimpleNamespace(api=api)
+    view = TournamentVerificationView(_created_event(), bot)  # type: ignore[arg-type]
+    button = next(c for c in view.walk_children() if isinstance(c, TournamentVerificationRejectButton))
+    itx = _FakeButtonInteraction(api)
+
+    # Stub the modal so wait() returns immediately with a non-empty reason.
+    class _StubModal:
+        def __init__(self) -> None:
+            self.reason = SimpleNamespace(value="not a valid run")
+
+        async def wait(self) -> None:
+            return None
+
+    monkeypatch.setattr(_tournaments, "TournamentRejectionReasonModal", _StubModal)
+
+    await button.callback(itx)  # type: ignore[arg-type]
+
+    api.reject_tournament_completion.assert_awaited_once_with(77)
+    api.verify_tournament_completion.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reject_button_empty_reason_cancels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty reject reason cancels the reject — no API call is made."""
+    api = AsyncMock()
+    bot = SimpleNamespace(api=api)
+    view = TournamentVerificationView(_created_event(), bot)  # type: ignore[arg-type]
+    button = next(c for c in view.walk_children() if isinstance(c, TournamentVerificationRejectButton))
+    itx = _FakeButtonInteraction(api)
+
+    class _EmptyModal:
+        def __init__(self) -> None:
+            self.reason = SimpleNamespace(value="")
+
+        async def wait(self) -> None:
+            return None
+
+    monkeypatch.setattr(_tournaments, "TournamentRejectionReasonModal", _EmptyModal)
+
+    await button.callback(itx)  # type: ignore[arg-type]
+
+    api.reject_tournament_completion.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_verification_changed_surfaces_verdict() -> None:
+    """The verification-changed consumer posts the verdict with mention mitigation."""
+    api = AsyncMock()
+    channel = FakeChannel()
+    handler = _make_verification_handler(api, channel)
+
+    event = TournamentVerificationChangedEvent(
+        tournament_completion_id=77, cycle_id=42, user_id=111, verified=True, time=12.34
+    )
+    await handler._on_verification_changed(event, None)
+
+    assert len(channel.send_calls) == 1
+    kwargs = channel.send_calls[0]["kwargs"]
+    assert "verified" in kwargs["content"]
+    assert "<@111>" in kwargs["content"]
+    allowed = kwargs["allowed_mentions"]
+    assert allowed.everyone is False
+    assert allowed.roles is False

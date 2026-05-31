@@ -1089,6 +1089,39 @@ class APIService:
         r = Route("PUT", "/completions/{record_id}/verification", record_id=record_id)
         return self._request(r, data=data, response_model=JobStatusResponse)
 
+    def verify_tournament_completion(self, tc_id: int) -> Response[JobStatusResponse]:
+        """Verify a non-PB tournament completion (bot mod-review Accept callback).
+
+        Routes the moderator's Accept verdict to the ``tournaments:verify`` endpoint from
+        Plan 11-03 — the bot never writes the DB. The flip + participation-XP grant happen
+        server-side; this returns the job status of the published verification-changed
+        event.
+
+        Args:
+            tc_id (int): The tournament completion ID to verify.
+
+        Returns:
+            Response[JobStatusResponse]: The job status of the verification.
+        """
+        r = Route("PATCH", "/tournaments/completions/{tc_id}/verify", tc_id=tc_id)
+        return self._request(r, response_model=JobStatusResponse)
+
+    def reject_tournament_completion(self, tc_id: int) -> Response[JobStatusResponse]:
+        """Reject a non-PB tournament completion (bot mod-review Reject callback).
+
+        Routes the moderator's Reject verdict to the ``tournaments:verify`` endpoint from
+        Plan 11-03 — the bot never writes the DB. The endpoint takes no reason payload (the
+        row is simply left unverified, Open-Q1), so no body is sent.
+
+        Args:
+            tc_id (int): The tournament completion ID to reject.
+
+        Returns:
+            Response[JobStatusResponse]: The job status of the rejection.
+        """
+        r = Route("PATCH", "/tournaments/completions/{tc_id}/reject", tc_id=tc_id)
+        return self._request(r, response_model=JobStatusResponse)
+
     def get_records_filtered(  # noqa: PLR0913
         self,
         code: OverwatchCode | None = None,
