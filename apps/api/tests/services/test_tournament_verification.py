@@ -62,7 +62,9 @@ def _make_service() -> tuple[CompletionsService, Any, Any, Any]:
     txn_cm = MagicMock()
     txn_cm.__aenter__ = AsyncMock(return_value=None)
     txn_cm.__aexit__ = AsyncMock(return_value=None)
-    conn.transaction.return_value = txn_cm
+    # conn.transaction() must return the CM synchronously (not a coroutine), so
+    # override the AsyncMock attribute with a plain MagicMock.
+    conn.transaction = MagicMock(return_value=txn_cm)
 
     completions_repo = AsyncMock()
     tournament_repo = AsyncMock()
@@ -183,7 +185,9 @@ async def test_pb_path_verify_propagates_to_both_rows() -> None:
         "user_id": 123,
         "code": "ABC123",
         "old_time": 8.0,
-        "old_verified": False,
+        # old_verified True so the (verified AND not old_verified) quest-progress
+        # branch is skipped — this test isolates the tournament side-effect.
+        "old_verified": True,
         "tournament_completion_id": 9001,
     }
     completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
@@ -225,7 +229,8 @@ async def test_pb_path_verify_idempotent_award_via_ledger() -> None:
         "user_id": 123,
         "code": "ABC123",
         "old_time": 8.0,
-        "old_verified": False,
+        # old_verified True so the quest-progress branch is skipped (isolation).
+        "old_verified": True,
         "tournament_completion_id": 9001,
     }
     completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
