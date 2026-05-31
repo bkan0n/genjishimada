@@ -391,6 +391,46 @@
     "arguments": {
       "x-queue-type": "classic"
     }
+  },
+  {
+    "name": "api.tournament.completion.created",
+    "vhost": "/",
+    "durable": true,
+    "auto_delete": false,
+    "arguments": {
+      "x-dead-letter-exchange": "",
+      "x-dead-letter-routing-key": "api.tournament.completion.created.dlq",
+      "x-queue-type": "classic"
+    }
+  },
+  {
+    "name": "api.tournament.completion.created.dlq",
+    "vhost": "/",
+    "durable": true,
+    "auto_delete": false,
+    "arguments": {
+      "x-queue-type": "classic"
+    }
+  },
+  {
+    "name": "api.tournament.verification.changed",
+    "vhost": "/",
+    "durable": true,
+    "auto_delete": false,
+    "arguments": {
+      "x-dead-letter-exchange": "",
+      "x-dead-letter-routing-key": "api.tournament.verification.changed.dlq",
+      "x-queue-type": "classic"
+    }
+  },
+  {
+    "name": "api.tournament.verification.changed.dlq",
+    "vhost": "/",
+    "durable": true,
+    "auto_delete": false,
+    "arguments": {
+      "x-queue-type": "classic"
+    }
   }
   ]
 }
