@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-04-PLAN.md (gap closure)
-last_updated: "2026-05-31T20:05:58.013Z"
+stopped_at: Completed 11-04-PLAN.md (bypass removed, SC-4 regression green)
+last_updated: "2026-05-31T22:55:05.009Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 30
-  completed_plans: 28
-  percent: 90
+  completed_plans: 29
+  percent: 91
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-29)
 ## Current Position
 
 Phase: 11 (tournament-verification-flow) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-05-31
 
-Progress: [█████████░] 90%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
@@ -75,6 +75,8 @@ Progress: [█████████░] 90%
 | Phase 09 P03 | 4min | 2 tasks | 3 files |
 | Phase 11 P01 | 9min | 3 tasks | 5 files |
 | Phase 11 P02 | 35min | 2 tasks | 5 files |
+| Phase 11 P03 | 22min | 2 tasks | 8 files |
+| Phase 11 P04 | 18min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -125,6 +127,11 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-02 D-07 relax catches ONLY asyncpg.exceptions.CheckViolationError (0017 speed trigger, ERRCODE 23514) gated on active_cycle is not None; non-tournament maps re-raise → existing HTTP 400 preserved; Unique/FK propagate
 - [Phase 11]: 11-02 SlowerThanPendingError precheck gated on active_cycle is None so tournament maps fall through to the relax (valid slower run recorded, not 400ed)
 - [Phase 11]: 11-02 verify-side propagation lives INSIDE verify_completion (not a bot consumer) because VerificationChangedEvent carries no map_id (P8); fresh conn+txn when conn is None; idempotent participation XP via the 08-01 ledger
+- [Phase ?]: [Phase 11]: 11-03 verify/reject share one _set_verified body; reject sets verified=FALSE (Open-Q1), no XP; both forward request headers so X-PYTEST-ENABLED skips the broker on the non-IGNORE_IDEMPOTENCY verification.changed queue
+- [Phase ?]: [Phase 11]: 11-03 OCR variant on-match terminal calls completions_service.verify_tournament_completion (seam building a TournamentService); OCR auto-verify + bot callback share one verify impl; mismatch escalates via TournamentCompletionCreatedEvent (NOT core)
+- [Phase ?]: [Phase 11]: 11-03 fetch_tournament_completion added (was absent); TournamentService imported at completions_service module top (no circular dep — tournament_service imports nothing from completions)
+- [Phase 11]: 11-04 removed the verification-skipping bypass (D-05): POST /cycles/{id}/submit route + TournamentService.submit_completion + SDK TournamentCompletionCreateRequest + orphaned SlowerTimeError exception all deleted; PB-path helpers (cross_write_to_core/create_tournament_completion) + verify-path (award_participation/publish_xp_events/verify_tournament_completion) preserved
+- [Phase 11]: 11-04 seed-tournament-local.sh repointed to a normal POST /api/v3/completions/ on the active cycle's map (auto-detect verified pipeline); participation-XP regression moved from submit to verify; TestSubmissionRejection rewritten to assert get_active_cycle_by_map_id is active-only
 
 ### Pending Todos
 
@@ -152,6 +159,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-31T20:05:58.005Z
-Stopped at: Completed 11-02-PLAN.md (re-verified + committed test refinement 6f96a44)
+Last session: 2026-05-31T22:54:29.665Z
+Stopped at: Completed 11-04-PLAN.md (bypass removed, SC-4 regression green)
 Resume file: None
