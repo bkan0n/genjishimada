@@ -35,7 +35,6 @@ from repository.lootbox_repository import provide_lootbox_repository
 from repository.tournaments_repository import provide_tournament_repository
 from repository.users_repository import provide_users_repository
 from services.completions_service import CompletionsService, provide_completions_service
-from services.tournament_reward_service import provide_tournament_reward_service
 from services.exceptions.completions import (
     CompletionNotFoundError,
     DuplicateCompletionError,
@@ -46,6 +45,7 @@ from services.exceptions.completions import (
     SlowerThanPendingError,
 )
 from services.notifications_service import NotificationsService, provide_notifications_service
+from services.tournament_reward_service import provide_tournament_reward_service
 from services.users_service import UsersService, provide_users_service
 from utilities.errors import CustomHTTPException
 

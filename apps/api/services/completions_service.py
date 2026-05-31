@@ -11,6 +11,7 @@ import aiohttp
 import msgspec
 import sentry_sdk
 from asyncpg import Connection, Pool
+from asyncpg.exceptions import CheckViolationError
 from genjishimada_sdk.completions import (
     CompletionCreatedEvent,
     CompletionCreateRequest,
@@ -46,9 +47,9 @@ from repository.exceptions import (
     ForeignKeyViolationError,
     UniqueConstraintViolationError,
 )
-from repository.tournaments_repository import TournamentRepository
 from repository.lootbox_repository import LootboxRepository
 from repository.store_repository import StoreRepository
+from repository.tournaments_repository import TournamentRepository
 from repository.users_repository import UsersRepository
 from services.exceptions.completions import (
     CompletionNotFoundError,
@@ -429,7 +430,7 @@ class CompletionsService(BaseService):
                     headers=Headers(),
                 )
 
-    async def submit_completion(
+    async def submit_completion(  # noqa: PLR0912
         self, data: CompletionCreateRequest, request: Request, notifications: NotificationsService, users: UsersService
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion record and publish an event.
@@ -449,14 +450,13 @@ class CompletionsService(BaseService):
             SlowerThanPendingError: If new time is slower than pending verification.
             CompletionNotFoundError: If referenced completion not found (FK violation).
         """
-        from asyncpg.exceptions import CheckViolationError
-
         map_exists = await self._completions_repo.check_map_exists(data.code)
         if not map_exists:
             raise MapNotFoundError(data.code)
 
         completion_id: int | None = None
-        async with self._pool.acquire() as conn, conn.transaction():
+        async with self._pool.acquire() as raw_conn, raw_conn.transaction():
+            conn = cast("Connection", raw_conn)
             # D-01 auto-detect: resolve map_id then look up the active cycle so
             # the rest of the submit path can branch on tournament membership
             # inside this transaction.
@@ -495,7 +495,7 @@ class CompletionsService(BaseService):
                 if active_cycle is None:
                     raise
                 await self._record_tournament_completion(active_cycle, data, conn=conn)
-                return CompletionSubmissionJobResponse(None, None)
+                return CompletionSubmissionJobResponse(job_status=None, completion_id=0)
             except UniqueConstraintViolationError:
                 raise DuplicateCompletionError(user_id=data.user_id, map_code=data.code)
             except ForeignKeyViolationError as e:
@@ -831,7 +831,7 @@ class CompletionsService(BaseService):
 
         if conn is None:
             async with self._pool.acquire() as fresh_conn, fresh_conn.transaction():
-                active_cycle, pending_events, verified_row = await _do(fresh_conn)
+                active_cycle, pending_events, verified_row = await _do(cast("Connection", fresh_conn))
         else:
             active_cycle, pending_events, verified_row = await _do(conn)
 
