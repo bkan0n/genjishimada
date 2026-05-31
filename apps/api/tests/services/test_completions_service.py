@@ -1687,3 +1687,117 @@ class TestSubmitTournamentSlowerRelax:
 
         with pytest.raises(DuplicateCompletionError):
             await service.submit_completion(data, mock_request, mocker.AsyncMock(), mocker.AsyncMock())
+
+
+# ---------------------------------------------------------------------------
+# Phase 11-02 Task 2: verify_completion tournament side-effect (D-04a).
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyCompletionTournamentSideEffect:
+    """D-04a: verifying a linked PB completion flips the tournament row + XP."""
+
+    async def test_verify_propagates_to_linked_tournament_row(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """Verify on a PB-linked cycle completion sets tournament verified + awards XP."""
+        service, tournament_repo, reward_service = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        conn = mocker.AsyncMock()
+        mock_completions_repo.check_completion_exists.return_value = True
+        mock_completions_repo.fetch_completion_for_moderation.return_value = {
+            "user_id": 123,
+            "code": "ABC123",
+            "old_time": 8.0,
+            "old_verified": False,
+            "tournament_completion_id": 9001,
+        }
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        tournament_repo.get_active_cycle_by_map_id.return_value = {
+            "id": 42,
+            "category_id": 3,
+            "map_id": 777,
+            "status": "active",
+        }
+        tournament_repo.set_tournament_verified.return_value = {
+            "id": 9001,
+            "cycle_id": 42,
+            "user_id": 123,
+            "time": 8.0,
+        }
+        reward_service.award_participation.return_value = ["xp-event"]
+        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+
+        data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        await service.verify_completion(mock_request, 5001, data, conn=conn)
+
+        tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, conn=conn)
+        reward_service.award_participation.assert_awaited_once()
+        reward_service.publish_xp_events.assert_awaited_once_with(["xp-event"])
+        tournament_publishes = [
+            c
+            for c in service.publish_message.call_args_list
+            if c.kwargs.get("routing_key") == "api.tournament.verification.changed"
+        ]
+        assert len(tournament_publishes) == 1
+        assert tournament_publishes[0].kwargs["idempotency_key"] == "tournament:verify:9001"
+
+    async def test_verify_no_tournament_link_no_side_effect(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """A core completion with no tournament link triggers no side-effect."""
+        service, tournament_repo, reward_service = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        conn = mocker.AsyncMock()
+        mock_completions_repo.check_completion_exists.return_value = True
+        mock_completions_repo.fetch_completion_for_moderation.return_value = {
+            "user_id": 123,
+            "code": "ABC123",
+            "old_time": 8.0,
+            "old_verified": False,
+            "tournament_completion_id": None,
+        }
+        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+
+        data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        await service.verify_completion(mock_request, 5001, data, conn=conn)
+
+        tournament_repo.set_tournament_verified.assert_not_awaited()
+        reward_service.award_participation.assert_not_awaited()
+
+    async def test_verify_on_non_cycle_map_no_side_effect(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """A linked row whose map is not an active cycle triggers no side-effect."""
+        service, tournament_repo, reward_service = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        conn = mocker.AsyncMock()
+        mock_completions_repo.check_completion_exists.return_value = True
+        mock_completions_repo.fetch_completion_for_moderation.return_value = {
+            "user_id": 123,
+            "code": "ABC123",
+            "old_time": 8.0,
+            "old_verified": False,
+            "tournament_completion_id": 9001,
+        }
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        tournament_repo.get_active_cycle_by_map_id.return_value = None
+        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+
+        data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        await service.verify_completion(mock_request, 5001, data, conn=conn)
+
+        tournament_repo.set_tournament_verified.assert_not_awaited()
+        reward_service.award_participation.assert_not_awaited()

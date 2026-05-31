@@ -36,6 +36,7 @@ from genjishimada_sdk.difficulties import DifficultyTop, convert_extended_diffic
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
 from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
+from genjishimada_sdk.tournaments import TournamentVerificationChangedEvent
 from litestar import Request
 from litestar.datastructures import Headers, State
 
@@ -742,6 +743,17 @@ class CompletionsService(BaseService):
                 time=completion_info["old_time"],
             )
 
+        # D-04a: when a verified core row links a tournament row on an active
+        # cycle, propagate the verification to the tournament row + award
+        # participation XP, all inside verify_completion (NOT via a bot consumer,
+        # since VerificationChangedEvent carries no map_id — P8).
+        if data.verified:
+            await self._propagate_tournament_verification(
+                completion_info=completion_info,
+                headers=request.headers if request else Headers(),
+                conn=conn,
+            )
+
         message_data = VerificationChangedEvent(
             completion_id=record_id,
             verified=data.verified,
@@ -773,6 +785,75 @@ class CompletionsService(BaseService):
                 conn=conn,  # type: ignore
                 notifications=notifications,
             )
+
+    async def _propagate_tournament_verification(
+        self,
+        *,
+        completion_info: dict,
+        headers: Headers,
+        conn: Connection | None,
+    ) -> None:
+        """Flip the linked tournament row verified + award participation (D-04a).
+
+        Runs only when the verified core row links a tournament row whose map is
+        an active cycle. ``set_tournament_verified`` and ``award_participation``
+        are atomic on a single connection: when ``conn`` is None (the common
+        pooled route call), a fresh connection + transaction is acquired (mirrors
+        ``verify_completion_with_pool``). XP is idempotent (the 08-01 ledger), so
+        this is replay-safe — verifying twice grants once. Deferred XP events are
+        flushed AFTER the transaction commits, then the tournament verification
+        event is published.
+
+        Args:
+            completion_info: Moderation row (user_id, code, tournament_completion_id).
+            headers: Request headers for the publish call.
+            conn: Active connection (may be None for pooled route calls).
+        """
+        if self._tournament_repo is None:
+            return
+        tournament_completion_id = completion_info.get("tournament_completion_id")
+        if tournament_completion_id is None:
+            return
+
+        async def _do(active_conn: Connection) -> tuple[dict | None, list[Any], dict | None]:
+            cycle = await self._resolve_active_cycle(completion_info["code"], conn=active_conn)
+            if cycle is None:
+                return None, [], None
+            row = await self._tournament_repo.set_tournament_verified(  # type: ignore[union-attr]
+                tournament_completion_id, conn=active_conn
+            )
+            events: list[Any] = []
+            if self._tournament_reward_service is not None:
+                events = await self._tournament_reward_service.award_participation(
+                    cycle, completion_info["user_id"], conn=active_conn
+                )
+            return cycle, events, row
+
+        if conn is None:
+            async with self._pool.acquire() as fresh_conn, fresh_conn.transaction():
+                active_cycle, pending_events, verified_row = await _do(fresh_conn)
+        else:
+            active_cycle, pending_events, verified_row = await _do(conn)
+
+        if active_cycle is None or verified_row is None:
+            return
+
+        if self._tournament_reward_service is not None and pending_events:
+            await self._tournament_reward_service.publish_xp_events(pending_events)
+
+        event = TournamentVerificationChangedEvent(
+            tournament_completion_id=tournament_completion_id,
+            cycle_id=active_cycle["id"],
+            user_id=completion_info["user_id"],
+            verified=True,
+            time=float(verified_row["time"]),
+        )
+        await self.publish_message(
+            routing_key="api.tournament.verification.changed",
+            data=event,
+            headers=headers,
+            idempotency_key=f"tournament:verify:{tournament_completion_id}",
+        )
 
     async def get_completions_leaderboard(
         self, code: str, page_number: int, page_size: int

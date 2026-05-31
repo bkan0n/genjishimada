@@ -1867,11 +1867,17 @@ class CompletionsRepository(BaseRepository):
             conn: Optional connection for transaction support.
 
         Returns:
-            Dict with user_id, code, old_time, old_verified, or None if not found.
+            Dict with user_id, code, old_time, old_verified,
+            tournament_completion_id, or None if not found.
         """
         _conn = self._get_connection(conn)
         query = """
-            SELECT c.user_id, m.code, c.time as old_time, c.verified as old_verified
+            SELECT
+                c.user_id,
+                m.code,
+                c.time as old_time,
+                c.verified as old_verified,
+                c.tournament_completion_id
             FROM core.completions c
             LEFT JOIN core.maps m ON m.id = c.map_id AND m.code IS NOT NULL
             WHERE c.id = $1
