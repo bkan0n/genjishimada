@@ -20,7 +20,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Submissions & Leaderboard
 
-- [ ] **SUB-01**: Tournament completion submission with tier-then-time ranking (fully verified > partial)
+- [x] **SUB-01**: Tournament completion submission with tier-then-time ranking (fully verified > partial)
 - [ ] **SUB-02**: Separate tournaments.completions table with per-cycle speed enforcement (fresh slate)
 - [ ] **SUB-03**: Cross-write to core.completions only when tournament time is strictly faster
 - [ ] **SUB-04**: tournament_completion_id FK on core.completions for metadata linking
@@ -93,7 +93,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CYCLE-06 | Phase 5 | Complete |
 | CYCLE-07 | Phase 5 | Complete |
 | CYCLE-08 | Phase 4 | Pending |
-| SUB-01 | Phase 6 | Pending |
+| SUB-01 | Phase 6 | Complete |
 | SUB-02 | Phase 6 | Pending |
 | SUB-03 | Phase 6 | Pending |
 | SUB-04 | Phase 6 | Pending |

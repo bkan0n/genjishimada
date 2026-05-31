@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Completed 07-04-PLAN.md (gap closure)
-last_updated: "2026-05-30T22:30:00Z"
-last_activity: 2026-05-30
+last_updated: "2026-05-31T19:36:37.600Z"
+last_activity: 2026-05-31
 progress:
-  total_phases: 10
+  total_phases: 11
   completed_phases: 10
-  total_plans: 23
-  completed_plans: 23
-  percent: 100
+  total_plans: 30
+  completed_plans: 26
+  percent: 87
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-29)
 
 **Core value:** Give the Genji Parkour community a persistent, competitive cycle that keeps players engaged week-over-week through fresh map challenges, leaderboard competition, and visible champion recognition.
-**Current focus:** Phase 10 — bot-slash-commands
+**Current focus:** Phase 11 — tournament-verification-flow
 
 ## Current Position
 
-Phase: 10 (bot-slash-commands) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
-Last activity: 2026-05-30 - Completed quick task 260530-mu5: add just recipes for local infrastructure
+Phase: 11 (tournament-verification-flow) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-05-31
 
-Progress: [██████████] 100%
+Progress: [█████████░] 87%
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [██████████] 100%
 | Phase 10 P02 | 4min | 2 tasks | 2 files |
 | Phase 10 P03 | 7min | 3 tasks | 3 files |
 | Phase 07 P04 | 8min | 2 tasks | 3 files |
+| Phase 09 P03 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 10]: 10-03 bot owns streak 404->zero-state (except APIHTTPError + e.status==NOT_FOUND -> 0/0); empty leaderboard short-circuits before paginator (zero-page modulo guard)
 - [Phase ?]: [Phase 10]: 10-03 TournamentLeaderboardPaginator is StaticPaginatorView[Any]; both bot test files share a real-utilities loader with sys.modules snapshot/restore
 - [Phase 07]: 07-04 fixed cold-start db_pool race: poller _loop sleeps before its first poll (asyncpg lifespan is plugin-appended after the poller's) + publish_pending_transitions guards state.get('db_pool') with a clean no-op; cadence/cancellation/semantics unchanged
+- [Phase ?]: [Phase 09]: 09-03 tournament queues + .dlq added to definitions.json mirroring api.xp.grant pair (canonical broker-load fix); DLQ sweep acquires a fresh channel per base queue so one NOT_FOUND .dlq cannot cascade ChannelInvalidStateError into the rest
 
 ### Pending Todos
 
@@ -143,6 +145,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-30T20:13:34.581Z
+Last session: 2026-05-31T19:36:37.562Z
 Stopped at: Completed 07-04-PLAN.md (gap closure)
 Resume file: None
