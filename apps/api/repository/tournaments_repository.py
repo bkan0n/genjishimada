@@ -280,6 +280,38 @@ class TournamentRepository(BaseRepository):
             category_id,
         )
 
+    async def get_active_cycle_by_map_id(
+        self,
+        map_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Look up the active tournament cycle for a given map.
+
+        Keyed on ``map_id`` so a normal completion's map can be matched to a
+        running tournament cycle without a separate submit step (D-01/D-02).
+        Backed by ``idx_cycles_map_id`` (migration 0020).
+
+        Args:
+            map_id: Map ID to match against active cycles.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Cycle dict (id, category_id, map_id, status) if an active cycle
+            exists for this map, None otherwise.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT id, category_id, map_id, status
+            FROM tournaments.cycles
+            WHERE map_id = $1 AND status = 'active'
+            LIMIT 1
+            """,
+            map_id,
+        )
+        return dict(row) if row else None
+
     # =========================================================================
     # Cycles
     # =========================================================================
@@ -1007,6 +1039,41 @@ class TournamentRepository(BaseRepository):
             screenshot,  # $5
             video,  # $6
         )
+
+    async def set_tournament_verified(
+        self,
+        tournament_completion_id: int,
+        verified: bool = True,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Flip a single tournament completion's verified flag.
+
+        Used by BOTH the PB side-effect (inside the completion verify path)
+        and the non-PB verify endpoint (D-04a/D-06). Idempotent: setting
+        verified to the same value twice is harmless.
+
+        Args:
+            tournament_completion_id: ID of the tournament completion row.
+            verified: Target verified value (defaults to True).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Dict with id, cycle_id, user_id, time of the updated row, or None
+            if no row matched the given id.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            UPDATE tournaments.completions
+            SET verified = $2
+            WHERE id = $1
+            RETURNING id, cycle_id, user_id, time
+            """,
+            tournament_completion_id,
+            verified,
+        )
+        return dict(row) if row else None
 
     async def fetch_leaderboard(
         self,
