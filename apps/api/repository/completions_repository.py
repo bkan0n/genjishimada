@@ -1572,6 +1572,32 @@ class CompletionsRepository(BaseRepository):
             constraint_name = extract_constraint_name(e) or "unknown"
             raise RepoFKError(constraint_name, "core.completions", str(e)) from e
 
+    async def set_completion_tournament_link(
+        self,
+        core_completion_id: int,
+        tournament_completion_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Link a core completion to its tournament completion row (D-04).
+
+        Sets ``core.completions.tournament_completion_id`` for an already-inserted
+        PB core row, inside the same submit transaction. The PB core row exists
+        before this call, so the link is set explicitly rather than via the
+        cross_write_to_core CTE (which inserts a fresh row).
+
+        Args:
+            core_completion_id: The core.completions row id.
+            tournament_completion_id: The tournaments.completions row id.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        await _conn.execute(
+            "UPDATE core.completions SET tournament_completion_id = $2 WHERE id = $1",
+            core_completion_id,
+            tournament_completion_id,
+        )
+
     async def check_map_exists(
         self,
         code: str,

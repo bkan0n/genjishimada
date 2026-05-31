@@ -45,6 +45,7 @@ from repository.exceptions import (
     ForeignKeyViolationError,
     UniqueConstraintViolationError,
 )
+from repository.tournaments_repository import TournamentRepository
 from repository.lootbox_repository import LootboxRepository
 from repository.store_repository import StoreRepository
 from repository.users_repository import UsersRepository
@@ -62,6 +63,7 @@ from services.exceptions.completions import (
 from .base import BaseService
 from .lootbox_service import LootboxService
 from .store_service import StoreService
+from .tournament_reward_service import TournamentRewardService
 from .users_service import UsersService
 
 if TYPE_CHECKING:
@@ -75,16 +77,32 @@ BOT_USER_ID = 969632729643753482
 class CompletionsService(BaseService):
     """Service for completions domain."""
 
-    def __init__(self, pool: Pool, state: State, completions_repo: CompletionsRepository) -> None:
+    def __init__(
+        self,
+        pool: Pool,
+        state: State,
+        completions_repo: CompletionsRepository,
+        tournament_repo: TournamentRepository | None = None,
+        tournament_reward_service: TournamentRewardService | None = None,
+    ) -> None:
         """Initialize completions service.
 
         Args:
             pool: AsyncPG connection pool.
             state: Application state.
             completions_repo: Completions repository.
+            tournament_repo: Tournament repository for auto-detecting the active
+                cycle by map_id (D-01) and linking the PB cross-write (D-04).
+                Optional so existing 3-arg unit tests keep working; the DI
+                provider always supplies one in production.
+            tournament_reward_service: Reward service used inside verify_completion
+                to award participation XP when a linked tournament row is verified
+                (D-04a). Optional for the same reason as above.
         """
         super().__init__(pool, state)
         self._completions_repo = completions_repo
+        self._tournament_repo = tournament_repo
+        self._tournament_reward_service = tournament_reward_service
 
     @staticmethod
     def _compute_medal(time_value: float, thresholds: dict | None) -> str | None:
@@ -430,20 +448,33 @@ class CompletionsService(BaseService):
             SlowerThanPendingError: If new time is slower than pending verification.
             CompletionNotFoundError: If referenced completion not found (FK violation).
         """
+        from asyncpg.exceptions import CheckViolationError
+
         map_exists = await self._completions_repo.check_map_exists(data.code)
         if not map_exists:
             raise MapNotFoundError(data.code)
 
+        completion_id: int | None = None
         async with self._pool.acquire() as conn, conn.transaction():
+            # D-01 auto-detect: resolve map_id then look up the active cycle so
+            # the rest of the submit path can branch on tournament membership
+            # inside this transaction.
+            active_cycle = await self._resolve_active_cycle(data.code, conn=conn)
+
             pending = await self._completions_repo.get_pending_verification(data.user_id, data.code, conn=conn)  # type: ignore
             verification_id_to_delete = None
 
             if pending:
-                if data.time >= pending["time"]:
+                # D-07: on a tournament map a valid slower-than-PB run must fall
+                # through to the speed-trigger relax, so do NOT pre-empt it with
+                # the pending-faster precheck. Non-tournament maps keep the
+                # existing HTTP-400 behavior unchanged.
+                if data.time >= pending["time"] and active_cycle is None:
                     raise SlowerThanPendingError(new_time=data.time, pending_time=pending["time"])
 
-                await self._completions_repo.reject_completion(pending["id"], BOT_USER_ID, conn=conn)  # type: ignore
-                verification_id_to_delete = pending["verification_id"]
+                if data.time < pending["time"]:
+                    await self._completions_repo.reject_completion(pending["id"], BOT_USER_ID, conn=conn)  # type: ignore
+                    verification_id_to_delete = pending["verification_id"]
 
             try:
                 completion_id = await self._completions_repo.insert_completion(
@@ -454,12 +485,34 @@ class CompletionsService(BaseService):
                     video=data.video,
                     conn=conn,  # type: ignore
                 )
+            except CheckViolationError:
+                # The 0017 speed trigger (ERRCODE 23514) rejected a slower-than-PB
+                # run. D-07: ONLY relax on a tournament map — record a tournament
+                # row with NO core row and NO FK link. On a non-tournament map,
+                # re-raise so the existing HTTP-400 path is preserved. Unique/FK
+                # violations are NOT caught here, so they still propagate (P7).
+                if active_cycle is None:
+                    raise
+                await self._record_tournament_completion(active_cycle, data, conn=conn)
+                return CompletionSubmissionJobResponse(None, None)
             except UniqueConstraintViolationError:
                 raise DuplicateCompletionError(user_id=data.user_id, map_code=data.code)
             except ForeignKeyViolationError as e:
                 if "user_id" in e.constraint_name:
                     raise CompletionNotFoundError(data.user_id)
                 raise MapNotFoundError(data.code)
+
+            # D-04 PB path: a PB completion on the active cycle map links a
+            # tournament row via core.completions.tournament_completion_id in the
+            # SAME transaction.
+            if active_cycle is not None and completion_id:
+                tournament_completion_id = await self._record_tournament_completion(
+                    active_cycle, data, conn=conn
+                )
+                if tournament_completion_id is not None:
+                    await self._completions_repo.set_completion_tournament_link(
+                        completion_id, tournament_completion_id, conn=conn
+                    )
 
         if verification_id_to_delete:
             delete_event = VerificationMessageDeleteEvent(verification_id_to_delete)
@@ -499,6 +552,59 @@ class CompletionsService(BaseService):
             idempotency_key=idempotency_key,
         )
         return CompletionSubmissionJobResponse(job_status, completion_id)
+
+    async def _resolve_active_cycle(self, code: str, *, conn: Connection | None) -> dict | None:
+        """Resolve a map code to the active tournament cycle, if any (D-01).
+
+        Returns None when tournament wiring is absent (unit tests), the map code
+        has no metadata, or the map is not the active cycle's map.
+
+        Args:
+            code: Map code being submitted/verified.
+            conn: Active connection (transaction-scoped for submit).
+
+        Returns:
+            The active cycle dict (id, category_id, map_id, status) or None.
+        """
+        if self._tournament_repo is None:
+            return None
+        map_meta = await self._completions_repo.fetch_map_metadata_by_code(code, conn=conn)
+        if not map_meta or map_meta.get("map_id") is None:
+            return None
+        return await self._tournament_repo.get_active_cycle_by_map_id(map_meta["map_id"], conn=conn)
+
+    async def _record_tournament_completion(
+        self,
+        active_cycle: dict,
+        data: CompletionCreateRequest,
+        *,
+        conn: Connection,
+    ) -> int | None:
+        """Insert a tournament completion row for an active-cycle submission.
+
+        Used by BOTH the PB path (caller then sets the core->tournament link) and
+        the D-07 non-PB path (no core row, no link).
+
+        Args:
+            active_cycle: Active cycle dict (must contain ``id`` and ``map_id``).
+            data: The completion submission request.
+            conn: Active transaction connection.
+
+        Returns:
+            The new tournament completion id, or None if wiring is absent.
+        """
+        if self._tournament_repo is None:
+            return None
+        row = await self._tournament_repo.create_tournament_completion(
+            cycle_id=active_cycle["id"],
+            user_id=data.user_id,
+            map_id=active_cycle["map_id"],
+            time=data.time,
+            screenshot=data.screenshot,
+            video=data.video,
+            conn=conn,
+        )
+        return row.get("id") if row else None
 
     def _build_patch_dict(self, patch: CompletionPatchRequest) -> dict[str, Any]:
         """Build patch dict excluding UNSET fields."""
@@ -922,6 +1028,24 @@ class CompletionsService(BaseService):
 async def provide_completions_service(
     state: State,
     completions_repo: CompletionsRepository,
+    tournament_repo: TournamentRepository,
+    tournament_reward_service: TournamentRewardService,
 ) -> CompletionsService:
-    """Litestar DI provider for CompletionsService."""
-    return CompletionsService(state.db_pool, state, completions_repo)
+    """Litestar DI provider for CompletionsService.
+
+    Args:
+        state: Application state containing the database pool.
+        completions_repo: Completions repository.
+        tournament_repo: Tournament repository for auto-detect + cross-write link.
+        tournament_reward_service: Reward service for participation XP on verify.
+
+    Returns:
+        CompletionsService wired with tournament dependencies.
+    """
+    return CompletionsService(
+        state.db_pool,
+        state,
+        completions_repo,
+        tournament_repo=tournament_repo,
+        tournament_reward_service=tournament_reward_service,
+    )

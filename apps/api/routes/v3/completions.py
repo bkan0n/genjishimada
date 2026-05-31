@@ -31,8 +31,11 @@ from litestar.exceptions import HTTPException
 from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
 from repository.completions_repository import provide_completions_repository
+from repository.lootbox_repository import provide_lootbox_repository
+from repository.tournaments_repository import provide_tournament_repository
 from repository.users_repository import provide_users_repository
 from services.completions_service import CompletionsService, provide_completions_service
+from services.tournament_reward_service import provide_tournament_reward_service
 from services.exceptions.completions import (
     CompletionNotFoundError,
     DuplicateCompletionError,
@@ -60,6 +63,11 @@ class CompletionsController(Controller):
         "users": Provide(provide_users_service),
         "notifications": Provide(provide_notifications_service),
         "users_repo": Provide(provide_users_repository),
+        # Tournament wiring for submit auto-detect (D-01) + verify propagation
+        # (D-04a). provide_completions_service resolves these nested deps by name.
+        "tournament_repo": Provide(provide_tournament_repository),
+        "tournament_reward_service": Provide(provide_tournament_reward_service),
+        "lootbox_repo": Provide(provide_lootbox_repository),
     }
 
     @get(
