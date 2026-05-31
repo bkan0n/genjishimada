@@ -14,8 +14,6 @@ from genjishimada_sdk.tournaments import (
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
-    TournamentCompletionCreateRequest,
-    TournamentCompletionResponse,
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
     TournamentCycleListResponse,
@@ -34,13 +32,10 @@ from services.exceptions.tournaments import (
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
-    CycleNotActiveError,
-    CycleNotFoundError,
     MapNotEligibleError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
-    SlowerTimeError,
     StreakNotFoundError,
     TournamentCompletionNotFoundError,
 )
@@ -497,95 +492,6 @@ class TournamentService(BaseService):
             )
 
         return msgspec.convert(result, TournamentNextCycleResponse)
-
-    async def submit_completion(
-        self,
-        cycle_id: int,
-        data: TournamentCompletionCreateRequest,
-    ) -> TournamentCompletionResponse:
-        """Submit a tournament completion for a cycle.
-
-        Validates the cycle is active, checks if the submitted time is faster
-        than the user's current best, inserts the tournament completion, and
-        cross-writes to core.completions -- all within a single transaction.
-
-        Args:
-            cycle_id: Cycle to submit for.
-            data: Completion submission data.
-
-        Returns:
-            Created tournament completion.
-
-        Raises:
-            CycleNotFoundError: If the cycle does not exist.
-            CycleNotActiveError: If the cycle is not active.
-            SlowerTimeError: If submitted time is not faster than current best.
-        """
-        pending_xp_events: list[XpGrantEvent] = []
-        async with self._pool.acquire() as conn, conn.transaction():
-            cycle = await self._tournament_repo.fetch_cycle(
-                cycle_id,
-                conn=conn,  # type: ignore[arg-type]
-            )
-            if cycle is None:
-                raise CycleNotFoundError(cycle_id)
-            if cycle["status"] != "active":
-                raise CycleNotActiveError(cycle_id, cycle["status"])
-
-            existing = await self._tournament_repo.fetch_user_completion(
-                cycle_id,
-                data.user_id,
-                conn=conn,  # type: ignore[arg-type]
-            )
-            if existing is not None and data.time >= existing["time"]:
-                raise SlowerTimeError(current_best=existing["time"], submitted_time=data.time)
-
-            is_first_completion = existing is None
-
-            row = await self._tournament_repo.create_tournament_completion(
-                cycle_id=cycle_id,
-                user_id=data.user_id,
-                map_id=cycle["map_id"],
-                time=data.time,
-                screenshot=data.screenshot,
-                video=data.video,
-                conn=conn,  # type: ignore[arg-type]
-            )
-
-            await self._tournament_repo.cross_write_to_core(
-                tournament_completion_id=row["id"],
-                user_id=data.user_id,
-                map_id=cycle["map_id"],
-                time=data.time,
-                screenshot=data.screenshot,
-                video=data.video,
-                conn=conn,  # type: ignore[arg-type]
-            )
-
-            log.info("[->] Tournament completion submitted for cycle %s by user %s", cycle_id, data.user_id)
-
-            # RWD-01: grant participation XP once per (cycle, user). The
-            # existing-is-None gate is the "first ever this cycle" signal (the
-            # insert above happens after the check); the 08-01 ledger makes a
-            # replay a no-op even if this path were reached again. The grant runs
-            # inside this open transaction so the ledger claim + lootbox.xp upsert
-            # + completion insert commit (or roll back) together. The xp.grant
-            # NOTIFICATION is deferred (collected here) and published only after
-            # this transaction commits, so a rollback never tells the bot about XP
-            # that was erased (CR-02).
-            if is_first_completion and self._reward_service is not None:
-                pending_xp_events = await self._reward_service.award_participation(
-                    cycle=cycle,
-                    user_id=data.user_id,
-                    conn=conn,  # type: ignore[arg-type]
-                )
-                log.info("[✓] Participation XP granted for cycle %s to user %s", cycle_id, data.user_id)
-
-        # Transaction committed: now safe to publish the XP grant notification.
-        if pending_xp_events and self._reward_service is not None:
-            await self._reward_service.publish_xp_events(pending_xp_events)
-
-        return msgspec.convert(row, TournamentCompletionResponse)
 
     async def verify_tournament_completion(
         self,

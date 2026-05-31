@@ -11,8 +11,6 @@ from genjishimada_sdk.tournaments import (
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
-    TournamentCompletionCreateRequest,
-    TournamentCompletionResponse,
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
     TournamentCycleListResponse,
@@ -38,13 +36,10 @@ from services.exceptions.tournaments import (
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
-    CycleNotActiveError,
-    CycleNotFoundError,
     MapNotEligibleError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
-    SlowerTimeError,
     StreakNotFoundError,
     TournamentCompletionNotFoundError,
 )
@@ -455,49 +450,6 @@ class TournamentsController(litestar.Controller):
         except MapNotEligibleError as e:
             raise CustomHTTPException(
                 status_code=HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=str(e),
-            ) from e
-
-    @litestar.post(
-        path="/cycles/{cycle_id:int}/submit",
-        summary="Submit Tournament Completion",
-        status_code=HTTP_201_CREATED,
-        opt={"required_scopes": {"tournaments:write"}},
-    )
-    async def submit_completion(
-        self,
-        tournament_service: TournamentService,
-        cycle_id: Annotated[int, Parameter(description="Cycle ID")],
-        data: Annotated[TournamentCompletionCreateRequest, Body(title="Submission")],
-    ) -> TournamentCompletionResponse:
-        """Submit a tournament completion for a cycle.
-
-        Args:
-            tournament_service: Tournament service.
-            cycle_id: Cycle to submit for.
-            data: Completion submission data.
-
-        Returns:
-            Created tournament completion.
-
-        Raises:
-            CustomHTTPException: 404 if cycle not found, 409 if cycle not active or time not faster.
-        """
-        try:
-            return await tournament_service.submit_completion(cycle_id, data)
-        except CycleNotFoundError as e:
-            raise CustomHTTPException(
-                status_code=HTTP_404_NOT_FOUND,
-                detail=str(e),
-            ) from e
-        except CycleNotActiveError as e:
-            raise CustomHTTPException(
-                status_code=HTTP_409_CONFLICT,
-                detail=str(e),
-            ) from e
-        except SlowerTimeError as e:
-            raise CustomHTTPException(
-                status_code=HTTP_409_CONFLICT,
                 detail=str(e),
             ) from e
 
