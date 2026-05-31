@@ -10,7 +10,7 @@ progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 30
-  completed_plans: 27
+  completed_plans: 28
   percent: 90
 ---
 
@@ -74,6 +74,7 @@ Progress: [█████████░] 90%
 | Phase 07 P04 | 8min | 2 tasks | 3 files |
 | Phase 09 P03 | 4min | 2 tasks | 3 files |
 | Phase 11 P01 | 9min | 3 tasks | 5 files |
+| Phase 11 P02 | 35min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -119,6 +120,11 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 10]: 10-03 TournamentLeaderboardPaginator is StaticPaginatorView[Any]; both bot test files share a real-utilities loader with sys.modules snapshot/restore
 - [Phase 07]: 07-04 fixed cold-start db_pool race: poller _loop sleeps before its first poll (asyncpg lifespan is plugin-appended after the poller's) + publish_pending_transitions guards state.get('db_pool') with a clean no-op; cadence/cancellation/semantics unchanged
 - [Phase ?]: [Phase 09]: 09-03 tournament queues + .dlq added to definitions.json mirroring api.xp.grant pair (canonical broker-load fix); DLQ sweep acquires a fresh channel per base queue so one NOT_FOUND .dlq cannot cascade ChannelInvalidStateError into the rest
+- [Phase 11]: 11-02 FK link set via a NEW explicit UPDATE (set_completion_tournament_link) not by extending insert_completion — the PB core row already exists so a targeted UPDATE is clearer than threading an optional param through the insert CTE
+- [Phase 11]: 11-02 tournament deps (TournamentRepository + TournamentRewardService) injected as OPTIONAL ctor params (default None, 3-arg ctor preserved for existing unit tests); no circular dep so module-level runtime imports
+- [Phase 11]: 11-02 D-07 relax catches ONLY asyncpg.exceptions.CheckViolationError (0017 speed trigger, ERRCODE 23514) gated on active_cycle is not None; non-tournament maps re-raise → existing HTTP 400 preserved; Unique/FK propagate
+- [Phase 11]: 11-02 SlowerThanPendingError precheck gated on active_cycle is None so tournament maps fall through to the relax (valid slower run recorded, not 400ed)
+- [Phase 11]: 11-02 verify-side propagation lives INSIDE verify_completion (not a bot consumer) because VerificationChangedEvent carries no map_id (P8); fresh conn+txn when conn is None; idempotent participation XP via the 08-01 ledger
 
 ### Pending Todos
 
@@ -147,5 +153,5 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-05-31T20:05:58.005Z
-Stopped at: Completed 11-02-PLAN.md
+Stopped at: Completed 11-02-PLAN.md (re-verified + committed test refinement 6f96a44)
 Resume file: None
