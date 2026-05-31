@@ -25,24 +25,27 @@ import datetime as dt
 import os
 from http import HTTPStatus
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence, cast
 
 import discord
-from discord import TextChannel, app_commands, ui
+from discord import AllowedMentions, ButtonStyle, MediaGalleryItem, TextChannel, app_commands, ui
 from discord.ext import commands
 from genjishimada_sdk.maps import OverwatchCode
 from genjishimada_sdk.tournaments import (
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
+    TournamentCompletionCreatedEvent,
     TournamentCycleCompletedEvent,
     TournamentCycleStartedEvent,
     TournamentLeaderboardEntryResponse,
+    TournamentVerificationChangedEvent,
 )
 
 from extensions._queue_registry import queue_consumer
 from utilities import transformers
 from utilities.base import BaseCog, BaseHandler
 from utilities.errors import APIHTTPError, UserFacingError
+from utilities.extra import poll_job_until_complete
 from utilities.paginator import StaticPaginatorView
 
 if TYPE_CHECKING:
@@ -65,16 +68,191 @@ _WORKSHOP_URL = "https://workshop.codes/{code}"
 _PODIUM_SIZE = 3
 
 
+class TournamentRejectionReasonModal(ui.Modal):
+    """Collects an optional free-text reason when a mod rejects a tournament run.
+
+    The tournament reject endpoint (Plan 11-03) takes no reason payload — the row is
+    simply left unverified — so the reason is surfaced back to the moderator only and not
+    forwarded to the API. The modal exists to mirror the completions reject UX and to give
+    the reject a confirmation gate (an empty submit cancels the reject).
+    """
+
+    reason = ui.TextInput(label="Reason", style=discord.TextStyle.paragraph)
+
+    def __init__(self) -> None:
+        """Initialize the tournament rejection-reason modal."""
+        super().__init__(title="Rejection Reason")
+
+    async def on_submit(self, itx: GenjiItx) -> None:
+        """Acknowledge the submitted reason ephemerally.
+
+        Args:
+            itx: The Discord interaction context.
+        """
+        await itx.response.send_message(f"Sent the rejection reason as:\n>>> {self.reason.value}", ephemeral=True)
+
+
+class TournamentVerificationAcceptButton(ui.Button):
+    """Accept a non-PB tournament run — routes the verdict to the verify API.
+
+    The custom_id ``tournament:accept`` is deliberately DISTINCT from the completions
+    view's ``completions:accept`` (P3 / T-11-18) so the two persistent components never
+    collide. The bot NEVER writes the DB (T-11-17 / CLAUDE.md): the verdict only takes
+    effect through ``bot.api.verify_tournament_completion`` (the ``tournaments:verify``
+    endpoint from 11-03).
+    """
+
+    view: "TournamentVerificationView"
+
+    def __init__(self) -> None:
+        """Initialize the Accept button for verifying a tournament run."""
+        super().__init__(style=ButtonStyle.green, label="Accept", custom_id="tournament:accept")
+
+    async def callback(self, itx: GenjiItx) -> None:
+        """Verify the tournament completion via the API and poll the job to completion.
+
+        Args:
+            itx: The Discord interaction context.
+        """
+        await itx.response.defer(ephemeral=True, thinking=True)
+        for c in self.view.walk_children():
+            if isinstance(c, ui.Button):
+                c.disabled = True
+        if itx.message:
+            await itx.message.edit(view=self.view)
+
+        job_status = await self.view.bot.api.verify_tournament_completion(self.view.completion_id)
+        job = await poll_job_until_complete(itx.client.api, job_status.id)
+
+        if not job:
+            await itx.edit_original_response(
+                content=(
+                    "There was an unknown error while processing. "
+                    "Please do not try again until it has been resolved."
+                )
+            )
+        elif job.status == "succeeded":
+            await itx.edit_original_response(content="Successfully verified the tournament run.")
+        else:
+            await itx.edit_original_response(
+                content=(
+                    "There was an error while processing. Please do not try again until it has been resolved."
+                )
+            )
+
+
+class TournamentVerificationRejectButton(ui.Button):
+    """Reject a non-PB tournament run — routes the verdict to the reject API.
+
+    The custom_id ``tournament:reject`` is DISTINCT from ``completions:reject`` (P3 /
+    T-11-18). A reason modal gates the reject (an empty submit cancels it); the reject
+    endpoint takes no reason payload, so the reason is shown back to the moderator only.
+    The bot NEVER writes the DB — the reject takes effect through
+    ``bot.api.reject_tournament_completion`` (T-11-17).
+    """
+
+    view: "TournamentVerificationView"
+
+    def __init__(self) -> None:
+        """Initialize the Reject button for denying a tournament run."""
+        super().__init__(style=ButtonStyle.red, label="Reject", custom_id="tournament:reject")
+
+    async def callback(self, itx: GenjiItx) -> None:
+        """Open the reason modal, then reject the tournament completion via the API.
+
+        Args:
+            itx: The Discord interaction context.
+        """
+        modal = TournamentRejectionReasonModal()
+        await itx.response.send_modal(modal)
+        await modal.wait()
+        if not modal.reason.value:
+            return
+
+        for c in self.view.walk_children():
+            if isinstance(c, ui.Button):
+                c.disabled = True
+        if itx.message:
+            await itx.message.edit(view=self.view)
+
+        await self.view.bot.api.reject_tournament_completion(self.view.completion_id)
+        await itx.followup.send(content="Successfully rejected the tournament run.", ephemeral=True)
+
+
+class TournamentVerificationView(ui.LayoutView):
+    """Mod Accept/Reject card for a non-PB tournament run (D-04 video path).
+
+    Renders the run's screenshot/video/time/user from the
+    ``TournamentCompletionCreatedEvent`` (no extra fetch — the event carries everything,
+    Plan 11-01). The submitting user is referenced ONLY by numeric ``<@user_id>`` and the
+    view is sent with ``AllowedMentions(everyone=False, roles=False)`` (Phase-9
+    mention-injection mitigation / T-11-19). The Accept/Reject verdict routes to the
+    ``tournaments:verify`` API — the bot never writes the DB (T-11-17).
+    """
+
+    def __init__(self, event: TournamentCompletionCreatedEvent, bot: core.Genji) -> None:
+        """Initialize the tournament verification view from a completion-created event.
+
+        Args:
+            event: The tournament completion-created event to render.
+            bot: The bot instance used for the verify/reject API calls.
+        """
+        self.completion_id = event.completion_id
+        self.event = event
+        self.bot = bot
+        super().__init__(timeout=None)
+        self._rebuild_components()
+
+    def _rebuild_components(self) -> None:
+        """Build the container with the run details, screenshot gallery, and action row."""
+        details = (
+            f"New Tournament Submission from <@{self.event.user_id}>\n"
+            f"**Time:** {self.event.time:.2f}s\n"
+            f"**Cycle:** {self.event.cycle_id}\n"
+            + (f"**Video:** {self.event.video}\n" if self.event.video else "")
+        )
+        container = ui.Container(
+            ui.TextDisplay(details),
+            ui.Separator(),
+            ui.MediaGallery(MediaGalleryItem(self.event.screenshot)),
+            ui.ActionRow(
+                TournamentVerificationAcceptButton(),
+                TournamentVerificationRejectButton(),
+            ),
+        )
+        self.add_item(container)
+
+    async def on_error(self, itx: GenjiItx, error: Exception, item: ui.Item[Any], /) -> None:
+        """Delegate component errors to the application command tree handler.
+
+        Args:
+            itx: The Discord interaction context.
+            error: The raised exception.
+            item: The UI item that raised.
+        """
+        await itx.client.tree.on_error(itx, cast("app_commands.AppCommandError", error))
+
+
 class TournamentHandler(BaseHandler):
     """Posts tournament announcements and transfers the per-category champion role."""
 
     announcement_channel: TextChannel
+    verification_channel: TextChannel
 
     async def _resolve_channels(self) -> None:
-        """Resolve the configured tournament announcement channel."""
+        """Resolve the announcement channel and the (shared) mod verification channel.
+
+        The non-PB tournament Accept/Reject card reuses the EXISTING mod verification
+        queue (``channels.submission.verification_queue``) rather than a dedicated channel
+        — mods already watch this queue for completion review (CONTEXT discretion default).
+        """
         channel = self.bot.get_channel(self.bot.config.channels.tournament.announcements)
         assert isinstance(channel, TextChannel)
         self.announcement_channel = channel
+
+        verification_channel = self.bot.get_channel(self.bot.config.channels.submission.verification_queue)
+        assert isinstance(verification_channel, TextChannel)
+        self.verification_channel = verification_channel
 
     @queue_consumer(
         "api.tournament.cycle_started",
@@ -163,6 +341,71 @@ class TournamentHandler(BaseHandler):
         allowed_mentions = discord.AllowedMentions(users=allowed_users, everyone=False, roles=False)
         await self.announcement_channel.send(content=content, embed=embed, allowed_mentions=allowed_mentions)
         log.info("[✓] [Tournament] posted results embed for cycle=%s", event.cycle_id)
+
+    @queue_consumer(
+        "api.tournament.completion.created",
+        struct_type=TournamentCompletionCreatedEvent,
+        idempotent=True,
+    )
+    async def _on_completion_created(
+        self, event: TournamentCompletionCreatedEvent, _: AbstractIncomingMessage
+    ) -> None:
+        """Render the mod Accept/Reject card for a non-PB video tournament run (D-04).
+
+        The event carries the run's screenshot/video/time/user (Plan 11-01), so the card
+        renders without any extra API fetch. The card is posted to the shared mod
+        verification queue. Idempotent — the outbox ``message_id``
+        (``tournament:submission:{user_id}:{tc_id}``) is the dedupe key, no hand-rolled key
+        (Phase-9 pattern / T-11-20).
+        """
+        log.debug(
+            "[→] [Tournament] completion_created completion=%s cycle=%s user=%s",
+            event.completion_id,
+            event.cycle_id,
+            event.user_id,
+        )
+        view = TournamentVerificationView(event, self.bot)
+        await self.verification_channel.send(
+            view=view,
+            allowed_mentions=AllowedMentions(everyone=False, roles=False),
+        )
+        log.info("[✓] [Tournament] posted Accept/Reject card for completion=%s", event.completion_id)
+
+    @queue_consumer(
+        "api.tournament.verification.changed",
+        struct_type=TournamentVerificationChangedEvent,
+        idempotent=True,
+    )
+    async def _on_verification_changed(
+        self, event: TournamentVerificationChangedEvent, _: AbstractIncomingMessage
+    ) -> None:
+        """Surface the verdict of a tournament verification to the verification channel.
+
+        On verify the moderator gets a confirmation post; a reject leaves the row
+        unverified and is announced as such. The submitting user is referenced ONLY by
+        numeric ``<@user_id>`` with ``AllowedMentions(everyone=False, roles=False)``
+        (T-11-19). Idempotent — the outbox ``message_id``
+        (``tournament:verify|reject:{tc_id}``) is the dedupe key (T-11-20).
+        """
+        log.debug(
+            "[→] [Tournament] verification_changed completion=%s verified=%s user=%s",
+            event.tournament_completion_id,
+            event.verified,
+            event.user_id,
+        )
+        verdict = "verified" if event.verified else "rejected"
+        await self.verification_channel.send(
+            content=(
+                f"Tournament run from <@{event.user_id}> ({event.time:.2f}s) was **{verdict}** "
+                f"(completion `{event.tournament_completion_id}`, cycle `{event.cycle_id}`)."
+            ),
+            allowed_mentions=AllowedMentions(everyone=False, roles=False),
+        )
+        log.info(
+            "[✓] [Tournament] surfaced %s verdict for completion=%s",
+            verdict,
+            event.tournament_completion_id,
+        )
 
     async def _transfer_champion_role(
         self,
