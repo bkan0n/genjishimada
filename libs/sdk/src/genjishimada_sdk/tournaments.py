@@ -28,6 +28,7 @@ __all__ = (
     "TournamentLeaderboardEntryResponse",
     "TournamentNextCycleResponse",
     "TournamentStreakResponse",
+    "TournamentVerificationChangedEvent",
     "TournamentXpGrantEvent",
 )
 
@@ -441,13 +442,45 @@ class TournamentCycleCompletedEvent(Struct):
 class TournamentCompletionCreatedEvent(Struct):
     """Event emitted when a tournament completion is created.
 
+    Rides ``api.tournament.completion.created`` (non-PB video path). Carries
+    the submission details so the bot embed needs no extra fetch.
+
     Attributes:
         completion_id: Identifier of the tournament completion.
         cycle_id: Identifier of the tournament cycle.
+        user_id: Identifier of the submitting user.
+        time: Completion time in seconds.
+        video: Optional video proof URL.
+        screenshot: Screenshot proof URL.
     """
 
     completion_id: int
     cycle_id: int
+    user_id: int
+    time: float
+    video: str | None
+    screenshot: str
+
+
+class TournamentVerificationChangedEvent(Struct):
+    """Event emitted when a tournament completion's verification changes.
+
+    Rides ``api.tournament.verification.changed``. The table has no
+    ``verified_by`` column, so the event does not carry one.
+
+    Attributes:
+        tournament_completion_id: Identifier of the tournament completion.
+        cycle_id: Identifier of the tournament cycle.
+        user_id: Identifier of the submitting user.
+        verified: New verified state of the completion.
+        time: Completion time in seconds.
+    """
+
+    tournament_completion_id: int
+    cycle_id: int
+    user_id: int
+    verified: bool
+    time: float
 
 
 class TournamentXpGrantEvent(Struct):
