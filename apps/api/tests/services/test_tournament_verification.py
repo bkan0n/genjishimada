@@ -40,8 +40,38 @@ from genjishimada_sdk.tournaments import (
 )
 
 from services.completions_service import CompletionsService
+from services.tournament_service import TournamentService
 
 pytestmark = [pytest.mark.domain_tournaments]
+
+
+def _make_tournament_service() -> tuple[TournamentService, Any, Any]:
+    """Build a TournamentService with mocked deps for verify/reject tests.
+
+    Returns the service plus the tournament repo and reward service mocks. The
+    pool yields a single shared connection whose transaction() is a synchronous
+    no-op async CM (mirroring _make_service).
+    """
+    pool = MagicMock()
+    conn = AsyncMock()
+
+    acquire_cm = MagicMock()
+    acquire_cm.__aenter__ = AsyncMock(return_value=conn)
+    acquire_cm.__aexit__ = AsyncMock(return_value=None)
+    pool.acquire.return_value = acquire_cm
+
+    txn_cm = MagicMock()
+    txn_cm.__aenter__ = AsyncMock(return_value=None)
+    txn_cm.__aexit__ = AsyncMock(return_value=None)
+    conn.transaction = MagicMock(return_value=txn_cm)
+
+    tournament_repo = AsyncMock()
+    reward_service = AsyncMock()
+    reward_service.award_participation.return_value = []
+
+    service = TournamentService(pool, MagicMock(), tournament_repo, reward_service=reward_service)
+    service.publish_message = AsyncMock(return_value={"job_id": "j"})  # type: ignore[method-assign]
+    return service, tournament_repo, reward_service
 
 
 def _make_service() -> tuple[CompletionsService, Any, Any, Any]:
@@ -306,12 +336,208 @@ async def test_non_pb_path_submission_creates_tournament_row_without_core_row() 
     completions_repo.set_completion_tournament_link.assert_not_awaited()
 
 
-@pytest.mark.xfail(reason="tournament verify endpoint lands in 11-03", strict=False)
-def test_non_pb_path_verify_endpoint_marks_tournament_row_verified() -> None:
-    """The new verify endpoint flips a non-PB tournament row to verified.
+async def test_verify_tournament_completion_flips_row_and_awards_xp() -> None:
+    """verify_tournament_completion flips verified + grants one participation XP (SC-2 mod path/D-06).
 
-    SC-2: PATCH /tournaments/completions/{id}/verify calls
-    ``set_tournament_verified`` and publishes TournamentVerificationChangedEvent;
-    no core row is touched. The endpoint itself is delivered in plan 11-03.
+    The non-PB tournament row has no core row, so this is its OWN verification:
+    set_tournament_verified TRUE, award_participation once, and publish a
+    verified=True TournamentVerificationChangedEvent.
     """
-    raise AssertionError("tournament verify endpoint not implemented yet (11-03)")
+    service, tournament_repo, reward_service = _make_tournament_service()
+    tournament_repo.fetch_tournament_completion.return_value = {
+        "id": 9002,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 99.0,
+        "verified": False,
+    }
+    tournament_repo.set_tournament_verified.return_value = {
+        "id": 9002,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 99.0,
+    }
+    tournament_repo.fetch_cycle.return_value = {
+        "id": 42,
+        "category_id": 3,
+        "map_id": 777,
+        "status": "active",
+    }
+    reward_service.award_participation.return_value = ["xp"]
+
+    await service.verify_tournament_completion(9002)
+
+    tournament_repo.set_tournament_verified.assert_awaited_once()
+    assert tournament_repo.set_tournament_verified.await_args.args[0] == 9002
+    reward_service.award_participation.assert_awaited_once()
+    reward_service.publish_xp_events.assert_awaited_once_with(["xp"])
+    publish_kwargs = service.publish_message.await_args.kwargs  # type: ignore[union-attr]
+    assert publish_kwargs["routing_key"] == "api.tournament.verification.changed"
+    assert publish_kwargs["idempotency_key"] == "tournament:verify:9002"
+    assert publish_kwargs["data"].verified is True
+
+
+async def test_verify_tournament_completion_missing_row_raises() -> None:
+    """Verifying an unknown tournament_completion_id raises a not-found domain error (404)."""
+    from services.exceptions.tournaments import TournamentCompletionNotFoundError
+
+    service, tournament_repo, _ = _make_tournament_service()
+    tournament_repo.fetch_tournament_completion.return_value = None
+
+    with pytest.raises(TournamentCompletionNotFoundError):
+        await service.verify_tournament_completion(404404)
+
+
+async def test_verify_tournament_completion_twice_awards_xp_once() -> None:
+    """Two verifies grant participation once (D-02/D-06 idempotency via the ledger).
+
+    award_participation is called each time but the 08-01 ledger returns no events
+    on replay, so publish_xp_events flushes nothing the second time.
+    """
+    service, tournament_repo, reward_service = _make_tournament_service()
+    tournament_repo.fetch_tournament_completion.return_value = {
+        "id": 9002,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 99.0,
+        "verified": False,
+    }
+    tournament_repo.set_tournament_verified.return_value = {
+        "id": 9002,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 99.0,
+    }
+    tournament_repo.fetch_cycle.return_value = {
+        "id": 42,
+        "category_id": 3,
+        "map_id": 777,
+        "status": "active",
+    }
+    # First verify grants; replay returns no events.
+    reward_service.award_participation.side_effect = [["xp"], []]
+
+    await service.verify_tournament_completion(9002)
+    await service.verify_tournament_completion(9002)
+
+    assert reward_service.award_participation.await_count == 2
+    reward_service.publish_xp_events.assert_awaited_once_with(["xp"])
+
+
+async def test_reject_tournament_completion_leaves_unverified_no_xp() -> None:
+    """reject_tournament_completion keeps verified=FALSE and grants no XP.
+
+    Rejecting publishes a verified=False TournamentVerificationChangedEvent under
+    the tournament:reject key and never calls award_participation.
+    """
+    service, tournament_repo, reward_service = _make_tournament_service()
+    tournament_repo.fetch_tournament_completion.return_value = {
+        "id": 9002,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 99.0,
+        "verified": False,
+    }
+    tournament_repo.set_tournament_verified.return_value = {
+        "id": 9002,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 99.0,
+    }
+
+    await service.reject_tournament_completion(9002)
+
+    reward_service.award_participation.assert_not_awaited()
+    set_args = tournament_repo.set_tournament_verified.await_args
+    # rejected row is set verified=False
+    assert set_args.args[0] == 9002
+    assert set_args.kwargs.get("verified", set_args.args[1] if len(set_args.args) > 1 else None) is False
+    publish_kwargs = service.publish_message.await_args.kwargs  # type: ignore[union-attr]
+    assert publish_kwargs["routing_key"] == "api.tournament.verification.changed"
+    assert publish_kwargs["idempotency_key"] == "tournament:reject:9002"
+    assert publish_kwargs["data"].verified is False
+
+
+# ---------------------------------------------------------------------------
+# Task 2: OCR variant — attempt_tournament_auto_verify_async
+# ---------------------------------------------------------------------------
+
+
+def _ocr_response(code: str, time: float, name: str) -> bytes:
+    """Encode a minimal OCR /extract response body for the mocked HTTP call."""
+    import msgspec
+
+    return msgspec.json.encode({"extracted": {"code": code, "time": time, "name": name}})
+
+
+def _mock_ocr_session(monkeypatch: pytest.MonkeyPatch, body: bytes) -> None:
+    """Patch aiohttp.ClientSession so POST /extract returns ``body``."""
+    import aiohttp
+
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.read = AsyncMock(return_value=body)
+    post_cm = MagicMock()
+    post_cm.__aenter__ = AsyncMock(return_value=resp)
+    post_cm.__aexit__ = AsyncMock(return_value=None)
+
+    session = MagicMock()
+    session.post = MagicMock(return_value=post_cm)
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=session)
+    session_cm.__aexit__ = AsyncMock(return_value=None)
+
+    monkeypatch.setattr(aiohttp, "ClientSession", MagicMock(return_value=session_cm))
+
+
+async def test_tournament_ocr_match_calls_tournament_verify(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An OCR match routes to verify_tournament_completion (NOT core verify) — SC-2 OCR path."""
+    service, _completions_repo, _tournament_repo, _reward = _make_service()
+    service.verify_tournament_completion = AsyncMock()  # type: ignore[attr-defined]
+    service.verify_completion_with_pool = AsyncMock()  # type: ignore[method-assign]
+
+    users = AsyncMock()
+    users.fetch_all_user_names.return_value = ["player"]
+    _mock_ocr_session(monkeypatch, _ocr_response("ABC123", 99.0, "PLAYER"))
+
+    await service.attempt_tournament_auto_verify_async(
+        tournament_completion_id=9002,
+        cycle_id=42,
+        user_id=123,
+        code="ABC123",
+        time=99.0,
+        screenshot="https://example.com/s.png",
+        users=users,
+        notifications=None,
+    )
+
+    service.verify_tournament_completion.assert_awaited_once_with(9002)
+    service.verify_completion_with_pool.assert_not_awaited()
+
+
+async def test_tournament_ocr_mismatch_publishes_tournament_created(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An OCR mismatch escalates to mod review via TournamentCompletionCreatedEvent (NOT core)."""
+    service, _completions_repo, _tournament_repo, _reward = _make_service()
+    service.verify_tournament_completion = AsyncMock()  # type: ignore[attr-defined]
+
+    users = AsyncMock()
+    users.fetch_all_user_names.return_value = ["player"]
+    # Time mismatch -> no three-way match.
+    _mock_ocr_session(monkeypatch, _ocr_response("ABC123", 12.34, "PLAYER"))
+
+    await service.attempt_tournament_auto_verify_async(
+        tournament_completion_id=9002,
+        cycle_id=42,
+        user_id=123,
+        code="ABC123",
+        time=99.0,
+        screenshot="https://example.com/s.png",
+        users=users,
+        notifications=None,
+    )
+
+    service.verify_tournament_completion.assert_not_awaited()
+    publish_kwargs = service.publish_message.await_args.kwargs  # type: ignore[union-attr]
+    assert publish_kwargs["routing_key"] == "api.tournament.completion.created"
+    assert isinstance(publish_kwargs["data"], TournamentCompletionCreatedEvent)
+    assert publish_kwargs["idempotency_key"] == "tournament:submission:123:9002"
