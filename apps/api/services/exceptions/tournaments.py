@@ -145,3 +145,13 @@ class StreakNotFoundError(TournamentsError):
 
     def __init__(self, user_id: int) -> None:
         super().__init__("Tournament streak record not found.", user_id=user_id)
+
+
+class TournamentCompletionNotFoundError(TournamentsError):
+    """Tournament completion row does not exist."""
+
+    def __init__(self, tournament_completion_id: int) -> None:
+        super().__init__(
+            "Tournament completion not found.",
+            tournament_completion_id=tournament_completion_id,
+        )

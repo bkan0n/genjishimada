@@ -1075,6 +1075,35 @@ class TournamentRepository(BaseRepository):
         )
         return dict(row) if row else None
 
+    async def fetch_tournament_completion(
+        self,
+        tournament_completion_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch a single tournament completion row by ID.
+
+        Used by the non-PB verify/reject endpoints (11-03) to resolve the cycle
+        and user before flipping the verified flag and awarding participation XP.
+
+        Args:
+            tournament_completion_id: ID of the tournament completion row.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Dict with id, cycle_id, user_id, time, verified, or None if no row matched.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT id, cycle_id, user_id, time, verified
+            FROM tournaments.completions
+            WHERE id = $1
+            """,
+            tournament_completion_id,
+        )
+        return dict(row) if row else None
+
     async def fetch_leaderboard(
         self,
         cycle_id: int,

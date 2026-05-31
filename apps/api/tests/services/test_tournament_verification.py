@@ -173,7 +173,7 @@ async def test_pb_path_submission_creates_linked_tournament_and_core_rows() -> N
     completions_repo.get_pending_verification.return_value = None
     completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
     completions_repo.insert_completion.return_value = 5001
-    completions_repo.get_suspicious_flags.return_value = []
+    completions_repo.fetch_suspicious_flags.return_value = []
     tournament_repo.get_active_cycle_by_map_id.return_value = {
         "id": 42,
         "category_id": 3,
@@ -310,7 +310,7 @@ async def test_non_pb_path_submission_creates_tournament_row_without_core_row() 
     completions_repo.get_pending_verification.return_value = None
     completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
     completions_repo.insert_completion.side_effect = CheckViolationError("speed trigger")
-    completions_repo.get_suspicious_flags.return_value = []
+    completions_repo.fetch_suspicious_flags.return_value = []
     tournament_repo.get_active_cycle_by_map_id.return_value = {
         "id": 42,
         "category_id": 3,
@@ -467,7 +467,9 @@ def _ocr_response(code: str, time: float, name: str) -> bytes:
     """Encode a minimal OCR /extract response body for the mocked HTTP call."""
     import msgspec
 
-    return msgspec.json.encode({"extracted": {"code": code, "time": time, "name": name}})
+    return msgspec.json.encode(
+        {"extracted": {"code": code, "time": time, "name": name, "sources": {}, "texts": {}}}
+    )
 
 
 def _mock_ocr_session(monkeypatch: pytest.MonkeyPatch, body: bytes) -> None:

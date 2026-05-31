@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import msgspec
 from asyncpg import Pool
+from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.tournaments import (
     TournamentCategoryCreateRequest,
     TournamentCategoryPatchRequest,
@@ -22,8 +23,9 @@ from genjishimada_sdk.tournaments import (
     TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
     TournamentStreakResponse,
+    TournamentVerificationChangedEvent,
 )
-from litestar.datastructures import State
+from litestar.datastructures import Headers, State
 
 from repository.exceptions import UniqueConstraintViolationError
 from repository.tournaments_repository import TournamentRepository
@@ -40,10 +42,12 @@ from services.exceptions.tournaments import (
     PendingCycleNotFoundError,
     SlowerTimeError,
     StreakNotFoundError,
+    TournamentCompletionNotFoundError,
 )
 from services.tournament_reward_service import TournamentRewardService
 
 if TYPE_CHECKING:
+    from asyncpg import Connection
     from genjishimada_sdk.xp import XpGrantEvent
 
 log = getLogger(__name__)
@@ -582,6 +586,157 @@ class TournamentService(BaseService):
             await self._reward_service.publish_xp_events(pending_xp_events)
 
         return msgspec.convert(row, TournamentCompletionResponse)
+
+    async def verify_tournament_completion(
+        self,
+        tournament_completion_id: int,
+        *,
+        headers: Headers | None = None,
+        conn: Connection | None = None,
+    ) -> JobStatusResponse:
+        """Verify a non-PB tournament completion and award participation XP.
+
+        This is the tournament row's OWN verification (D-04): a slower-than-PB run
+        has no core completion, so it never fires a core verification event. The
+        verdict flips ``tournaments.completions.verified`` TRUE, the first verified
+        run auto-enrolls the player by granting participation XP (D-02/D-06,
+        idempotent via the 08-01 ledger), and a verified=True
+        TournamentVerificationChangedEvent is published. When ``conn`` is None a
+        fresh connection + transaction is acquired so the flip + XP grant are
+        atomic (mirrors verify_completion_with_pool); the deferred XP notification
+        is flushed only after the transaction commits (CR-02).
+
+        Args:
+            tournament_completion_id: ID of the tournament completion row to verify.
+            headers: Optional request headers forwarded to the publish call
+                (carries X-PYTEST-ENABLED in tests so the broker is skipped).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Job status of the published verification-changed event.
+
+        Raises:
+            TournamentCompletionNotFoundError: If no tournament completion row matches.
+        """
+        return await self._set_verified(
+            tournament_completion_id,
+            verified=True,
+            idempotency_key=f"tournament:verify:{tournament_completion_id}",
+            award_xp=True,
+            headers=headers,
+            conn=conn,
+        )
+
+    async def reject_tournament_completion(
+        self,
+        tournament_completion_id: int,
+        *,
+        headers: Headers | None = None,
+        conn: Connection | None = None,
+    ) -> JobStatusResponse:
+        """Reject a non-PB tournament completion (leaves it unverified).
+
+        The simplest reject (Open-Q1): the row stays ``verified = FALSE`` so it
+        ranks below verified runs. No participation XP is granted, and a
+        verified=False TournamentVerificationChangedEvent is published.
+
+        Args:
+            tournament_completion_id: ID of the tournament completion row to reject.
+            headers: Optional request headers forwarded to the publish call
+                (carries X-PYTEST-ENABLED in tests so the broker is skipped).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Job status of the published verification-changed event.
+
+        Raises:
+            TournamentCompletionNotFoundError: If no tournament completion row matches.
+        """
+        return await self._set_verified(
+            tournament_completion_id,
+            verified=False,
+            idempotency_key=f"tournament:reject:{tournament_completion_id}",
+            award_xp=False,
+            headers=headers,
+            conn=conn,
+        )
+
+    async def _set_verified(  # noqa: PLR0913
+        self,
+        tournament_completion_id: int,
+        *,
+        verified: bool,
+        idempotency_key: str,
+        award_xp: bool,
+        headers: Headers | None = None,
+        conn: Connection | None = None,
+    ) -> JobStatusResponse:
+        """Shared verify/reject body: flip the row, optionally award XP, publish.
+
+        Args:
+            tournament_completion_id: Tournament completion row ID.
+            verified: Target verified value (True verify, False reject).
+            idempotency_key: Publish idempotency key for the changed event.
+            award_xp: Whether to award participation XP (verify only).
+            headers: Optional request headers forwarded to the publish call.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Job status of the published verification-changed event.
+
+        Raises:
+            TournamentCompletionNotFoundError: If no tournament completion row matches.
+        """
+        existing = await self._tournament_repo.fetch_tournament_completion(
+            tournament_completion_id,
+            conn=conn,  # type: ignore[arg-type]
+        )
+        if existing is None:
+            raise TournamentCompletionNotFoundError(tournament_completion_id)
+
+        pending_xp_events: list[XpGrantEvent] = []
+
+        async def _do(active_conn: Connection) -> dict | None:
+            nonlocal pending_xp_events
+            row = await self._tournament_repo.set_tournament_verified(
+                tournament_completion_id,
+                verified,
+                conn=active_conn,
+            )
+            if award_xp and self._reward_service is not None and row is not None:
+                cycle = await self._tournament_repo.fetch_cycle(row["cycle_id"], conn=active_conn)
+                if cycle is not None:
+                    pending_xp_events = await self._reward_service.award_participation(
+                        cycle=cycle,
+                        user_id=row["user_id"],
+                        conn=active_conn,
+                    )
+            return row
+
+        if conn is None:
+            async with self._pool.acquire() as raw_conn, raw_conn.transaction():
+                updated = await _do(raw_conn)  # type: ignore[arg-type]
+        else:
+            updated = await _do(conn)
+
+        # Transaction committed: now safe to publish the deferred XP notification.
+        if pending_xp_events and self._reward_service is not None:
+            await self._reward_service.publish_xp_events(pending_xp_events)
+
+        time_value = float(updated["time"]) if updated else float(existing["time"])
+        event = TournamentVerificationChangedEvent(
+            tournament_completion_id=tournament_completion_id,
+            cycle_id=existing["cycle_id"],
+            user_id=existing["user_id"],
+            verified=verified,
+            time=time_value,
+        )
+        return await self.publish_message(
+            routing_key="api.tournament.verification.changed",
+            data=event,
+            headers=headers if headers is not None else Headers(),
+            idempotency_key=idempotency_key,
+        )
 
     async def get_leaderboard(self, cycle_id: int) -> list[TournamentLeaderboardEntryResponse]:
         """Get the ranked leaderboard for a tournament cycle.

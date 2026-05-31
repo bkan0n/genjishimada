@@ -869,3 +869,137 @@ class TestCycleListingEndpoint:
         assert "total" in data
         assert "cycles" in data
         assert len(data["cycles"]) <= 1
+
+
+async def _seed_tournament_completion(
+    asyncpg_pool, category_id: int, map_id: int, user_id: int, *, time: float = 99.0
+) -> tuple[int, int]:
+    """Seed an active cycle + an unverified tournament completion; return (cycle_id, tc_id)."""
+    async with asyncpg_pool.acquire() as conn:
+        cycle_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.cycles (category_id, map_id, status, started_at)
+            VALUES ($1, $2, 'active', NOW())
+            RETURNING id
+            """,
+            category_id,
+            map_id,
+        )
+        tc_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, verified)
+            VALUES ($1, $2, $3, $4, $5, FALSE)
+            RETURNING id
+            """,
+            cycle_id,
+            user_id,
+            map_id,
+            time,
+            "https://example.com/s.png",
+        )
+    return cycle_id, tc_id
+
+
+class TestVerifyTournamentCompletion:
+    """PATCH /api/v3/tournaments/completions/{id}/verify|reject (tournaments:verify)."""
+
+    async def test_verify_flips_row_and_grants_participation(
+        self, test_client, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """Verifying a non-PB tournament row flips verified TRUE + grants one XP row (SC-2/D-06)."""
+        category_id = await asyncpg_pool.fetchval(
+            """
+            INSERT INTO tournaments.categories (name, difficulties, participation_xp, placement_xp, streak_xp)
+            VALUES ($1, $2, 25, '[]'::jsonb, '[]'::jsonb)
+            RETURNING id
+            """,
+            f"Verify {uuid4().hex[:8]}",
+            ["Easy"],
+        )
+        map_id = await create_test_map(difficulty="Easy")
+        user_id = await create_test_user(nickname=f"V{uuid4().hex[:6]}")
+        cycle_id, tc_id = await _seed_tournament_completion(asyncpg_pool, category_id, map_id, user_id)
+
+        response = await test_client.patch(f"{BASE}/completions/{tc_id}/verify")
+
+        assert response.status_code == 200
+        verified = await asyncpg_pool.fetchval(
+            "SELECT verified FROM tournaments.completions WHERE id = $1", tc_id
+        )
+        assert verified is True
+        xp_rows = await asyncpg_pool.fetchval(
+            "SELECT COUNT(*) FROM tournaments.xp_grants WHERE cycle_id = $1 AND user_id = $2 AND reason = 'participation'",
+            cycle_id,
+            user_id,
+        )
+        assert xp_rows == 1
+
+    async def test_verify_twice_grants_participation_once(
+        self, test_client, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """Verifying twice grants participation exactly once (D-02/D-06 ledger idempotency)."""
+        category_id = await asyncpg_pool.fetchval(
+            """
+            INSERT INTO tournaments.categories (name, difficulties, participation_xp, placement_xp, streak_xp)
+            VALUES ($1, $2, 25, '[]'::jsonb, '[]'::jsonb)
+            RETURNING id
+            """,
+            f"VerifyTwice {uuid4().hex[:8]}",
+            ["Easy"],
+        )
+        map_id = await create_test_map(difficulty="Easy")
+        user_id = await create_test_user(nickname=f"VT{uuid4().hex[:6]}")
+        cycle_id, tc_id = await _seed_tournament_completion(asyncpg_pool, category_id, map_id, user_id)
+
+        await test_client.patch(f"{BASE}/completions/{tc_id}/verify")
+        await test_client.patch(f"{BASE}/completions/{tc_id}/verify")
+
+        xp_rows = await asyncpg_pool.fetchval(
+            "SELECT COUNT(*) FROM tournaments.xp_grants WHERE cycle_id = $1 AND user_id = $2 AND reason = 'participation'",
+            cycle_id,
+            user_id,
+        )
+        assert xp_rows == 1
+
+    async def test_reject_leaves_row_unverified(
+        self, test_client, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """Rejecting keeps verified FALSE and grants no participation XP."""
+        category_id = await asyncpg_pool.fetchval(
+            """
+            INSERT INTO tournaments.categories (name, difficulties, participation_xp, placement_xp, streak_xp)
+            VALUES ($1, $2, 25, '[]'::jsonb, '[]'::jsonb)
+            RETURNING id
+            """,
+            f"Reject {uuid4().hex[:8]}",
+            ["Easy"],
+        )
+        map_id = await create_test_map(difficulty="Easy")
+        user_id = await create_test_user(nickname=f"R{uuid4().hex[:6]}")
+        cycle_id, tc_id = await _seed_tournament_completion(asyncpg_pool, category_id, map_id, user_id)
+
+        response = await test_client.patch(f"{BASE}/completions/{tc_id}/reject")
+
+        assert response.status_code == 200
+        verified = await asyncpg_pool.fetchval(
+            "SELECT verified FROM tournaments.completions WHERE id = $1", tc_id
+        )
+        assert verified is False
+        xp_rows = await asyncpg_pool.fetchval(
+            "SELECT COUNT(*) FROM tournaments.xp_grants WHERE cycle_id = $1 AND user_id = $2 AND reason = 'participation'",
+            cycle_id,
+            user_id,
+        )
+        assert xp_rows == 0
+
+    async def test_verify_nonexistent_returns_404(self, test_client):
+        """Verifying an unknown tournament_completion_id returns 404."""
+        response = await test_client.patch(f"{BASE}/completions/999999999/verify")
+
+        assert response.status_code == 404
+
+    async def test_verify_without_scope_rejected(self, unauthenticated_client):
+        """PATCH verify without the tournaments:verify scope returns 401."""
+        response = await unauthenticated_client.patch(f"{BASE}/completions/1/verify")
+
+        assert response.status_code == 401

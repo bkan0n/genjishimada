@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 import litestar
+from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.tournaments import (
     TournamentCategoryCreateRequest,
     TournamentCategoryPatchRequest,
@@ -45,6 +46,7 @@ from services.exceptions.tournaments import (
     PendingCycleNotFoundError,
     SlowerTimeError,
     StreakNotFoundError,
+    TournamentCompletionNotFoundError,
 )
 from services.tournament_reward_service import provide_tournament_reward_service
 from services.tournament_service import TournamentService, provide_tournament_service
@@ -496,6 +498,78 @@ class TournamentsController(litestar.Controller):
         except SlowerTimeError as e:
             raise CustomHTTPException(
                 status_code=HTTP_409_CONFLICT,
+                detail=str(e),
+            ) from e
+
+    @litestar.patch(
+        path="/completions/{tournament_completion_id:int}/verify",
+        summary="Verify Tournament Completion",
+        description="Verify a non-PB tournament completion (bot mod-review callback).",
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"tournaments:verify"}},
+    )
+    async def verify_tournament_completion(
+        self,
+        request: litestar.Request,
+        tournament_service: TournamentService,
+        tournament_completion_id: Annotated[int, Parameter(description="Tournament completion ID")],
+    ) -> JobStatusResponse:
+        """Verify a tournament completion row.
+
+        Args:
+            request: HTTP request (for headers forwarded to the publish call).
+            tournament_service: Tournament service.
+            tournament_completion_id: Tournament completion ID to verify.
+
+        Returns:
+            Job status of the published verification-changed event.
+
+        Raises:
+            CustomHTTPException: 404 if the tournament completion does not exist.
+        """
+        try:
+            return await tournament_service.verify_tournament_completion(
+                tournament_completion_id, headers=request.headers
+            )
+        except TournamentCompletionNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+
+    @litestar.patch(
+        path="/completions/{tournament_completion_id:int}/reject",
+        summary="Reject Tournament Completion",
+        description="Reject a non-PB tournament completion (bot mod-review callback).",
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"tournaments:verify"}},
+    )
+    async def reject_tournament_completion(
+        self,
+        request: litestar.Request,
+        tournament_service: TournamentService,
+        tournament_completion_id: Annotated[int, Parameter(description="Tournament completion ID")],
+    ) -> JobStatusResponse:
+        """Reject a tournament completion row (leaves it unverified).
+
+        Args:
+            request: HTTP request (for headers forwarded to the publish call).
+            tournament_service: Tournament service.
+            tournament_completion_id: Tournament completion ID to reject.
+
+        Returns:
+            Job status of the published verification-changed event.
+
+        Raises:
+            CustomHTTPException: 404 if the tournament completion does not exist.
+        """
+        try:
+            return await tournament_service.reject_tournament_completion(
+                tournament_completion_id, headers=request.headers
+            )
+        except TournamentCompletionNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
                 detail=str(e),
             ) from e
 
