@@ -866,7 +866,7 @@ class TournamentRepository(BaseRepository):
     # XP Grants (idempotency ledger)
     # =========================================================================
 
-    async def claim_xp_grant(  # noqa: PLR0913
+    async def claim_xp_grant(
         self,
         cycle_id: int,
         user_id: int,
