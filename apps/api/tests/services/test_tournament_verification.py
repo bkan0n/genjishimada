@@ -427,7 +427,7 @@ async def test_verify_tournament_completion_flips_row_and_awards_xp() -> None:
         "cycle_id": 42,
         "user_id": 123,
         "time": 99.0,
-        "verified": False,
+        "status": "pending",
     }
     tournament_repo.set_tournament_verified.return_value = {
         "id": 9002,
@@ -478,7 +478,7 @@ async def test_verify_tournament_completion_twice_awards_xp_once() -> None:
         "cycle_id": 42,
         "user_id": 123,
         "time": 99.0,
-        "verified": False,
+        "status": "pending",
     }
     tournament_repo.set_tournament_verified.return_value = {
         "id": 9002,
@@ -502,11 +502,13 @@ async def test_verify_tournament_completion_twice_awards_xp_once() -> None:
     reward_service.publish_xp_events.assert_awaited_once_with(["xp"])
 
 
-async def test_reject_tournament_completion_leaves_unverified_no_xp() -> None:
-    """reject_tournament_completion keeps verified=FALSE and grants no XP.
+async def test_reject_tournament_completion_writes_rejected_no_xp() -> None:
+    """reject_tournament_completion drives the row to status='rejected' and grants no XP.
 
-    Rejecting publishes a verified=False TournamentVerificationChangedEvent under
-    the tournament:reject key and never calls award_participation.
+    Rejecting a pending run calls set_tournament_verified(..., False) (which writes
+    status='rejected' — the D-08 drain signal, NOT leaving it 'pending'), never
+    calls award_participation, and publishes a verified=False
+    TournamentVerificationChangedEvent under the tournament:reject key.
     """
     service, tournament_repo, reward_service = _make_tournament_service()
     tournament_repo.fetch_tournament_completion.return_value = {
@@ -514,7 +516,7 @@ async def test_reject_tournament_completion_leaves_unverified_no_xp() -> None:
         "cycle_id": 42,
         "user_id": 123,
         "time": 99.0,
-        "verified": False,
+        "status": "pending",
     }
     tournament_repo.set_tournament_verified.return_value = {
         "id": 9002,
@@ -527,13 +529,60 @@ async def test_reject_tournament_completion_leaves_unverified_no_xp() -> None:
 
     reward_service.award_participation.assert_not_awaited()
     set_args = tournament_repo.set_tournament_verified.await_args
-    # rejected row is set verified=False
+    # Reject drives the repo verdict toward status='rejected' (verified=False arg).
     assert set_args.args[0] == 9002
     assert set_args.kwargs.get("verified", set_args.args[1] if len(set_args.args) > 1 else None) is False
     publish_kwargs = service.publish_message.await_args.kwargs  # type: ignore[union-attr]
     assert publish_kwargs["routing_key"] == "api.tournament.verification.changed"
     assert publish_kwargs["idempotency_key"] == "tournament:reject:9002"
     assert publish_kwargs["data"].verified is False
+
+
+async def test_reject_after_verify_raises_already_verified() -> None:
+    """Terminal guard (T-12.1-06): a verified run cannot be rejected back.
+
+    The guard now reads existing['status'] == 'verified' (the generated 'verified'
+    column is read-only). A verified — possibly already-rewarded — run is terminal:
+    rejecting it raises AlreadyVerifiedError, preventing rank/reward churn.
+    """
+    from services.exceptions.tournaments import AlreadyVerifiedError
+
+    service, tournament_repo, _ = _make_tournament_service()
+    tournament_repo.fetch_tournament_completion.return_value = {
+        "id": 9002,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 99.0,
+        "status": "verified",
+    }
+
+    with pytest.raises(AlreadyVerifiedError):
+        await service.reject_tournament_completion(9002)
+
+    tournament_repo.set_tournament_verified.assert_not_awaited()
+
+
+async def test_reverify_verified_is_noop_via_status() -> None:
+    """Re-verifying an already-'verified' run short-circuits to a no-op verdict job (T-12.1-07).
+
+    The no-op guard now reads existing['status'] == 'verified': the participation
+    XP was already granted and the event already published, so a replayed verify
+    re-grants/re-publishes nothing.
+    """
+    service, tournament_repo, reward_service = _make_tournament_service()
+    tournament_repo.fetch_tournament_completion.return_value = {
+        "id": 9002,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 99.0,
+        "status": "verified",
+    }
+
+    await service.verify_tournament_completion(9002)
+
+    # No-op: the row was already verified, so no write/grant happens.
+    tournament_repo.set_tournament_verified.assert_not_awaited()
+    reward_service.award_participation.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
