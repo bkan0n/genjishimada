@@ -407,8 +407,8 @@ class TestTournamentsFreshRestartWipe:
             tc_id = await conn.fetchval(
                 """
                 INSERT INTO tournaments.completions
-                    (cycle_id, user_id, map_id, time, screenshot, verified, completion)
-                VALUES ($1, $2, $3, 12.34, 'https://example.com/s.png', TRUE, TRUE)
+                    (cycle_id, user_id, map_id, time, screenshot, status, completion)
+                VALUES ($1, $2, $3, 12.34, 'https://example.com/s.png', 'verified', TRUE)
                 RETURNING id
                 """,
                 cycle_id,
