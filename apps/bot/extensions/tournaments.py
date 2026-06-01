@@ -493,6 +493,15 @@ class TournamentHandler(BaseHandler):
             event.edition_id,
             len(event.results),
         )
+        # Defensive early exit mirroring _on_edition_rollover (CR-03): an all-rejected /
+        # no-submissions edition drains with an empty results list. Without this guard the
+        # handler would still build and send a header-only "## 🏅 Results" card with no
+        # winners ping. Bail before any transfer or post so nothing is announced.
+        if not event.results:
+            log.info(
+                "[✓] [Tournament] edition_results %s carried no results; nothing to post", event.edition_id
+            )
+            return
 
         # 1) HELD champion-role transfers FIRST (Pitfall 5 / D-05), per result entry. Cache
         # each entry's category so the SAME object is reused for the transfer and rendering.
