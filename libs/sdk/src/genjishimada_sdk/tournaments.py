@@ -24,6 +24,8 @@ __all__ = (
     "TournamentCycleResultsResponse",
     "TournamentCycleStartedEvent",
     "TournamentCycleWithWinnerResponse",
+    "TournamentCyclesCompletedEvent",
+    "TournamentCyclesStartedEvent",
     "TournamentLeaderboardEntryResponse",
     "TournamentNextCycleResponse",
     "TournamentStreakResponse",
@@ -420,6 +422,36 @@ class TournamentCycleCompletedEvent(Struct):
     category_id: int
     standings: list[TournamentLeaderboardEntryResponse]
     winner_user_id: int | None
+
+
+class TournamentCyclesStartedEvent(Struct):
+    """Combined event for every cycle started in a single rotation.
+
+    A single pg_cron rotation can start multiple categories' cycles in one
+    transaction. The outbox poller groups those rows by their shared
+    ``created_at`` and publishes ONE of these batch events so the bot renders a
+    single combined announcement instead of one per category.
+
+    Attributes:
+        cycles: Per-category started events that share one rotation transaction.
+    """
+
+    cycles: list[TournamentCycleStartedEvent]
+
+
+class TournamentCyclesCompletedEvent(Struct):
+    """Combined event for every cycle completed in a single rotation.
+
+    A single pg_cron rotation can finalize multiple categories' cycles in one
+    transaction. The outbox poller groups those rows by their shared
+    ``created_at`` and publishes ONE of these batch events so the bot renders a
+    single combined results announcement instead of one per category.
+
+    Attributes:
+        cycles: Per-category completed events that share one rotation transaction.
+    """
+
+    cycles: list[TournamentCycleCompletedEvent]
 
 
 class TournamentCompletionCreatedEvent(Struct):
