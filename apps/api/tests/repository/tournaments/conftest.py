@@ -286,20 +286,31 @@ async def create_test_tournament_completion(asyncpg_pool: asyncpg.Pool):
     """
 
     async def _create(cycle_id: int, user_id: int, map_id: int, **overrides: Any) -> int:
+        # Migration 0025 made `verified` a STORED generated column derived from
+        # the new tri-state `status` (pending/verified/rejected). Inserting into
+        # `verified` directly raises GeneratedAlwaysError, so the seed writes
+        # `status`. For backward compatibility callers may still pass
+        # `verified=True/False`; it is translated to `status` ('verified' for
+        # True, 'pending' for False — a FALSE row was never an explicit rejection,
+        # matching the migration's backfill rule). An explicit `status=` override
+        # always wins.
         data: dict[str, Any] = {
             "time": 30.0,
             "screenshot": "https://example.com/screenshot.png",
             "video": None,
-            "verified": False,
             "completion": False,
         }
+        legacy_verified = overrides.pop("verified", None)
+        status = overrides.pop("status", None)
+        if status is None:
+            status = "verified" if legacy_verified else "pending"
         data.update(overrides)
 
         async with asyncpg_pool.acquire() as conn:
             completion_id: int = await conn.fetchval(
                 """
                 INSERT INTO tournaments.completions (
-                    cycle_id, user_id, map_id, time, screenshot, video, verified, completion
+                    cycle_id, user_id, map_id, time, screenshot, video, status, completion
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING id
@@ -310,7 +321,7 @@ async def create_test_tournament_completion(asyncpg_pool: asyncpg.Pool):
                 data["time"],
                 data["screenshot"],
                 data["video"],
-                data["verified"],
+                status,
                 data["completion"],
             )
         return completion_id

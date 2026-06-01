@@ -825,3 +825,182 @@ class TestCreateEditionRolloverTransition:
         assert result["edition_id"] == edition["id"]
         assert result["event_type"] == "edition_rollover"
         assert result["published"] is False
+
+
+# =============================================================================
+# Tri-state verify/reject writes + drain count (D-08, Plan 12.1-03)
+# =============================================================================
+
+
+class TestSetTournamentVerifiedTriState:
+    """set_tournament_verified now writes the tri-state ``status`` column.
+
+    After migration 0025 ``verified`` is a STORED generated column derived from
+    ``status``; writing it directly raises GeneratedAlwaysError. These tests pin
+    that verify -> ``status='verified'`` (generated verified reads TRUE), reject
+    -> ``status='rejected'`` (generated verified reads FALSE, and the row is
+    distinguishable from an un-reviewed ``pending`` run), and that the
+    ``IS DISTINCT FROM`` no-op guard is preserved (now keyed on ``status``).
+    """
+
+    async def test_verify_sets_status_verified(
+        self,
+        repository: TournamentRepository,
+        create_test_category,
+        create_test_cycle,
+        create_test_map,
+        create_test_user,
+        create_test_tournament_completion,
+        asyncpg_pool,
+    ):
+        category_id = await create_test_category()
+        map_id = await create_test_map()
+        cycle_id = await create_test_cycle(category_id, map_id, status="active")
+        user_id = await create_test_user()
+        tc_id = await create_test_tournament_completion(cycle_id, user_id, map_id, time=25.0)
+
+        row = await repository.set_tournament_verified(tc_id, True)
+
+        assert row is not None
+        assert row["id"] == tc_id
+        async with asyncpg_pool.acquire() as conn:
+            persisted = await conn.fetchrow(
+                "SELECT status, verified FROM tournaments.completions WHERE id = $1", tc_id
+            )
+        assert persisted["status"] == "verified"
+        assert persisted["verified"] is True
+
+    async def test_reject_sets_status_rejected_not_pending(
+        self,
+        repository: TournamentRepository,
+        create_test_category,
+        create_test_cycle,
+        create_test_map,
+        create_test_user,
+        create_test_tournament_completion,
+        asyncpg_pool,
+    ):
+        category_id = await create_test_category()
+        map_id = await create_test_map()
+        cycle_id = await create_test_cycle(category_id, map_id, status="active")
+        user_id = await create_test_user()
+        tc_id = await create_test_tournament_completion(cycle_id, user_id, map_id, time=25.0)
+
+        row = await repository.set_tournament_verified(tc_id, False)
+
+        assert row is not None
+        async with asyncpg_pool.acquire() as conn:
+            persisted = await conn.fetchrow(
+                "SELECT status, verified FROM tournaments.completions WHERE id = $1", tc_id
+            )
+        # The drain signal: a rejected run is distinguishable from a pending one.
+        assert persisted["status"] == "rejected"
+        assert persisted["verified"] is False
+
+    async def test_same_status_is_noop(
+        self,
+        repository: TournamentRepository,
+        create_test_category,
+        create_test_cycle,
+        create_test_map,
+        create_test_user,
+        create_test_tournament_completion,
+    ):
+        category_id = await create_test_category()
+        map_id = await create_test_map()
+        cycle_id = await create_test_cycle(category_id, map_id, status="active")
+        user_id = await create_test_user()
+        # Seed already-verified so a verify is a true no-op (IS DISTINCT FROM).
+        tc_id = await create_test_tournament_completion(
+            cycle_id, user_id, map_id, time=25.0, status="verified"
+        )
+
+        row = await repository.set_tournament_verified(tc_id, True)
+
+        # No row changed -> None (the load-bearing CR-01/WR-06 idempotency guard).
+        assert row is None
+
+
+class TestFetchTournamentCompletionReturnsStatus:
+    async def test_fetch_returns_status_field(
+        self,
+        repository: TournamentRepository,
+        create_test_category,
+        create_test_cycle,
+        create_test_map,
+        create_test_user,
+        create_test_tournament_completion,
+    ):
+        category_id = await create_test_category()
+        map_id = await create_test_map()
+        cycle_id = await create_test_cycle(category_id, map_id, status="active")
+        user_id = await create_test_user()
+        tc_id = await create_test_tournament_completion(
+            cycle_id, user_id, map_id, time=25.0, status="pending"
+        )
+
+        result = await repository.fetch_tournament_completion(tc_id)
+
+        assert result is not None
+        assert result["status"] == "pending"
+
+
+class TestCountInflightVerifications:
+    """count_inflight_verifications(edition_id) is the poller's drain signal (D-08)."""
+
+    async def test_counts_only_pending_across_child_cycles(
+        self,
+        repository: TournamentRepository,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+        create_test_tournament_completion,
+    ):
+        started = datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+        ends = started + timedelta(weeks=1)
+        edition_id = await create_test_edition(started, ends, status="awaiting_results")
+        category_id = await create_test_category()
+        map_a = await create_test_map()
+        map_b = await create_test_map()
+        cycle_a = await create_test_child_cycle(edition_id, category_id, map_a, status="finalizing")
+        cycle_b = await create_test_child_cycle(edition_id, category_id, map_b, status="finalizing")
+
+        user_1 = await create_test_user()
+        user_2 = await create_test_user()
+        user_3 = await create_test_user()
+        # Two pending (one per cycle), one verified, one rejected -> count is 2.
+        await create_test_tournament_completion(cycle_a, user_1, map_a, time=10.0, status="pending")
+        await create_test_tournament_completion(cycle_b, user_2, map_b, time=11.0, status="pending")
+        await create_test_tournament_completion(cycle_a, user_3, map_a, time=12.0, status="verified")
+        await create_test_tournament_completion(
+            cycle_b, await create_test_user(), map_b, time=13.0, status="rejected"
+        )
+
+        count = await repository.count_inflight_verifications(edition_id)
+
+        assert count == 2
+
+    async def test_returns_zero_when_drained(
+        self,
+        repository: TournamentRepository,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+        create_test_tournament_completion,
+    ):
+        started = datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+        ends = started + timedelta(weeks=1)
+        edition_id = await create_test_edition(started, ends, status="awaiting_results")
+        category_id = await create_test_category()
+        map_id = await create_test_map()
+        cycle_id = await create_test_child_cycle(edition_id, category_id, map_id, status="finalizing")
+        user_id = await create_test_user()
+        await create_test_tournament_completion(cycle_id, user_id, map_id, time=10.0, status="verified")
+
+        count = await repository.count_inflight_verifications(edition_id)
+
+        assert count == 0
