@@ -1123,7 +1123,7 @@ class APIService:
         r = Route("PATCH", "/tournaments/completions/{tc_id}/reject", tc_id=tc_id)
         return self._request(r, response_model=JobStatusResponse)
 
-    def force_publish_tournament_results(self) -> Response[JobStatusResponse]:
+    def force_publish_tournament_results(self) -> Response[None]:
         """Force-publish the awaiting-results edition's results, abandoning pending runs (D-03).
 
         The escape hatch for a stuck verification queue: routes the moderator's force-publish
@@ -1133,11 +1133,15 @@ class APIService:
         ``awaiting_results`` (no id param). The bot never writes the DB — this HTTP call is
         the only path to the database (CLAUDE.md).
 
+        The route returns ``204 No Content`` (CR-01): the results announcement is delivered
+        asynchronously via the deferred ``edition_results`` outbox event, so there is no
+        synchronous body to decode.
+
         Returns:
-            Response[JobStatusResponse]: The job status of the forced results publish.
+            Response[None]: No content; the forced publish is fire-and-forget.
         """
         r = Route("PATCH", "/tournaments/publish-results")
-        return self._request(r, response_model=JobStatusResponse)
+        return self._request(r)
 
     def get_records_filtered(  # noqa: PLR0913
         self,

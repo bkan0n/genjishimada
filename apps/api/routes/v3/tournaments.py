@@ -534,26 +534,29 @@ class TournamentsController(litestar.Controller):
             "edition is awaiting results. Requires tournaments:write; the bot-side "
             "mod gate (Plan 05) is the authoritative caller check."
         ),
-        status_code=HTTP_200_OK,
+        status_code=HTTP_204_NO_CONTENT,
         opt={"required_scopes": {"tournaments:write"}},
     )
     async def force_publish_results(
         self,
         tournament_service: TournamentService,
-    ) -> TournamentEditionResponse:
+    ) -> Response[None]:
         """Force-publish the awaiting_results edition's results (D-03).
 
         Args:
             tournament_service: Tournament service.
 
         Returns:
-            The force-completed edition.
+            Empty response with 204 status. The results announcement is delivered
+            asynchronously via the deferred ``edition_results`` outbox event drained
+            on the poller's next tick (CR-01); there is no synchronous body.
 
         Raises:
             CustomHTTPException: 409 if no edition is currently awaiting results.
         """
         try:
-            return await tournament_service.force_publish_results()
+            await tournament_service.force_publish_results()
+            return Response(None, status_code=HTTP_204_NO_CONTENT)
         except NoAwaitingResultsEditionError as e:
             raise CustomHTTPException(
                 status_code=HTTP_409_CONFLICT,

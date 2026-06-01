@@ -509,7 +509,7 @@ class TournamentService(BaseService):
             return None
         return msgspec.convert(row, TournamentEditionResponse)
 
-    async def force_publish_results(self, *, conn: Connection | None = None) -> TournamentEditionResponse:
+    async def force_publish_results(self, *, conn: Connection | None = None) -> None:
         """Admin force-publish the results of the awaiting_results edition (D-03).
 
         The escape hatch for a stuck verification queue under the drain-only model
@@ -536,14 +536,17 @@ class TournamentService(BaseService):
                 write + status flips are atomic.
 
         Returns:
-            The force-completed :class:`TournamentEditionResponse`.
+            None. The deferred-publish design means the real result is delivered
+            asynchronously via the ``edition_results`` outbox event drained on the
+            poller's next tick; there is no useful synchronous body to return, and
+            returning a pre-flip edition snapshot would be a stale-status lie (CR-01).
 
         Raises:
             NoAwaitingResultsEditionError: If no edition is currently
                 ``awaiting_results`` (nothing to publish).
         """
 
-        async def _do(active_conn: Connection) -> dict:
+        async def _do(active_conn: Connection) -> None:
             editions = await self._tournament_repo.fetch_awaiting_results_editions(conn=active_conn)
             if not editions:
                 raise NoAwaitingResultsEditionError
@@ -555,17 +558,12 @@ class TournamentService(BaseService):
                 edition["id"],
                 conn=active_conn,
             )
-            return edition
 
         if conn is None:
             async with self._pool.acquire() as raw_conn, raw_conn.transaction():
-                edition = await _do(raw_conn)  # type: ignore[arg-type]
+                await _do(raw_conn)  # type: ignore[arg-type]
         else:
-            edition = await _do(conn)
-
-        # Re-fetch is unnecessary: the row's status is now 'completed'. Return the
-        # edition (status reflects the in-memory flip for the response shape).
-        return msgspec.convert({**edition, "status": "completed"}, TournamentEditionResponse)
+            await _do(conn)
 
     async def set_transitions_paused(self, paused: bool) -> TournamentLifecycleResponse:
         """Pause or resume automatic edition transitions (GLOBAL, D-03/D-12).
