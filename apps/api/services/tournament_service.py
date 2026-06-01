@@ -772,11 +772,13 @@ class TournamentService(BaseService):
         headers: Headers | None = None,
         conn: Connection | None = None,
     ) -> JobStatusResponse:
-        """Reject a non-PB tournament completion (leaves it unverified).
+        """Reject a non-PB tournament completion (drives it to status='rejected').
 
-        The simplest reject (Open-Q1): the row stays ``verified = FALSE`` so it
-        ranks below verified runs. No participation XP is granted, and a
-        verified=False TournamentVerificationChangedEvent is published.
+        Reject now writes ``status = 'rejected'`` (D-08): the run ranks below
+        verified runs AND is distinguishable from an un-reviewed ``pending`` one,
+        so the poller can detect when the verification queue has drained. No
+        participation XP is granted, and a verified=False
+        TournamentVerificationChangedEvent is published.
 
         Args:
             tournament_completion_id: ID of the tournament completion row to reject.
@@ -835,22 +837,24 @@ class TournamentService(BaseService):
         if existing is None:
             raise TournamentCompletionNotFoundError(tournament_completion_id)
 
-        # Terminal guard (CR-01): a verified run cannot be rejected back to
-        # unverified, because reject takes the award_xp=False path and never
-        # reverses the participation XP already granted. Forbid the illegal
-        # transition instead of silently de-syncing the ledger and the row.
-        if not verified and existing["verified"]:
+        # Terminal guard (CR-01 / T-12.1-06): a verified run cannot be rejected
+        # back, because reject takes the award_xp=False path and never reverses
+        # the participation XP already granted. Forbid the illegal transition
+        # instead of silently de-syncing the ledger and the row. Reads the
+        # tri-state ``status`` (since 0025 ``verified`` is a read-only generated
+        # column); a verdict is terminal once ``status == 'verified'``.
+        if not verified and existing["status"] == "verified":
             raise AlreadyVerifiedError(tournament_completion_id)
 
-        # No-op RE-VERIFY only (idempotent redelivery, CR-01): a verify replayed
-        # against an already-verified row is a true no-op — the participation XP
-        # was already granted and the event already published, so short-circuit
-        # without re-granting/re-publishing. This guard deliberately does NOT
-        # cover reject-of-an-unverified-row: that is a legitimate first-time
-        # verdict that must still persist verified=False and publish the
-        # verified=False event so the bot surfaces the rejection. (Reject AFTER
-        # verify is already refused above via AlreadyVerifiedError.)
-        if verified and existing["verified"]:
+        # No-op RE-VERIFY only (idempotent redelivery, CR-01 / T-12.1-07): a
+        # verify replayed against an already-'verified' row is a true no-op — the
+        # participation XP was already granted and the event already published, so
+        # short-circuit without re-granting/re-publishing. This guard deliberately
+        # does NOT cover reject-of-a-pending-row: that is a legitimate first-time
+        # verdict that must still persist status='rejected' (the D-08 drain signal)
+        # and publish the verified=False event so the bot surfaces the rejection.
+        # (Reject AFTER verify is already refused above via AlreadyVerifiedError.)
+        if verified and existing["status"] == "verified":
             return await self._noop_verdict_job(
                 tournament_completion_id,
                 idempotency_key=idempotency_key,
@@ -962,7 +966,9 @@ class TournamentService(BaseService):
             tournament_completion_id=tournament_completion_id,
             cycle_id=existing["cycle_id"],
             user_id=existing["user_id"],
-            verified=bool(existing["verified"]),
+            # Derive from the tri-state source of truth (status), not the generated
+            # verified mirror, so the no-op replay event matches the verdict (D-08).
+            verified=existing["status"] == "verified",
             time=float(existing["time"]),
         )
         return await self.publish_message(
