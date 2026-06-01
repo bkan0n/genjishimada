@@ -358,9 +358,16 @@ COMMENT ON FUNCTION tournaments.process_edition_transitions() IS
 --    intention-revealing and order-safe. NEVER add CASCADE to that FK.
 UPDATE core.completions SET tournament_completion_id = NULL
 WHERE tournament_completion_id IS NOT NULL;
--- 2) Wipe tournament state (xp_grants cascade from cycles; streaks.last_cycle_id SET NULL;
---    cycles cascade from editions). RESTART IDENTITY for a clean slate.
-TRUNCATE tournaments.completions, tournaments.cycles, tournaments.editions RESTART IDENTITY CASCADE;
+-- 2) Wipe tournament state with ordered DELETEs (children first), NOT TRUNCATE CASCADE.
+--    CRITICAL (D-15): `TRUNCATE tournaments.completions CASCADE` would structurally
+--    truncate core.completions (which has an FK into tournaments.completions),
+--    destroying PB rows regardless of the ON DELETE SET NULL action -- TRUNCATE
+--    ignores per-row FK actions. Row-level DELETE honors ON DELETE SET NULL/CASCADE,
+--    so deleting tournaments.completions only NULLs the (already-NULLed) core link
+--    and never deletes a core.completions row.
+DELETE FROM tournaments.completions;  -- core.completions FK -> SET NULL (already NULL)
+DELETE FROM tournaments.cycles;       -- xp_grants CASCADE; streaks.last_cycle_id SET NULL
+DELETE FROM tournaments.editions;
 -- 3) Drop any stale outbox rows.
 DELETE FROM tournaments.pending_transitions;
 
