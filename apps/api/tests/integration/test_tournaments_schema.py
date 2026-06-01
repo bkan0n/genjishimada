@@ -163,17 +163,35 @@ class TestTournamentsSchema:
                 await tr.rollback()
 
     async def test_config_singleton_seeded(self, asyncpg_pool):
-        """The config singleton row is seeded with blacklist_weeks = 4."""
+        """The config singleton exists and blacklist_weeks is seeded defaulting to 4.
+
+        Asserts the column DEFAULT (an immutable schema property that drives the seed
+        INSERT) rather than the live row value. The singleton is a shared row that sibling
+        integration tests legitimately PATCH (e.g. to 5 or 0) without restoring it, so on
+        the session-scoped shared test DB the live value is order/parallelism-dependent.
+        The seed invariant — "blacklist_weeks is seeded to 4" — is the column default, which
+        no data write can change.
+        """
         async with asyncpg_pool.acquire() as conn:
             row = await conn.fetchrow(
                 """
-                SELECT id, blacklist_weeks
+                SELECT id
                 FROM tournaments.config
                 WHERE id = 1
                 """
             )
-            assert row is not None
-            assert row["blacklist_weeks"] == 4
+            assert row is not None  # singleton seeded
+
+            default = await conn.fetchval(
+                """
+                SELECT column_default
+                FROM information_schema.columns
+                WHERE table_schema = 'tournaments'
+                  AND table_name = 'config'
+                  AND column_name = 'blacklist_weeks'
+                """
+            )
+            assert default is not None and "4" in default  # DEFAULT 4 → seeded value
 
     async def test_foreign_key_indexes_exist(self, asyncpg_pool):
         """All FK columns have explicit indexes."""
