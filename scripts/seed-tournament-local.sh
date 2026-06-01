@@ -190,14 +190,14 @@ EM_ID="$(create_or_get_category \
   "Easy / Medium" '["Easy","Medium"]' \
   "$EASY_MED_PARTICIPATION" "$EASY_MED_PLACEMENT" "$EASY_MED_STREAK" \
   "${EASY_MED_CHAMPION_ROLE_ID:-}")"
-EM_CYCLE="$(ensure_active_cycle "$EM_ID" || true)"
+EM_CYCLE="$(ensure_active_cycle "$EM_ID")"
 
 echo "--> Hard / Very Hard"
 HV_ID="$(create_or_get_category \
   "Hard / Very Hard" '["Hard","Very Hard"]' \
   "$HARD_VH_PARTICIPATION" "$HARD_VH_PLACEMENT" "$HARD_VH_STREAK" \
   "${HARD_VH_CHAMPION_ROLE_ID:-}")"
-HV_CYCLE="$(ensure_active_cycle "$HV_ID" || true)"
+HV_CYCLE="$(ensure_active_cycle "$HV_ID")"
 
 echo
 echo "==> Done."
