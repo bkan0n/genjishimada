@@ -115,13 +115,24 @@ class TournamentVerificationAcceptButton(ui.Button):
             itx: The Discord interaction context.
         """
         await itx.response.defer(ephemeral=True, thinking=True)
+
+        # WR-04: call the API BEFORE disabling the card. If the call raises, the
+        # card stays interactive so the moderator can retry; disabling first
+        # would permanently lock a card whose verdict never took effect.
+        try:
+            job_status = await self.view.bot.api.verify_tournament_completion(self.view.completion_id)
+        except (APIHTTPError, APIUnavailableError):
+            await itx.edit_original_response(
+                content="There was an error reaching the API. Please try again."
+            )
+            return
+
         for c in self.view.walk_children():
             if isinstance(c, ui.Button):
                 c.disabled = True
         if itx.message:
             await itx.message.edit(view=self.view)
 
-        job_status = await self.view.bot.api.verify_tournament_completion(self.view.completion_id)
         job = await poll_job_until_complete(itx.client.api, job_status.id)
 
         if not job:
@@ -169,14 +180,42 @@ class TournamentVerificationRejectButton(ui.Button):
         if not modal.reason.value:
             return
 
+        # WR-04: call the API BEFORE disabling the card so a failed reject leaves
+        # a retryable card instead of a permanently-disabled one.
+        try:
+            job_status = await self.view.bot.api.reject_tournament_completion(self.view.completion_id)
+        except (APIHTTPError, APIUnavailableError):
+            await itx.followup.send(
+                content="There was an error reaching the API. Please try again.", ephemeral=True
+            )
+            return
+
         for c in self.view.walk_children():
             if isinstance(c, ui.Button):
                 c.disabled = True
         if itx.message:
             await itx.message.edit(view=self.view)
 
-        await self.view.bot.api.reject_tournament_completion(self.view.completion_id)
-        await itx.followup.send(content="Successfully rejected the tournament run.", ephemeral=True)
+        # WR-05: poll the job like Accept does, so a failed reject is reported as
+        # a failure rather than a premature "Successfully rejected".
+        job = await poll_job_until_complete(itx.client.api, job_status.id)
+        if not job:
+            await itx.followup.send(
+                content=(
+                    "There was an unknown error while processing. "
+                    "Please do not try again until it has been resolved."
+                ),
+                ephemeral=True,
+            )
+        elif job.status == "succeeded":
+            await itx.followup.send(content="Successfully rejected the tournament run.", ephemeral=True)
+        else:
+            await itx.followup.send(
+                content=(
+                    "There was an error while processing. Please do not try again until it has been resolved."
+                ),
+                ephemeral=True,
+            )
 
 
 class TournamentVerificationView(ui.LayoutView):
