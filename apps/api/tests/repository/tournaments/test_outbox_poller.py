@@ -25,7 +25,7 @@ import asyncpg
 import msgspec
 import pytest
 from genjishimada_sdk.internal import JobStatusResponse
-from genjishimada_sdk.tournaments import TournamentRolloverEvent
+from genjishimada_sdk.tournaments import TournamentEditionResultsEvent, TournamentRolloverEvent
 from litestar.datastructures import State
 
 import services.tournament_outbox_service as outbox_module
@@ -446,3 +446,420 @@ class TestBuildEvent:
         assert routing_key == "api.tournament.rollover"
         assert isinstance(event, TournamentRolloverEvent)
         assert event.edition_id == 7
+
+    async def test_results_event_type_builds_results_only(self):
+        """An edition_results row builds a TournamentEditionResultsEvent on the results key."""
+        row = {
+            "event_type": "edition_results",
+            "cycle_id": None,
+            "edition_id": 9,
+            "payload": {"edition_id": 9, "results": []},
+        }
+        routing_key, event = _build_event(row)
+        assert routing_key == "api.tournament.results"
+        assert isinstance(event, TournamentEditionResultsEvent)
+        assert event.edition_id == 9
+
+
+# =============================================================================
+# Plan 12.1-04: poller-owned drain state machine (D-01/D-02/D-05/D-07)
+# =============================================================================
+#
+# The cron (12.1-01) is timing-only: it flips the due edition to
+# 'awaiting_results', child cycles to 'finalizing', and writes NO outbox row. The
+# poller now OWNS results computation: process_awaiting_results_editions runs
+# inside the same publish-before-mark transaction and, per edition, branches on
+# count_inflight_verifications:
+#   * first tick, pending == 0 -> combined TournamentRolloverEvent
+#     (results_pending=False), grant XP, edition + cycles -> completed
+#   * first tick, pending  > 0 -> start-only TournamentRolloverEvent
+#     (results_pending=True), set start_announced, NO grants, edition stays
+#     awaiting_results (champion role held: empty results -> bot skips transfer)
+#   * later tick, start_announced, pending == 0 (drained) -> write an
+#     edition_results outbox row; the SAME loop drains it next tick at
+#     tournament:results:{edition_id}, grants XP, edition + cycles -> completed
+
+
+async def _set_edition_status(pool: asyncpg.Pool, edition_id: int, status: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE tournaments.editions SET status = $2 WHERE id = $1",
+            edition_id,
+            status,
+        )
+
+
+async def _set_cycles_status(pool: asyncpg.Pool, edition_id: int, status: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE tournaments.cycles SET status = $2 WHERE edition_id = $1",
+            edition_id,
+            status,
+        )
+
+
+async def _edition_row(pool: asyncpg.Pool, edition_id: int) -> dict:
+    async with pool.acquire() as conn:
+        return dict(await conn.fetchrow("SELECT * FROM tournaments.editions WHERE id = $1", edition_id))
+
+
+async def _cycle_statuses(pool: asyncpg.Pool, edition_id: int) -> list[str]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT status FROM tournaments.cycles WHERE edition_id = $1 ORDER BY id",
+            edition_id,
+        )
+        return [r["status"] for r in rows]
+
+
+async def _results_rows(pool: asyncpg.Pool, edition_id: int) -> list[dict]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT * FROM tournaments.pending_transitions
+            WHERE event_type = 'edition_results' AND edition_id = $1
+            ORDER BY id
+            """,
+            edition_id,
+        )
+        return [dict(r) for r in rows]
+
+
+async def _seed_completion(
+    pool: asyncpg.Pool,
+    cycle_id: int,
+    user_id: int,
+    map_id: int,
+    status: str,
+    time: float = 30.0,
+) -> int:
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            """
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status, completion)
+            VALUES ($1, $2, $3, $4, 'https://x/s.png', $5, FALSE)
+            RETURNING id
+            """,
+            cycle_id,
+            user_id,
+            map_id,
+            time,
+            status,
+        )
+
+
+async def _make_awaiting_edition(
+    asyncpg_pool: asyncpg.Pool,
+    create_test_category,
+    create_test_edition,
+    create_test_child_cycle,
+    create_test_map,
+    n: int = 1,
+) -> tuple[int, list[tuple[int, int, int]]]:
+    """Create an awaiting_results edition with n finalizing child cycles."""
+    edition_id, children = await _make_edition_with_cycles(
+        asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=n
+    )
+    await _set_cycles_status(asyncpg_pool, edition_id, "finalizing")
+    await _set_edition_status(asyncpg_pool, edition_id, "awaiting_results")
+    return edition_id, children
+
+
+class TestPollerFirstTickNoPending:
+    """First tick, no in-flight verifications -> combined rollover, grants, completed (D-01/D-07)."""
+
+    async def test_first_tick_no_pending_emits_combined(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+    ):
+        """Zero pending: one combined TournamentRolloverEvent (results_pending=False), edition->completed, grants run."""
+        edition_id, children = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, map_a, cycle_a) = children[0]
+        user_id = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_a, user_id, map_a, status="verified")
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        awarded: list[int] = []
+
+        async def _fake_award(self, event, *, conn):  # noqa: ANN001
+            awarded.append(event.cycle_id)
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        evt = our[0]["data"]
+        assert isinstance(evt, TournamentRolloverEvent)
+        assert evt.results_pending is False
+        assert {e.cycle_id for e in evt.results} == {cycle_a}
+        assert awarded == [cycle_a]  # grants ran for the child cycle
+        # edition + cycles flipped to completed
+        assert (await _edition_row(asyncpg_pool, edition_id))["status"] == "completed"
+        assert await _cycle_statuses(asyncpg_pool, edition_id) == ["completed"]
+
+
+class TestPollerFirstTickPending:
+    """First tick, pending > 0 -> start-only rollover, results_pending=True, stays awaiting (D-05/D-07)."""
+
+    async def test_first_tick_pending_emits_start_only(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+    ):
+        """Pending exists: results_pending=True, results empty, start_announced set, no grants, stays awaiting_results."""
+        edition_id, children = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, map_a, cycle_a) = children[0]
+        user_id = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_a, user_id, map_a, status="pending")
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        awarded: list[int] = []
+
+        async def _fake_award(self, event, *, conn):  # noqa: ANN001
+            awarded.append(event.cycle_id)
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        evt = our[0]["data"]
+        assert isinstance(evt, TournamentRolloverEvent)
+        assert evt.results_pending is True
+        assert evt.results == []  # held: empty results -> bot skips transfer (D-05)
+        assert awarded == []  # NO grants while pending
+        ed = await _edition_row(asyncpg_pool, edition_id)
+        assert ed["status"] == "awaiting_results"  # stays
+        assert ed["start_announced"] is True
+        # no edition_results row yet
+        assert await _results_rows(asyncpg_pool, edition_id) == []
+
+
+class TestPollerLaterTickDrained:
+    """Later tick, start_announced, pending now 0 -> edition_results row, grants, completed (D-02/D-07)."""
+
+    async def test_later_tick_drained_emits_results(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+    ):
+        """After start_announced and drain: an edition_results outbox row is written, drained, grants run, completed."""
+        edition_id, children = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, map_a, cycle_a) = children[0]
+        # Simulate: start already announced (first tick was pending), queue now drained (all verified).
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE tournaments.editions SET start_announced = TRUE WHERE id = $1", edition_id
+            )
+        user_id = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_a, user_id, map_a, status="verified")
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        awarded: list[int] = []
+
+        async def _fake_award(self, event, *, conn):  # noqa: ANN001
+            awarded.append(event.cycle_id)
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        # Tick 1: detects drain, writes an edition_results outbox row, flips completed; grants run when drained.
+        await publish_pending_transitions(state)
+        rows = await _results_rows(asyncpg_pool, edition_id)
+        assert len(rows) == 1
+        assert (await _edition_row(asyncpg_pool, edition_id))["status"] == "completed"
+        assert await _cycle_statuses(asyncpg_pool, edition_id) == ["completed"]
+        assert awarded == [cycle_a]
+
+        # Tick 2: the SAME loop drains the edition_results row and publishes it on the results key.
+        await publish_pending_transitions(state)
+        key = f"tournament:results:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        evt = our[0]["data"]
+        assert isinstance(evt, TournamentEditionResultsEvent)
+        assert {e.cycle_id for e in evt.results} == {cycle_a}
+
+
+class TestPollerRerunNoDuplicateGrants:
+    """Re-running the poller after completion does not double-grant or re-flip (idempotent)."""
+
+    async def test_poller_rerun_no_duplicate_grants(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+    ):
+        """A second poll finds no awaiting_results edition -> award_cycle_end is not called again."""
+        edition_id, children = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, map_a, cycle_a) = children[0]
+        user_id = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_a, user_id, map_a, status="verified")
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        awarded: list[int] = []
+
+        async def _fake_award(self, event, *, conn):  # noqa: ANN001
+            awarded.append(event.cycle_id)
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+        assert awarded == [cycle_a]
+        assert (await _edition_row(asyncpg_pool, edition_id))["status"] == "completed"
+
+        # Second poll: edition is no longer awaiting_results -> no second grant.
+        await publish_pending_transitions(state)
+        assert awarded == [cycle_a]  # unchanged
+
+
+class TestPollerStackedEditions:
+    """Two awaiting_results editions each publish independently when their queue drains."""
+
+    async def test_stacked_editions_independent(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+    ):
+        """One drained edition completes; a still-pending sibling stays awaiting_results."""
+        # Drained edition.
+        ed_drained, ch_d = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_d, map_d, cycle_d) = ch_d[0]
+        u1 = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_d, u1, map_d, status="verified")
+
+        # Still-pending edition.
+        ed_pending, ch_p = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_p, map_p, cycle_p) = ch_p[0]
+        u2 = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_p, u2, map_p, status="pending")
+
+        # Clear unrelated unpublished rows (keep both our editions' rows).
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                DELETE FROM tournaments.pending_transitions
+                WHERE published = FALSE AND edition_id IS DISTINCT FROM $1 AND edition_id IS DISTINCT FROM $2
+                """,
+                ed_drained,
+                ed_pending,
+            )
+
+        _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        async def _noop_award(self, event, *, conn):  # noqa: ANN001
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        # Drained edition completed; pending edition still awaiting_results (start_announced set).
+        assert (await _edition_row(asyncpg_pool, ed_drained))["status"] == "completed"
+        pending_ed = await _edition_row(asyncpg_pool, ed_pending)
+        assert pending_ed["status"] == "awaiting_results"
+        assert pending_ed["start_announced"] is True
+
+
+class TestPollerEmptyEdition:
+    """An edition whose cycles have empty leaderboards publishes a no-winner results event (Pitfall 6)."""
+
+    async def test_empty_edition_no_winner(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+    ):
+        """No submissions: combined rollover with empty standings and winner_user_id=None; edition->completed."""
+        edition_id, children = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, _map_a, cycle_a) = children[0]
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        async def _noop_award(self, event, *, conn):  # noqa: ANN001
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        evt = our[0]["data"]
+        assert evt.results_pending is False
+        assert len(evt.results) == 1
+        assert evt.results[0].standings == []
+        assert evt.results[0].winner_user_id is None
+        assert (await _edition_row(asyncpg_pool, edition_id))["status"] == "completed"
