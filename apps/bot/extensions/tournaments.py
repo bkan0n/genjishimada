@@ -51,7 +51,7 @@ from genjishimada_sdk.tournaments import (
 
 from extensions._queue_registry import queue_consumer
 from utilities import transformers
-from utilities.base import BaseCog, BaseHandler
+from utilities.base import BaseCog, BaseHandler, ConfirmationView
 from utilities.errors import APIHTTPError, APIUnavailableError, UserFacingError
 from utilities.extra import poll_job_until_complete
 from utilities.paginator import StaticPaginatorView
@@ -921,6 +921,72 @@ class TournamentRerollCog(BaseCog):
         view.add_item(ui.Container(ui.TextDisplay(section), accent_color=discord.Color.blurple()))
         await itx.edit_original_response(view=view)
         log.info("[✓] [Tournament] /tournament-reroll set next-cycle map %s for category=%s", result.map_code, category)
+
+    @app_commands.command(name="tournament-publish-results")
+    @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
+    @app_commands.default_permissions(manage_guild=True)
+    async def tournament_publish_results(self, itx: GenjiItx) -> None:
+        """Force-publish the awaiting-results edition's results, abandoning pending runs (D-03).
+
+        The escape hatch for a stuck verification queue (D-02 is drain-only with no time
+        cap): publishes the results immediately using whatever is currently verified,
+        abandoning still-pending runs. Edition-scoped server-side to the single edition
+        currently ``awaiting_results`` — no id is passed.
+
+        The authoritative access control is the bot-side Mod/Sensei role check below
+        (D-03 / threat T-12.1-14): the bot's single full-scope API key does NOT distinguish
+        Discord callers, and ``default_member_permissions`` is only a UI hint. A confirmation
+        gate guards the abandon (pending runs are dropped from this edition's results).
+
+        Args:
+            itx: The interaction context.
+        """
+        await itx.response.defer(ephemeral=True)
+
+        # Explicit guard (NOT a bare assert): assert is stripped under python -O and raises
+        # an unclassified AssertionError if this command is reached outside a guild (DM /
+        # User App context, which Discord allows even with @app_commands.guilds).
+        if not isinstance(itx.user, discord.Member) or itx.guild is None:
+            raise UserFacingError("This command must be used inside the server.")
+        is_mod = (
+            itx.user.get_role(itx.client.config.roles.admin.mod) is not None
+            or itx.user.get_role(itx.client.config.roles.admin.sensei) is not None
+        )
+        if not is_mod:
+            # D-03: THE authoritative gate. Raised before any API write so a non-mod never
+            # triggers a force-publish (asserted by the publish_gate unit test, T-12.1-14).
+            raise UserFacingError("This command is for moderators only.")
+
+        log.debug("[→] [Tournament] /tournament-publish-results by=%s", itx.user.id)
+
+        view = ConfirmationView(
+            "# Force-publish tournament results?\n"
+            "This publishes the awaiting-results edition's results NOW using whatever is "
+            "currently verified, **abandoning any runs still pending verification**. This "
+            "cannot be undone."
+        )
+        await itx.edit_original_response(view=view)
+        view.original_interaction = itx
+        await view.wait()
+        if view.confirmed is not True:
+            # Cancelled / timed out: never reach the API (T-12.1-14).
+            return
+
+        await itx.client.api.force_publish_tournament_results()
+
+        confirm = ui.LayoutView(timeout=None)
+        confirm.add_item(
+            ui.Container(
+                ui.TextDisplay(
+                    "# Results Force-Published\n"
+                    "The awaiting-results edition's results have been published. A separate "
+                    "results announcement will post shortly."
+                ),
+                accent_color=discord.Color.gold(),
+            )
+        )
+        await itx.edit_original_response(view=confirm)
+        log.info("[✓] [Tournament] /tournament-publish-results force-published results by=%s", itx.user.id)
 
 
 async def setup(bot: core.Genji) -> None:

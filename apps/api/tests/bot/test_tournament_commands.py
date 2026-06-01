@@ -265,6 +265,79 @@ async def test_reroll_dispatch_explicit_code_calls_choose() -> None:
 
 
 # ---------------------------------------------------------------------------
+# publish-results gate + dispatch (D-03 / T-12.1-14)
+# ---------------------------------------------------------------------------
+
+
+class _StubConfirmationView:
+    """A stand-in ConfirmationView whose confirmed verdict is preset.
+
+    The real view defers to a live Discord interaction + button click; these unit tests
+    invoke the command callback directly, so the view is replaced with a stub that records
+    its construction and returns the preset verdict from ``wait()``.
+    """
+
+    confirmed_value: bool | None = True
+    instances: list[_StubConfirmationView] = []
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.confirmed = type(self).confirmed_value
+        self.original_interaction: Any = None
+        type(self).instances.append(self)
+
+    async def wait(self) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_publish_results_gate_rejects_non_admin_without_api_write(monkeypatch: pytest.MonkeyPatch) -> None:
+    """T-12.1-14: a non-Mod/non-Sensei invoker is rejected and NO force-publish API call occurs."""
+    _StubConfirmationView.confirmed_value = True
+    _StubConfirmationView.instances = []
+    monkeypatch.setattr(_tournaments, "ConfirmationView", _StubConfirmationView)
+
+    cog = object.__new__(TournamentRerollCog)
+    itx = _make_itx(roles=set())  # no admin roles
+
+    with pytest.raises(UserFacingError):
+        await TournamentRerollCog.tournament_publish_results.callback(cog, itx)
+
+    itx.client.api.force_publish_tournament_results.assert_not_called()
+    # the gate is BEFORE the confirmation view (no confirmation even constructed)
+    assert _StubConfirmationView.instances == []
+
+
+@pytest.mark.asyncio
+async def test_publish_results_mod_confirmed_calls_force_publish(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-03: a Mod who confirms triggers force_publish_tournament_results."""
+    _StubConfirmationView.confirmed_value = True
+    _StubConfirmationView.instances = []
+    monkeypatch.setattr(_tournaments, "ConfirmationView", _StubConfirmationView)
+
+    cog = object.__new__(TournamentRerollCog)
+    itx = _make_itx(roles={_MOD_ROLE})
+
+    await TournamentRerollCog.tournament_publish_results.callback(cog, itx)
+
+    itx.client.api.force_publish_tournament_results.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_publish_results_cancelled_does_not_call_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Mod who cancels (or the view times out) never reaches the force-publish API."""
+    _StubConfirmationView.confirmed_value = None  # cancelled / timed out
+    _StubConfirmationView.instances = []
+    monkeypatch.setattr(_tournaments, "ConfirmationView", _StubConfirmationView)
+
+    cog = object.__new__(TournamentRerollCog)
+    itx = _make_itx(roles={_SENSEI_ROLE})
+
+    await TournamentRerollCog.tournament_publish_results.callback(cog, itx)
+
+    itx.client.api.force_publish_tournament_results.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # streak zero-state (D-04 via APIHTTPError 404)
 # ---------------------------------------------------------------------------
 

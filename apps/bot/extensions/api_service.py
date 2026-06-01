@@ -1123,6 +1123,22 @@ class APIService:
         r = Route("PATCH", "/tournaments/completions/{tc_id}/reject", tc_id=tc_id)
         return self._request(r, response_model=JobStatusResponse)
 
+    def force_publish_tournament_results(self) -> Response[JobStatusResponse]:
+        """Force-publish the awaiting-results edition's results, abandoning pending runs (D-03).
+
+        The escape hatch for a stuck verification queue: routes the moderator's force-publish
+        to Plan 04's ``PATCH /tournaments/publish-results`` route (``tournaments:write``),
+        which runs the drained path IGNORING remaining in-flight verifications and publishes
+        the results immediately. The route is edition-scoped to the single edition currently
+        ``awaiting_results`` (no id param). The bot never writes the DB — this HTTP call is
+        the only path to the database (CLAUDE.md).
+
+        Returns:
+            Response[JobStatusResponse]: The job status of the forced results publish.
+        """
+        r = Route("PATCH", "/tournaments/publish-results")
+        return self._request(r, response_model=JobStatusResponse)
+
     def get_records_filtered(  # noqa: PLR0913
         self,
         code: OverwatchCode | None = None,
