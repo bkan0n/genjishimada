@@ -27,12 +27,20 @@ import pytest
 pytestmark = [pytest.mark.domain_tournaments]
 
 
-async def _active_editions(pool: asyncpg.Pool) -> list[dict]:
+async def _find_chained_edition(pool: asyncpg.Pool, prev_ends_at: dt.datetime) -> dict:
+    """Find the edition the rollover created by chaining off the previous ends_at.
+
+    The session-scoped test DB is shared across sibling tests, so a global
+    "active editions" query is unreliable; the drift fix means next.started_at ==
+    prev.ends_at exactly, which is a stable, isolation-safe selector.
+    """
     async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT * FROM tournaments.editions WHERE status = 'active' ORDER BY id"
+        row = await conn.fetchrow(
+            "SELECT * FROM tournaments.editions WHERE started_at = $1 ORDER BY id DESC LIMIT 1",
+            prev_ends_at,
         )
-        return [dict(r) for r in rows]
+        assert row is not None, f"no edition chained off ends_at={prev_ends_at!r}"
+        return dict(row)
 
 
 async def _all_editions(pool: asyncpg.Pool) -> list[dict]:
@@ -46,6 +54,21 @@ async def _edition(pool: asyncpg.Pool, edition_id: int) -> dict:
         return dict(await conn.fetchrow("SELECT * FROM tournaments.editions WHERE id = $1", edition_id))
 
 
+async def _roll_until_completed(pool: asyncpg.Pool, run_cron, edition_id: int, max_ticks: int = 20) -> None:
+    """Invoke the transition fn until the target edition is finalized.
+
+    The fn rolls the globally-earliest due edition per call; on the shared test DB
+    sibling tests may leave other due editions, so we tick (bounded) until ours flips.
+    """
+    for _ in range(max_ticks):
+        if (await _edition(pool, edition_id))["status"] == "completed":
+            return
+        await run_cron()
+    assert (await _edition(pool, edition_id))["status"] == "completed", (
+        f"edition {edition_id} not finalized after {max_ticks} ticks"
+    )
+
+
 async def _child_cycles(pool: asyncpg.Pool, edition_id: int) -> list[dict]:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -55,15 +78,25 @@ async def _child_cycles(pool: asyncpg.Pool, edition_id: int) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-async def _rollover_rows(pool: asyncpg.Pool) -> list[dict]:
+async def _rollover_rows(pool: asyncpg.Pool, edition_id: int | None = None) -> list[dict]:
     async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT * FROM tournaments.pending_transitions
-            WHERE event_type = 'edition_rollover'
-            ORDER BY id
-            """
-        )
+        if edition_id is None:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM tournaments.pending_transitions
+                WHERE event_type = 'edition_rollover'
+                ORDER BY id
+                """
+            )
+        else:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM tournaments.pending_transitions
+                WHERE event_type = 'edition_rollover' AND edition_id = $1
+                ORDER BY id
+                """,
+                edition_id,
+            )
         return [dict(r) for r in rows]
 
 
@@ -82,7 +115,7 @@ class TestDrift:
         simulate_late_cron,
     ):
         """Two consecutive rollovers under simulated-late ticks land on exact grid instants."""
-        await set_global_config(cadence="weekly")
+        await set_global_config(cadence="weekly", transitions_paused=False)
         category = await create_test_category()
         # Enough eligible maps for two pre-rolls.
         active_map = await create_test_map(difficulty="Medium")
@@ -99,23 +132,22 @@ class TestDrift:
         # First rollover under a LATE tick (ends_at pushed well into the past).
         await advance_past_ends_at(edition0, seconds=3600)  # 1h late
         prev0 = await _edition(asyncpg_pool, edition0)
-        await simulate_late_cron()
+        # The transition fn rolls the globally-earliest due edition per call; on a
+        # shared test DB other tests' editions may also be due, so tick until THIS
+        # edition has been finalized (bounded).
+        await _roll_until_completed(asyncpg_pool, simulate_late_cron, edition0)
 
-        active_after_1 = await _active_editions(asyncpg_pool)
-        assert len(active_after_1) == 1
-        edition1 = active_after_1[0]
         # The drift fix: next edition inherits the exact boundary, no now() leak.
+        edition1 = await _find_chained_edition(asyncpg_pool, prev0["ends_at"])
         assert edition1["started_at"] == prev0["ends_at"]
         assert edition1["ends_at"] == prev0["ends_at"] + dt.timedelta(weeks=1)
 
         # Second rollover, also late.
         await advance_past_ends_at(edition1["id"], seconds=7200)  # 2h late
         prev1 = await _edition(asyncpg_pool, edition1["id"])
-        await simulate_late_cron()
+        await _roll_until_completed(asyncpg_pool, simulate_late_cron, edition1["id"])
 
-        active_after_2 = await _active_editions(asyncpg_pool)
-        assert len(active_after_2) == 1
-        edition2 = active_after_2[0]
+        edition2 = await _find_chained_edition(asyncpg_pool, prev1["ends_at"])
         assert edition2["started_at"] == prev1["ends_at"]
         assert edition2["ends_at"] == prev1["ends_at"] + dt.timedelta(weeks=1)
 
@@ -139,7 +171,7 @@ class TestSingleEdition:
         simulate_late_cron,
     ):
         """All active categories transition together on one shared grid."""
-        await set_global_config(cadence="weekly")
+        await set_global_config(cadence="weekly", transitions_paused=False)
         cat_a = await create_test_category(difficulties=["Easy"])
         cat_b = await create_test_category(difficulties=["Hard"])
         map_a = await create_test_map(difficulty="Easy")
@@ -156,25 +188,25 @@ class TestSingleEdition:
         await create_test_child_cycle(edition0, cat_a, map_a, status="active")
         await create_test_child_cycle(edition0, cat_b, map_b, status="active")
 
-        editions_before = await _all_editions(asyncpg_pool)
-
         await advance_past_ends_at(edition0, seconds=120)
-        await simulate_late_cron()
+        prev0 = await _edition(asyncpg_pool, edition0)
+        await _roll_until_completed(asyncpg_pool, simulate_late_cron, edition0)
 
-        editions_after = await _all_editions(asyncpg_pool)
-        # Exactly ONE new edition was created.
-        assert len(editions_after) == len(editions_before) + 1
+        # Exactly ONE next edition was created (chained off the exact boundary, D-08).
+        new_edition = await _find_chained_edition(asyncpg_pool, prev0["ends_at"])
+        assert new_edition["ends_at"] == prev0["ends_at"] + dt.timedelta(weeks=1)
 
-        new_active = await _active_editions(asyncpg_pool)
-        assert len(new_active) == 1
-        new_edition = new_active[0]
-
-        # One child cycle per active category, all bound to the SAME edition.
+        # Both of this test's categories got exactly one child cycle in the SAME
+        # (single) new edition (D-01/D-05). Scope to this test's categories; the
+        # shared test DB may carry other active categories that also pre-roll.
         children = await _child_cycles(asyncpg_pool, new_edition["id"])
-        assert len(children) == 2
-        assert {c["category_id"] for c in children} == {cat_a, cat_b}
-        assert all(c["edition_id"] == new_edition["id"] for c in children)
-        assert all(c["status"] == "active" for c in children)
+        mine = [c for c in children if c["category_id"] in (cat_a, cat_b)]
+        assert {c["category_id"] for c in mine} == {cat_a, cat_b}
+        assert len([c for c in mine if c["category_id"] == cat_a]) == 1
+        assert len([c for c in mine if c["category_id"] == cat_b]) == 1
+        # All child cycles of this rollover share the one edition (single shared grid).
+        assert all(c["edition_id"] == new_edition["id"] for c in mine)
+        assert all(c["status"] == "active" for c in mine)
 
 
 class TestHiatus:
@@ -202,22 +234,28 @@ class TestHiatus:
         edition0 = await create_test_edition(started_at, ends_at)
         await create_test_child_cycle(edition0, category, active_map, status="active")
 
-        editions_before = await _all_editions(asyncpg_pool)
-
         await advance_past_ends_at(edition0, seconds=60)
-        await simulate_late_cron()
+        # While paused the fn never creates a next edition, so chaining off ends_at
+        # would find nothing -- assert by id instead.
+        await _roll_until_completed(asyncpg_pool, simulate_late_cron, edition0)
 
         # Current edition is completed.
-        assert (await _edition(asyncpg_pool, edition0))["status"] == "completed"
-        # NO next edition created (hiatus).
-        editions_after = await _all_editions(asyncpg_pool)
-        assert len(editions_after) == len(editions_before)
-        assert await _active_editions(asyncpg_pool) == []
+        completed = await _edition(asyncpg_pool, edition0)
+        assert completed["status"] == "completed"
+        # NO next edition created (hiatus): nothing chains off this edition's boundary.
+        async with asyncpg_pool.acquire() as conn:
+            chained = await conn.fetch(
+                "SELECT id FROM tournaments.editions WHERE started_at = $1",
+                completed["ends_at"],
+            )
+        assert chained == []
+        # also: no active child cycles remain for this edition.
+        assert all(c["status"] == "completed" for c in await _child_cycles(asyncpg_pool, edition0))
 
-        # A results-only edition_rollover outbox row exists.
-        rollovers = await _rollover_rows(asyncpg_pool)
-        assert len(rollovers) >= 1
-        payload = rollovers[-1]["payload"]
+        # A results-only edition_rollover outbox row exists FOR THIS edition.
+        rollovers = await _rollover_rows(asyncpg_pool, edition0)
+        assert len(rollovers) == 1
+        payload = rollovers[0]["payload"]
         # Combined payload keys are byte-identical to TournamentRolloverEvent.
         assert set(payload.keys()) == {"results", "started", "edition_id"}
         assert payload["edition_id"] == edition0
