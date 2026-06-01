@@ -470,6 +470,13 @@ class CompletionsService(BaseService):
         _ = cycle_id  # reserved for the mod-review embed enrichment (11-05)
         idempotency_key = f"tournament:submission:{user_id}:{tournament_completion_id}"
 
+        # WR-02: narrow the broad try to the OCR HTTP call + match decision ONLY.
+        # The actual verify (which runs its own DB txn + XP grant + publish) must
+        # happen OUTSIDE this try, otherwise a post-commit publish failure inside
+        # verify_tournament_completion would fall through to the mod-review
+        # fallback below and double-surface the run (auto-verified in the DB AND
+        # queued for manual review).
+        ocr_matched = False
         try:
             hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
             user_name_response = await users.fetch_all_user_names(user_id)
@@ -496,34 +503,7 @@ class CompletionsService(BaseService):
             code_match = code == extracted.code
             time_match = time == extracted.time
             user_match = extracted.name in user_names
-
-            if code_match and time_match and user_match:
-                await self.verify_tournament_completion(tournament_completion_id)
-                return
-
-            await self._publish_tournament_mod_review(
-                tournament_completion_id=tournament_completion_id,
-                cycle_id=cycle_id,
-                user_id=user_id,
-                time=time,
-                screenshot=screenshot,
-                idempotency_key=idempotency_key,
-            )
-
-            if notifications:
-                await notifications.create_and_dispatch(
-                    data=NotificationCreateRequest(
-                        user_id=user_id,
-                        event_type=NotificationEventType.AUTO_VERIFY_FAILED,  # type: ignore
-                        title="Auto-Verification Failed",
-                        body=(
-                            f"Auto-verification failed for your tournament completion on {code}. "
-                            "Your submission is now awaiting manual verification."
-                        ),
-                        metadata={"tournament_completion_id": tournament_completion_id, "map_code": code},
-                    ),
-                    headers=Headers(),
-                )
+            ocr_matched = code_match and time_match and user_match
 
         except Exception as e:
             log.exception(
@@ -556,6 +536,38 @@ class CompletionsService(BaseService):
                     ),
                     headers=Headers(),
                 )
+            return
+
+        # OCR succeeded. Act on the decision OUTSIDE the broad except so a
+        # verify-side failure surfaces normally instead of triggering a
+        # contradictory mod-review fallback (WR-02).
+        if ocr_matched:
+            await self.verify_tournament_completion(tournament_completion_id)
+            return
+
+        await self._publish_tournament_mod_review(
+            tournament_completion_id=tournament_completion_id,
+            cycle_id=cycle_id,
+            user_id=user_id,
+            time=time,
+            screenshot=screenshot,
+            idempotency_key=idempotency_key,
+        )
+
+        if notifications:
+            await notifications.create_and_dispatch(
+                data=NotificationCreateRequest(
+                    user_id=user_id,
+                    event_type=NotificationEventType.AUTO_VERIFY_FAILED,  # type: ignore
+                    title="Auto-Verification Failed",
+                    body=(
+                        f"Auto-verification failed for your tournament completion on {code}. "
+                        "Your submission is now awaiting manual verification."
+                    ),
+                    metadata={"tournament_completion_id": tournament_completion_id, "map_code": code},
+                ),
+                headers=Headers(),
+            )
 
     async def _publish_tournament_mod_review(  # noqa: PLR0913
         self,
@@ -1133,12 +1145,24 @@ class CompletionsService(BaseService):
             verified=True,
             time=float(verified_row["time"]),
         )
-        await self.publish_message(
-            routing_key="api.tournament.verification.changed",
-            data=event,
-            headers=headers,
-            idempotency_key=f"tournament:verify:{tournament_completion_id}",
-        )
+        # WR-01: DB txn is already committed; a publish failure must be logged at
+        # exception level (not silently dropped) so a missing verification-changed
+        # event is reconcilable.
+        try:
+            await self.publish_message(
+                routing_key="api.tournament.verification.changed",
+                data=event,
+                headers=headers,
+                idempotency_key=f"tournament:verify:{tournament_completion_id}",
+            )
+        except Exception:
+            log.exception(
+                "Failed to publish tournament verification-changed event after commit "
+                "(tournament_completion_id=%s) — DB is committed but the bot was not "
+                "notified; reconcile manually.",
+                tournament_completion_id,
+            )
+            raise
 
     async def get_completions_leaderboard(
         self, code: str, page_number: int, page_size: int
