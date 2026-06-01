@@ -143,7 +143,6 @@ class TournamentService(BaseService):
             row = await self._tournament_repo.create_category(
                 name=data.name,
                 difficulties=[str(d) for d in data.difficulties],
-                cycle_frequency=data.cycle_frequency,
                 participation_xp=data.participation_xp,
                 placement_xp=msgspec.json.encode(data.placement_xp).decode(),
                 streak_xp=msgspec.json.encode(data.streak_xp).decode(),
@@ -225,8 +224,6 @@ class TournamentService(BaseService):
             updates["name"] = data.name
         if data.difficulties is not msgspec.UNSET:
             updates["difficulties"] = [str(d) for d in data.difficulties]
-        if data.cycle_frequency is not msgspec.UNSET:
-            updates["cycle_frequency"] = data.cycle_frequency
         if data.participation_xp is not msgspec.UNSET:
             updates["participation_xp"] = data.participation_xp
         if data.placement_xp is not msgspec.UNSET:

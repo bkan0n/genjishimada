@@ -66,6 +66,18 @@ class DebugRouteDisabledError(TournamentsError):
         super().__init__("Debug cycle-length override is disabled in production.")
 
 
+class NoActiveEditionError(TournamentsError):
+    """No tournament edition is currently active (D-05).
+
+    Raised when ``GET /editions/active`` is requested but no edition has status
+    'active'. The shared grid-anchored timing (started_at/ends_at) only exists
+    while an edition is running; controllers map this to HTTP 404.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("No active tournament edition exists.")
+
+
 class InvalidTimezoneError(TournamentsError):
     """The supplied anchor timezone is not a known IANA timezone name (T-12-04).
 

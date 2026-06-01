@@ -102,6 +102,7 @@ from genjishimada_sdk.tournaments import (
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
     TournamentCycleListResponse,
+    TournamentEditionResponse,
     TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
     TournamentStreakResponse,
@@ -1712,6 +1713,19 @@ class APIService:
         """
         r = Route("GET", "/tournaments/categories/{category_id}", category_id=category_id)
         return self._request(r, response_model=TournamentCategoryResponse)
+
+    def get_active_edition(self) -> Response[TournamentEditionResponse]:
+        """Get the active tournament edition's stored shared timing (D-05/D-08).
+
+        Returns the single active edition's grid-anchored started_at/ends_at. The
+        ``ends_at`` is STORED (not derived from cadence) — callers must read it here
+        rather than recomputing from started_at + cadence (closes frontend-spec §8).
+
+        Returns:
+            Response[TournamentEditionResponse]: The active edition timing.
+        """
+        r = Route("GET", "/tournaments/editions/active")
+        return self._request(r, response_model=TournamentEditionResponse)
 
     def get_tournament_streak(self, user_id: int) -> Response[TournamentStreakResponse]:
         """Get a user's tournament participation streak.

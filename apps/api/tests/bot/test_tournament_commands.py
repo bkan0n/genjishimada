@@ -37,6 +37,7 @@ from genjishimada_sdk.tournaments import (
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
     TournamentCycleWithWinnerResponse,
+    TournamentEditionResponse,
     TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
     TournamentStreakResponse,
@@ -110,11 +111,12 @@ _SENSEI_ROLE = 222
 
 
 def _sample_category() -> TournamentCategoryResponse:
+    # Cadence is GLOBAL since migration 0024 — the category struct no longer carries
+    # a per-category cycle_frequency (D-02).
     return TournamentCategoryResponse(
         id=1,
         name="Hard",
         difficulties=["Hard"],
-        cycle_frequency="weekly",
         participation_xp=100,
         placement_xp=[],
         streak_xp=[],
@@ -122,6 +124,17 @@ def _sample_category() -> TournamentCategoryResponse:
         is_active=True,
         created_at=_NOW,
         updated_at=_NOW,
+    )
+
+
+def _active_edition() -> TournamentEditionResponse:
+    """Active edition with STORED started_at/ends_at (read by /tournament info, D-08)."""
+    return TournamentEditionResponse(
+        id=1,
+        started_at=_NOW,
+        ends_at=_NOW + dt.timedelta(days=7),
+        status="active",
+        created_at=_NOW,
     )
 
 
@@ -398,6 +411,7 @@ async def test_info_renders_card_for_active_cycle() -> None:
     itx = _make_itx()
     itx.client.api.get_tournament_category.return_value = _sample_category()
     itx.client.api.list_tournament_cycles.return_value = _cycle_list([_active_cycle()])
+    itx.client.api.get_active_edition.return_value = _active_edition()
     itx.client.api.get_map.return_value = SimpleNamespace(
         difficulty="Hard", map_name="Hanamura", map_banner="https://cdn.genji.pk/b.png"
     )
@@ -405,6 +419,8 @@ async def test_info_renders_card_for_active_cycle() -> None:
     await TournamentCommandCog.info.callback(cog, itx, 1)
 
     itx.client.api.get_map.assert_awaited_once_with(code="ABCD1")
+    # D-08: the Ends line reads the STORED edition ends_at, not a locally-derived value.
+    itx.client.api.get_active_edition.assert_awaited_once()
     rendered = _view_text(itx.edit_original_response.await_args.kwargs["view"])
     assert "Hanamura" in rendered
     assert "ABCD1" in rendered

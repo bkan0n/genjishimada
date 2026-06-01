@@ -28,7 +28,6 @@ private attribute would silently never register the consumers.
 from __future__ import annotations
 
 import asyncio
-import datetime as dt
 import os
 from http import HTTPStatus
 from logging import getLogger
@@ -626,10 +625,16 @@ class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
             f"**Category:** {category_data.name}",
         ]
 
-        # OQ1: the cycles list has no ends_at — compute it locally from started_at and the
-        # category's cadence (weekly → 7d, biweekly → 14d). No API change required.
-        if active.started_at is not None:
-            ends_at = active.started_at + dt.timedelta(days=7 if category_data.cycle_frequency == "weekly" else 14)
+        # D-05/D-08: read the STORED edition ends_at instead of deriving it from
+        # cadence locally (closes frontend-spec §8). Cadence is global since 0024, so
+        # the category no longer carries cycle_frequency. A 404 (no active edition)
+        # simply omits the Ends line rather than failing the info card.
+        try:
+            edition = await itx.client.api.get_active_edition()
+        except APIHTTPError:
+            edition = None
+        if edition is not None:
+            ends_at = edition.ends_at
             lines.append(f"**Ends:** {discord.utils.format_dt(ends_at, 'R')} ({discord.utils.format_dt(ends_at, 'F')})")
 
         view = ui.LayoutView(timeout=None)

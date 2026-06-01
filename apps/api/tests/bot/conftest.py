@@ -144,11 +144,11 @@ def fake_guild(fake_role: FakeRole, fake_member: FakeMember) -> FakeGuild:
 def sample_category() -> TournamentCategoryResponse:
     """Return a sample TournamentCategoryResponse with a champion role id."""
     now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    # Cadence is GLOBAL since migration 0024 — no per-category cycle_frequency (D-02).
     return TournamentCategoryResponse(
         id=1,
         name="Hard",
         difficulties=["Hard"],
-        cycle_frequency="weekly",
         participation_xp=100,
         placement_xp=[],
         streak_xp=[],

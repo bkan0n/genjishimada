@@ -87,7 +87,6 @@ class TournamentRepository(BaseRepository):
         self,
         name: str,
         difficulties: list[str],
-        cycle_frequency: str,
         participation_xp: int,
         placement_xp: object,
         streak_xp: object,
@@ -97,10 +96,12 @@ class TournamentRepository(BaseRepository):
     ) -> dict:
         """Create a tournament category.
 
+        Cadence is GLOBAL since migration 0024 (``tournaments.config.cadence``,
+        D-02); categories no longer carry a per-category ``cycle_frequency``.
+
         Args:
             name: Category display name.
             difficulties: Array of DifficultyTop values.
-            cycle_frequency: Rotation frequency (weekly or biweekly).
             participation_xp: Flat XP bonus for first submission per cycle.
             placement_xp: JSON array of placement XP tiers.
             streak_xp: JSON array of streak XP thresholds.
@@ -113,15 +114,15 @@ class TournamentRepository(BaseRepository):
         Raises:
             UniqueConstraintViolationError: If category name already exists.
             RepoFKError: If a foreign key reference is invalid.
-            CheckConstraintViolationError: If cycle_frequency value is invalid.
+            CheckConstraintViolationError: If a check constraint is violated.
         """
         _conn = self._get_connection(conn)
         query = """
             INSERT INTO tournaments.categories (
-                name, difficulties, cycle_frequency, participation_xp,
+                name, difficulties, participation_xp,
                 placement_xp, streak_xp, champion_role_id
             )
-            VALUES ($1, $2::text[], $3, $4, $5::jsonb, $6::jsonb, $7)
+            VALUES ($1, $2::text[], $3, $4::jsonb, $5::jsonb, $6)
             RETURNING *
         """
         try:
@@ -129,7 +130,6 @@ class TournamentRepository(BaseRepository):
                 query,
                 name,
                 difficulties,
-                cycle_frequency,
                 participation_xp,
                 placement_xp,
                 streak_xp,

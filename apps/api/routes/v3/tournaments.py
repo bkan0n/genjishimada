@@ -8,7 +8,6 @@ import litestar
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.tournaments import (
     TournamentCategoryCreateRequest,
-    TournamentCategoryLifecycleResponse,
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
@@ -18,6 +17,7 @@ from genjishimada_sdk.tournaments import (
     TournamentDebugCycleLengthRequest,
     TournamentEditionResponse,
     TournamentLeaderboardEntryResponse,
+    TournamentLifecycleResponse,
     TournamentNextCycleResponse,
     TournamentPauseRequest,
     TournamentStreakResponse,
@@ -44,7 +44,9 @@ from services.exceptions.tournaments import (
     CategoryNotFoundError,
     CycleAlreadyLiveError,
     DebugRouteDisabledError,
+    InvalidTimezoneError,
     MapNotEligibleError,
+    NoActiveEditionError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
@@ -102,14 +104,28 @@ class TournamentsController(litestar.Controller):
     ) -> TournamentConfigResponse:
         """Update tournament config.
 
+        This is the GLOBAL config mutation surface: ``cadence`` (D-02) and the grid
+        anchor (``anchor_weekday``/``anchor_time``/``anchor_tz``, D-07) are mutated
+        here. An invalid ``anchor_tz`` is rejected before persisting (T-12-04/T-12-10)
+        so it can never reach the grid-boundary PL/pgSQL ``AT TIME ZONE``.
+
         Args:
             tournament_service: Tournament service.
             data: Config update request.
 
         Returns:
             Updated tournament configuration.
+
+        Raises:
+            CustomHTTPException: 422 if the supplied anchor timezone is unknown.
         """
-        return await tournament_service.update_config(data)
+        try:
+            return await tournament_service.update_config(data)
+        except InvalidTimezoneError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            ) from e
 
     @litestar.post(
         path="/categories",
@@ -462,30 +478,28 @@ class TournamentsController(litestar.Controller):
             ) from e
 
     @litestar.post(
-        path="/categories/{category_id:int}/bootstrap",
-        summary="Bootstrap First Cycle",
+        path="/bootstrap",
+        summary="Bootstrap First Edition",
         description=(
-            "Manually activate the FIRST cycle for a category so it then rolls over "
-            "automatically via the pg_cron transition machinery. Idempotent-safe: a "
-            "category with any live or pending cycle returns 409."
+            "Manually activate the FIRST grid-snapped edition (one edition + one child "
+            "cycle per active category) so it then rolls over automatically via the "
+            "pg_cron transition machinery. Idempotent-safe: an active edition already "
+            "existing returns 409. The shared started_at is grid-snapped (never now())."
         ),
         status_code=HTTP_201_CREATED,
         opt={"required_scopes": {"tournaments:write"}},
     )
-    async def bootstrap_cycle(
+    async def bootstrap_edition(
         self,
         tournament_service: TournamentService,
-        category_id: Annotated[int, Parameter(description="Category ID")],
     ) -> TournamentEditionResponse:
-        """Activate the first grid-snapped edition (12-04 re-paths this route).
+        """Activate the first grid-snapped edition (config-level, D-13a).
 
-        The ``category_id`` path param is retained for route compatibility but is
-        ignored: bootstrap now creates ONE edition spanning all active categories
-        (D-13a). The 12-04 route wave moves this to a config-level path.
+        Bootstrap creates ONE edition spanning all active categories; the timing is
+        shared on the edition (started_at/ends_at) rather than per-cycle.
 
         Args:
             tournament_service: Tournament service.
-            category_id: Ignored (edition bootstrap is global since 0024).
 
         Returns:
             The created active edition.
@@ -495,12 +509,7 @@ class TournamentsController(litestar.Controller):
                 category has no eligible maps.
         """
         try:
-            return await tournament_service.bootstrap_cycle(category_id)
-        except CategoryNotFoundError as e:
-            raise CustomHTTPException(
-                status_code=HTTP_404_NOT_FOUND,
-                detail=str(e),
-            ) from e
+            return await tournament_service.bootstrap_edition()
         except CycleAlreadyLiveError as e:
             raise CustomHTTPException(
                 status_code=HTTP_409_CONFLICT,
@@ -512,13 +521,14 @@ class TournamentsController(litestar.Controller):
                 detail=str(e),
             ) from e
 
-    @litestar.post(
-        path="/categories/{category_id:int}/pause",
-        summary="Pause or Resume Cycle Transitions",
+    @litestar.patch(
+        path="/pause",
+        summary="Pause or Resume Edition Transitions",
         description=(
-            "Pause (paused=true) or resume (paused=false) automatic cycle transitions "
-            "for a category. Paused categories are skipped by the scheduled transition "
-            "function; resuming restores the normal weekly/biweekly cadence."
+            "GLOBAL hiatus lever (D-03/D-12): pause (paused=true) or resume "
+            "(paused=false) automatic edition transitions. While paused the active "
+            "edition still runs its full term; only creation of the NEXT edition is "
+            "suppressed at the boundary. Resuming restores the normal cadence."
         ),
         status_code=HTTP_200_OK,
         opt={"required_scopes": {"tournaments:write"}},
@@ -526,38 +536,26 @@ class TournamentsController(litestar.Controller):
     async def set_transitions_paused(
         self,
         tournament_service: TournamentService,
-        category_id: Annotated[int, Parameter(description="Category ID")],
         data: Annotated[TournamentPauseRequest, Body(title="Pause")],
-    ) -> TournamentCategoryLifecycleResponse:
-        """Pause or resume automatic cycle transitions for a category.
+    ) -> TournamentLifecycleResponse:
+        """Pause or resume automatic edition transitions (GLOBAL).
 
         Args:
             tournament_service: Tournament service.
-            category_id: Category ID.
             data: Request with the paused flag.
 
         Returns:
-            The updated lifecycle state.
-
-        Raises:
-            CustomHTTPException: 404 if category not found.
+            The updated global lifecycle state.
         """
-        try:
-            _ = category_id  # ignored: pause is global since 0024 (12-04 re-paths)
-            return await tournament_service.set_transitions_paused(data.paused)
-        except CategoryNotFoundError as e:
-            raise CustomHTTPException(
-                status_code=HTTP_404_NOT_FOUND,
-                detail=str(e),
-            ) from e
+        return await tournament_service.set_transitions_paused(data.paused)
 
     @litestar.patch(
-        path="/categories/{category_id:int}/debug-cycle-length",
-        summary="Override Cycle Length (DEBUG/TEST ONLY)",
+        path="/debug-cycle-length",
+        summary="Override Edition Length (DEBUG/TEST ONLY)",
         description=(
-            "DEBUG/TEST ONLY: override a category's cycle length in seconds so the next "
+            "DEBUG/TEST ONLY: override the GLOBAL edition length in seconds so the next "
             "transition recomputes from the override. Pass seconds=null to clear the "
-            "override and restore the normal cadence. Rejected in production."
+            "override and restore the normal cadence. Rejected in production (T-12-07)."
         ),
         status_code=HTTP_200_OK,
         opt={"required_scopes": {"tournaments:write"}},
@@ -565,35 +563,61 @@ class TournamentsController(litestar.Controller):
     async def set_debug_cycle_length(
         self,
         tournament_service: TournamentService,
-        category_id: Annotated[int, Parameter(description="Category ID")],
         data: Annotated[TournamentDebugCycleLengthRequest, Body(title="Debug Cycle Length")],
-    ) -> TournamentCategoryLifecycleResponse:
-        """Override a category's cycle length in seconds (DEBUG/TEST ONLY).
+    ) -> TournamentLifecycleResponse:
+        """Override the GLOBAL edition length in seconds (DEBUG/TEST ONLY).
 
         Args:
             tournament_service: Tournament service.
-            category_id: Category ID.
             data: Request with the seconds override (None clears it).
 
         Returns:
-            The updated lifecycle state.
+            The updated global lifecycle state.
 
         Raises:
-            CustomHTTPException: 403 if disabled in production, 404 if category not found.
+            CustomHTTPException: 403 if disabled in production.
         """
         try:
-            _ = category_id  # ignored: debug lever is global since 0024 (12-04 re-paths)
             return await tournament_service.set_debug_cycle_length(data.seconds)
         except DebugRouteDisabledError as e:
             raise CustomHTTPException(
                 status_code=HTTP_403_FORBIDDEN,
                 detail=str(e),
             ) from e
-        except CategoryNotFoundError as e:
+
+    @litestar.get(
+        path="/editions/active",
+        summary="Get Active Edition",
+        description=(
+            "Return the single active edition's shared grid-anchored timing "
+            "(id/started_at/ends_at/status). ``ends_at`` is STORED, not derived — the "
+            "frontend reads it here instead of computing it (D-05/D-08, closes "
+            "frontend-spec §8)."
+        ),
+        opt={"required_scopes": {"tournaments:read"}},
+    )
+    async def get_active_edition(
+        self,
+        tournament_service: TournamentService,
+    ) -> TournamentEditionResponse:
+        """Return the active edition's stored shared timing.
+
+        Args:
+            tournament_service: Tournament service.
+
+        Returns:
+            The active edition (id/started_at/ends_at/status/created_at).
+
+        Raises:
+            CustomHTTPException: 404 if no edition is currently active.
+        """
+        edition = await tournament_service.fetch_active_edition()
+        if edition is None:
             raise CustomHTTPException(
                 status_code=HTTP_404_NOT_FOUND,
-                detail=str(e),
-            ) from e
+                detail=str(NoActiveEditionError()),
+            )
+        return edition
 
     @litestar.patch(
         path="/completions/{tournament_completion_id:int}/verify",

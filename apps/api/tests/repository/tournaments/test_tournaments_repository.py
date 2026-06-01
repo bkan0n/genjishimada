@@ -44,23 +44,14 @@ class TestUpdateConfig:
 # =============================================================================
 
 
-# NOTE (12-01 deferred-items): migration 0024 dropped per-category cycle_frequency
-# (cadence is now global on tournaments.config, D-02). The create_category repo
-# method + its TournamentCategoryCreateRequest service call still reference the
-# dropped column; the coordinated rewrite is owned by the service wave (12-03).
-# These two tests are xfail-by-design until then so this repo-only plan's file is
-# green without dragging the service refactor into scope.
-@pytest.mark.xfail(
-    reason="create_category still inserts dropped cycle_frequency column; service-wave rewrite owns this (12-03)",
-    raises=Exception,
-    strict=True,
-)
+# Migration 0024 dropped per-category cycle_frequency (cadence is now GLOBAL on
+# tournaments.config, D-02). The route wave (12-04) completed the coordinated repo +
+# service + SDK rewrite: create_category no longer accepts cycle_frequency.
 class TestCreateCategory:
     async def test_create_category_returns_dict(self, repository: TournamentRepository):
         result = await repository.create_category(
             name="Test-Create-Cat",
             difficulties=["Hard"],
-            cycle_frequency="weekly",
             participation_xp=50,
             placement_xp="[]",
             streak_xp="[]",
@@ -70,13 +61,13 @@ class TestCreateCategory:
         assert "id" in result
         assert result["name"] == "Test-Create-Cat"
         assert result["difficulties"] == ["Hard"]
-        assert "cycle_frequency" in result
+        # Cadence is global since 0024 — the category row no longer carries it.
+        assert "cycle_frequency" not in result
 
     async def test_create_category_duplicate_name_raises(self, repository: TournamentRepository):
         await repository.create_category(
             name="DuplicateCat",
             difficulties=["Medium"],
-            cycle_frequency="weekly",
             participation_xp=100,
             placement_xp="[]",
             streak_xp="[]",
@@ -86,7 +77,6 @@ class TestCreateCategory:
             await repository.create_category(
                 name="DuplicateCat",
                 difficulties=["Hard"],
-                cycle_frequency="weekly",
                 participation_xp=50,
                 placement_xp="[]",
                 streak_xp="[]",

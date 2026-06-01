@@ -69,7 +69,8 @@ class TestCreateCategory:
         data = response.json()
         assert data["name"] == name
         assert data["difficulties"] == ["Easy"]
-        assert data["cycle_frequency"] == "weekly"
+        # Cadence is GLOBAL since migration 0024 — categories no longer carry it.
+        assert "cycle_frequency" not in data
         assert data["is_active"] is True
         assert "id" in data
         assert "created_at" in data
@@ -83,7 +84,6 @@ class TestCreateCategory:
             json={
                 "name": name,
                 "difficulties": ["Hard", "Very Hard"],
-                "cycle_frequency": "biweekly",
                 "participation_xp": 25,
                 "placement_xp": [{"place": 1, "xp": 100}],
                 "streak_xp": [{"threshold": 3, "xp": 50}],
@@ -95,7 +95,8 @@ class TestCreateCategory:
         data = response.json()
         assert data["name"] == name
         assert data["difficulties"] == ["Hard", "Very Hard"]
-        assert data["cycle_frequency"] == "biweekly"
+        # Cadence is GLOBAL since migration 0024 — set it via PATCH /config, not here.
+        assert "cycle_frequency" not in data
         assert data["participation_xp"] == 25
         assert data["placement_xp"] == [{"place": 1, "xp": 100}]
         assert data["streak_xp"] == [{"threshold": 3, "xp": 50}]

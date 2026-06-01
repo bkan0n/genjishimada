@@ -134,11 +134,14 @@ class TournamentConfigPatchRequest(Struct, kw_only=True):
 class TournamentCategoryResponse(Struct):
     """Full tournament category with XP configuration.
 
+    Migration 0024 moved cadence OFF the category onto the global config singleton
+    (``tournaments.config.cadence``, D-02); categories no longer carry their own
+    ``cycle_frequency``.
+
     Attributes:
         id: Category identifier.
         name: Category display name.
         difficulties: Difficulty groupings this category includes.
-        cycle_frequency: How often cycles rotate.
         participation_xp: Flat XP bonus for first submission per cycle.
         placement_xp: Placement-based XP tiers.
         streak_xp: Streak-based XP thresholds.
@@ -151,7 +154,6 @@ class TournamentCategoryResponse(Struct):
     id: int
     name: str
     difficulties: list[DifficultyTop]
-    cycle_frequency: CycleFrequency
     participation_xp: int
     placement_xp: list[PlacementXpTier]
     streak_xp: list[StreakXpTier]
@@ -164,10 +166,12 @@ class TournamentCategoryResponse(Struct):
 class TournamentCategoryCreateRequest(Struct):
     """Request payload for creating a tournament category.
 
+    Cadence is GLOBAL (``tournaments.config.cadence``, D-02) since migration 0024 —
+    a category create no longer accepts a per-category ``cycle_frequency``.
+
     Attributes:
         name: Category display name.
         difficulties: Difficulty groupings this category includes.
-        cycle_frequency: How often cycles rotate.
         participation_xp: Flat XP bonus for first submission per cycle.
         placement_xp: Placement-based XP tiers.
         streak_xp: Streak-based XP thresholds.
@@ -176,7 +180,6 @@ class TournamentCategoryCreateRequest(Struct):
 
     name: str
     difficulties: list[DifficultyTop]
-    cycle_frequency: CycleFrequency = "weekly"
     participation_xp: int = 0
     placement_xp: list[PlacementXpTier] = []
     streak_xp: list[StreakXpTier] = []
@@ -186,10 +189,12 @@ class TournamentCategoryCreateRequest(Struct):
 class TournamentCategoryPatchRequest(Struct, kw_only=True):
     """Partial update for a tournament category.
 
+    Cadence is GLOBAL (``tournaments.config.cadence``, D-02) since migration 0024 —
+    a category PATCH no longer accepts a per-category ``cycle_frequency``.
+
     Attributes:
         name: Category display name.
         difficulties: Difficulty groupings this category includes.
-        cycle_frequency: How often cycles rotate.
         participation_xp: Flat XP bonus for first submission per cycle.
         placement_xp: Placement-based XP tiers.
         streak_xp: Streak-based XP thresholds.
@@ -199,7 +204,6 @@ class TournamentCategoryPatchRequest(Struct, kw_only=True):
 
     name: str | UnsetType = UNSET
     difficulties: list[DifficultyTop] | UnsetType = UNSET
-    cycle_frequency: CycleFrequency | UnsetType = UNSET
     participation_xp: int | UnsetType = UNSET
     placement_xp: list[PlacementXpTier] | UnsetType = UNSET
     streak_xp: list[StreakXpTier] | UnsetType = UNSET
