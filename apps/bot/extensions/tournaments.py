@@ -764,7 +764,12 @@ class TournamentRerollCog(BaseCog):
         """
         await itx.response.defer(ephemeral=True)
 
-        assert isinstance(itx.user, discord.Member) and itx.guild
+        # Explicit guard (NOT a bare assert): assert is stripped under python -O
+        # and raises an unclassified AssertionError if this command is reached
+        # outside a guild (DM / User App context, which Discord allows even with
+        # @app_commands.guilds). Surface a clean user-facing error instead.
+        if not isinstance(itx.user, discord.Member) or itx.guild is None:
+            raise UserFacingError("This command must be used inside the server.")
         is_mod = (
             itx.user.get_role(itx.client.config.roles.admin.mod) is not None
             or itx.user.get_role(itx.client.config.roles.admin.sensei) is not None
