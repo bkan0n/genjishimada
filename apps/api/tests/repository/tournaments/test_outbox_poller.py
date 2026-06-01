@@ -1,17 +1,20 @@
-"""Integration tests for the tournament outbox poller (07-02).
+"""Integration tests for the tournament outbox poller (07-02 / 12-03).
 
 ``publish_pending_transitions(state)`` selects unpublished
 ``tournaments.pending_transitions`` rows under ``FOR UPDATE SKIP LOCKED`` inside
-one transaction, builds each into its SDK event struct, publishes it via
-``BaseService.publish_message``, and marks it published in the same transaction
-(publish-then-mark = at-least-once, D-11).
+one transaction, builds each ``edition_rollover`` row into ONE
+``TournamentRolloverEvent``, publishes it on ``api.tournament.rollover`` with the
+idempotency key ``tournament:rollover:{edition_id}`` (D-09/D-11), and marks it
+published in the same transaction (publish-then-mark = at-least-once, D-11).
+
+The reward side-effects (``award_cycle_end`` + the non-participant streak reset)
+run ONCE PER CHILD CYCLE — i.e. once per ``event.results`` entry, keyed on
+``entry.cycle_id`` (Pattern 4) — not once per edition.
 
 The poller passes ``Headers({})`` to ``publish_message`` (production path), so to
 exercise it in tests without a live RabbitMQ broker we stub
 ``TournamentOutboxService.publish_message`` -- the same effect as the documented
 ``X-PYTEST-ENABLED=1`` publish skip (base.py), but lets us assert call counts.
-The publish-failure test needs no stub: the failure happens in ``_build_event``
-(``msgspec.convert``) before publish, leaving the row unmarked.
 """
 
 import datetime as dt
@@ -22,6 +25,7 @@ import asyncpg
 import msgspec
 import pytest
 from genjishimada_sdk.internal import JobStatusResponse
+from genjishimada_sdk.tournaments import TournamentRolloverEvent
 from litestar.datastructures import State
 
 import services.tournament_outbox_service as outbox_module
@@ -40,68 +44,46 @@ def _now_iso() -> str:
     return dt.datetime.now(dt.UTC).isoformat()
 
 
-def _started_payload(cycle_id: int, category_id: int, map_id: int) -> str:
-    return json.dumps(
-        {
-            "cycle_id": cycle_id,
-            "category_id": category_id,
-            "map_id": map_id,
-            "map_code": "ABC12",
-            "map_name": "TestMap",
-            "started_at": _now_iso(),
-            "ends_at": _now_iso(),
-        }
-    )
+def _started_entry(cycle_id: int, category_id: int, map_id: int) -> dict:
+    return {
+        "cycle_id": cycle_id,
+        "category_id": category_id,
+        "map_id": map_id,
+        "map_code": "ABC12",
+        "map_name": "TestMap",
+        "started_at": _now_iso(),
+        "ends_at": _now_iso(),
+    }
 
 
-def _completed_payload(cycle_id: int, category_id: int) -> str:
-    return json.dumps(
-        {
-            "cycle_id": cycle_id,
-            "category_id": category_id,
-            "standings": [],
-            "winner_user_id": None,
-        }
-    )
+def _completed_entry(cycle_id: int, category_id: int) -> dict:
+    return {
+        "cycle_id": cycle_id,
+        "category_id": category_id,
+        "standings": [],
+        "winner_user_id": None,
+    }
 
 
-async def _seed_transition(
+def _rollover_payload(edition_id: int, results: list[dict], started: list[dict]) -> str:
+    return json.dumps({"edition_id": edition_id, "results": results, "started": started})
+
+
+async def _seed_rollover(
     pool: asyncpg.Pool,
-    cycle_id: int,
-    event_type: str,
+    edition_id: int,
     payload: str,
-    created_at: dt.datetime | None = None,
 ) -> int:
+    """Seed ONE edition_rollover outbox row (cycle_id NULL, edition_id set)."""
     async with pool.acquire() as conn:
-        if created_at is not None:
-            return await conn.fetchval(
-                """
-                INSERT INTO tournaments.pending_transitions (cycle_id, event_type, payload, created_at)
-                VALUES ($1, $2, $3::jsonb, $4)
-                RETURNING id
-                """,
-                cycle_id,
-                event_type,
-                payload,
-                created_at,
-            )
         return await conn.fetchval(
             """
-            INSERT INTO tournaments.pending_transitions (cycle_id, event_type, payload)
-            VALUES ($1, $2, $3::jsonb)
+            INSERT INTO tournaments.pending_transitions (cycle_id, edition_id, event_type, payload)
+            VALUES (NULL, $1, 'edition_rollover', $2::jsonb)
             RETURNING id
             """,
-            cycle_id,
-            event_type,
+            edition_id,
             payload,
-        )
-
-
-async def _published_created_at(pool: asyncpg.Pool, transition_id: int) -> dt.datetime:
-    async with pool.acquire() as conn:
-        return await conn.fetchval(
-            "SELECT created_at FROM tournaments.pending_transitions WHERE id = $1",
-            transition_id,
         )
 
 
@@ -125,111 +107,130 @@ def _stub_publish(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     return calls
 
 
-async def _make_cycle(create_test_category, create_test_cycle, create_test_map) -> tuple[int, int, int]:
-    """Create a (category_id, map_id, cycle_id) for FK-valid outbox rows."""
-    category_id = await create_test_category(cycle_frequency="weekly")
-    map_id = await create_test_map(difficulty="Medium")
-    cycle_id = await create_test_cycle(category_id, map_id, status="active", started_at=dt.datetime.now(dt.UTC))
-    return category_id, map_id, cycle_id
+async def _clear_other_unpublished(pool: asyncpg.Pool, edition_id: int) -> None:
+    """Clear unpublished rows from other tests so this poll batch is just ours.
+
+    The xdist/session-shared DB may carry rows (including unpublishable poison
+    rows) from sibling tests that would make the poll publish/raise on rows we
+    do not own. Scope each poll to our edition.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM tournaments.pending_transitions WHERE published = FALSE AND edition_id IS DISTINCT FROM $1",
+            edition_id,
+        )
 
 
-class TestPublishAndMark:
-    """The poller groups rows by (event_type, created_at) into one batch publish each."""
+async def _make_edition_with_cycles(
+    asyncpg_pool: asyncpg.Pool,
+    create_test_category,
+    create_test_edition,
+    create_test_child_cycle,
+    create_test_map,
+    n: int = 1,
+) -> tuple[int, list[tuple[int, int, int]]]:
+    """Create an edition + n (category, map, child cycle) tuples for FK-valid rows."""
+    started_at = dt.datetime.now(dt.UTC)
+    ends_at = started_at + dt.timedelta(days=7)
+    edition_id = await create_test_edition(started_at, ends_at)
+    children: list[tuple[int, int, int]] = []
+    for _ in range(n):
+        category_id = await create_test_category()
+        map_id = await create_test_map(difficulty="Medium")
+        cycle_id = await create_test_child_cycle(edition_id, category_id, map_id, status="active")
+        children.append((category_id, map_id, cycle_id))
+    return edition_id, children
 
-    async def test_poller_groups_and_marks(
+
+class TestRolloverPublish:
+    """One edition_rollover row -> exactly ONE publish keyed by edition_id (D-09/D-11)."""
+
+    async def test_one_row_one_publish_with_edition_idempotency_key(
         self,
         asyncpg_pool: asyncpg.Pool,
         monkeypatch: pytest.MonkeyPatch,
         create_test_category,
-        create_test_cycle,
+        create_test_edition,
+        create_test_child_cycle,
         create_test_map,
     ):
-        """Two cycles rotating together -> ONE cycles_started + ONE cycles_completed publish.
-
-        Both cycles' started rows share one ``created_at`` (one rotation), and both
-        completed rows share a (different) ``created_at``. Each group publishes once
-        on the plural routing key, carrying a ``cycles`` list of length 2, and every
-        row is marked published.
-        """
-        cat_a, map_a, cycle_a = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
-        cat_b, map_b, cycle_b = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
-
-        # Two distinct rotation timestamps (started vs completed groups) — both rows
-        # in each group share their group's created_at so they aggregate.
-        started_at = dt.datetime.now(dt.UTC)
-        completed_at = started_at + dt.timedelta(microseconds=1)
-
-        started_a = await _seed_transition(
-            asyncpg_pool, cycle_a, "cycle_started", _started_payload(cycle_a, cat_a, map_a), created_at=started_at
+        """A single edition_rollover row publishes once on api.tournament.rollover."""
+        edition_id, children = await _make_edition_with_cycles(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=2
         )
-        started_b = await _seed_transition(
-            asyncpg_pool, cycle_b, "cycle_started", _started_payload(cycle_b, cat_b, map_b), created_at=started_at
+        (cat_a, map_a, cycle_a), (cat_b, map_b, cycle_b) = children
+        payload = _rollover_payload(
+            edition_id,
+            results=[_completed_entry(cycle_a, cat_a), _completed_entry(cycle_b, cat_b)],
+            started=[_started_entry(cycle_a, cat_a, map_a), _started_entry(cycle_b, cat_b, map_b)],
         )
-        completed_a = await _seed_transition(
-            asyncpg_pool, cycle_a, "cycle_completed", _completed_payload(cycle_a, cat_a), created_at=completed_at
-        )
-        completed_b = await _seed_transition(
-            asyncpg_pool, cycle_b, "cycle_completed", _completed_payload(cycle_b, cat_b), created_at=completed_at
-        )
+        row_id = await _seed_rollover(asyncpg_pool, edition_id, payload)
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
 
         calls = _stub_publish(monkeypatch)
+        # award_cycle_end touches xp ledger; stub it out for the publish-shape test.
+        import services.tournament_reward_service as reward_module
+
+        async def _noop_award(self, event, *, conn):  # noqa: ANN001
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
 
-        # Every seeded row marked published.
-        for tid in (started_a, started_b, completed_a, completed_b):
-            assert await _published(asyncpg_pool, tid) is True
+        assert await _published(asyncpg_pool, row_id) is True
 
-        # The shared DB may carry rows from other tests, so locate OUR two groups by
-        # their rotation-scoped idempotency keys.
-        started_key = f"tournament:cycle_started:{started_at.isoformat()}"
-        completed_key = f"tournament:cycle_completed:{completed_at.isoformat()}"
-        keys = [c["idempotency_key"] for c in calls]
-
-        # Each group published exactly ONCE (no per-category fan-out, no re-publish).
-        assert keys.count(started_key) == 1
-        assert keys.count(completed_key) == 1
-
-        started_call = next(c for c in calls if c["idempotency_key"] == started_key)
-        completed_call = next(c for c in calls if c["idempotency_key"] == completed_key)
-
-        assert started_call["routing_key"] == "api.tournament.cycles_started"
-        assert completed_call["routing_key"] == "api.tournament.cycles_completed"
-
-        # Each batch event carries one entry per cycle that rotated together.
-        assert len(started_call["data"].cycles) == 2
-        assert len(completed_call["data"].cycles) == 2
-        assert {e.cycle_id for e in started_call["data"].cycles} == {cycle_a, cycle_b}
-        assert {e.cycle_id for e in completed_call["data"].cycles} == {cycle_a, cycle_b}
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        call = our[0]
+        assert call["routing_key"] == "api.tournament.rollover"
+        assert isinstance(call["data"], TournamentRolloverEvent)
+        assert call["data"].edition_id == edition_id
+        assert {e.cycle_id for e in call["data"].results} == {cycle_a, cycle_b}
+        assert {e.cycle_id for e in call["data"].started} == {cycle_a, cycle_b}
 
 
-class TestSkipLocked:
-    """FOR UPDATE SKIP LOCKED prevents a second poller from re-publishing locked rows."""
+class TestRolloverIdempotentRepoll:
+    """A crash before mark-published re-publishes with the SAME idempotency key (at-least-once)."""
 
-    async def test_skip_locked_no_double_publish(
+    async def test_repoll_republishes_same_key(
         self,
         asyncpg_pool: asyncpg.Pool,
         monkeypatch: pytest.MonkeyPatch,
         create_test_category,
-        create_test_cycle,
+        create_test_edition,
+        create_test_child_cycle,
         create_test_map,
     ):
-        """While connection A holds the unpublished rows, the poller processes zero rows."""
-        category_id, map_id, cycle_id = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
-        completed = await _seed_transition(
-            asyncpg_pool, cycle_id, "cycle_completed", _completed_payload(cycle_id, category_id)
+        """While conn A holds the row locked the poller skips it; once released it publishes once."""
+        edition_id, children = await _make_edition_with_cycles(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
         )
-        completed_at = await _published_created_at(asyncpg_pool, completed)
+        (cat_a, map_a, cycle_a) = children[0]
+        payload = _rollover_payload(
+            edition_id,
+            results=[_completed_entry(cycle_a, cat_a)],
+            started=[_started_entry(cycle_a, cat_a, map_a)],
+        )
+        row_id = await _seed_rollover(asyncpg_pool, edition_id, payload)
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
 
         calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        async def _noop_award(self, event, *, conn):  # noqa: ANN001
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
         state = State({"db_pool": asyncpg_pool})
+        key = f"tournament:rollover:{edition_id}"
 
         conn_a = await asyncpg_pool.acquire()
         try:
             tx = conn_a.transaction()
             await tx.start()
-            # Lock all unpublished rows on connection A.
             locked = await conn_a.fetch(
                 f"""
                 SELECT id FROM tournaments.pending_transitions
@@ -238,22 +239,141 @@ class TestSkipLocked:
                 {_SKIP_LOCKED_SQL}
                 """
             )
-            assert any(r["id"] == completed for r in locked)
+            assert any(r["id"] == row_id for r in locked)
 
-            # The poller sees our row as skip-locked -> never publishes it, leaves it FALSE.
-            our_key = f"tournament:cycle_completed:{completed_at.isoformat()}"
+            # Skip-locked -> never publishes our row, leaves it FALSE.
             await publish_pending_transitions(state)
-            assert our_key not in [c["idempotency_key"] for c in calls]
-            assert await _published(asyncpg_pool, completed) is False
+            assert key not in [c["idempotency_key"] for c in calls]
+            assert await _published(asyncpg_pool, row_id) is False
 
             await tx.rollback()
         finally:
             await asyncpg_pool.release(conn_a)
 
-        # Lock released -> the poller now publishes and marks our row.
+        # Lock released -> the poller publishes and marks our row, same key.
         await publish_pending_transitions(state)
-        assert our_key in [c["idempotency_key"] for c in calls]
-        assert await _published(asyncpg_pool, completed) is True
+        assert [c["idempotency_key"] for c in calls].count(key) == 1
+        assert await _published(asyncpg_pool, row_id) is True
+
+
+class TestRolloverRewardPerChildCycle:
+    """award_cycle_end runs once PER results entry (per child cycle), not once per edition."""
+
+    async def test_award_called_once_per_results_entry(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+    ):
+        """A rollover with N results entries drives award_cycle_end N times, keyed on cycle_id."""
+        edition_id, children = await _make_edition_with_cycles(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=3
+        )
+        results = [_completed_entry(c, cat) for (cat, _m, c) in children]
+        started = [_started_entry(c, cat, m) for (cat, m, c) in children]
+        payload = _rollover_payload(edition_id, results=results, started=started)
+        await _seed_rollover(asyncpg_pool, edition_id, payload)
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        captured: list[int] = []
+
+        async def _fake_award(self, event, *, conn):  # noqa: ANN001
+            captured.append(event.cycle_id)
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        expected = sorted(c for (_cat, _m, c) in children)
+        assert sorted(captured) == expected  # once per child cycle, not once per edition
+
+
+class TestRolloverHiatusSections:
+    """Into-hiatus (results-only) and out-of-hiatus (started-only) each publish ONE event."""
+
+    async def test_into_hiatus_results_only(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+    ):
+        """results present, started empty -> one publish; started section empty."""
+        edition_id, children = await _make_edition_with_cycles(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, _map_a, cycle_a) = children[0]
+        payload = _rollover_payload(edition_id, results=[_completed_entry(cycle_a, cat_a)], started=[])
+        row_id = await _seed_rollover(asyncpg_pool, edition_id, payload)
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        async def _noop_award(self, event, *, conn):  # noqa: ANN001
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        assert our[0]["data"].started == []
+        assert len(our[0]["data"].results) == 1
+        assert await _published(asyncpg_pool, row_id) is True
+
+    async def test_out_of_hiatus_started_only(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+    ):
+        """started present, results empty -> one publish; no reward calls; results empty."""
+        edition_id, children = await _make_edition_with_cycles(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, map_a, cycle_a) = children[0]
+        payload = _rollover_payload(edition_id, results=[], started=[_started_entry(cycle_a, cat_a, map_a)])
+        row_id = await _seed_rollover(asyncpg_pool, edition_id, payload)
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        captured: list[int] = []
+
+        async def _fake_award(self, event, *, conn):  # noqa: ANN001
+            captured.append(event.cycle_id)
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        assert our[0]["data"].results == []
+        assert len(our[0]["data"].started) == 1
+        assert captured == []  # no results entries -> no reward calls
+        assert await _published(asyncpg_pool, row_id) is True
 
 
 class TestPublishFailure:
@@ -264,17 +384,19 @@ class TestPublishFailure:
         asyncpg_pool: asyncpg.Pool,
         monkeypatch: pytest.MonkeyPatch,
         create_test_category,
-        create_test_cycle,
+        create_test_edition,
+        create_test_child_cycle,
         create_test_map,
     ):
-        """A cycle_completed payload missing `standings` raises and is NOT marked published."""
-        category_id, map_id, cycle_id = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
-        # Malformed: missing the required `standings` and `winner_user_id` keys.
-        bad_payload = json.dumps({"cycle_id": cycle_id, "category_id": category_id})
-        bad = await _seed_transition(asyncpg_pool, cycle_id, "cycle_completed", bad_payload)
+        """An edition_rollover payload missing `started` raises and is NOT marked published."""
+        edition_id, _children = await _make_edition_with_cycles(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        # Malformed: missing the required `started` key.
+        bad_payload = json.dumps({"edition_id": edition_id, "results": []})
+        bad = await _seed_rollover(asyncpg_pool, edition_id, bad_payload)
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
 
-        # Stub publish so any incidental well-formed row does not hit a real broker;
-        # the whole batch rolls back when the bad row raises anyway.
         _stub_publish(monkeypatch)
         state = State({"db_pool": asyncpg_pool})
 
@@ -282,109 +404,19 @@ class TestPublishFailure:
         with pytest.raises(msgspec.ValidationError):
             await publish_pending_transitions(state)
 
-        # The offending row was never marked published (the mark never ran).
         assert await _published(asyncpg_pool, bad) is False
 
 
-class TestCycleEndRewardHook:
-    """The poller invokes cycle-end rewards + the reset sweep on cycle_completed rows (08-03)."""
-
-    async def test_cycle_completed_invokes_award_cycle_end(
-        self,
-        asyncpg_pool: asyncpg.Pool,
-        monkeypatch: pytest.MonkeyPatch,
-        create_test_category,
-        create_test_cycle,
-        create_test_map,
-    ):
-        """A cycle_completed row drives award_cycle_end with the built event + conn."""
-        import services.tournament_reward_service as reward_module
-
-        category_id, map_id, cycle_id = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
-        await _seed_transition(
-            asyncpg_pool, cycle_id, "cycle_completed", _completed_payload(cycle_id, category_id)
-        )
-
-        # The xdist/session-shared DB may carry an orphaned unpublishable poison row
-        # from TestPublishFailure that would make the poll raise before reaching our
-        # row. Clear all still-unpublished rows first so this poll batch is just ours.
-        async with asyncpg_pool.acquire() as _c:
-            await _c.execute(
-                "DELETE FROM tournaments.pending_transitions WHERE published = FALSE AND cycle_id <> $1",
-                cycle_id,
-            )
-
-        _stub_publish(monkeypatch)
-        captured: list[int] = []
-
-        async def _fake_award(self, event, *, conn):  # noqa: ANN001
-            captured.append(event.cycle_id)
-            return []
-
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
-        state = State({"db_pool": asyncpg_pool})
-
-        await publish_pending_transitions(state)
-
-        assert cycle_id in captured
-
-    async def test_cycle_started_does_not_invoke_award_cycle_end(
-        self,
-        asyncpg_pool: asyncpg.Pool,
-        monkeypatch: pytest.MonkeyPatch,
-        create_test_category,
-        create_test_cycle,
-        create_test_map,
-    ):
-        """A cycle_started row never invokes a reward call."""
-        import services.tournament_reward_service as reward_module
-
-        category_id, map_id, cycle_id = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
-        await _seed_transition(
-            asyncpg_pool, cycle_id, "cycle_started", _started_payload(cycle_id, category_id, map_id)
-        )
-
-        # The xdist/session-shared DB may carry an orphaned unpublishable poison row
-        # from TestPublishFailure that would make the poll raise before reaching our
-        # row. Clear all still-unpublished rows first so this poll batch is just ours.
-        async with asyncpg_pool.acquire() as _c:
-            await _c.execute(
-                "DELETE FROM tournaments.pending_transitions WHERE published = FALSE AND cycle_id <> $1",
-                cycle_id,
-            )
-
-        _stub_publish(monkeypatch)
-        captured: list[int] = []
-
-        async def _fake_award(self, event, *, conn):  # noqa: ANN001
-            captured.append(event.cycle_id)
-            return []
-
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
-        state = State({"db_pool": asyncpg_pool})
-
-        await publish_pending_transitions(state)
-
-        assert cycle_id not in captured
-
-
 class TestPoolNotReady:
-    """publish_pending_transitions no-ops cleanly when db_pool is absent (07-04).
-
-    Regression for the cold-start lifespan race: the poller's first tick could run
-    before the asyncpg lifespan populated state.db_pool. The defensive readiness
-    guard must return early (no exception, no publish) rather than raising.
-    """
+    """publish_pending_transitions no-ops cleanly when db_pool is absent (07-04)."""
 
     async def test_publish_noops_when_db_pool_absent(self, monkeypatch: pytest.MonkeyPatch):
         """With no db_pool in state the call returns normally and never publishes."""
         state = State({})  # empty -- no db_pool key
         calls = _stub_publish(monkeypatch)
 
-        # Must not raise (KeyError/AttributeError) -- the guard returns early.
         await publish_pending_transitions(state)
 
-        # The guard returned before any publish / DB acquire.
         assert calls == []
 
 
@@ -395,8 +427,22 @@ class TestBuildEvent:
         """An unknown event_type is not mappable to a routing key / struct."""
         row = {
             "event_type": "not_a_real_event",
-            "cycle_id": 1,
+            "cycle_id": None,
+            "edition_id": 1,
             "payload": {},
         }
         with pytest.raises(KeyError):
             _build_event(row)
+
+    async def test_rollover_event_type_builds_combined(self):
+        """An edition_rollover row builds a TournamentRolloverEvent on the rollover key."""
+        row = {
+            "event_type": "edition_rollover",
+            "cycle_id": None,
+            "edition_id": 7,
+            "payload": {"edition_id": 7, "results": [], "started": []},
+        }
+        routing_key, event = _build_event(row)
+        assert routing_key == "api.tournament.rollover"
+        assert isinstance(event, TournamentRolloverEvent)
+        assert event.edition_id == 7
