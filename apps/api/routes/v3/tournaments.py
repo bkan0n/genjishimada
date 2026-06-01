@@ -47,6 +47,7 @@ from services.exceptions.tournaments import (
     InvalidTimezoneError,
     MapNotEligibleError,
     NoActiveEditionError,
+    NoAwaitingResultsEditionError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
@@ -518,6 +519,44 @@ class TournamentsController(litestar.Controller):
         except NoEligibleMapsError as e:
             raise CustomHTTPException(
                 status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            ) from e
+
+    @litestar.patch(
+        path="/publish-results",
+        summary="Force-Publish Edition Results",
+        description=(
+            "Admin escape hatch (D-03): force-publish the results of the edition "
+            "currently awaiting_results, IGNORING any remaining in-flight "
+            "verifications. Computes results from currently-verified runs, writes "
+            "the deferred results event, and completes the edition. Abandoned "
+            "(still-pending) runs are left pending (audit trail). Returns 409 if no "
+            "edition is awaiting results. Requires tournaments:write; the bot-side "
+            "mod gate (Plan 05) is the authoritative caller check."
+        ),
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def force_publish_results(
+        self,
+        tournament_service: TournamentService,
+    ) -> TournamentEditionResponse:
+        """Force-publish the awaiting_results edition's results (D-03).
+
+        Args:
+            tournament_service: Tournament service.
+
+        Returns:
+            The force-completed edition.
+
+        Raises:
+            CustomHTTPException: 409 if no edition is currently awaiting results.
+        """
+        try:
+            return await tournament_service.force_publish_results()
+        except NoAwaitingResultsEditionError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_409_CONFLICT,
                 detail=str(e),
             ) from e
 

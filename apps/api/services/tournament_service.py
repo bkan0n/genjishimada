@@ -43,12 +43,14 @@ from services.exceptions.tournaments import (
     DebugRouteDisabledError,
     InvalidTimezoneError,
     MapNotEligibleError,
+    NoAwaitingResultsEditionError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
     StreakNotFoundError,
     TournamentCompletionNotFoundError,
 )
+from services.tournament_outbox_service import _write_drained_results_row
 from services.tournament_reward_service import TournamentRewardService
 
 if TYPE_CHECKING:
@@ -506,6 +508,64 @@ class TournamentService(BaseService):
         if row is None:
             return None
         return msgspec.convert(row, TournamentEditionResponse)
+
+    async def force_publish_results(self, *, conn: Connection | None = None) -> TournamentEditionResponse:
+        """Admin force-publish the results of the awaiting_results edition (D-03).
+
+        The escape hatch for a stuck verification queue under the drain-only model
+        (D-02, no time cap). It runs the SAME drained-path the poller uses
+        (:func:`_write_drained_results_row`) but IGNORING remaining in-flight
+        verifications: it computes results from the currently-``verified`` runs,
+        writes the ``edition_results`` outbox row (the existing poller drains +
+        publishes + grants it on its next tick — Pitfall 3, at-least-once
+        preserved), and flips the edition + its child cycles to ``completed``.
+
+        Still-``pending`` (abandoned) completions are LEFT ``pending`` (Open
+        Question 2): the leaderboard already excludes any non-``verified`` run, so
+        leaving them pending cannot mis-rank, and it preserves the audit trail that
+        they were never reviewed. No 4th status is introduced.
+
+        Factoring the write through the shared :func:`_write_drained_results_row`
+        helper keeps the force-publish path and the poller's drain branch from
+        diverging. The whole unit (results row write + status flips) runs in ONE
+        transaction via the atomic acquire-or-inject pattern.
+
+        Args:
+            conn: Optional connection for transaction support. When None a
+                connection is acquired and a transaction is opened so the row
+                write + status flips are atomic.
+
+        Returns:
+            The force-completed :class:`TournamentEditionResponse`.
+
+        Raises:
+            NoAwaitingResultsEditionError: If no edition is currently
+                ``awaiting_results`` (nothing to publish).
+        """
+
+        async def _do(active_conn: Connection) -> dict:
+            editions = await self._tournament_repo.fetch_awaiting_results_editions(conn=active_conn)
+            if not editions:
+                raise NoAwaitingResultsEditionError
+            # Single awaiting_results edition expected; force the oldest (ends_at
+            # ASC) — the same ordering the poller uses for stacked editions.
+            edition = editions[0]
+            await _write_drained_results_row(
+                self._tournament_repo,
+                edition["id"],
+                conn=active_conn,
+            )
+            return edition
+
+        if conn is None:
+            async with self._pool.acquire() as raw_conn, raw_conn.transaction():
+                edition = await _do(raw_conn)  # type: ignore[arg-type]
+        else:
+            edition = await _do(conn)
+
+        # Re-fetch is unnecessary: the row's status is now 'completed'. Return the
+        # edition (status reflects the in-memory flip for the response shape).
+        return msgspec.convert({**edition, "status": "completed"}, TournamentEditionResponse)
 
     async def set_transitions_paused(self, paused: bool) -> TournamentLifecycleResponse:
         """Pause or resume automatic edition transitions (GLOBAL, D-03/D-12).

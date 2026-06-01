@@ -78,6 +78,19 @@ class NoActiveEditionError(TournamentsError):
         super().__init__("No active tournament edition exists.")
 
 
+class NoAwaitingResultsEditionError(TournamentsError):
+    """No edition is currently awaiting results (D-03).
+
+    Raised by ``force_publish_results`` when the admin force-publish escape hatch
+    is invoked but no edition has status ``'awaiting_results'`` — there is nothing
+    to publish. Controllers map this to HTTP 409 (the same conflict shape as
+    bootstrap's ``CycleAlreadyLiveError``).
+    """
+
+    def __init__(self) -> None:
+        super().__init__("No edition is currently awaiting results.")
+
+
 class InvalidTimezoneError(TournamentsError):
     """The supplied anchor timezone is not a known IANA timezone name (T-12-04).
 

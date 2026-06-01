@@ -1131,3 +1131,121 @@ class TestForcePublishResultsRoute:
             await conn.execute("UPDATE tournaments.editions SET status = 'completed' WHERE status = 'awaiting_results'")
         response = await test_client.patch(f"{BASE}/publish-results")
         assert response.status_code == 409
+
+
+# =============================================================================
+# Plan 12.1-04 Task 2: force_publish_results SERVICE-level tests (D-03)
+# =============================================================================
+#
+# These exercise TournamentService.force_publish_results directly (not via HTTP)
+# against the migrated integration DB. The services/ conftest skips DB setup, so
+# the real-DB service test lives here where tournaments.* exists. force_publish
+# runs the drained-path IGNORING pending: edition -> completed, edition_results
+# row written, still-pending completions left pending (audit trail, Open Q2).
+
+
+async def _seed_awaiting_edition_for_service(asyncpg_pool, *, with_pending, create_test_map, create_test_user):
+    """Seed an awaiting_results edition + finalizing cycle + verified (and optional pending) completion."""
+    started_at = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
+    ends_at = started_at + dt.timedelta(days=7)
+    map_id = await create_test_map(difficulty="Medium")
+    user_v = await create_test_user(nickname=f"SV{uuid4().hex[:6]}")
+    async with asyncpg_pool.acquire() as conn:
+        edition_id = await conn.fetchval(
+            "INSERT INTO tournaments.editions (started_at, ends_at, status) VALUES ($1, $2, 'awaiting_results') RETURNING id",
+            started_at,
+            ends_at,
+        )
+        category_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.categories (name, difficulties, participation_xp, placement_xp, streak_xp, is_active)
+            VALUES ($1, $2::text[], 0, '[]'::jsonb, '[]'::jsonb, TRUE)
+            RETURNING id
+            """,
+            f"SVC-{uuid4().hex[:6]}",
+            ["Medium"],
+        )
+        cycle_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.cycles (edition_id, category_id, map_id, status, started_at)
+            VALUES ($1, $2, $3, 'finalizing', $4)
+            RETURNING id
+            """,
+            edition_id,
+            category_id,
+            map_id,
+            started_at,
+        )
+        await conn.execute(
+            """
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status, completion)
+            VALUES ($1, $2, $3, 30.0, 'https://x/s.png', 'verified', FALSE)
+            """,
+            cycle_id,
+            user_v,
+            map_id,
+        )
+        pending_id = None
+        if with_pending:
+            user_p = await create_test_user(nickname=f"SP{uuid4().hex[:6]}")
+            pending_id = await conn.fetchval(
+                """
+                INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status, completion)
+                VALUES ($1, $2, $3, 20.0, 'https://x/s.png', 'pending', FALSE)
+                RETURNING id
+                """,
+                cycle_id,
+                user_p,
+                map_id,
+            )
+    return edition_id, cycle_id, pending_id
+
+
+class TestForcePublishResultsService:
+    """TournamentService.force_publish_results runs the drain branch ignoring pending (D-03)."""
+
+    async def test_force_publish_completes_and_leaves_pending(
+        self, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """Force-publish over a pending run: edition->completed, results row written, pending stays pending."""
+        from litestar.datastructures import State
+
+        from repository.tournaments_repository import TournamentRepository
+        from services.tournament_service import TournamentService
+
+        edition_id, cycle_id, pending_id = await _seed_awaiting_edition_for_service(
+            asyncpg_pool, with_pending=True, create_test_map=create_test_map, create_test_user=create_test_user
+        )
+        service = TournamentService(asyncpg_pool, State({}), TournamentRepository(asyncpg_pool))
+
+        await service.force_publish_results()
+
+        async with asyncpg_pool.acquire() as conn:
+            ed_status = await conn.fetchval("SELECT status FROM tournaments.editions WHERE id = $1", edition_id)
+            cy_status = await conn.fetchval("SELECT status FROM tournaments.cycles WHERE id = $1", cycle_id)
+            results_rows = await conn.fetchval(
+                "SELECT COUNT(*) FROM tournaments.pending_transitions WHERE event_type = 'edition_results' AND edition_id = $1",
+                edition_id,
+            )
+            pending_status = await conn.fetchval(
+                "SELECT status FROM tournaments.completions WHERE id = $1", pending_id
+            )
+        assert ed_status == "completed"
+        assert cy_status == "completed"
+        assert results_rows == 1
+        assert pending_status == "pending"  # abandoned run left pending (audit trail)
+
+    async def test_force_publish_no_edition_raises(self, asyncpg_pool):
+        """Force-publish with no awaiting_results edition raises NoAwaitingResultsEditionError."""
+        from litestar.datastructures import State
+
+        from repository.tournaments_repository import TournamentRepository
+        from services.exceptions.tournaments import NoAwaitingResultsEditionError
+        from services.tournament_service import TournamentService
+
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute("UPDATE tournaments.editions SET status = 'completed' WHERE status = 'awaiting_results'")
+        service = TournamentService(asyncpg_pool, State({}), TournamentRepository(asyncpg_pool))
+
+        with pytest.raises(NoAwaitingResultsEditionError):
+            await service.force_publish_results()
