@@ -1047,11 +1047,14 @@ class TournamentRepository(BaseRepository):
         *,
         conn: Connection | None = None,
     ) -> dict | None:
-        """Flip a single tournament completion's verified flag.
+        """Flip a single tournament completion's verified flag (only on a real change).
 
         Used by BOTH the PB side-effect (inside the completion verify path)
-        and the non-PB verify endpoint (D-04a/D-06). Idempotent: setting
-        verified to the same value twice is harmless.
+        and the non-PB verify endpoint (D-04a/D-06). The UPDATE is guarded by
+        ``verified IS DISTINCT FROM $2`` so a no-op transition (the row is
+        already in the target state) matches no row and returns ``None``,
+        letting callers distinguish "real transition" from "no change" and
+        avoid re-granting XP or re-publishing on redelivery (CR-01/WR-06).
 
         Args:
             tournament_completion_id: ID of the tournament completion row.
@@ -1059,15 +1062,16 @@ class TournamentRepository(BaseRepository):
             conn: Optional connection for transaction support.
 
         Returns:
-            Dict with id, cycle_id, user_id, time of the updated row, or None
-            if no row matched the given id.
+            Dict with id, cycle_id, user_id, time of the updated row when the
+            value actually changed, or None when no row matched (row missing OR
+            already in the target state). Callers re-fetch to disambiguate.
         """
         _conn = self._get_connection(conn)
         row = await _conn.fetchrow(
             """
             UPDATE tournaments.completions
             SET verified = $2
-            WHERE id = $1
+            WHERE id = $1 AND verified IS DISTINCT FROM $2
             RETURNING id, cycle_id, user_id, time
             """,
             tournament_completion_id,

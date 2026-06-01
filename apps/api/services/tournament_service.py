@@ -592,6 +592,9 @@ class TournamentService(BaseService):
 
         Raises:
             TournamentCompletionNotFoundError: If no tournament completion row matches.
+            AlreadyVerifiedError: If a reject is attempted on an already-verified run
+                (the participation XP grant is not reversible, so the verdict is
+                terminal once verified — CR-01).
         """
         existing = await self._tournament_repo.fetch_tournament_completion(
             tournament_completion_id,
@@ -599,6 +602,21 @@ class TournamentService(BaseService):
         )
         if existing is None:
             raise TournamentCompletionNotFoundError(tournament_completion_id)
+
+        # Terminal guard (CR-01): a verified run cannot be rejected back to
+        # unverified, because reject takes the award_xp=False path and never
+        # reverses the participation XP already granted. Forbid the illegal
+        # transition instead of silently de-syncing the ledger and the row.
+        if not verified and existing["verified"]:
+            raise AlreadyVerifiedError(tournament_completion_id)
+
+        # No-op transition (idempotent redelivery, CR-01/WR-06): the row is
+        # already in the target state. Nothing to grant or re-publish.
+        if bool(existing["verified"]) == verified:
+            return await self._noop_verdict_job(
+                tournament_completion_id,
+                idempotency_key=idempotency_key,
+            )
 
         pending_xp_events: list[XpGrantEvent] = []
 
@@ -625,22 +643,81 @@ class TournamentService(BaseService):
         else:
             updated = await _do(conn)
 
+        # WR-06: the guarded UPDATE matched no row even though the precheck saw
+        # one — the completion was deleted between the precheck and the UPDATE
+        # (TOCTOU). Do NOT publish a phantom event off the stale precheck row.
+        if updated is None:
+            raise TournamentCompletionNotFoundError(tournament_completion_id)
+
         # Transaction committed: now safe to publish the deferred XP notification.
         if pending_xp_events and self._reward_service is not None:
             await self._reward_service.publish_xp_events(pending_xp_events)
 
-        time_value = float(updated["time"]) if updated else float(existing["time"])
+        event = TournamentVerificationChangedEvent(
+            tournament_completion_id=tournament_completion_id,
+            cycle_id=updated["cycle_id"],
+            user_id=updated["user_id"],
+            verified=verified,
+            time=float(updated["time"]),
+        )
+        # WR-01: the DB txn is already committed. A publish failure must not be
+        # silently swallowed — log it at exception level with the completion id
+        # so a dropped verification-changed event is reconcilable.
+        try:
+            return await self.publish_message(
+                routing_key="api.tournament.verification.changed",
+                data=event,
+                headers=headers,
+                idempotency_key=idempotency_key,
+            )
+        except Exception:
+            log.exception(
+                "Failed to publish tournament verification-changed event after commit "
+                "(tournament_completion_id=%s, verified=%s) — DB is committed but the bot "
+                "was not notified; reconcile manually.",
+                tournament_completion_id,
+                verified,
+            )
+            raise
+
+    async def _noop_verdict_job(
+        self,
+        tournament_completion_id: int,
+        *,
+        idempotency_key: str,
+    ) -> JobStatusResponse:
+        """Return a succeeded job for a no-op verdict without re-granting/re-publishing.
+
+        Used when a verdict is replayed for a row already in the target state
+        (idempotent redelivery). The publish is idempotent via the
+        ``idempotency_key`` so re-emitting the changed event is harmless and
+        keeps the bot's poll observable, but no XP is granted.
+
+        Args:
+            tournament_completion_id: Tournament completion row ID (for logging).
+            idempotency_key: Publish idempotency key for the changed event.
+
+        Returns:
+            Job status of the (idempotent) verification-changed publish.
+        """
+        log.info(
+            "Tournament verdict no-op for tournament_completion_id=%s (already in target state).",
+            tournament_completion_id,
+        )
+        existing = await self._tournament_repo.fetch_tournament_completion(tournament_completion_id)
+        if existing is None:
+            raise TournamentCompletionNotFoundError(tournament_completion_id)
         event = TournamentVerificationChangedEvent(
             tournament_completion_id=tournament_completion_id,
             cycle_id=existing["cycle_id"],
             user_id=existing["user_id"],
-            verified=verified,
-            time=time_value,
+            verified=bool(existing["verified"]),
+            time=float(existing["time"]),
         )
         return await self.publish_message(
             routing_key="api.tournament.verification.changed",
             data=event,
-            headers=headers if headers is not None else Headers(),
+            headers=None,
             idempotency_key=idempotency_key,
         )
 
