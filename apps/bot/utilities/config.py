@@ -86,12 +86,17 @@ class AdminChannel(Base):
     round_table: int
 
 
+class Tournament(Base):
+    announcements: int
+
+
 class Channels(Base):
     updates: Updates
     information: Information
     submission: Submission
     help: Help
     admin: AdminChannel
+    tournament: Tournament
 
 
 class Config(Base):

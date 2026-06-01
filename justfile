@@ -84,6 +84,18 @@ ci:
     just lint-all
     just test-all
 
+# Start local infrastructure (postgres, rabbitmq, minio) in Docker
+infra-up:
+    docker compose -f docker-compose.local.yml up -d
+
+# Stop and remove local infrastructure containers
+infra-down:
+    docker compose -f docker-compose.local.yml down
+
+# Follow logs from local infrastructure
+infra-logs:
+    docker compose -f docker-compose.local.yml logs -f
+
 # ----------------------------
 # Documentation (MkDocs)
 # ----------------------------

@@ -98,6 +98,14 @@ from genjishimada_sdk.tags import (
     TagsSearchFilters,
     TagsSearchResponse,
 )
+from genjishimada_sdk.tournaments import (
+    TournamentCategoryResponse,
+    TournamentChooseMapRequest,
+    TournamentCycleListResponse,
+    TournamentLeaderboardEntryResponse,
+    TournamentNextCycleResponse,
+    TournamentStreakResponse,
+)
 from genjishimada_sdk.users import (
     OverwatchUsernamesResponse,
     OverwatchUsernamesUpdateRequest,
@@ -1081,6 +1089,39 @@ class APIService:
         r = Route("PUT", "/completions/{record_id}/verification", record_id=record_id)
         return self._request(r, data=data, response_model=JobStatusResponse)
 
+    def verify_tournament_completion(self, tc_id: int) -> Response[JobStatusResponse]:
+        """Verify a non-PB tournament completion (bot mod-review Accept callback).
+
+        Routes the moderator's Accept verdict to the ``tournaments:verify`` endpoint from
+        Plan 11-03 — the bot never writes the DB. The flip + participation-XP grant happen
+        server-side; this returns the job status of the published verification-changed
+        event.
+
+        Args:
+            tc_id (int): The tournament completion ID to verify.
+
+        Returns:
+            Response[JobStatusResponse]: The job status of the verification.
+        """
+        r = Route("PATCH", "/tournaments/completions/{tc_id}/verify", tc_id=tc_id)
+        return self._request(r, response_model=JobStatusResponse)
+
+    def reject_tournament_completion(self, tc_id: int) -> Response[JobStatusResponse]:
+        """Reject a non-PB tournament completion (bot mod-review Reject callback).
+
+        Routes the moderator's Reject verdict to the ``tournaments:verify`` endpoint from
+        Plan 11-03 — the bot never writes the DB. The endpoint takes no reason payload (the
+        row is simply left unverified, Open-Q1), so no body is sent.
+
+        Args:
+            tc_id (int): The tournament completion ID to reject.
+
+        Returns:
+            Response[JobStatusResponse]: The job status of the rejection.
+        """
+        r = Route("PATCH", "/tournaments/completions/{tc_id}/reject", tc_id=tc_id)
+        return self._request(r, response_model=JobStatusResponse)
+
     def get_records_filtered(  # noqa: PLR0913
         self,
         code: OverwatchCode | None = None,
@@ -1662,6 +1703,101 @@ class APIService:
         """Get upvotes count."""
         r = Route("GET", "/completions/upvoting/{message_id}", message_id=message_id)
         return self._request(r, response_model=int)
+
+    def get_tournament_category(self, category_id: int) -> Response[TournamentCategoryResponse]:
+        """Get a tournament category by ID.
+
+        Returns:
+            Response[TournamentCategoryResponse]: The tournament category.
+        """
+        r = Route("GET", "/tournaments/categories/{category_id}", category_id=category_id)
+        return self._request(r, response_model=TournamentCategoryResponse)
+
+    def get_tournament_streak(self, user_id: int) -> Response[TournamentStreakResponse]:
+        """Get a user's tournament participation streak.
+
+        Args:
+            user_id (int): The Discord user ID to fetch the streak for.
+
+        Returns:
+            Response[TournamentStreakResponse]: The user's streak record.
+        """
+        r = Route("GET", "/tournaments/streaks/{user_id}", user_id=user_id)
+        return self._request(r, response_model=TournamentStreakResponse)
+
+    def list_tournament_categories(self) -> Response[list[TournamentCategoryResponse]]:
+        """List all tournament categories.
+
+        Returns:
+            Response[list[TournamentCategoryResponse]]: All tournament categories.
+        """
+        r = Route("GET", "/tournaments/categories")
+        return self._request(r, response_model=list[TournamentCategoryResponse])
+
+    def list_tournament_cycles(
+        self,
+        *,
+        status: str | None = None,
+        category_id: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Response[TournamentCycleListResponse]:
+        """List tournament cycles, optionally filtered by status and category.
+
+        Args:
+            status (str | None): Optional cycle status filter (e.g. "active").
+            category_id (int | None): Optional category ID filter.
+            limit (int): Maximum number of cycles to return.
+            offset (int): Pagination offset.
+
+        Returns:
+            Response[TournamentCycleListResponse]: The matching cycles.
+        """
+        r = Route("GET", "/tournaments/cycles")
+        return self._request(
+            r,
+            response_model=TournamentCycleListResponse,
+            params={"status": status, "category_id": category_id, "limit": limit, "offset": offset},
+        )
+
+    def get_tournament_leaderboard(self, cycle_id: int) -> Response[list[TournamentLeaderboardEntryResponse]]:
+        """Get the full leaderboard for a tournament cycle.
+
+        Args:
+            cycle_id (int): The cycle ID to fetch the leaderboard for.
+
+        Returns:
+            Response[list[TournamentLeaderboardEntryResponse]]: The leaderboard entries.
+        """
+        r = Route("GET", "/tournaments/cycles/{cycle_id}/leaderboard", cycle_id=cycle_id)
+        return self._request(r, response_model=list[TournamentLeaderboardEntryResponse])
+
+    def reroll_next_cycle(self, category_id: int) -> Response[TournamentNextCycleResponse]:
+        """Reroll the next-cycle map for a category (random selection).
+
+        Args:
+            category_id (int): The category ID to reroll.
+
+        Returns:
+            Response[TournamentNextCycleResponse]: The newly-selected next cycle.
+        """
+        r = Route("POST", "/tournaments/categories/{category_id}/reroll", category_id=category_id)
+        return self._request(r, response_model=TournamentNextCycleResponse)
+
+    def choose_next_cycle(
+        self, category_id: int, data: TournamentChooseMapRequest
+    ) -> Response[TournamentNextCycleResponse]:
+        """Explicitly choose the next-cycle map for a category.
+
+        Args:
+            category_id (int): The category ID to set the next-cycle map for.
+            data (TournamentChooseMapRequest): The explicit map selection payload.
+
+        Returns:
+            Response[TournamentNextCycleResponse]: The chosen next cycle.
+        """
+        r = Route("PATCH", "/tournaments/categories/{category_id}/next-cycle", category_id=category_id)
+        return self._request(r, response_model=TournamentNextCycleResponse, data=data)
 
     def claim_idempotency(self, data: ClaimCreateRequest) -> Response[ClaimResponse]:
         """Claim an idempotency key for a queue message action."""

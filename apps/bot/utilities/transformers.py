@@ -252,6 +252,44 @@ class UserTransformer(app_commands.Transformer):
         return [app_commands.Choice(name=names[:100], value=str(user_id)) for user_id, names in users]
 
 
+class CategoryTransformer(app_commands.Transformer):
+    async def transform(self, itx: GenjiItx, value: str) -> int:
+        """Transform a category name or ID string into a category ID.
+
+        Args:
+            itx (GenjiItx): The interaction context.
+            value (str): The input value, a category ID or name.
+
+        Returns:
+            int: The resolved category ID.
+
+        Raises:
+            UserFacingError: If the value does not match any known category name.
+        """
+        if value.isdigit():
+            return int(value)
+        cats = await itx.client.api.list_tournament_categories()
+        folded = value.casefold()
+        match = next((c for c in cats if c.name.casefold() == folded), None)
+        if match is None:
+            raise UserFacingError(f"Unknown category: {value}")
+        return match.id
+
+    async def autocomplete(self, itx: GenjiItx, current: str) -> list[app_commands.Choice[str]]:
+        """Autocomplete tournament category names from the live API.
+
+        Args:
+            itx (GenjiItx): The interaction context.
+            current (str): The partial category input.
+
+        Returns:
+            list[app_commands.Choice[str]]: Suggested categories, capped at 25.
+        """
+        cats = await itx.client.api.list_tournament_categories()
+        folded = current.casefold()
+        return [app_commands.Choice(name=c.name, value=str(c.id)) for c in cats if folded in c.name.casefold()][:25]
+
+
 class FakeUserTransformer(app_commands.Transformer):
     async def transform(self, itx: GenjiItx, value: str) -> int:
         """Transform a string into a user ID.

@@ -14,6 +14,7 @@ from extensions.newsfeed import NewsfeedHandler
 from extensions.notifications import NotificationHandler
 from extensions.playtest import PlaytestHandler
 from extensions.rabbit import RabbitHandler
+from extensions.tournaments import TournamentHandler
 from extensions.video_thumbnail import VideoThumbnailHandler
 from extensions.xp import XPHandler
 
@@ -41,6 +42,7 @@ class Genji(commands.Bot):
     _newsfeed_client: NewsfeedHandler
     _api_service: APIService
     _completions_manager: CompletionHandler
+    _tournament_manager: TournamentHandler
     _xp_manager: XPHandler
     _thumbnail_service: VideoThumbnailHandler
     _map_editor_service: MapEditHandler
@@ -136,6 +138,15 @@ class Genji(commands.Bot):
     @completions.setter
     def completions(self, service: CompletionHandler) -> None:
         self._completions_manager = service
+
+    @property
+    def tournaments(self) -> TournamentHandler:
+        """Return the TournamentHandler service."""
+        return self._tournament_manager
+
+    @tournaments.setter
+    def tournaments(self, service: TournamentHandler) -> None:
+        self._tournament_manager = service
 
     @property
     def xp(self) -> XPHandler:

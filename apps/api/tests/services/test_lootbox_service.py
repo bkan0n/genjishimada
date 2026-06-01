@@ -479,3 +479,88 @@ class TestGrantUserXpReason:
 
         event = mock_publish.call_args.kwargs["data"]
         assert event.reason is None
+
+
+class TestGrantXpConnHelper:
+    """Verify the conn-accepting grant_xp helper (08-02 Task 1)."""
+
+    async def test_grant_xp_threads_conn_into_repo_calls(
+        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+    ):
+        """grant_xp passes conn into fetch_xp_multiplier and upsert_user_xp."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.fetch_xp_multiplier.return_value = 1.0
+        mock_lootbox_repo.upsert_user_xp.return_value = {
+            "previous_amount": 100,
+            "new_amount": 175,
+        }
+        mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+
+        sentinel_conn = object()
+        response = await service.grant_xp(
+            headers={},
+            user_id=123,
+            amount=75,
+            type="Tournament",
+            reason="Tournament Placement #1",
+            conn=sentinel_conn,
+        )
+
+        assert response.previous_amount == 100
+        assert response.new_amount == 175
+        assert mock_lootbox_repo.fetch_xp_multiplier.call_args.kwargs["conn"] is sentinel_conn
+        assert mock_lootbox_repo.upsert_user_xp.call_args.kwargs["conn"] is sentinel_conn
+
+    async def test_grant_xp_publishes_tournament_event(
+        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+    ):
+        """grant_xp publishes XpGrantEvent with type/reason/amounts to api.xp.grant."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.fetch_xp_multiplier.return_value = 1.0
+        mock_lootbox_repo.upsert_user_xp.return_value = {
+            "previous_amount": 200,
+            "new_amount": 350,
+        }
+        mock_publish = mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+
+        await service.grant_xp(
+            headers={},
+            user_id=999,
+            amount=150,
+            type="Tournament",
+            reason="Tournament Streak x3",
+        )
+
+        mock_publish.assert_called_once()
+        assert mock_publish.call_args.kwargs["routing_key"] == "api.xp.grant"
+        event = mock_publish.call_args.kwargs["data"]
+        assert isinstance(event, XpGrantEvent)
+        assert event.user_id == 999
+        assert event.amount == 150
+        assert event.type == "Tournament"
+        assert event.previous_amount == 200
+        assert event.new_amount == 350
+        assert event.reason == "Tournament Streak x3"
+
+    async def test_grant_user_xp_delegates_to_grant_xp(
+        self, mock_pool, mock_state, mock_lootbox_repo, mocker
+    ):
+        """grant_user_xp still works and delegates to grant_xp (no conn)."""
+        service = LootboxService(mock_pool, mock_state, mock_lootbox_repo)
+
+        mock_lootbox_repo.fetch_xp_multiplier.return_value = 1.0
+        mock_lootbox_repo.upsert_user_xp.return_value = {
+            "previous_amount": 10,
+            "new_amount": 60,
+        }
+        mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+
+        data = XpGrantRequest(amount=50, type="Other", reason="legacy path")
+        response = await service.grant_user_xp(headers={}, user_id=5, data=data)
+
+        assert response.previous_amount == 10
+        assert response.new_amount == 60
+        # delegation path acquires no caller connection
+        assert mock_lootbox_repo.upsert_user_xp.call_args.kwargs.get("conn") is None
