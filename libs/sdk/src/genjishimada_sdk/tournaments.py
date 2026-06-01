@@ -282,7 +282,7 @@ class TournamentEditionResponse(Struct):
         started_at: EXACT grid value (anchor + N x period); never now().
         ends_at: started_at + period; the next edition inherits this as its
             started_at (the drift fix).
-        status: Current edition status ('active' | 'completed').
+        status: Current edition status ('active' | 'awaiting_results' | 'completed').
         created_at: When the edition record was created.
     """
 
