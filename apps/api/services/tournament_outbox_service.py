@@ -1,37 +1,32 @@
-"""Outbox->RabbitMQ bridge for tournament cycle transition events.
+"""Outbox->RabbitMQ bridge for the combined tournament edition-rollover event.
 
-The pg_cron transition function writes ``tournaments.pending_transitions`` rows
-(the transactional outbox). A single rotation can write one ``cycle_started`` +
-one ``cycle_completed`` row per due category, all sharing the SAME transaction
-``created_at``. This module's :func:`publish_pending_transitions`
-poll-publish-mark loop reads unpublished rows under ``FOR UPDATE SKIP LOCKED``,
-GROUPS them by ``(event_type, created_at)``, publishes ONE combined batch event
-per group to its plural ``api.tournament.cycles_*`` routing key via
-:meth:`BaseService.publish_message`, and marks every row in the group published
-in the same transaction. Publish happens BEFORE mark so a crash between the two
-re-publishes on the next poll (at-least-once, D-11); the rotation-scoped
-idempotency key (``tournament:{event_type}:{created_at_iso}``) makes the
-duplicates harmless downstream.
+The pg_cron transition function writes ONE ``tournaments.pending_transitions``
+row per rollover (the transactional outbox) with ``event_type='edition_rollover'``
+and a combined payload ``{results, started, edition_id}`` (D-09). This module's
+:func:`publish_pending_transitions` poll-publish-mark loop reads unpublished rows
+under ``FOR UPDATE SKIP LOCKED``, converts each into one
+:class:`TournamentRolloverEvent`, publishes it to ``api.tournament.rollover`` via
+:meth:`BaseService.publish_message` with the edition-scoped idempotency key
+``tournament:rollover:{edition_id}`` (D-11), and marks the row published in the
+SAME transaction. Publish happens BEFORE mark so a crash between the two
+re-publishes on the next poll (at-least-once, D-11); the stable idempotency key
+makes the duplicates harmless downstream.
 
-The per-cycle XP/streak side effects (``award_cycle_end`` +
-``_reset_non_participant_streaks``) still run once PER ROW (per cycle), not per
-group — the grouping is purely a publish/render concern.
+The reward/streak side effects (``award_cycle_end`` +
+``_reset_non_participant_streaks``) run once PER CHILD CYCLE — i.e. once per
+``event.results`` entry, keyed on ``entry.cycle_id`` (Pattern 4) — NOT once per
+edition. The XP grant ledger (``UNIQUE(cycle_id, user_id, reason)``) is the real
+double-grant guard, so a re-delivered rollover grants no duplicate XP.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from logging import getLogger
 from typing import TYPE_CHECKING
 
 import msgspec
 from asyncpg import Pool
-from genjishimada_sdk.tournaments import (
-    TournamentCycleCompletedEvent,
-    TournamentCyclesCompletedEvent,
-    TournamentCyclesStartedEvent,
-    TournamentCycleStartedEvent,
-)
+from genjishimada_sdk.tournaments import TournamentRolloverEvent
 from litestar.datastructures import Headers, State
 
 from repository.lootbox_repository import LootboxRepository
@@ -41,42 +36,19 @@ from services.lootbox_service import LootboxService
 from services.tournament_reward_service import TournamentRewardService
 
 if TYPE_CHECKING:
-    import datetime as dt
-
+    from genjishimada_sdk.tournaments import TournamentCycleCompletedEvent
     from genjishimada_sdk.xp import XpGrantEvent
 
 log = getLogger(__name__)
 
-# Maps the pending_transitions.event_type CHECK values to the PLURAL (batch)
-# routing key and the batch SDK event struct that wraps a list of per-cycle
-# events. The per-cycle struct (used to convert each row's payload) is resolved
-# via _SINGLE_EVENT_STRUCT. Drift between SQL jsonb_build_object payload keys and
-# the per-cycle struct surfaces as an immediate msgspec.convert error rather than
-# a silently shipped bad event (Pitfall 5).
+# Single routing entry: the combined edition_rollover event collapses the former
+# cycle_started/cycle_completed pair. The row's payload is converted directly into
+# TournamentRolloverEvent; drift between the SQL jsonb_build_object payload keys
+# and the struct surfaces as an immediate msgspec.convert error rather than a
+# silently shipped bad event (Pitfall 5).
 _EVENT_ROUTING: dict[str, tuple[str, type[msgspec.Struct]]] = {
-    "cycle_started": ("api.tournament.cycles_started", TournamentCyclesStartedEvent),
-    "cycle_completed": ("api.tournament.cycles_completed", TournamentCyclesCompletedEvent),
+    "edition_rollover": ("api.tournament.rollover", TournamentRolloverEvent),
 }
-
-# Maps each event_type to the SINGLE-cycle struct used to convert one row's
-# payload before it is appended to a batch group's ``cycles`` list.
-_SINGLE_EVENT_STRUCT: dict[str, type[msgspec.Struct]] = {
-    "cycle_started": TournamentCycleStartedEvent,
-    "cycle_completed": TournamentCycleCompletedEvent,
-}
-
-
-@dataclass
-class _TransitionGroup:
-    """Accumulator for one ``(event_type, created_at)`` rotation group.
-
-    Attributes:
-        events: Per-cycle SDK events that share one rotation transaction.
-        row_ids: Outbox row ids backing ``events`` (all marked published together).
-    """
-
-    events: list[msgspec.Struct] = field(default_factory=list)
-    row_ids: list[int] = field(default_factory=list)
 
 
 class TournamentOutboxService(BaseService):
@@ -89,13 +61,12 @@ class TournamentOutboxService(BaseService):
     """
 
 
-def _build_event(row: dict) -> tuple[str, msgspec.Struct]:
-    """Convert an outbox row's payload into its routing key and per-cycle event.
+def _build_event(row: dict) -> tuple[str, TournamentRolloverEvent]:
+    """Convert an edition_rollover outbox row into its routing key and event.
 
-    The returned ``routing_key`` is the PLURAL (batch) routing key for the row's
-    ``event_type``; the returned ``event`` is the SINGLE-cycle struct decoded from
-    this row's payload (one batch event later wraps a list of these). Grouping and
-    batch-event construction happen in :func:`publish_pending_transitions`.
+    The returned ``routing_key`` is ``api.tournament.rollover``; the returned
+    ``event`` is the combined :class:`TournamentRolloverEvent` decoded from this
+    row's payload (one row == one combined event, D-09).
 
     Args:
         row: A ``tournaments.pending_transitions`` row dict. ``event_type`` is the
@@ -103,17 +74,15 @@ def _build_event(row: dict) -> tuple[str, msgspec.Struct]:
             via the jsonb<->msgspec codec registered in ``app.py``.
 
     Returns:
-        A ``(routing_key, per_cycle_event)`` tuple. ``routing_key`` is the plural
-        batch key; ``per_cycle_event`` is a single-cycle SDK struct.
+        A ``(routing_key, rollover_event)`` tuple.
 
     Raises:
         KeyError: If ``event_type`` is not a known transition type.
         msgspec.ValidationError: If the payload does not match the struct shape
             (Pitfall 5 — keeps a malformed payload row unpublished).
     """
-    routing_key, _batch_struct = _EVENT_ROUTING[row["event_type"]]
-    struct_type = _SINGLE_EVENT_STRUCT[row["event_type"]]
-    event = msgspec.convert(row["payload"], struct_type)
+    routing_key = _EVENT_ROUTING[row["event_type"]][0]
+    event = msgspec.convert(row["payload"], TournamentRolloverEvent)
     return routing_key, event
 
 
@@ -129,8 +98,9 @@ async def publish_pending_transitions(state: State) -> None:
     transaction. Publish precedes mark so a crash between them re-publishes on the
     next poll (at-least-once).
 
-    The per-cycle reward side effects (``award_cycle_end`` + the non-participant
-    streak reset) still run ONCE PER ROW (per cycle), independent of grouping.
+    The reward side effects (``award_cycle_end`` + the non-participant streak
+    reset) run ONCE PER CHILD CYCLE — once per ``event.results`` entry, keyed on
+    ``entry.cycle_id`` (Pattern 4) — NOT once per edition.
 
     Each ``publish_message`` writes a ``public.jobs`` row; a re-publish creates a
     new one (acceptable for an outbox/at-least-once design). Failures propagate:
@@ -160,55 +130,42 @@ async def publish_pending_transitions(state: State) -> None:
         lootbox_service=lootbox_service,
     )
     pending_xp_events: list[XpGrantEvent] = []
-    # Group key -> accumulated per-cycle events + the row ids backing them. One
-    # group == one (event_type, created_at) rotation, published as ONE batch event.
-    groups: dict[tuple[str, dt.datetime], _TransitionGroup] = {}
     async with pool.acquire() as conn, conn.transaction():
         rows = await repository.fetch_unpublished_transitions(conn=conn)  # type: ignore[arg-type]
         for row in rows:
-            _routing_key, event = _build_event(row)
+            routing_key, event = _build_event(row)
+            edition_id = event.edition_id
 
-            # RWD-02/04/05: on a finalizing cycle, grant placement + streak rewards
-            # and reset non-participant streaks INSIDE this outbox transaction
-            # (Option A) before the publish/mark. These run ONCE PER CYCLE (per row),
-            # NOT per group. award_cycle_end is replay-safe via the 08-01 ledger, so a
-            # re-delivered cycle_completed row grants no duplicate XP. No second
-            # scheduler — this rides the ~10s poller. The non-idempotent xp.grant
-            # NOTIFICATIONS are collected and published only AFTER this transaction
-            # commits (CR-02): a rollback (e.g. a mark_transition_published failure)
-            # must not notify the bot about XP that rolled back and will be re-granted
-            # on the next poll.
-            if row["event_type"] == "cycle_completed" and isinstance(event, TournamentCycleCompletedEvent):
-                pending_xp_events += await reward_service.award_cycle_end(event, conn=conn)  # type: ignore[arg-type]
-                await _reset_non_participant_streaks(repository, event, conn=conn)  # type: ignore[arg-type]
-                log.info("[✓] cycle-end rewards processed for cycle %s", event.cycle_id)
+            # RWD-02/04/05: grant placement + streak rewards and reset
+            # non-participant streaks INSIDE this outbox transaction (Option A)
+            # before the publish/mark. These run ONCE PER CHILD CYCLE — once per
+            # results entry, keyed on entry.cycle_id (Pattern 4 — NOT re-keyed to
+            # the edition). award_cycle_end is replay-safe via the 08-01 ledger, so
+            # a re-delivered edition_rollover grants no duplicate XP. The
+            # non-idempotent xp.grant NOTIFICATIONS are collected and published only
+            # AFTER this transaction commits (CR-02): a rollback (e.g. a
+            # mark_transition_published failure) must not notify the bot about XP
+            # that rolled back and will be re-granted on the next poll.
+            for entry in event.results:
+                pending_xp_events += await reward_service.award_cycle_end(entry, conn=conn)  # type: ignore[arg-type]
+                await _reset_non_participant_streaks(repository, entry, conn=conn)  # type: ignore[arg-type]
+                log.info("[✓] cycle-end rewards processed for cycle %s (edition %s)", entry.cycle_id, edition_id)
 
-            # Accumulate this row's per-cycle event into its (event_type, created_at)
-            # group so all categories that rotated together ship as ONE batch event.
-            key = (row["event_type"], row["created_at"])
-            group = groups.setdefault(key, _TransitionGroup(events=[], row_ids=[]))
-            group.events.append(event)
-            group.row_ids.append(row["id"])
-
-        # One combined publish per group, then mark EVERY row in the group published
-        # — all inside this transaction (publish-before-mark = at-least-once). The
-        # rotation-scoped idempotency key dedupes re-publishes downstream.
-        for (event_type, created_at), group in groups.items():
-            routing_key, batch_struct = _EVENT_ROUTING[event_type]
-            batch_event = batch_struct(cycles=group.events)  # type: ignore[call-arg]
+            # ONE combined publish per edition_rollover row, then mark it published
+            # — all inside this transaction (publish-before-mark = at-least-once).
+            # The edition-scoped idempotency key dedupes re-publishes downstream.
             await service.publish_message(
                 routing_key=routing_key,
-                data=batch_event,
+                data=event,
                 headers=Headers({}),
-                idempotency_key=f"tournament:{event_type}:{created_at.isoformat()}",
+                idempotency_key=f"tournament:rollover:{edition_id}",
             )
-            for row_id in group.row_ids:
-                await repository.mark_transition_published(row_id, conn=conn)  # type: ignore[arg-type]
+            await repository.mark_transition_published(row["id"], conn=conn)  # type: ignore[arg-type]
             log.info(
-                "[→] published %s batch (%d cycles) for rotation %s",
-                event_type,
-                len(group.events),
-                created_at.isoformat(),
+                "[→] published edition_rollover (edition %s: %d results, %d started)",
+                edition_id,
+                len(event.results),
+                len(event.started),
             )
 
     # Transaction committed: publish the deferred, non-idempotent XP grant
