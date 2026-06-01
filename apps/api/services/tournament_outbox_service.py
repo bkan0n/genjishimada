@@ -17,6 +17,25 @@ The reward/streak side effects (``award_cycle_end`` +
 ``event.results`` entry, keyed on ``entry.cycle_id`` (Pattern 4) — NOT once per
 edition. The XP grant ledger (``UNIQUE(cycle_id, user_id, reason)``) is the real
 double-grant guard, so a re-delivered rollover grants no duplicate XP.
+
+WHY THE GRANTS STAY INSIDE THE OUTBOX TRANSACTION (deliberate, not an oversight):
+the XP grant, the ``publish_message``, and ``mark_transition_published`` are
+coupled in ONE transaction on purpose. Decoupling the grants to a post-commit
+step would break the per-cycle grant-once guarantee: if the row were marked
+published (so it never re-polls) but the process died before a post-commit grant
+ran, the XP would be permanently lost with no replay. Keeping them transactional
+means a ``mark_transition_published`` rollback also rolls back the grant, and the
+next poll re-attempts the whole unit. The grant itself is idempotent via the
+ledger, so the at-least-once re-poll is harmless. Only the NON-idempotent
+``xp.grant`` notifications are deferred to after commit (``pending_xp_events``):
+a notification cannot be un-sent, so it must never fire for XP that rolled back.
+The transaction does hold the ``FOR UPDATE SKIP LOCKED`` locks for the duration
+of the grants (O(N categories x M participants) round-trips); this is bounded in
+practice by the small per-edition category/participant counts and is the accepted
+cost of the correctness coupling above. If participant counts ever grow large
+enough to threaten the poller's transaction window, the right fix is batching the
+grant queries (set-based INSERT ... SELECT into the ledger) — NOT moving them out
+of the transaction.
 """
 
 from __future__ import annotations
