@@ -282,6 +282,13 @@ class TournamentHandler(BaseHandler):
     async def _resolve_channels(self) -> None:
         """Resolve the announcement channel and the (shared) mod verification channel.
 
+        Invoked automatically by ``BaseHandler._ensure_guild_and_channel`` (scheduled
+        as a task in ``BaseHandler.__init__``), which awaits ``bot.wait_until_ready()``
+        before calling this override. ``announcement_channel`` / ``verification_channel``
+        are therefore guaranteed initialized before any queue consumer fires — there is
+        deliberately no explicit call here or in ``setup()`` (a manual call would run
+        before the gateway is ready and ``get_channel`` would return ``None``).
+
         The non-PB tournament Accept/Reject card reuses the EXISTING mod verification
         queue (``channels.submission.verification_queue``) rather than a dedicated channel
         — mods already watch this queue for completion review (CONTEXT discretion default).
