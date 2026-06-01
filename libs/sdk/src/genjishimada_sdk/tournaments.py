@@ -32,6 +32,7 @@ __all__ = (
     "TournamentCyclesStartedEvent",
     "TournamentDebugCycleLengthRequest",
     "TournamentEditionResponse",
+    "TournamentEditionResultsEvent",
     "TournamentLeaderboardEntryResponse",
     "TournamentLifecycleResponse",
     "TournamentNextCycleResponse",
@@ -45,7 +46,7 @@ __all__ = (
 CycleFrequency = Literal["weekly", "biweekly"]
 CycleStatus = Literal["pending", "active", "finalizing", "completed"]
 Cadence = Literal["weekly", "biweekly"]
-EditionStatus = Literal["active", "completed"]
+EditionStatus = Literal["active", "awaiting_results", "completed"]
 
 
 class PlacementXpTier(Struct):
@@ -609,18 +610,54 @@ class TournamentRolloverEvent(Struct):
     - ``started`` is empty when the boundary only finalizes the edition (into a
       hiatus, ``transitions_paused``).
 
+    When verification is still in flight at the boundary (Phase 12.1, D-09),
+    ``results_pending=True`` marks a start-only deferred rollover: ``results`` is
+    empty and the finalized edition's standings arrive later as a separate
+    :class:`TournamentEditionResultsEvent`. ``results_pending`` defaults to
+    ``False`` so an OLD-shape outbox payload (written before this field existed,
+    no ``results_pending`` key) still ``msgspec.convert``s cleanly — in-flight
+    rows at deploy MUST keep converting or they stay unpublished forever
+    (Pitfall 2, hard backward-compatibility constraint).
+
     Attributes:
         edition_id: Identifier of the edition that rolled over (idempotency key
             source: ``tournament:rollover:{edition_id}``).
         results: Per-category completed results of the finalized edition; empty
-            on a start-only (out-of-hiatus) rollover.
+            on a start-only (out-of-hiatus) rollover OR when ``results_pending``.
         started: Per-category started cycles of the next edition; empty on a
             results-only (into-hiatus) rollover.
+        results_pending: ``True`` when the finalized edition's results are
+            deferred pending verification drain; ``results`` is then empty and a
+            separate :class:`TournamentEditionResultsEvent` follows. Defaults to
+            ``False`` to keep old-shape payloads convertible.
     """
 
     edition_id: int
     results: list[TournamentCycleCompletedEvent]
     started: list[TournamentCycleStartedEvent]
+    results_pending: bool = False
+
+
+class TournamentEditionResultsEvent(Struct):
+    """Results-only event for a deferred (verification-gated) edition rollover.
+
+    Carried on ``api.tournament.results`` (idempotency key
+    ``tournament:results:{edition_id}``). Emitted when a finalized edition's
+    pending verifications have drained AFTER a start-only
+    :class:`TournamentRolloverEvent` (``results_pending=True``) already announced
+    the next edition's start (Phase 12.1, D-09). The bot's ``_on_edition_results``
+    handler posts the deferred standings as a NEW announcement and performs the
+    held champion-role transfer.
+
+    Attributes:
+        edition_id: Identifier of the finalized edition whose results settled
+            (idempotency key source: ``tournament:results:{edition_id}``).
+        results: Per-category completed results of the finalized edition; empty
+            when every run was rejected / no submissions (a no-winner card).
+    """
+
+    edition_id: int
+    results: list[TournamentCycleCompletedEvent]
 
 
 class TournamentCompletionCreatedEvent(Struct):
