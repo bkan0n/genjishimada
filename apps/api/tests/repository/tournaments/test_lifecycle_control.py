@@ -1,9 +1,12 @@
 """Integration tests for the cycle lifecycle-control repository methods.
 
-Covers check_any_live_cycle, create_active_cycle, set_category_paused, and
-set_category_debug_cycle_seconds added in quick-task 260601-bhy. Uses the same
-conftest fixtures (create_test_category, create_test_cycle, create_test_map) as
-the rest of the tournaments repository suite.
+Covers check_any_live_cycle and create_active_cycle. The per-category
+set_category_paused / set_category_debug_cycle_seconds tests were removed in
+Phase 12 — pause/debug went GLOBAL (D-03), and the global setters are now
+covered by test_tournaments_repository.py (test_set_transitions_paused,
+test_set_debug_cycle_seconds_and_clear). Uses the same conftest fixtures
+(create_test_category, create_test_cycle, create_test_map) as the rest of the
+tournaments repository suite.
 """
 
 import asyncpg
@@ -80,61 +83,3 @@ class TestCreateActiveCycle:
         assert row["started_at"] is not None
         assert row["category_id"] == category
         assert row["map_id"] == map_id
-
-
-class TestSetCategoryPaused:
-    """set_category_paused flips and round-trips the transitions_paused flag."""
-
-    async def test_flip_and_round_trip(
-        self,
-        asyncpg_pool: asyncpg.Pool,
-        create_test_category,
-    ):
-        """Pausing then resuming round-trips the flag."""
-        category = await create_test_category()
-        repo = TournamentRepository(asyncpg_pool)
-
-        paused = await repo.set_category_paused(category, True)
-        assert paused is not None
-        assert paused["transitions_paused"] is True
-
-        resumed = await repo.set_category_paused(category, False)
-        assert resumed is not None
-        assert resumed["transitions_paused"] is False
-
-    async def test_missing_category_returns_none(
-        self,
-        asyncpg_pool: asyncpg.Pool,
-    ):
-        """Updating a non-existent category returns None."""
-        repo = TournamentRepository(asyncpg_pool)
-        assert await repo.set_category_paused(999_999, True) is None
-
-
-class TestSetCategoryDebugCycleSeconds:
-    """set_category_debug_cycle_seconds sets and clears the override."""
-
-    async def test_set_and_clear(
-        self,
-        asyncpg_pool: asyncpg.Pool,
-        create_test_category,
-    ):
-        """Setting an override then clearing it (None) round-trips."""
-        category = await create_test_category()
-        repo = TournamentRepository(asyncpg_pool)
-
-        set_row = await repo.set_category_debug_cycle_seconds(category, 30)
-        assert set_row is not None
-        assert set_row["debug_cycle_seconds"] == 30
-
-        cleared = await repo.set_category_debug_cycle_seconds(category, None)
-        assert cleared is not None
-        assert cleared["debug_cycle_seconds"] is None
-
-    async def test_missing_category_returns_none(
-        self,
-        asyncpg_pool: asyncpg.Pool,
-    ):
-        """Updating a non-existent category returns None."""
-        repo = TournamentRepository(asyncpg_pool)
-        assert await repo.set_category_debug_cycle_seconds(999_999, 30) is None
