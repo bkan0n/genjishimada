@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from logging import getLogger
 
 from asyncpg import Connection, Pool
@@ -309,36 +310,172 @@ class TournamentRepository(BaseRepository):
             category_id,
         )
 
+    # =========================================================================
+    # Global lifecycle config setters (D-02/D-03/D-07)
+    # =========================================================================
+    # Migration 0024 moved cadence/anchor/pause/debug off individual categories
+    # onto the tournaments.config singleton. These setters reuse the same
+    # injection-safe allow-list SET builder as update_config: field names come
+    # from a fixed dict (NOT user input) and values are bound as $n positional
+    # params -- never string-interpolated (T-12-05).
+
+    _GLOBAL_CONFIG_FIELDS = frozenset(
+        {
+            "cadence",
+            "anchor_weekday",
+            "anchor_time",
+            "anchor_tz",
+            "transitions_paused",
+            "debug_cycle_seconds",
+        }
+    )
+
+    async def _set_global_config(
+        self,
+        updates: dict,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Apply an allow-listed global config update and return the row.
+
+        Args:
+            updates: Field-name -> value map; every key MUST be in
+                ``_GLOBAL_CONFIG_FIELDS`` (caller passes literal keys, never user
+                input).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The updated config singleton row as dict.
+
+        Raises:
+            ValueError: If any field name is outside the allow-list.
+            CheckConstraintViolationError: If a value violates a column CHECK.
+        """
+        bad = set(updates) - self._GLOBAL_CONFIG_FIELDS
+        if bad:
+            raise ValueError(f"unknown global config fields: {sorted(bad)}")
+        _conn = self._get_connection(conn)
+        set_clauses = []
+        values: list[object] = []
+        for idx, (field, value) in enumerate(updates.items(), start=1):
+            set_clauses.append(f"{field} = ${idx}")
+            values.append(value)
+        set_clauses.append("updated_at = now()")
+        query = f"UPDATE tournaments.config SET {', '.join(set_clauses)} WHERE id = 1 RETURNING *"
+        try:
+            row = await _conn.fetchrow(query, *values)
+            return dict(row) if row else {}
+        except CheckViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise CheckConstraintViolationError(constraint_name, "tournaments.config", str(e)) from e
+
+    async def set_transitions_paused(
+        self,
+        paused: bool,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Set the global automatic-transition pause flag (D-03).
+
+        Args:
+            paused: True pauses automatic edition transitions; False resumes.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The updated config singleton row as dict.
+        """
+        return await self._set_global_config({"transitions_paused": paused}, conn=conn)
+
+    async def set_debug_cycle_seconds(
+        self,
+        seconds: int | None,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Set or clear the global debug edition-length override (D-03).
+
+        Args:
+            seconds: Override length in seconds, or None to clear the override.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The updated config singleton row as dict.
+
+        Raises:
+            CheckConstraintViolationError: If seconds is not positive.
+        """
+        return await self._set_global_config({"debug_cycle_seconds": seconds}, conn=conn)
+
+    async def set_cadence(
+        self,
+        cadence: str,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Set the global cycle cadence (D-02).
+
+        Args:
+            cadence: 'weekly' or 'biweekly'.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The updated config singleton row as dict.
+
+        Raises:
+            CheckConstraintViolationError: If cadence is not an allowed value.
+        """
+        return await self._set_global_config({"cadence": cadence}, conn=conn)
+
+    async def set_anchor(
+        self,
+        anchor_weekday: int,
+        anchor_time: dt.time,
+        anchor_tz: str,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Set the global grid anchor (weekday/time/timezone) (D-07).
+
+        Args:
+            anchor_weekday: EXTRACT(DOW) weekday 0=Sun..6=Sat.
+            anchor_time: Anchor time-of-day in anchor_tz wall-clock.
+            anchor_tz: IANA timezone name (service-validated before persisting).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The updated config singleton row as dict.
+
+        Raises:
+            CheckConstraintViolationError: If anchor_weekday is out of range.
+        """
+        return await self._set_global_config(
+            {
+                "anchor_weekday": anchor_weekday,
+                "anchor_time": anchor_time,
+                "anchor_tz": anchor_tz,
+            },
+            conn=conn,
+        )
+
+    # --- Deprecated per-category shims -------------------------------------
+    # Migration 0024 made pause/debug GLOBAL (D-03). These shims keep the
+    # still-category-scoped service handlers importing/type-checking until the
+    # service wave (12-03) rewrites them to the global setters. The category_id
+    # argument is intentionally ignored (the levers are no longer per-category).
+
     async def set_category_paused(
         self,
         category_id: int,
         paused: bool,
         *,
         conn: Connection | None = None,
-    ) -> dict | None:
-        """Set a category's automatic-transition pause flag.
+    ) -> dict:
+        """Deprecated: delegates to the global ``set_transitions_paused`` (D-03).
 
-        Args:
-            category_id: Category ID to update.
-            paused: True pauses automatic transitions; False resumes the cadence.
-            conn: Optional connection for transaction support.
-
-        Returns:
-            Dict with id, transitions_paused, debug_cycle_seconds, or None if the
-            category does not exist.
+        ``category_id`` is ignored (the pause lever is global since 0024).
         """
-        _conn = self._get_connection(conn)
-        row = await _conn.fetchrow(
-            """
-            UPDATE tournaments.categories
-            SET transitions_paused = $2, updated_at = now()
-            WHERE id = $1
-            RETURNING id, transitions_paused, debug_cycle_seconds
-            """,
-            category_id,
-            paused,
-        )
-        return dict(row) if row else None
+        _ = category_id
+        return await self.set_transitions_paused(paused, conn=conn)
 
     async def set_category_debug_cycle_seconds(
         self,
@@ -346,30 +483,13 @@ class TournamentRepository(BaseRepository):
         seconds: int | None,
         *,
         conn: Connection | None = None,
-    ) -> dict | None:
-        """Set or clear a category's debug cycle-length override.
+    ) -> dict:
+        """Deprecated: delegates to the global ``set_debug_cycle_seconds`` (D-03).
 
-        Args:
-            category_id: Category ID to update.
-            seconds: Override length in seconds, or None to clear the override.
-            conn: Optional connection for transaction support.
-
-        Returns:
-            Dict with id, transitions_paused, debug_cycle_seconds, or None if the
-            category does not exist.
+        ``category_id`` is ignored (the debug lever is global since 0024).
         """
-        _conn = self._get_connection(conn)
-        row = await _conn.fetchrow(
-            """
-            UPDATE tournaments.categories
-            SET debug_cycle_seconds = $2, updated_at = now()
-            WHERE id = $1
-            RETURNING id, transitions_paused, debug_cycle_seconds
-            """,
-            category_id,
-            seconds,
-        )
-        return dict(row) if row else None
+        _ = category_id
+        return await self.set_debug_cycle_seconds(seconds, conn=conn)
 
     async def get_active_cycle_by_map_id(
         self,
@@ -476,6 +596,115 @@ class TournamentRepository(BaseRepository):
         except ForeignKeyViolationError as e:
             constraint_name = extract_constraint_name(e) or "unknown"
             raise RepoFKError(constraint_name, "tournaments.cycles", str(e)) from e
+
+    # =========================================================================
+    # Editions (D-05) -- the top-level grid-anchored timing entity
+    # =========================================================================
+
+    async def create_edition(
+        self,
+        started_at: dt.datetime,
+        ends_at: dt.datetime,
+        status: str = "active",
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Create a tournament edition with EXACT grid timestamps (D-05/D-08).
+
+        started_at/ends_at are bound as parameters (computed by the caller from
+        ``next_grid_boundary()`` or inherited as ``prev.ends_at``); this method
+        NEVER writes ``now()`` into the edition window -- that drift bug
+        (create_active_cycle line ~470) is deliberately NOT copied here.
+
+        Args:
+            started_at: Exact grid start instant.
+            ends_at: Exact grid end instant (started_at + period).
+            status: Edition status ('active' | 'completed'). Defaults to 'active'.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Created edition as dict.
+
+        Raises:
+            CheckConstraintViolationError: If status is not an allowed value.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO tournaments.editions (started_at, ends_at, status)
+            VALUES ($1, $2, $3)
+            RETURNING *
+        """
+        try:
+            row = await _conn.fetchrow(query, started_at, ends_at, status)
+            return dict(row) if row else {}
+        except CheckViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise CheckConstraintViolationError(constraint_name, "tournaments.editions", str(e)) from e
+
+    async def create_cycle_for_edition(
+        self,
+        edition_id: int,
+        category_id: int,
+        map_id: int,
+        started_at: dt.datetime,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Create an ACTIVE child cycle linked to an edition (D-01/D-05).
+
+        The cycle inherits the edition's exact ``started_at`` (passed by the
+        caller); never ``now()``. All active categories share one edition per
+        rotation via ``edition_id``.
+
+        Args:
+            edition_id: Parent edition this cycle belongs to.
+            category_id: Category this cycle belongs to.
+            map_id: Map selected for this cycle.
+            started_at: Exact grid start instant inherited from the edition.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Created active child cycle as dict.
+
+        Raises:
+            RepoFKError: If edition_id, category_id, or map_id doesn't exist.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO tournaments.cycles (edition_id, category_id, map_id, status, started_at)
+            VALUES ($1, $2, $3, 'active', $4)
+            RETURNING *
+        """
+        try:
+            row = await _conn.fetchrow(query, edition_id, category_id, map_id, started_at)
+            return dict(row) if row else {}
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "tournaments.cycles", str(e)) from e
+
+    async def fetch_active_edition(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch the single active tournament edition, if any.
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The most recent active edition as dict, or None if none is active.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT *
+            FROM tournaments.editions
+            WHERE status = 'active'
+            ORDER BY started_at DESC
+            LIMIT 1
+        """
+        row = await _conn.fetchrow(query)
+        return dict(row) if row else None
 
     async def fetch_cycle(
         self,
@@ -1339,35 +1568,46 @@ class TournamentRepository(BaseRepository):
 
     async def create_pending_transition(
         self,
-        cycle_id: int,
+        cycle_id: int | None,
         event_type: str,
         payload: str,
         *,
+        edition_id: int | None = None,
         conn: Connection | None = None,
     ) -> dict:
         """Create a pending transition event for outbox publishing.
 
+        Supports both the legacy per-cycle rows (cycle_started/cycle_completed,
+        with a non-null ``cycle_id``) and the combined ``edition_rollover`` row
+        (Pattern 3 / A3), which has no single cycle: ``cycle_id`` is None and
+        ``edition_id`` is set. Migration 0024 made ``cycle_id`` nullable and added
+        the nullable ``edition_id`` FK.
+
         Args:
-            cycle_id: Cycle that triggered the transition.
-            event_type: Event type (cycle_started or cycle_completed).
+            cycle_id: Cycle that triggered the transition, or None for an
+                edition_rollover row.
+            event_type: Event type (cycle_started, cycle_completed, or
+                edition_rollover).
             payload: JSON payload for the event.
+            edition_id: Edition the rollover belongs to (set for edition_rollover
+                rows, None otherwise).
             conn: Optional connection for transaction support.
 
         Returns:
             Created transition dict.
 
         Raises:
-            RepoFKError: If cycle_id doesn't exist.
+            RepoFKError: If cycle_id or edition_id doesn't exist.
             CheckConstraintViolationError: If event_type value is invalid.
         """
         _conn = self._get_connection(conn)
         query = """
-            INSERT INTO tournaments.pending_transitions (cycle_id, event_type, payload)
-            VALUES ($1, $2, $3::jsonb)
+            INSERT INTO tournaments.pending_transitions (cycle_id, edition_id, event_type, payload)
+            VALUES ($1, $2, $3, $4::jsonb)
             RETURNING *
         """
         try:
-            row = await _conn.fetchrow(query, cycle_id, event_type, payload)
+            row = await _conn.fetchrow(query, cycle_id, edition_id, event_type, payload)
             return dict(row) if row else {}
         except ForeignKeyViolationError as e:
             constraint_name = extract_constraint_name(e) or "unknown"
