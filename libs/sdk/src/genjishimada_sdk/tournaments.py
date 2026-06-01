@@ -1,4 +1,5 @@
 import datetime as dt
+import warnings
 from typing import Literal
 
 from msgspec import UNSET, Struct, UnsetType
@@ -230,10 +231,13 @@ class TournamentLifecycleResponse(Struct):
     debug_cycle_seconds: int | None
 
 
-# Backward-compat alias: the lifecycle structs moved to global (config-level)
-# semantics in migration 0024 (D-03). The old per-category name is retained as an
-# importable alias so the still-category-scoped service/route handlers keep
-# importing until Plan 03/05 rewrite them to the global surface.
+# DEPRECATED backward-compat alias: the lifecycle structs moved to global
+# (config-level) semantics in migration 0024 (D-03). The old per-category name is
+# retained as an importable alias so the still-category-scoped service/route
+# handlers keep importing until Plan 03/05 rewrite them to the global surface.
+# New code MUST use ``TournamentLifecycleResponse``. (Cannot attach a runtime
+# DeprecationWarning here without also warning on the live type it aliases, so the
+# warning is documentation-only for this name.)
 TournamentCategoryLifecycleResponse = TournamentLifecycleResponse
 
 
@@ -556,6 +560,15 @@ class TournamentCyclesStartedEvent(Struct):
 
     cycles: list[TournamentCycleStartedEvent]
 
+    def __post_init__(self) -> None:
+        """Emit a DeprecationWarning whenever this superseded event is constructed."""
+        warnings.warn(
+            "TournamentCyclesStartedEvent is deprecated; use TournamentRolloverEvent "
+            "(the combined edition_rollover event).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
 
 class TournamentCyclesCompletedEvent(Struct):
     """Combined event for every cycle completed in a single rotation.
@@ -571,6 +584,15 @@ class TournamentCyclesCompletedEvent(Struct):
     """
 
     cycles: list[TournamentCycleCompletedEvent]
+
+    def __post_init__(self) -> None:
+        """Emit a DeprecationWarning whenever this superseded event is constructed."""
+        warnings.warn(
+            "TournamentCyclesCompletedEvent is deprecated; use TournamentRolloverEvent "
+            "(the combined edition_rollover event).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
 
 
 class TournamentRolloverEvent(Struct):
