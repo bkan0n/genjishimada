@@ -4,9 +4,14 @@ Tests HTTP interface: request/response serialization,
 error translation, and full stack flow through real database.
 """
 
+import datetime as dt
+from collections.abc import AsyncIterator
 from uuid import uuid4
 
 import pytest
+from litestar import Litestar
+from litestar.testing import AsyncTestClient
+from pytest_databases.docker.postgres import PostgresService
 
 pytestmark = [
     pytest.mark.integration,
@@ -14,6 +19,46 @@ pytestmark = [
 ]
 
 BASE = "/api/v3/tournaments"
+
+
+def _dsn(svc: PostgresService) -> str:
+    return f"postgresql://{svc.user}:{svc.password}@{svc.host}:{svc.port}/{svc.database}"
+
+
+@pytest.fixture
+async def read_only_client(
+    postgres_service: PostgresService,
+    asyncpg_pool,
+) -> AsyncIterator[AsyncTestClient[Litestar]]:
+    """Client authenticated as a NON-superuser holding ONLY ``tournaments:read``.
+
+    Used to prove wrong-scope rejection on the force-publish route: the seeded
+    ``testing`` token is a superuser and bypasses scope checks, so a dedicated
+    scoped token is required to exercise the guard (mirrors test_config_tournament.py).
+    """
+    from app import create_app
+
+    api_key = f"ro-{uuid4().hex[:12]}"
+    async with asyncpg_pool.acquire() as conn:
+        user_id = await conn.fetchval(
+            "INSERT INTO public.auth_users (username, info) VALUES ($1, $2) RETURNING id",
+            f"readonly-{uuid4().hex[:8]}",
+            "tournaments:read only",
+        )
+        await conn.execute(
+            """
+            INSERT INTO public.api_tokens (user_id, api_key, is_superuser, scopes)
+            VALUES ($1, $2, FALSE, $3)
+            """,
+            user_id,
+            api_key,
+            ["tournaments:read"],
+        )
+
+    app = create_app(psql_dsn=_dsn(postgres_service))
+    async with AsyncTestClient(app=app) as client:
+        client.headers.update({"x-pytest-enabled": "1", "X-API-KEY": api_key})
+        yield client
 
 
 class TestGetConfig:
@@ -998,3 +1043,91 @@ class TestVerifyTournamentCompletion:
         response = await unauthenticated_client.patch(f"{BASE}/completions/1/verify")
 
         assert response.status_code == 401
+
+
+# =============================================================================
+# Plan 12.1-04 Task 2: PATCH /tournaments/publish-results force-publish (D-03)
+# =============================================================================
+
+
+async def _seed_awaiting_results_edition(asyncpg_pool, create_test_map, create_test_user) -> int:
+    """Seed an awaiting_results edition with one finalizing child cycle + a verified completion."""
+    started_at = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
+    ends_at = started_at + dt.timedelta(days=7)
+    map_id = await create_test_map(difficulty="Medium")
+    user_id = await create_test_user(nickname=f"FP{uuid4().hex[:6]}")
+    async with asyncpg_pool.acquire() as conn:
+        edition_id = await conn.fetchval(
+            "INSERT INTO tournaments.editions (started_at, ends_at, status) VALUES ($1, $2, 'awaiting_results') RETURNING id",
+            started_at,
+            ends_at,
+        )
+        category_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.categories (name, difficulties, participation_xp, placement_xp, streak_xp, is_active)
+            VALUES ($1, $2::text[], 0, '[]'::jsonb, '[]'::jsonb, TRUE)
+            RETURNING id
+            """,
+            f"FPRoute-{uuid4().hex[:6]}",
+            ["Medium"],
+        )
+        cycle_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.cycles (edition_id, category_id, map_id, status, started_at)
+            VALUES ($1, $2, $3, 'finalizing', $4)
+            RETURNING id
+            """,
+            edition_id,
+            category_id,
+            map_id,
+            started_at,
+        )
+        await conn.execute(
+            """
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status, completion)
+            VALUES ($1, $2, $3, 30.0, 'https://x/s.png', 'verified', FALSE)
+            """,
+            cycle_id,
+            user_id,
+            map_id,
+        )
+    return edition_id
+
+
+class TestForcePublishResultsRoute:
+    """PATCH /api/v3/tournaments/publish-results (tournaments:write, D-03)."""
+
+    async def test_unauthenticated_rejected(self, unauthenticated_client):
+        """No API key -> 401."""
+        response = await unauthenticated_client.patch(f"{BASE}/publish-results")
+        assert response.status_code == 401
+
+    async def test_wrong_scope_rejected(self, read_only_client):
+        """A read-only (non-superuser) caller is rejected (401/403) by the scope guard (T-12.1-09)."""
+        response = await read_only_client.patch(f"{BASE}/publish-results")
+        assert response.status_code in (401, 403)
+
+    async def test_write_scope_publishes_and_completes(
+        self, test_client, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """A tournaments:write caller force-publishes: edition -> completed, results row written."""
+        edition_id = await _seed_awaiting_results_edition(asyncpg_pool, create_test_map, create_test_user)
+
+        response = await test_client.patch(f"{BASE}/publish-results")
+        assert response.status_code in (200, 201)
+
+        async with asyncpg_pool.acquire() as conn:
+            status = await conn.fetchval("SELECT status FROM tournaments.editions WHERE id = $1", edition_id)
+            results_rows = await conn.fetchval(
+                "SELECT COUNT(*) FROM tournaments.pending_transitions WHERE event_type = 'edition_results' AND edition_id = $1",
+                edition_id,
+            )
+        assert status == "completed"
+        assert results_rows == 1
+
+    async def test_no_awaiting_edition_returns_409(self, test_client, asyncpg_pool):
+        """No awaiting_results edition -> 409 (domain error translated)."""
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute("UPDATE tournaments.editions SET status = 'completed' WHERE status = 'awaiting_results'")
+        response = await test_client.patch(f"{BASE}/publish-results")
+        assert response.status_code == 409
