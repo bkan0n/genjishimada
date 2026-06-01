@@ -6,8 +6,10 @@ from msgspec import UNSET, Struct, UnsetType
 from .difficulties import DifficultyTop
 
 __all__ = (
+    "Cadence",
     "CycleFrequency",
     "CycleStatus",
+    "EditionStatus",
     "PlacementXpTier",
     "StreakXpTier",
     "TournamentCategoryCreateRequest",
@@ -28,9 +30,12 @@ __all__ = (
     "TournamentCyclesCompletedEvent",
     "TournamentCyclesStartedEvent",
     "TournamentDebugCycleLengthRequest",
+    "TournamentEditionResponse",
     "TournamentLeaderboardEntryResponse",
+    "TournamentLifecycleResponse",
     "TournamentNextCycleResponse",
     "TournamentPauseRequest",
+    "TournamentRolloverEvent",
     "TournamentStreakResponse",
     "TournamentVerificationChangedEvent",
     "TournamentXpGrantEvent",
@@ -38,6 +43,8 @@ __all__ = (
 
 CycleFrequency = Literal["weekly", "biweekly"]
 CycleStatus = Literal["pending", "active", "finalizing", "completed"]
+Cadence = Literal["weekly", "biweekly"]
+EditionStatus = Literal["active", "completed"]
 
 
 class PlacementXpTier(Struct):
@@ -72,13 +79,31 @@ class StreakXpTier(Struct):
 class TournamentConfigResponse(Struct):
     """Tournament global configuration.
 
+    Carries the global cadence/anchor/pause/debug levers that migration 0024
+    moved off ``tournaments.categories`` onto the ``tournaments.config`` singleton
+    (D-02/D-03/D-07). There is no per-category ``id`` framing — these are global.
+
     Attributes:
         blacklist_weeks: Number of weeks a map is excluded after use.
+        cadence: Global cycle cadence ('weekly' | 'biweekly') (D-02).
+        anchor_weekday: Grid anchor weekday using EXTRACT(DOW): 0=Sun..6=Sat (D-07).
+        anchor_time: Grid anchor time-of-day in anchor_tz wall-clock (D-07).
+        anchor_tz: IANA timezone name for the grid anchor (D-07).
+        transitions_paused: Global hiatus lever; when True the next edition is
+            suppressed at the boundary (D-03).
+        debug_cycle_seconds: Debug/test edition-length override in seconds, or
+            None for the normal weekly/biweekly cadence (D-03).
         created_at: When the config was created.
         updated_at: When the config was last updated.
     """
 
     blacklist_weeks: int
+    cadence: Cadence
+    anchor_weekday: int
+    anchor_time: dt.time
+    anchor_tz: str
+    transitions_paused: bool
+    debug_cycle_seconds: int | None
     created_at: dt.datetime
     updated_at: dt.datetime
 
@@ -88,9 +113,17 @@ class TournamentConfigPatchRequest(Struct, kw_only=True):
 
     Attributes:
         blacklist_weeks: Number of weeks for map cooldown.
+        cadence: Global cycle cadence ('weekly' | 'biweekly').
+        anchor_weekday: Grid anchor weekday (0=Sun..6=Sat).
+        anchor_time: Grid anchor time-of-day in anchor_tz wall-clock.
+        anchor_tz: IANA timezone name for the grid anchor.
     """
 
     blacklist_weeks: int | UnsetType = UNSET
+    cadence: Cadence | UnsetType = UNSET
+    anchor_weekday: int | UnsetType = UNSET
+    anchor_time: dt.time | UnsetType = UNSET
+    anchor_tz: str | UnsetType = UNSET
 
 
 # ---------------------------------------------------------------------------
@@ -174,43 +207,81 @@ class TournamentCategoryPatchRequest(Struct, kw_only=True):
     is_active: bool | UnsetType = UNSET
 
 
-class TournamentCategoryLifecycleResponse(Struct):
-    """Lifecycle-control state for a tournament category.
+class TournamentLifecycleResponse(Struct):
+    """Global lifecycle-control state for automatic edition transitions.
 
-    Returned by the pause/resume and debug-cycle-length admin routes.
+    Returned by the global pause/resume and debug-cycle-length admin routes.
+    Migration 0024 moved these levers off individual categories onto the
+    ``tournaments.config`` singleton, so there is no per-category ``id`` framing
+    (D-03).
 
     Attributes:
-        id: Category identifier.
-        transitions_paused: When True, automatic cycle transitions are paused.
-        debug_cycle_seconds: Debug/test cycle-length override in seconds, or None
-            for the normal weekly/biweekly cadence.
+        transitions_paused: When True, automatic edition transitions are paused
+            (global hiatus lever).
+        debug_cycle_seconds: Debug/test edition-length override in seconds, or
+            None for the normal weekly/biweekly cadence.
     """
 
-    id: int
     transitions_paused: bool
     debug_cycle_seconds: int | None
 
 
+# Backward-compat alias: the lifecycle structs moved to global (config-level)
+# semantics in migration 0024 (D-03). The old per-category name is retained as an
+# importable alias so the still-category-scoped service/route handlers keep
+# importing until Plan 03/05 rewrite them to the global surface.
+TournamentCategoryLifecycleResponse = TournamentLifecycleResponse
+
+
 class TournamentPauseRequest(Struct):
-    """Request payload for pausing or resuming automatic cycle transitions.
+    """Request payload for pausing or resuming automatic edition transitions (global).
 
     Attributes:
-        paused: True pauses automatic transitions for the category; False resumes
-            the normal weekly/biweekly cadence.
+        paused: True pauses automatic transitions globally; False resumes the
+            normal weekly/biweekly cadence.
     """
 
     paused: bool
 
 
 class TournamentDebugCycleLengthRequest(Struct):
-    """Request payload for overriding a category's cycle length (DEBUG/TEST ONLY).
+    """Request payload for overriding the global edition length (DEBUG/TEST ONLY).
 
     Attributes:
-        seconds: Cycle length override in seconds, or None to clear the override
+        seconds: Edition length override in seconds, or None to clear the override
             and restore the normal weekly/biweekly cadence.
     """
 
     seconds: int | None
+
+
+# ---------------------------------------------------------------------------
+# Edition types
+# ---------------------------------------------------------------------------
+
+
+class TournamentEditionResponse(Struct):
+    """Top-level tournament edition: the shared grid-anchored timing entity (D-05).
+
+    Migration 0024 moved the one shared ``started_at``/``ends_at`` up off the
+    individual cycles onto the edition; child cycles link via ``edition_id``.
+    ``ends_at`` is a STORED field, not derived from cadence — closing
+    frontend-spec §8 (D-08).
+
+    Attributes:
+        id: Edition identifier.
+        started_at: EXACT grid value (anchor + N x period); never now().
+        ends_at: started_at + period; the next edition inherits this as its
+            started_at (the drift fix).
+        status: Current edition status ('active' | 'completed').
+        created_at: When the edition record was created.
+    """
+
+    id: int
+    started_at: dt.datetime
+    ends_at: dt.datetime
+    status: EditionStatus
+    created_at: dt.datetime
 
 
 # ---------------------------------------------------------------------------
@@ -469,10 +540,11 @@ class TournamentCycleCompletedEvent(Struct):
 class TournamentCyclesStartedEvent(Struct):
     """Combined event for every cycle started in a single rotation.
 
-    A single pg_cron rotation can start multiple categories' cycles in one
-    transaction. The outbox poller groups those rows by their shared
-    ``created_at`` and publishes ONE of these batch events so the bot renders a
-    single combined announcement instead of one per category.
+    .. deprecated::
+        Superseded by :class:`TournamentRolloverEvent`, which collapses the
+        started/completed pair into one ``edition_rollover`` event. Retained as
+        importable until Plan 03/05 remove the remaining references; do not use
+        for new code.
 
     Attributes:
         cycles: Per-category started events that share one rotation transaction.
@@ -484,16 +556,45 @@ class TournamentCyclesStartedEvent(Struct):
 class TournamentCyclesCompletedEvent(Struct):
     """Combined event for every cycle completed in a single rotation.
 
-    A single pg_cron rotation can finalize multiple categories' cycles in one
-    transaction. The outbox poller groups those rows by their shared
-    ``created_at`` and publishes ONE of these batch events so the bot renders a
-    single combined results announcement instead of one per category.
+    .. deprecated::
+        Superseded by :class:`TournamentRolloverEvent`, which collapses the
+        started/completed pair into one ``edition_rollover`` event. Retained as
+        importable until Plan 03/05 remove the remaining references; do not use
+        for new code.
 
     Attributes:
         cycles: Per-category completed events that share one rotation transaction.
     """
 
     cycles: list[TournamentCycleCompletedEvent]
+
+
+class TournamentRolloverEvent(Struct):
+    """One combined edition rollover event (collapses the started/completed pair).
+
+    Carried on ``api.tournament.rollover``. Migration 0024 writes ONE
+    ``edition_rollover`` outbox row per boundary with a jsonb payload whose keys
+    are byte-identical to these field names (``edition_id``, ``results``,
+    ``started``) — a mismatch raises ``msgspec.ValidationError`` and (safely)
+    leaves the row unpublished (D-09/D-10/D-11, Pitfall 5).
+
+    The two sections are conditional (D-10):
+    - ``results`` is empty when the boundary only starts the next edition.
+    - ``started`` is empty when the boundary only finalizes the edition (into a
+      hiatus, ``transitions_paused``).
+
+    Attributes:
+        edition_id: Identifier of the edition that rolled over (idempotency key
+            source: ``tournament:rollover:{edition_id}``).
+        results: Per-category completed results of the finalized edition; empty
+            on a start-only (out-of-hiatus) rollover.
+        started: Per-category started cycles of the next edition; empty on a
+            results-only (into-hiatus) rollover.
+    """
+
+    edition_id: int
+    results: list[TournamentCycleCompletedEvent]
+    started: list[TournamentCycleStartedEvent]
 
 
 class TournamentCompletionCreatedEvent(Struct):
