@@ -1553,12 +1553,20 @@ class TournamentRepository(BaseRepository):
             Number of ``status='pending'`` completions across the edition's child cycles.
         """
         _conn = self._get_connection(conn)
+        # Filter on cy.status (WR-05): the drain signal must only count pending runs on
+        # cycles still being finalized (the docstring's "finalizing child cycles"). A
+        # completion left 'pending' on an already-'completed' cycle (stale/pre-migration
+        # data, WR-03) would otherwise keep this count non-zero forever and wedge the
+        # edition in 'awaiting_results' with no path to drain. 'active' is included so a
+        # not-yet-stopped cycle's pending runs are still counted.
         count: int = await _conn.fetchval(
             """
             SELECT COUNT(*)
             FROM tournaments.completions tc
             JOIN tournaments.cycles cy ON cy.id = tc.cycle_id
-            WHERE cy.edition_id = $1 AND tc.status = 'pending'
+            WHERE cy.edition_id = $1
+              AND cy.status IN ('active', 'finalizing')
+              AND tc.status = 'pending'
             """,
             edition_id,
         )
