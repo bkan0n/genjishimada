@@ -1491,37 +1491,78 @@ class TournamentRepository(BaseRepository):
         *,
         conn: Connection | None = None,
     ) -> dict | None:
-        """Flip a single tournament completion's verified flag (only on a real change).
+        """Set a tournament completion's verdict via the tri-state ``status`` (only on a real change).
 
         Used by BOTH the PB side-effect (inside the completion verify path)
-        and the non-PB verify endpoint (D-04a/D-06). The UPDATE is guarded by
-        ``verified IS DISTINCT FROM $2`` so a no-op transition (the row is
-        already in the target state) matches no row and returns ``None``,
-        letting callers distinguish "real transition" from "no change" and
-        avoid re-granting XP or re-publishing on redelivery (CR-01/WR-06).
+        and the non-PB verify/reject endpoints (D-04a/D-06/D-08). Since migration
+        0025 ``verified`` is a STORED generated column derived from ``status``
+        (writing it raises GeneratedAlwaysError), so the verdict is written to
+        ``status``: ``verified=True`` -> ``'verified'``, ``verified=False`` ->
+        ``'rejected'``. Writing ``'rejected'`` (not leaving the row ``'pending'``)
+        is the D-08 drain signal — a rejected run becomes distinguishable from an
+        un-reviewed pending one. The UPDATE is guarded by ``status IS DISTINCT
+        FROM $2`` so a no-op transition (the row is already in the target state)
+        matches no row and returns ``None``, letting callers distinguish "real
+        transition" from "no change" and avoid re-granting XP or re-publishing on
+        redelivery (CR-01/WR-06) — the load-bearing idempotency guard, now keyed
+        on ``status``.
 
         Args:
             tournament_completion_id: ID of the tournament completion row.
-            verified: Target verified value (defaults to True).
+            verified: Target verdict — True verifies (status='verified'),
+                False rejects (status='rejected'). Defaults to True.
             conn: Optional connection for transaction support.
 
         Returns:
             Dict with id, cycle_id, user_id, time of the updated row when the
-            value actually changed, or None when no row matched (row missing OR
+            status actually changed, or None when no row matched (row missing OR
             already in the target state). Callers re-fetch to disambiguate.
         """
         _conn = self._get_connection(conn)
+        target_status = "verified" if verified else "rejected"
         row = await _conn.fetchrow(
             """
             UPDATE tournaments.completions
-            SET verified = $2
-            WHERE id = $1 AND verified IS DISTINCT FROM $2
+            SET status = $2
+            WHERE id = $1 AND status IS DISTINCT FROM $2
             RETURNING id, cycle_id, user_id, time
             """,
             tournament_completion_id,
-            verified,
+            target_status,
         )
         return dict(row) if row else None
+
+    async def count_inflight_verifications(
+        self,
+        edition_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int:
+        """Count completions still pending verification across an edition's child cycles (D-08).
+
+        This is the poller's drain signal (Plan 12.1-04): an edition in
+        ``awaiting_results`` can publish its deferred results only once every
+        in-flight verification on its ``finalizing`` child cycles has resolved
+        (``status`` left ``'pending'``). Returns 0 when the queue has drained.
+
+        Args:
+            edition_id: Parent edition whose child cycles are counted.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Number of ``status='pending'`` completions across the edition's child cycles.
+        """
+        _conn = self._get_connection(conn)
+        count: int = await _conn.fetchval(
+            """
+            SELECT COUNT(*)
+            FROM tournaments.completions tc
+            JOIN tournaments.cycles cy ON cy.id = tc.cycle_id
+            WHERE cy.edition_id = $1 AND tc.status = 'pending'
+            """,
+            edition_id,
+        )
+        return count
 
     async def fetch_tournament_completion(
         self,
@@ -1539,12 +1580,14 @@ class TournamentRepository(BaseRepository):
             conn: Optional connection for transaction support.
 
         Returns:
-            Dict with id, cycle_id, user_id, time, verified, or None if no row matched.
+            Dict with id, cycle_id, user_id, time, verified, status, or None if
+            no row matched. ``status`` is the tri-state source of truth (D-08);
+            ``verified`` is the generated mirror kept for backward-compat reads.
         """
         _conn = self._get_connection(conn)
         row = await _conn.fetchrow(
             """
-            SELECT id, cycle_id, user_id, time, verified
+            SELECT id, cycle_id, user_id, time, verified, status
             FROM tournaments.completions
             WHERE id = $1
             """,

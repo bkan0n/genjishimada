@@ -720,8 +720,8 @@ class TestLeaderboardEndpoint:
         async with asyncpg_pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, verified)
-                VALUES ($1, $2, $3, $4, $5, TRUE)
+                INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status)
+                VALUES ($1, $2, $3, $4, $5, 'verified')
                 """,
                 cycle_id,
                 user_id,
@@ -867,8 +867,8 @@ async def _seed_tournament_completion(
         )
         tc_id = await conn.fetchval(
             """
-            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, verified)
-            VALUES ($1, $2, $3, $4, $5, FALSE)
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status)
+            VALUES ($1, $2, $3, $4, $5, 'pending')
             RETURNING id
             """,
             cycle_id,
