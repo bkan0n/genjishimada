@@ -687,7 +687,7 @@ class TournamentService(BaseService):
             return await self.publish_message(
                 routing_key="api.tournament.verification.changed",
                 data=event,
-                headers=headers,
+                headers=headers or Headers(),
                 idempotency_key=idempotency_key,
             )
         except Exception:
@@ -737,7 +737,7 @@ class TournamentService(BaseService):
         return await self.publish_message(
             routing_key="api.tournament.verification.changed",
             data=event,
-            headers=None,
+            headers=Headers(),
             idempotency_key=idempotency_key,
         )
 
