@@ -55,6 +55,23 @@ class TournamentRepository(BaseRepository):
         row = await _conn.fetchrow(query)
         return dict(row) if row else {}
 
+    # Allow-listed config columns for the dynamic SET-clause builder below.
+    # Field names are injection-safe ONLY because every key is checked against
+    # this fixed frozenset before being interpolated; values are always bound as
+    # $n positional params, never string-interpolated (mirrors
+    # ``_GLOBAL_CONFIG_FIELDS`` / ``_set_global_config``, T-12-05).
+    _CONFIG_FIELDS = frozenset(
+        {
+            "blacklist_weeks",
+            "cadence",
+            "anchor_weekday",
+            "anchor_time",
+            "anchor_tz",
+            "transitions_paused",
+            "debug_cycle_seconds",
+        }
+    )
+
     async def update_config(
         self,
         updates: dict,
@@ -64,11 +81,19 @@ class TournamentRepository(BaseRepository):
         """Update tournament configuration fields.
 
         Args:
-            updates: Dict of field names to new values.
+            updates: Dict of field names to new values. Every key MUST be in
+                ``_CONFIG_FIELDS``; unknown keys are rejected to prevent SQL
+                injection through the dynamic SET clause.
             conn: Optional connection for transaction support.
+
+        Raises:
+            ValueError: If any field name is outside the allow-list.
         """
         if not updates:
             return
+        bad = set(updates) - self._CONFIG_FIELDS
+        if bad:
+            raise ValueError(f"unknown config fields: {sorted(bad)}")
         _conn = self._get_connection(conn)
         set_clauses = []
         values: list[object] = []
