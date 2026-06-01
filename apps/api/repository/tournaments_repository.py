@@ -682,6 +682,68 @@ class TournamentRepository(BaseRepository):
             constraint_name = extract_constraint_name(e) or "unknown"
             raise RepoFKError(constraint_name, "tournaments.cycles", str(e)) from e
 
+    async def is_valid_timezone(
+        self,
+        anchor_tz: str,
+        *,
+        conn: Connection | None = None,
+    ) -> bool:
+        """Return whether ``anchor_tz`` is a known IANA timezone name (T-12-04).
+
+        Checks ``pg_timezone_names`` so an invalid value cannot be persisted and
+        later crash the grid-boundary PL/pgSQL ``AT TIME ZONE`` on every cron tick.
+
+        Args:
+            anchor_tz: Candidate IANA timezone name.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            True if the timezone is recognized by PostgreSQL, False otherwise.
+        """
+        _conn = self._get_connection(conn)
+        return bool(
+            await _conn.fetchval(
+                "SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = $1)",
+                anchor_tz,
+            )
+        )
+
+    async def next_grid_boundary(
+        self,
+        anchor_weekday: int,
+        anchor_time: dt.time,
+        anchor_tz: str,
+        period: dt.timedelta,
+        *,
+        conn: Connection | None = None,
+    ) -> dt.datetime:
+        """Compute the next grid boundary at/after now() (D-06/D-07/D-13a).
+
+        Delegates to the DST-correct PL/pgSQL ``tournaments.next_grid_boundary``
+        (migration 0024): ``now()`` is consulted ONLY to pick which boundary; the
+        returned instant is the exact anchor weekday@time-of-day in ``anchor_tz``,
+        stepped one ``period`` if already past. The caller stores the returned
+        value verbatim into the edition window -- now() is never stored (D-08).
+
+        Args:
+            anchor_weekday: EXTRACT(DOW) weekday 0=Sun..6=Sat.
+            anchor_time: Anchor time-of-day in ``anchor_tz`` wall-clock.
+            anchor_tz: IANA timezone name (validated by the service before use).
+            period: Cadence/debug period interval used to step a past boundary.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The exact grid-boundary timestamp (timezone-aware).
+        """
+        _conn = self._get_connection(conn)
+        return await _conn.fetchval(
+            "SELECT tournaments.next_grid_boundary(now(), $1, $2, $3, $4)",
+            anchor_weekday,
+            anchor_time,
+            anchor_tz,
+            period,
+        )
+
     async def fetch_active_edition(
         self,
         *,

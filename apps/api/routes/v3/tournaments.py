@@ -15,8 +15,8 @@ from genjishimada_sdk.tournaments import (
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
     TournamentCycleListResponse,
-    TournamentCycleResponse,
     TournamentDebugCycleLengthRequest,
+    TournamentEditionResponse,
     TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
     TournamentPauseRequest,
@@ -476,19 +476,23 @@ class TournamentsController(litestar.Controller):
         self,
         tournament_service: TournamentService,
         category_id: Annotated[int, Parameter(description="Category ID")],
-    ) -> TournamentCycleResponse:
-        """Activate the first cycle for a category.
+    ) -> TournamentEditionResponse:
+        """Activate the first grid-snapped edition (12-04 re-paths this route).
+
+        The ``category_id`` path param is retained for route compatibility but is
+        ignored: bootstrap now creates ONE edition spanning all active categories
+        (D-13a). The 12-04 route wave moves this to a config-level path.
 
         Args:
             tournament_service: Tournament service.
-            category_id: Category ID to bootstrap.
+            category_id: Ignored (edition bootstrap is global since 0024).
 
         Returns:
-            The created active cycle.
+            The created active edition.
 
         Raises:
-            CustomHTTPException: 404 if category not found, 409 if a live/pending
-                cycle already exists, 422 if no eligible maps.
+            CustomHTTPException: 409 if an active edition already exists, 422 if a
+                category has no eligible maps.
         """
         try:
             return await tournament_service.bootstrap_cycle(category_id)
@@ -539,7 +543,8 @@ class TournamentsController(litestar.Controller):
             CustomHTTPException: 404 if category not found.
         """
         try:
-            return await tournament_service.set_transitions_paused(category_id, data.paused)
+            _ = category_id  # ignored: pause is global since 0024 (12-04 re-paths)
+            return await tournament_service.set_transitions_paused(data.paused)
         except CategoryNotFoundError as e:
             raise CustomHTTPException(
                 status_code=HTTP_404_NOT_FOUND,
@@ -577,7 +582,8 @@ class TournamentsController(litestar.Controller):
             CustomHTTPException: 403 if disabled in production, 404 if category not found.
         """
         try:
-            return await tournament_service.set_debug_cycle_length(category_id, data.seconds)
+            _ = category_id  # ignored: debug lever is global since 0024 (12-04 re-paths)
+            return await tournament_service.set_debug_cycle_length(data.seconds)
         except DebugRouteDisabledError as e:
             raise CustomHTTPException(
                 status_code=HTTP_403_FORBIDDEN,

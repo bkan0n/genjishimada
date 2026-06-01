@@ -66,6 +66,18 @@ class DebugRouteDisabledError(TournamentsError):
         super().__init__("Debug cycle-length override is disabled in production.")
 
 
+class InvalidTimezoneError(TournamentsError):
+    """The supplied anchor timezone is not a known IANA timezone name (T-12-04).
+
+    Validated against ``pg_timezone_names`` before persisting so an invalid value
+    cannot reach the grid-boundary PL/pgSQL function (where ``AT TIME ZONE`` would
+    raise on every cron tick and stall edition transitions).
+    """
+
+    def __init__(self, anchor_tz: str) -> None:
+        super().__init__(f"Unknown timezone '{anchor_tz}'.", anchor_tz=anchor_tz)
+
+
 class CycleNotActiveError(TournamentsError):
     """Submission attempted on a non-active cycle."""
 
