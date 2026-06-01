@@ -144,3 +144,18 @@ class TournamentCompletionNotFoundError(TournamentsError):
             "Tournament completion not found.",
             tournament_completion_id=tournament_completion_id,
         )
+
+
+class AlreadyVerifiedError(TournamentsError):
+    """A verified tournament completion cannot be rejected after the fact.
+
+    A run that has already been verified (participation XP granted) cannot be
+    silently reverted to unverified, because the XP grant is not reversed. The
+    verdict is terminal once verified; controllers map this to HTTP 409 (CR-01).
+    """
+
+    def __init__(self, tournament_completion_id: int) -> None:
+        super().__init__(
+            "Tournament completion is already verified and cannot be rejected.",
+            tournament_completion_id=tournament_completion_id,
+        )

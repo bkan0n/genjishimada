@@ -44,7 +44,7 @@ from genjishimada_sdk.tournaments import (
 from extensions._queue_registry import queue_consumer
 from utilities import transformers
 from utilities.base import BaseCog, BaseHandler
-from utilities.errors import APIHTTPError, UserFacingError
+from utilities.errors import APIHTTPError, APIUnavailableError, UserFacingError
 from utilities.extra import poll_job_until_complete
 from utilities.paginator import StaticPaginatorView
 

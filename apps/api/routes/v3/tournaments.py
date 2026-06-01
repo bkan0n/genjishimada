@@ -33,6 +33,7 @@ from litestar.status_codes import (
 from repository.lootbox_repository import provide_lootbox_repository
 from repository.tournaments_repository import provide_tournament_repository
 from services.exceptions.tournaments import (
+    AlreadyVerifiedError,
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
@@ -513,7 +514,9 @@ class TournamentsController(litestar.Controller):
             Job status of the published verification-changed event.
 
         Raises:
-            CustomHTTPException: 404 if the tournament completion does not exist.
+            CustomHTTPException: 404 if the tournament completion does not exist;
+                409 if it is already verified (a verified run is terminal and cannot
+                be rejected back to unverified — CR-01).
         """
         try:
             return await tournament_service.reject_tournament_completion(
@@ -522,6 +525,11 @@ class TournamentsController(litestar.Controller):
         except TournamentCompletionNotFoundError as e:
             raise CustomHTTPException(
                 status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except AlreadyVerifiedError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_409_CONFLICT,
                 detail=str(e),
             ) from e
 
