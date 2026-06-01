@@ -960,6 +960,17 @@ class TournamentService(BaseService):
             )
             if current is None:
                 raise TournamentCompletionNotFoundError(tournament_completion_id)
+            # TOCTOU no-op (WR-01): a concurrent verdict landed between the precheck
+            # fetch and the guarded UPDATE, so the row is ALREADY in the target state.
+            # The concurrent call already granted XP and published the event — publishing
+            # a second event here would ride a fresh public.jobs UUID (new message_id) and
+            # could be processed twice by the bot. Treat it as an idempotent no-op instead.
+            target_status = "verified" if verified else "rejected"
+            if current["status"] == target_status:
+                return await self._noop_verdict_job(
+                    tournament_completion_id,
+                    idempotency_key=idempotency_key,
+                )
             updated = current
 
         # Transaction committed: now safe to publish the deferred XP notification.
