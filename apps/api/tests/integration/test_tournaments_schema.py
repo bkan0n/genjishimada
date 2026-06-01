@@ -452,3 +452,352 @@ class TestTournamentsFreshRestartWipe:
             assert (await conn.fetchval("SELECT count(*) FROM tournaments.completions")) == 0
             assert (await conn.fetchval("SELECT count(*) FROM tournaments.cycles")) == 0
             assert (await conn.fetchval("SELECT count(*) FROM tournaments.editions")) == 0
+
+
+class TestTournamentsVerificationAwareResults:
+    """Migration 0025 schema shape (Phase 12.1, D-06/D-08): tri-state completion
+    status with a generated `verified` column, the preserved ranking index,
+    `awaiting_results` edition status + `start_announced` marker, and the
+    timing-only `process_edition_transitions()` rewrite.
+
+    These are Wave 0 assertions: they are authored RED (migration 0025 does not
+    exist yet) and turn GREEN once 0025 is applied.
+    """
+
+    async def test_completions_status_check_tri_state(self, asyncpg_pool):
+        """tournaments.completions has a `status` column whose CHECK allows exactly
+        pending/verified/rejected and rejects anything else (D-08)."""
+        async with asyncpg_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT column_name, is_nullable, column_default
+                FROM information_schema.columns
+                WHERE table_schema = 'tournaments'
+                  AND table_name = 'completions'
+                  AND column_name = 'status'
+                """
+            )
+            assert row is not None, "completions.status column missing"
+            assert row["is_nullable"] == "NO"
+            assert "pending" in (row["column_default"] or "")
+
+            # Each of the three legal values is accepted; an illegal one is rejected.
+            tr = conn.transaction()
+            await tr.start()
+            try:
+                cycle_id, user_id, map_id = await self._seed_cycle(conn, "tri-state-check")
+                for status in ("pending", "verified", "rejected"):
+                    await conn.execute("SAVEPOINT s_legal")
+                    await conn.execute(
+                        """
+                        INSERT INTO tournaments.completions
+                            (cycle_id, user_id, map_id, time, screenshot, status)
+                        VALUES ($1, $2, $3, 10.00, 'https://example.com/s.png', $4)
+                        """,
+                        cycle_id,
+                        user_id,
+                        map_id,
+                        status,
+                    )
+                    await conn.execute("ROLLBACK TO SAVEPOINT s_legal")
+
+                await conn.execute("SAVEPOINT s_illegal")
+                with pytest.raises(asyncpg.CheckViolationError):
+                    await conn.execute(
+                        """
+                        INSERT INTO tournaments.completions
+                            (cycle_id, user_id, map_id, time, screenshot, status)
+                        VALUES ($1, $2, $3, 10.00, 'https://example.com/s.png', 'bogus')
+                        """,
+                        cycle_id,
+                        user_id,
+                        map_id,
+                    )
+                await conn.execute("ROLLBACK TO SAVEPOINT s_illegal")
+            finally:
+                await tr.rollback()
+
+    async def test_verified_is_generated_from_status(self, asyncpg_pool):
+        """`verified` is a STORED generated column synchronized to status='verified' (D-08)."""
+        async with asyncpg_pool.acquire() as conn:
+            # information_schema marks generated columns ALWAYS.
+            gen = await conn.fetchval(
+                """
+                SELECT is_generated
+                FROM information_schema.columns
+                WHERE table_schema = 'tournaments'
+                  AND table_name = 'completions'
+                  AND column_name = 'verified'
+                """
+            )
+            assert gen == "ALWAYS", f"verified should be a generated column, got is_generated={gen!r}"
+
+            tr = conn.transaction()
+            await tr.start()
+            try:
+                cycle_id, user_id, map_id = await self._seed_cycle(conn, "verified-generated")
+                await conn.execute("SAVEPOINT s_gen")
+                # Inserting status='verified' yields verified IS TRUE.
+                tc_id = await conn.fetchval(
+                    """
+                    INSERT INTO tournaments.completions
+                        (cycle_id, user_id, map_id, time, screenshot, status)
+                    VALUES ($1, $2, $3, 10.00, 'https://example.com/s.png', 'verified')
+                    RETURNING id
+                    """,
+                    cycle_id,
+                    user_id,
+                    map_id,
+                )
+                assert (
+                    await conn.fetchval(
+                        "SELECT verified FROM tournaments.completions WHERE id = $1", tc_id
+                    )
+                ) is True
+                # Updating status='rejected' flips the generated verified to FALSE.
+                await conn.execute(
+                    "UPDATE tournaments.completions SET status = 'rejected' WHERE id = $1", tc_id
+                )
+                assert (
+                    await conn.fetchval(
+                        "SELECT verified FROM tournaments.completions WHERE id = $1", tc_id
+                    )
+                ) is False
+                await conn.execute("ROLLBACK TO SAVEPOINT s_gen")
+            finally:
+                await tr.rollback()
+
+    async def test_ranking_index_still_exists(self, asyncpg_pool):
+        """idx_tournament_completions_ranking survives the verified column swap (Pitfall 1)."""
+        async with asyncpg_pool.acquire() as conn:
+            indexes = await conn.fetch(
+                "SELECT indexname FROM pg_indexes WHERE schemaname = 'tournaments'"
+            )
+            assert "idx_tournament_completions_ranking" in {r["indexname"] for r in indexes}
+
+    async def test_ranking_unchanged_verified_above_pending_and_rejected(self, asyncpg_pool):
+        """Ranking is preserved: a verified run sorts above pending/rejected regardless
+        of time, ordering by `verified DESC, time ASC` (D-08)."""
+        async with asyncpg_pool.acquire() as conn:
+            tr = conn.transaction()
+            await tr.start()
+            try:
+                cycle_id, _, map_id = await self._seed_cycle(conn, "ranking-preserve")
+                # Three distinct users in the same cycle.
+                u_verified = await self._make_user(conn, 1)
+                u_pending = await self._make_user(conn, 2)
+                u_rejected = await self._make_user(conn, 3)
+                await conn.execute("SAVEPOINT s_rank")
+                # The verified run is SLOWER than both others — it must still rank first.
+                await conn.execute(
+                    """
+                    INSERT INTO tournaments.completions
+                        (cycle_id, user_id, map_id, time, screenshot, status)
+                    VALUES
+                        ($1, $2, $3, 99.00, 'https://example.com/v.png', 'verified'),
+                        ($1, $4, $3, 10.00, 'https://example.com/p.png', 'pending'),
+                        ($1, $5, $3, 11.00, 'https://example.com/r.png', 'rejected')
+                    """,
+                    cycle_id,
+                    u_verified,
+                    map_id,
+                    u_pending,
+                    u_rejected,
+                )
+                ordered = await conn.fetch(
+                    """
+                    SELECT user_id
+                    FROM tournaments.completions
+                    WHERE cycle_id = $1
+                    ORDER BY verified DESC, time ASC
+                    """,
+                    cycle_id,
+                )
+                assert ordered[0]["user_id"] == u_verified, "verified run must rank first"
+                await conn.execute("ROLLBACK TO SAVEPOINT s_rank")
+            finally:
+                await tr.rollback()
+
+    async def test_editions_status_check_accepts_awaiting_results(self, asyncpg_pool):
+        """The editions status CHECK now accepts 'awaiting_results' and still rejects
+        an illegal value (D-06)."""
+        async with asyncpg_pool.acquire() as conn:
+            tr = conn.transaction()
+            await tr.start()
+            try:
+                await conn.execute("SAVEPOINT s_awaiting")
+                edition_id = await conn.fetchval(
+                    """
+                    INSERT INTO tournaments.editions (started_at, ends_at, status)
+                    VALUES (now(), now() + interval '1 week', 'awaiting_results')
+                    RETURNING id
+                    """
+                )
+                assert edition_id is not None
+                # An update to a still-illegal value is rejected.
+                with pytest.raises(asyncpg.CheckViolationError):
+                    await conn.execute(
+                        "UPDATE tournaments.editions SET status = 'bogus' WHERE id = $1", edition_id
+                    )
+                await conn.execute("ROLLBACK TO SAVEPOINT s_awaiting")
+            finally:
+                await tr.rollback()
+
+    async def test_editions_has_start_announced_column(self, asyncpg_pool):
+        """tournaments.editions has start_announced boolean NOT NULL DEFAULT FALSE (D-06)."""
+        async with asyncpg_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT is_nullable, data_type, column_default
+                FROM information_schema.columns
+                WHERE table_schema = 'tournaments'
+                  AND table_name = 'editions'
+                  AND column_name = 'start_announced'
+                """
+            )
+            assert row is not None, "editions.start_announced column missing"
+            assert row["is_nullable"] == "NO"
+            assert row["data_type"] == "boolean"
+            assert (row["column_default"] or "").lower().startswith("false")
+
+    async def test_process_edition_transitions_is_timing_only(
+        self, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """process_edition_transitions() on a due edition flips it to 'awaiting_results',
+        flips child cycles to 'finalizing', creates edition N+1, and writes NO outbox row (D-06).
+
+        Invoked directly (Pitfall 7: pg_cron is unavailable in the test DB).
+        """
+        async with asyncpg_pool.acquire() as conn:
+            tr = conn.transaction()
+            await tr.start()
+            try:
+                await conn.execute("SAVEPOINT s_timing")
+                # Wipe so this is the only due edition + ensure config is unpaused/normal.
+                await conn.execute(_WIPE_SQL)
+                await conn.execute(
+                    """
+                    UPDATE tournaments.config
+                    SET transitions_paused = FALSE, debug_cycle_seconds = NULL
+                    WHERE id = 1
+                    """
+                )
+                map_id = await create_test_map(difficulty="Medium")
+                category_id = await conn.fetchval(
+                    """
+                    INSERT INTO tournaments.categories (name, difficulties, is_active)
+                    VALUES ($1, ARRAY['Medium'], TRUE)
+                    RETURNING id
+                    """,
+                    f"timing-cat-{map_id}",
+                )
+                # A DUE edition: ends_at already in the past.
+                edition_id = await conn.fetchval(
+                    """
+                    INSERT INTO tournaments.editions (started_at, ends_at, status)
+                    VALUES (now() - interval '2 weeks', now() - interval '1 second', 'active')
+                    RETURNING id
+                    """
+                )
+                cycle_id = await conn.fetchval(
+                    """
+                    INSERT INTO tournaments.cycles (edition_id, category_id, map_id, status, started_at)
+                    VALUES ($1, $2, $3, 'active', now() - interval '2 weeks')
+                    RETURNING id
+                    """,
+                    edition_id,
+                    category_id,
+                    map_id,
+                )
+
+                outbox_before = await conn.fetchval(
+                    "SELECT count(*) FROM tournaments.pending_transitions"
+                )
+
+                await conn.execute("SELECT tournaments.process_edition_transitions()")
+
+                # Edition flips to awaiting_results (NOT completed).
+                assert (
+                    await conn.fetchval(
+                        "SELECT status FROM tournaments.editions WHERE id = $1", edition_id
+                    )
+                ) == "awaiting_results"
+                # Child cycle flips to finalizing (NOT completed).
+                assert (
+                    await conn.fetchval(
+                        "SELECT status FROM tournaments.cycles WHERE id = $1", cycle_id
+                    )
+                ) == "finalizing"
+                # Edition N+1 was created.
+                assert (
+                    await conn.fetchval(
+                        "SELECT count(*) FROM tournaments.editions WHERE status = 'active'"
+                    )
+                ) == 1
+                # NO outbox row was written by the timing-only cron.
+                outbox_after = await conn.fetchval(
+                    "SELECT count(*) FROM tournaments.pending_transitions"
+                )
+                assert outbox_after == outbox_before, "timing-only cron must write no outbox row"
+
+                await conn.execute("ROLLBACK TO SAVEPOINT s_timing")
+            finally:
+                await tr.rollback()
+
+    # ---- helpers -----------------------------------------------------------
+
+    @staticmethod
+    async def _make_user(conn, suffix: int) -> int:
+        """Insert a throwaway core.users row, returning its id."""
+        base = 999999999999999900
+        user_id = base + suffix
+        await conn.execute(
+            """
+            INSERT INTO core.users (id, nickname, global_name)
+            VALUES ($1, $2, $2)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            user_id,
+            f"vaware_user_{suffix}",
+        )
+        return user_id
+
+    @classmethod
+    async def _seed_cycle(cls, conn, label: str) -> tuple[int, int, int]:
+        """Seed a user, map, category, edition, and cycle. Returns (cycle_id, user_id, map_id)."""
+        user_id = await cls._make_user(conn, 0)
+        map_id = await conn.fetchval(
+            """
+            INSERT INTO core.maps (code, map_name, category, checkpoints, difficulty, raw_difficulty)
+            VALUES ($1, 'Verification Aware Test Map', 'Mildcore', 3, 'Easy', 3.00)
+            ON CONFLICT (code) DO UPDATE SET map_name = EXCLUDED.map_name
+            RETURNING id
+            """,
+            f"VA{abs(hash(label)) % 1000:03d}",
+        )
+        category_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.categories (name, difficulties)
+            VALUES ($1, ARRAY['Easy'])
+            RETURNING id
+            """,
+            f"vaware-{label}",
+        )
+        edition_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.editions (started_at, ends_at, status)
+            VALUES (now() - interval '1 week', now(), 'active')
+            RETURNING id
+            """
+        )
+        cycle_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.cycles (edition_id, category_id, map_id, status, started_at)
+            VALUES ($1, $2, $3, 'active', now() - interval '1 week')
+            RETURNING id
+            """,
+            edition_id,
+            category_id,
+            map_id,
+        )
+        return cycle_id, user_id, map_id
