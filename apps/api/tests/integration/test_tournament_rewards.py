@@ -102,23 +102,39 @@ async def _seed_completion(asyncpg_pool, cycle_id: int, user_id: int, map_id: in
 
 
 async def _seed_completed_transition(asyncpg_pool, cycle_id: int, category_id: int, standings: list[dict]) -> int:
-    """Seed a cycle_completed pending_transitions row the poller will pick up."""
-    payload = json.dumps(
-        {
-            "cycle_id": cycle_id,
-            "category_id": category_id,
-            "standings": standings,
-            "winner_user_id": standings[0]["user_id"] if standings else None,
-        }
-    )
+    """Seed an edition_rollover pending_transitions row the poller will pick up.
+
+    Migration 0024 collapsed cycle_completed into a combined edition_rollover row
+    (D-09); the per-cycle completed payload now lives in the rollover's
+    ``results`` list (one entry per child cycle). The poller drives the reward
+    side-effects per results entry, keyed on cycle_id (Pattern 4), so this still
+    exercises the same award/streak/ledger path. A throwaway edition supplies the
+    nullable edition_id FK + the edition-scoped idempotency key.
+    """
+    completed_entry = {
+        "cycle_id": cycle_id,
+        "category_id": category_id,
+        "standings": standings,
+        "winner_user_id": standings[0]["user_id"] if standings else None,
+    }
+    payload = json.dumps({"edition_id": None, "results": [completed_entry], "started": []})
     async with asyncpg_pool.acquire() as conn:
+        edition_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.editions (started_at, ends_at, status)
+            VALUES (NOW() - INTERVAL '7 days', NOW(), 'completed')
+            RETURNING id
+            """
+        )
+        # edition_id must be in the payload too (idempotency key source) -- patch it in.
+        payload = json.dumps({"edition_id": edition_id, "results": [completed_entry], "started": []})
         return await conn.fetchval(
             """
-            INSERT INTO tournaments.pending_transitions (cycle_id, event_type, payload)
-            VALUES ($1, 'cycle_completed', $2::jsonb)
+            INSERT INTO tournaments.pending_transitions (cycle_id, edition_id, event_type, payload)
+            VALUES (NULL, $1, 'edition_rollover', $2::jsonb)
             RETURNING id
             """,
-            cycle_id,
+            edition_id,
             payload,
         )
 
@@ -127,11 +143,18 @@ async def _clear_unpublished_except(asyncpg_pool, cycle_id: int) -> None:
     """Drop any orphaned unpublished outbox rows so the poll batch is just ours.
 
     The shared DB can carry an unpublishable poison row from another outbox test
-    that would make the poll raise before reaching our cycle_completed row.
+    that would make the poll raise before reaching our edition_rollover row. Our
+    rollover row carries cycle_id NULL and references our cycle inside
+    payload->'results'; keep only rows whose results contain our cycle_id and drop
+    everything else still unpublished.
     """
     async with asyncpg_pool.acquire() as conn:
         await conn.execute(
-            "DELETE FROM tournaments.pending_transitions WHERE published = FALSE AND cycle_id <> $1",
+            """
+            DELETE FROM tournaments.pending_transitions
+            WHERE published = FALSE
+              AND NOT (payload->'results' @> jsonb_build_array(jsonb_build_object('cycle_id', $1::int)))
+            """,
             cycle_id,
         )
 
