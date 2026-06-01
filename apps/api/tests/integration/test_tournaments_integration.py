@@ -1114,7 +1114,9 @@ class TestForcePublishResultsRoute:
         edition_id = await _seed_awaiting_results_edition(asyncpg_pool, create_test_map, create_test_user)
 
         response = await test_client.patch(f"{BASE}/publish-results")
-        assert response.status_code in (200, 201)
+        # 204 No Content: the real result is delivered asynchronously via the edition_results
+        # outbox event, so the route returns no synchronous body (CR-01).
+        assert response.status_code == 204
 
         async with asyncpg_pool.acquire() as conn:
             status = await conn.fetchval("SELECT status FROM tournaments.editions WHERE id = $1", edition_id)

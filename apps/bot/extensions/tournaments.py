@@ -498,9 +498,7 @@ class TournamentHandler(BaseHandler):
         # handler would still build and send a header-only "## 🏅 Results" card with no
         # winners ping. Bail before any transfer or post so nothing is announced.
         if not event.results:
-            log.info(
-                "[✓] [Tournament] edition_results %s carried no results; nothing to post", event.edition_id
-            )
+            log.info("[✓] [Tournament] edition_results %s carried no results; nothing to post", event.edition_id)
             return
 
         # 1) HELD champion-role transfers FIRST (Pitfall 5 / D-05), per result entry. Cache
