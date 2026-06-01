@@ -287,9 +287,7 @@ class CategoryTransformer(app_commands.Transformer):
         """
         cats = await itx.client.api.list_tournament_categories()
         folded = current.casefold()
-        return [
-            app_commands.Choice(name=c.name, value=str(c.id)) for c in cats if folded in c.name.casefold()
-        ][:25]
+        return [app_commands.Choice(name=c.name, value=str(c.id)) for c in cats if folded in c.name.casefold()][:25]
 
 
 class FakeUserTransformer(app_commands.Transformer):

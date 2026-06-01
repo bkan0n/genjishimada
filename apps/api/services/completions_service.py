@@ -713,9 +713,7 @@ class CompletionsService(BaseService):
             # tournament row via core.completions.tournament_completion_id in the
             # SAME transaction.
             if active_cycle is not None and completion_id:
-                tournament_completion_id = await self._record_tournament_completion(
-                    active_cycle, data, conn=conn
-                )
+                tournament_completion_id = await self._record_tournament_completion(active_cycle, data, conn=conn)
                 if tournament_completion_id is not None:
                     await self._completions_repo.set_completion_tournament_link(
                         completion_id, tournament_completion_id, conn=conn
