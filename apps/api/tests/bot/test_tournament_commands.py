@@ -185,6 +185,18 @@ def _make_itx(*, user_id: int = 500, roles: set[int] | None = None) -> SimpleNam
     return itx
 
 
+def _view_text(view: Any) -> str:
+    """Flatten every ui.TextDisplay in a CV2 LayoutView into one searchable string.
+
+    The migrated streak/info commands render ``ui.LayoutView`` (Container + TextDisplay)
+    instead of an embed; ``walk_children()`` recurses into the container so collecting every
+    item exposing a string ``content`` reconstructs the visible card text.
+    """
+    return "\n".join(
+        item.content for item in view.walk_children() if isinstance(getattr(item, "content", None), str)
+    )
+
+
 # ---------------------------------------------------------------------------
 # reroll gate (D-07 / T-10-07)
 # ---------------------------------------------------------------------------
@@ -257,12 +269,10 @@ async def test_streak_zero_maps_404_to_zero_state() -> None:
 
     await TournamentCommandCog.streak.callback(cog, itx)
 
-    embed = itx.edit_original_response.await_args.kwargs["embed"]
-    rendered = (embed.title or "") + (embed.description or "")
-    rendered += "".join(f"{f.name}{f.value}" for f in embed.fields)
-    assert "Current Streak0" in rendered
-    assert "Max Streak0" in rendered
-    assert "Submit in a cycle to start your streak!" in (embed.description or "")
+    rendered = _view_text(itx.edit_original_response.await_args.kwargs["view"])
+    assert "**Current Streak:** 0" in rendered
+    assert "**Max Streak:** 0" in rendered
+    assert "Submit in a cycle to start your streak!" in rendered
 
 
 @pytest.mark.asyncio
@@ -291,11 +301,10 @@ async def test_streak_renders_real_record() -> None:
 
     await TournamentCommandCog.streak.callback(cog, itx)
 
-    embed = itx.edit_original_response.await_args.kwargs["embed"]
-    rendered = "".join(f"{f.name}{f.value}" for f in embed.fields)
-    assert "Current Streak3" in rendered
-    assert "Max Streak5" in rendered
-    assert "Submit in a cycle" not in (embed.description or "")
+    rendered = _view_text(itx.edit_original_response.await_args.kwargs["view"])
+    assert "**Current Streak:** 3" in rendered
+    assert "**Max Streak:** 5" in rendered
+    assert "Submit in a cycle" not in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +393,7 @@ async def test_info_no_active_cycle_skips_get_map() -> None:
 
 @pytest.mark.asyncio
 async def test_info_renders_card_for_active_cycle() -> None:
-    """An active cycle renders the rich card with map link, end time, thumbnail."""
+    """An active cycle renders the CV2 card with map link, code, and end time."""
     cog = object.__new__(TournamentCommandCog)
     itx = _make_itx()
     itx.client.api.get_tournament_category.return_value = _sample_category()
@@ -396,10 +405,7 @@ async def test_info_renders_card_for_active_cycle() -> None:
     await TournamentCommandCog.info.callback(cog, itx, 1)
 
     itx.client.api.get_map.assert_awaited_once_with(code="ABCD1")
-    embed = itx.edit_original_response.await_args.kwargs["embed"]
-    rendered = (embed.title or "") + (embed.description or "")
-    rendered += "".join(f"{f.name}{f.value}" for f in embed.fields)
+    rendered = _view_text(itx.edit_original_response.await_args.kwargs["view"])
     assert "Hanamura" in rendered
     assert "ABCD1" in rendered
     assert "workshop.codes" in rendered
-    assert embed.thumbnail.url == "https://cdn.genji.pk/b.png"
