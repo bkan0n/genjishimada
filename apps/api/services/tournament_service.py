@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
+import os
 import re
 from logging import getLogger
 from typing import TYPE_CHECKING
@@ -11,12 +13,15 @@ from asyncpg import Pool
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.tournaments import (
     TournamentCategoryCreateRequest,
+    TournamentCategoryLifecycleResponse,
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
     TournamentCycleListResponse,
+    TournamentCycleResponse,
+    TournamentCycleStartedEvent,
     TournamentCycleWithWinnerResponse,
     TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
@@ -33,6 +38,8 @@ from services.exceptions.tournaments import (
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
+    CycleAlreadyLiveError,
+    DebugRouteDisabledError,
     MapNotEligibleError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
@@ -330,6 +337,152 @@ class TournamentService(BaseService):
             )
 
         return msgspec.convert(result, TournamentNextCycleResponse)
+
+    async def bootstrap_cycle(self, category_id: int) -> TournamentCycleResponse:
+        """Activate the FIRST cycle for a category so it then auto-rotates.
+
+        The normal select_map path only ever creates pending cycles; the only
+        thing that activates a cycle in production is the pg_cron transition
+        function, which has no first-cycle path. Bootstrap fills that gap: it
+        selects an eligible map (same selection block as select_map, with LRU
+        fallback), creates an ACTIVE cycle, and writes a ``cycle_started`` outbox
+        row so the bot announces it. That outbox row is byte-identical in shape to
+        the one the pg_cron promote-pending branch writes, so the existing
+        TournamentOutboxService publishes it with no changes. All steps run on one
+        acquired connection inside a transaction (TOCTOU-safe + atomic outbox write).
+
+        Args:
+            category_id: Category ID to bootstrap the first cycle for.
+
+        Returns:
+            The created active cycle.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            CycleAlreadyLiveError: If a live/pending cycle already exists.
+            NoEligibleMapsError: If no eligible maps are found and LRU fallback fails.
+        """
+        async with self._pool.acquire() as conn, conn.transaction():
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            live_cycle_id = await self._tournament_repo.check_any_live_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if live_cycle_id is not None:
+                raise CycleAlreadyLiveError(category_id, cycle_id=live_cycle_id)
+
+            config = await self._tournament_repo.fetch_config(
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            eligible = await self._tournament_repo.fetch_eligible_maps(
+                category["difficulties"],
+                config["blacklist_weeks"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if eligible:
+                selected = eligible[0]
+            else:
+                log.warning("[!] Eligible map pool exhausted for category %s, using LRU fallback", category_id)
+                selected = await self._tournament_repo.fetch_least_recently_used_map(
+                    category["difficulties"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if selected is None:
+                    raise NoEligibleMapsError(category_id)
+
+            created = await self._tournament_repo.create_active_cycle(
+                category_id,
+                selected["id"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            started_at = created["started_at"]
+            if isinstance(started_at, str):
+                started_at = dt.datetime.fromisoformat(started_at)
+            cycle_seconds = category.get("debug_cycle_seconds")
+            if cycle_seconds is not None:
+                duration = dt.timedelta(seconds=cycle_seconds)
+            else:
+                duration = dt.timedelta(days=14 if category["cycle_frequency"] == "biweekly" else 7)
+            ends_at = started_at + duration
+
+            event = TournamentCycleStartedEvent(
+                cycle_id=created["id"],
+                category_id=category_id,
+                map_id=selected["id"],
+                map_code=selected["code"],
+                map_name=selected["map_name"],
+                started_at=started_at,
+                ends_at=ends_at,
+            )
+            await self._tournament_repo.create_pending_transition(
+                created["id"],
+                "cycle_started",
+                msgspec.json.encode(event).decode(),
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        return msgspec.convert(created, TournamentCycleResponse)
+
+    async def set_transitions_paused(
+        self,
+        category_id: int,
+        paused: bool,
+    ) -> TournamentCategoryLifecycleResponse:
+        """Pause or resume automatic cycle transitions for a category.
+
+        Paused categories are skipped by process_cycle_transitions(); resuming
+        (paused=False) restores the normal cadence using the preserved started_at.
+
+        Args:
+            category_id: Category ID to update.
+            paused: True pauses automatic transitions; False resumes the cadence.
+
+        Returns:
+            The updated lifecycle state.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+        """
+        row = await self._tournament_repo.set_category_paused(category_id, paused)
+        if row is None:
+            raise CategoryNotFoundError(category_id)
+        return msgspec.convert(row, TournamentCategoryLifecycleResponse)
+
+    async def set_debug_cycle_length(
+        self,
+        category_id: int,
+        seconds: int | None,
+    ) -> TournamentCategoryLifecycleResponse:
+        """Override a category's cycle length in seconds (DEBUG/TEST ONLY).
+
+        Disabled in production (D-DEBUG). When seconds is None the override is
+        cleared and the normal weekly/biweekly cadence resumes.
+
+        Args:
+            category_id: Category ID to update.
+            seconds: Override length in seconds, or None to clear the override.
+
+        Returns:
+            The updated lifecycle state.
+
+        Raises:
+            DebugRouteDisabledError: If APP_ENVIRONMENT is production.
+            CategoryNotFoundError: If the category does not exist.
+        """
+        if os.getenv("APP_ENVIRONMENT") == "production":
+            raise DebugRouteDisabledError
+        row = await self._tournament_repo.set_category_debug_cycle_seconds(category_id, seconds)
+        if row is None:
+            raise CategoryNotFoundError(category_id)
+        return msgspec.convert(row, TournamentCategoryLifecycleResponse)
 
     async def get_next_cycle(self, category_id: int) -> TournamentNextCycleResponse:
         """Preview the pending next cycle for a category.

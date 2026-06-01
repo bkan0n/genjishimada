@@ -8,14 +8,18 @@ import litestar
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.tournaments import (
     TournamentCategoryCreateRequest,
+    TournamentCategoryLifecycleResponse,
     TournamentCategoryPatchRequest,
     TournamentCategoryResponse,
     TournamentChooseMapRequest,
     TournamentConfigPatchRequest,
     TournamentConfigResponse,
     TournamentCycleListResponse,
+    TournamentCycleResponse,
+    TournamentDebugCycleLengthRequest,
     TournamentLeaderboardEntryResponse,
     TournamentNextCycleResponse,
+    TournamentPauseRequest,
     TournamentStreakResponse,
 )
 from litestar.di import Provide
@@ -25,6 +29,7 @@ from litestar.status_codes import (
     HTTP_200_OK,
     HTTP_201_CREATED,
     HTTP_204_NO_CONTENT,
+    HTTP_403_FORBIDDEN,
     HTTP_404_NOT_FOUND,
     HTTP_409_CONFLICT,
     HTTP_422_UNPROCESSABLE_ENTITY,
@@ -37,6 +42,8 @@ from services.exceptions.tournaments import (
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
+    CycleAlreadyLiveError,
+    DebugRouteDisabledError,
     MapNotEligibleError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
@@ -451,6 +458,134 @@ class TournamentsController(litestar.Controller):
         except MapNotEligibleError as e:
             raise CustomHTTPException(
                 status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            ) from e
+
+    @litestar.post(
+        path="/categories/{category_id:int}/bootstrap",
+        summary="Bootstrap First Cycle",
+        description=(
+            "Manually activate the FIRST cycle for a category so it then rolls over "
+            "automatically via the pg_cron transition machinery. Idempotent-safe: a "
+            "category with any live or pending cycle returns 409."
+        ),
+        status_code=HTTP_201_CREATED,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def bootstrap_cycle(
+        self,
+        tournament_service: TournamentService,
+        category_id: Annotated[int, Parameter(description="Category ID")],
+    ) -> TournamentCycleResponse:
+        """Activate the first cycle for a category.
+
+        Args:
+            tournament_service: Tournament service.
+            category_id: Category ID to bootstrap.
+
+        Returns:
+            The created active cycle.
+
+        Raises:
+            CustomHTTPException: 404 if category not found, 409 if a live/pending
+                cycle already exists, 422 if no eligible maps.
+        """
+        try:
+            return await tournament_service.bootstrap_cycle(category_id)
+        except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except CycleAlreadyLiveError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_409_CONFLICT,
+                detail=str(e),
+            ) from e
+        except NoEligibleMapsError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            ) from e
+
+    @litestar.post(
+        path="/categories/{category_id:int}/pause",
+        summary="Pause or Resume Cycle Transitions",
+        description=(
+            "Pause (paused=true) or resume (paused=false) automatic cycle transitions "
+            "for a category. Paused categories are skipped by the scheduled transition "
+            "function; resuming restores the normal weekly/biweekly cadence."
+        ),
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def set_transitions_paused(
+        self,
+        tournament_service: TournamentService,
+        category_id: Annotated[int, Parameter(description="Category ID")],
+        data: Annotated[TournamentPauseRequest, Body(title="Pause")],
+    ) -> TournamentCategoryLifecycleResponse:
+        """Pause or resume automatic cycle transitions for a category.
+
+        Args:
+            tournament_service: Tournament service.
+            category_id: Category ID.
+            data: Request with the paused flag.
+
+        Returns:
+            The updated lifecycle state.
+
+        Raises:
+            CustomHTTPException: 404 if category not found.
+        """
+        try:
+            return await tournament_service.set_transitions_paused(category_id, data.paused)
+        except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+
+    @litestar.patch(
+        path="/categories/{category_id:int}/debug-cycle-length",
+        summary="Override Cycle Length (DEBUG/TEST ONLY)",
+        description=(
+            "DEBUG/TEST ONLY: override a category's cycle length in seconds so the next "
+            "transition recomputes from the override. Pass seconds=null to clear the "
+            "override and restore the normal cadence. Rejected in production."
+        ),
+        status_code=HTTP_200_OK,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def set_debug_cycle_length(
+        self,
+        tournament_service: TournamentService,
+        category_id: Annotated[int, Parameter(description="Category ID")],
+        data: Annotated[TournamentDebugCycleLengthRequest, Body(title="Debug Cycle Length")],
+    ) -> TournamentCategoryLifecycleResponse:
+        """Override a category's cycle length in seconds (DEBUG/TEST ONLY).
+
+        Args:
+            tournament_service: Tournament service.
+            category_id: Category ID.
+            data: Request with the seconds override (None clears it).
+
+        Returns:
+            The updated lifecycle state.
+
+        Raises:
+            CustomHTTPException: 403 if disabled in production, 404 if category not found.
+        """
+        try:
+            return await tournament_service.set_debug_cycle_length(category_id, data.seconds)
+        except DebugRouteDisabledError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_403_FORBIDDEN,
+                detail=str(e),
+            ) from e
+        except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
                 detail=str(e),
             ) from e
 
