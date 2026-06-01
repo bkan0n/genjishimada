@@ -29,7 +29,7 @@ class TestTournamentsSchema:
             assert row == 1
 
     async def test_tournaments_tables_exist(self, asyncpg_pool):
-        """All 7 tournament tables exist in the tournaments schema."""
+        """All 8 tournament tables exist (editions added by migration 0024, D-05)."""
         async with asyncpg_pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -45,6 +45,7 @@ class TestTournamentsSchema:
                 "categories",
                 "cycles",
                 "completions",
+                "editions",
                 "streaks",
                 "pending_transitions",
                 "xp_grants",
