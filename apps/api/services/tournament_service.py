@@ -204,8 +204,8 @@ class TournamentService(BaseService):
     ) -> TournamentCategoryResponse:
         """Update a tournament category.
 
-        Acquires a connection so the active cycle check and update happen
-        on the same connection, preventing TOCTOU races.
+        Runs the active-cycle check and the update inside one transaction on the
+        same connection, so the guard is atomic and free of TOCTOU races.
 
         Args:
             category_id: Category ID to update.
@@ -235,7 +235,11 @@ class TournamentService(BaseService):
         if data.is_active is not msgspec.UNSET:
             updates["is_active"] = data.is_active
 
-        async with self._pool.acquire() as conn:
+        # Wrap the check + mutation in a single transaction so the active-cycle
+        # guard is atomic (closes the TOCTOU gap: a pg_cron tick or a concurrent
+        # admin request can no longer activate a cycle between the read and the
+        # write). Mirrors the bootstrap_edition pattern.
+        async with self._pool.acquire() as conn, conn.transaction():
             cycle_id = await self._tournament_repo.check_active_cycle_for_category(
                 category_id,
                 conn=conn,  # type: ignore[arg-type]
@@ -262,8 +266,10 @@ class TournamentService(BaseService):
     async def delete_category(self, category_id: int) -> None:
         """Delete a tournament category.
 
-        Acquires a connection so the active cycle check and delete happen
-        on the same connection, preventing TOCTOU races.
+        Runs the active-cycle check and the delete inside one transaction on the
+        same connection, so the guard is atomic and free of TOCTOU races (a
+        pg_cron tick or concurrent admin request cannot activate a cycle between
+        the read and the delete).
 
         Args:
             category_id: Category ID to delete.
@@ -272,7 +278,7 @@ class TournamentService(BaseService):
             CategoryLockedError: If an active or finalizing cycle exists.
             CategoryNotFoundError: If the category does not exist.
         """
-        async with self._pool.acquire() as conn:
+        async with self._pool.acquire() as conn, conn.transaction():
             cycle_id = await self._tournament_repo.check_active_cycle_for_category(
                 category_id,
                 conn=conn,  # type: ignore[arg-type]
