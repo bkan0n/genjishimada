@@ -192,39 +192,25 @@ async def advance_past_ends_at(asyncpg_pool: asyncpg.Pool):
 
     async def _advance(edition_id: int, seconds: int = 60) -> dt.datetime:
         async with asyncpg_pool.acquire() as conn:
-            # Shift the whole edition window back so ends_at is `seconds` in the past
-            # while keeping (ends_at - started_at) exactly equal to the original period.
+            # Single atomic UPDATE: place ends_at exactly `seconds` before now()
+            # and anchor started_at relative to the SAME now() so the original
+            # period (ends_at - started_at) is preserved exactly. In an UPDATE
+            # every SET expression reads the PRE-update row, so `(ends_at -
+            # started_at)` is the original window length regardless of column
+            # write order. This removes the prior read-in-between race (a
+            # concurrent xdist transaction could mutate the row between the two
+            # statements and make the second shift compute a stale delta).
             new_ends_at: dt.datetime = await conn.fetchval(
                 """
                 UPDATE tournaments.editions
-                SET started_at = started_at - make_interval(secs => $2),
-                    ends_at    = ends_at    - make_interval(secs => $2)
+                SET started_at = now() - make_interval(secs => $2) - (ends_at - started_at),
+                    ends_at    = now() - make_interval(secs => $2)
                 WHERE id = $1
                 RETURNING ends_at
                 """,
                 edition_id,
-                # Move the window back by (current remaining time to ends_at) + `seconds`
-                # so ends_at lands `seconds` before now().
                 seconds,
             )
-            # If ends_at is still in the future, force it strictly past now().
-            row = await conn.fetchrow(
-                "SELECT started_at, ends_at FROM tournaments.editions WHERE id = $1",
-                edition_id,
-            )
-            if row["ends_at"] >= dt.datetime.now(dt.UTC):
-                delta = (row["ends_at"] - dt.datetime.now(dt.UTC)).total_seconds() + seconds
-                new_ends_at = await conn.fetchval(
-                    """
-                    UPDATE tournaments.editions
-                    SET started_at = started_at - make_interval(secs => $2),
-                        ends_at    = ends_at    - make_interval(secs => $2)
-                    WHERE id = $1
-                    RETURNING ends_at
-                    """,
-                    edition_id,
-                    delta,
-                )
         return new_ends_at
 
     return _advance
