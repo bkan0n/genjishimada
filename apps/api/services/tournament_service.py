@@ -29,6 +29,7 @@ from repository.exceptions import UniqueConstraintViolationError
 from repository.tournaments_repository import TournamentRepository
 from services.base import BaseService
 from services.exceptions.tournaments import (
+    AlreadyVerifiedError,
     CategoryLockedError,
     CategoryNameExistsError,
     CategoryNotFoundError,
@@ -610,9 +611,15 @@ class TournamentService(BaseService):
         if not verified and existing["verified"]:
             raise AlreadyVerifiedError(tournament_completion_id)
 
-        # No-op transition (idempotent redelivery, CR-01/WR-06): the row is
-        # already in the target state. Nothing to grant or re-publish.
-        if bool(existing["verified"]) == verified:
+        # No-op RE-VERIFY only (idempotent redelivery, CR-01): a verify replayed
+        # against an already-verified row is a true no-op — the participation XP
+        # was already granted and the event already published, so short-circuit
+        # without re-granting/re-publishing. This guard deliberately does NOT
+        # cover reject-of-an-unverified-row: that is a legitimate first-time
+        # verdict that must still persist verified=False and publish the
+        # verified=False event so the bot surfaces the rejection. (Reject AFTER
+        # verify is already refused above via AlreadyVerifiedError.)
+        if verified and existing["verified"]:
             return await self._noop_verdict_job(
                 tournament_completion_id,
                 idempotency_key=idempotency_key,
@@ -643,11 +650,24 @@ class TournamentService(BaseService):
         else:
             updated = await _do(conn)
 
-        # WR-06: the guarded UPDATE matched no row even though the precheck saw
-        # one — the completion was deleted between the precheck and the UPDATE
-        # (TOCTOU). Do NOT publish a phantom event off the stale precheck row.
+        # The guarded UPDATE matched no row. Two cases:
+        #   (a) TOCTOU delete (WR-06): the completion was removed between the
+        #       precheck and the UPDATE. Re-fetch confirms it is gone -> 404,
+        #       and crucially we never publish a phantom event off the stale
+        #       precheck row.
+        #   (b) Reject of an already-unverified (pending) row: with the single
+        #       `verified` bool (WR-03) this is a no-op at the DB level, but it
+        #       is still a legitimate first-time reject verdict that must publish
+        #       the verified=False event so the bot surfaces the rejection. The
+        #       row still exists, so we publish from the (re-fetched) row.
         if updated is None:
-            raise TournamentCompletionNotFoundError(tournament_completion_id)
+            current = await self._tournament_repo.fetch_tournament_completion(
+                tournament_completion_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if current is None:
+                raise TournamentCompletionNotFoundError(tournament_completion_id)
+            updated = current
 
         # Transaction committed: now safe to publish the deferred XP notification.
         if pending_xp_events and self._reward_service is not None:

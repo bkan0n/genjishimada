@@ -943,7 +943,13 @@ class TestVerifyTournamentCompletion:
     async def test_reject_leaves_row_unverified(
         self, test_client, asyncpg_pool, create_test_map, create_test_user
     ):
-        """Rejecting keeps verified FALSE and grants no participation XP."""
+        """Rejecting an already-verified run is refused with 409 (CR-01).
+
+        ``_seed_tournament_completion`` seeds a verified row. Under CR-01 a verified
+        run is terminal: reverting it to unverified would orphan the participation XP
+        already granted, so the reject endpoint returns 409 and the row stays
+        verified rather than silently de-syncing the ledger.
+        """
         category_id = await asyncpg_pool.fetchval(
             """
             INSERT INTO tournaments.categories (name, difficulties, participation_xp, placement_xp, streak_xp)
@@ -959,17 +965,12 @@ class TestVerifyTournamentCompletion:
 
         response = await test_client.patch(f"{BASE}/completions/{tc_id}/reject")
 
-        assert response.status_code == 200
+        assert response.status_code == 409
+        # The verified run is left untouched (not reverted).
         verified = await asyncpg_pool.fetchval(
             "SELECT verified FROM tournaments.completions WHERE id = $1", tc_id
         )
-        assert verified is False
-        xp_rows = await asyncpg_pool.fetchval(
-            "SELECT COUNT(*) FROM tournaments.xp_grants WHERE cycle_id = $1 AND user_id = $2 AND reason = 'participation'",
-            cycle_id,
-            user_id,
-        )
-        assert xp_rows == 0
+        assert verified is True
 
     async def test_verify_nonexistent_returns_404(self, test_client):
         """Verifying an unknown tournament_completion_id returns 404."""
