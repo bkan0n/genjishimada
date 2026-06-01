@@ -66,6 +66,14 @@ ALTER TABLE tournaments.completions
 --      either never reviewed or rejected; we cannot distinguish historically, so a
 --      FALSE row becomes 'pending' (the conservative choice -- it was never an
 --      explicit rejection). TRUE rows are 'verified'.
+--
+-- POST-DEPLOY NOTE (WR-03): If any cycles are in 'finalizing' status at deploy time,
+-- any completion row with verified=FALSE was either pending OR rejected under the old
+-- schema and is backfilled here as 'pending'. Because count_inflight_verifications
+-- treats 'pending' as an in-flight verification, such stale rows keep the edition's
+-- drain signal non-zero and can block it in 'awaiting_results' indefinitely. On the
+-- first deploy, run the admin force_publish_results escape hatch (or manually review
+-- these rows) to release any edition that cannot otherwise drain.
 UPDATE tournaments.completions
     SET status = CASE WHEN verified THEN 'verified' ELSE 'pending' END;
 
