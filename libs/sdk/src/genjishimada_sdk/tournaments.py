@@ -11,6 +11,7 @@ __all__ = (
     "PlacementXpTier",
     "StreakXpTier",
     "TournamentCategoryCreateRequest",
+    "TournamentCategoryLifecycleResponse",
     "TournamentCategoryPatchRequest",
     "TournamentCategoryResponse",
     "TournamentChooseMapRequest",
@@ -26,8 +27,10 @@ __all__ = (
     "TournamentCycleWithWinnerResponse",
     "TournamentCyclesCompletedEvent",
     "TournamentCyclesStartedEvent",
+    "TournamentDebugCycleLengthRequest",
     "TournamentLeaderboardEntryResponse",
     "TournamentNextCycleResponse",
+    "TournamentPauseRequest",
     "TournamentStreakResponse",
     "TournamentVerificationChangedEvent",
     "TournamentXpGrantEvent",
@@ -169,6 +172,45 @@ class TournamentCategoryPatchRequest(Struct, kw_only=True):
     streak_xp: list[StreakXpTier] | UnsetType = UNSET
     champion_role_id: int | None | UnsetType = UNSET
     is_active: bool | UnsetType = UNSET
+
+
+class TournamentCategoryLifecycleResponse(Struct):
+    """Lifecycle-control state for a tournament category.
+
+    Returned by the pause/resume and debug-cycle-length admin routes.
+
+    Attributes:
+        id: Category identifier.
+        transitions_paused: When True, automatic cycle transitions are paused.
+        debug_cycle_seconds: Debug/test cycle-length override in seconds, or None
+            for the normal weekly/biweekly cadence.
+    """
+
+    id: int
+    transitions_paused: bool
+    debug_cycle_seconds: int | None
+
+
+class TournamentPauseRequest(Struct):
+    """Request payload for pausing or resuming automatic cycle transitions.
+
+    Attributes:
+        paused: True pauses automatic transitions for the category; False resumes
+            the normal weekly/biweekly cadence.
+    """
+
+    paused: bool
+
+
+class TournamentDebugCycleLengthRequest(Struct):
+    """Request payload for overriding a category's cycle length (DEBUG/TEST ONLY).
+
+    Attributes:
+        seconds: Cycle length override in seconds, or None to clear the override
+            and restore the normal weekly/biweekly cadence.
+    """
+
+    seconds: int | None
 
 
 # ---------------------------------------------------------------------------

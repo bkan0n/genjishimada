@@ -43,6 +43,29 @@ class CycleAlreadyActiveError(TournamentsError):
         super().__init__("A cycle is already active for this category.", category_id=category_id)
 
 
+class CycleAlreadyLiveError(TournamentsError):
+    """A live or pending cycle already exists; the category cannot be bootstrapped.
+
+    Raised when bootstrap is attempted but the category already has a cycle in
+    active, finalizing, or pending status. Bootstrap only activates the FIRST
+    cycle and must never double-start an already-running rotation.
+    """
+
+    def __init__(self, category_id: int, cycle_id: int) -> None:
+        super().__init__(
+            "Category already has a live or pending cycle; cannot bootstrap.",
+            category_id=category_id,
+            cycle_id=cycle_id,
+        )
+
+
+class DebugRouteDisabledError(TournamentsError):
+    """The debug cycle-length override route is disabled in production."""
+
+    def __init__(self) -> None:
+        super().__init__("Debug cycle-length override is disabled in production.")
+
+
 class CycleNotActiveError(TournamentsError):
     """Submission attempted on a non-active cycle."""
 

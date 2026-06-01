@@ -280,6 +280,97 @@ class TournamentRepository(BaseRepository):
             category_id,
         )
 
+    async def check_any_live_cycle(
+        self,
+        category_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int | None:
+        """Check if a category has any non-completed (live or pending) cycle.
+
+        Used to make bootstrap idempotent: bootstrap must not double-start when
+        a cycle is already active, finalizing, or pre-rolled (pending).
+
+        Args:
+            category_id: Category ID to check.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Cycle ID if an active/finalizing/pending cycle exists, None otherwise.
+        """
+        _conn = self._get_connection(conn)
+        return await _conn.fetchval(
+            """
+            SELECT id
+            FROM tournaments.cycles
+            WHERE category_id = $1 AND status IN ('active', 'finalizing', 'pending')
+            LIMIT 1
+            """,
+            category_id,
+        )
+
+    async def set_category_paused(
+        self,
+        category_id: int,
+        paused: bool,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Set a category's automatic-transition pause flag.
+
+        Args:
+            category_id: Category ID to update.
+            paused: True pauses automatic transitions; False resumes the cadence.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Dict with id, transitions_paused, debug_cycle_seconds, or None if the
+            category does not exist.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            UPDATE tournaments.categories
+            SET transitions_paused = $2, updated_at = now()
+            WHERE id = $1
+            RETURNING id, transitions_paused, debug_cycle_seconds
+            """,
+            category_id,
+            paused,
+        )
+        return dict(row) if row else None
+
+    async def set_category_debug_cycle_seconds(
+        self,
+        category_id: int,
+        seconds: int | None,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Set or clear a category's debug cycle-length override.
+
+        Args:
+            category_id: Category ID to update.
+            seconds: Override length in seconds, or None to clear the override.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Dict with id, transitions_paused, debug_cycle_seconds, or None if the
+            category does not exist.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            UPDATE tournaments.categories
+            SET debug_cycle_seconds = $2, updated_at = now()
+            WHERE id = $1
+            RETURNING id, transitions_paused, debug_cycle_seconds
+            """,
+            category_id,
+            seconds,
+        )
+        return dict(row) if row else None
+
     async def get_active_cycle_by_map_id(
         self,
         map_id: int,
@@ -340,6 +431,43 @@ class TournamentRepository(BaseRepository):
         query = """
             INSERT INTO tournaments.cycles (category_id, map_id)
             VALUES ($1, $2)
+            RETURNING *
+        """
+        try:
+            row = await _conn.fetchrow(query, category_id, map_id)
+            return dict(row) if row else {}
+        except ForeignKeyViolationError as e:
+            constraint_name = extract_constraint_name(e) or "unknown"
+            raise RepoFKError(constraint_name, "tournaments.cycles", str(e)) from e
+
+    async def create_active_cycle(
+        self,
+        category_id: int,
+        map_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Create a new ACTIVE tournament cycle (started now).
+
+        Used by the bootstrap path to activate the FIRST cycle for a category;
+        the normal select_map path only ever creates pending cycles. Writing the
+        cycle_started outbox row is the service's job.
+
+        Args:
+            category_id: Category this cycle belongs to.
+            map_id: Map selected for this cycle.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Created active cycle as dict.
+
+        Raises:
+            RepoFKError: If category_id or map_id doesn't exist.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            INSERT INTO tournaments.cycles (category_id, map_id, status, started_at)
+            VALUES ($1, $2, 'active', now())
             RETURNING *
         """
         try:
