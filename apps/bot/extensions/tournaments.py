@@ -3,15 +3,22 @@
 Consumes the Phase-7 tournament lifecycle events and turns them into Discord
 announcements:
 
-- ``api.tournament.cycle_started`` → a rich new-cycle embed (DSC-01).
-- ``api.tournament.cycle_completed`` → one results embed with the Top-3 podium and the
-  winner highlight (DSC-02), folding in the champion-role transfer (DSC-03 / RWD-03).
+- ``api.tournament.cycles_started`` → ONE combined Components V2 (LayoutView)
+  new-cycle card with a per-category section for every category that rotated.
+- ``api.tournament.cycles_completed`` → ONE combined CV2 results card transferring
+  every category's champion role FIRST, then posting a single gold card with a
+  per-category podium and crowning all winners in one ping.
+
+A single rotation can start/complete several categories' cycles together; the
+outbox poller groups those into ONE batch event per rotation, so each consumer
+renders exactly one combined card instead of one per category.
 
 The bot is consumer-only: data missing from the events (category name +
-``champion_role_id``, map difficulty + banner) is sourced from existing API endpoints on
-event receipt (D-07). Both consumers are cycle-scoped idempotent — the Phase-7 outbox sets
-``message_id=tournament:{event_type}:{cycle_id}`` and ``@queue_consumer(idempotent=True)``
-claims on that id, so no key is hand-rolled here.
+``champion_role_id``, map difficulty) is sourced from existing API endpoints on
+event receipt (D-07). Both consumers are rotation-scoped idempotent — the outbox
+sets ``message_id=tournament:{event_type}:{created_at_iso}`` and
+``@queue_consumer(idempotent=True)`` claims on that id, so no key is hand-rolled
+here.
 
 The handler is registered as a PUBLIC ``bot.tournaments`` attribute; ``RabbitHandler``
 discovers queue consumers by walking ``dir(bot)`` and skips ``_``-prefixed attributes, so a
@@ -36,7 +43,8 @@ from genjishimada_sdk.tournaments import (
     TournamentChooseMapRequest,
     TournamentCompletionCreatedEvent,
     TournamentCycleCompletedEvent,
-    TournamentCycleStartedEvent,
+    TournamentCyclesCompletedEvent,
+    TournamentCyclesStartedEvent,
     TournamentLeaderboardEntryResponse,
     TournamentVerificationChangedEvent,
 )
@@ -61,11 +69,16 @@ log = getLogger(__name__)
 # auto-handles 429s; this stagger is the safety margin success criterion 4 requires.
 _ROLE_OP_DELAY: float = 1.0
 
-# Community host for Overwatch workshop codes (clickable link in the new-cycle embed).
+# Community host for Overwatch workshop codes (clickable link in the new-cycle card).
 _WORKSHOP_URL = "https://workshop.codes/{code}"
 
-# Top-N standings shown on the results podium (D-03 — compact embed).
+# Top-N standings shown on the results podium (D-03 — compact card).
 _PODIUM_SIZE = 3
+
+# Static hero image shown on the started/completed announcement cards. Replaces the
+# old per-map banner so tournament surfaces carry consistent artwork.
+# TODO: swap for real tournament artwork.
+_TOURNAMENT_GALLERY_IMAGE = "https://cdn.genji.pk/assets/tournament-hero.png"
 
 
 class TournamentRejectionReasonModal(ui.Modal):
@@ -122,9 +135,7 @@ class TournamentVerificationAcceptButton(ui.Button):
         try:
             job_status = await self.view.bot.api.verify_tournament_completion(self.view.completion_id)
         except (APIHTTPError, APIUnavailableError):
-            await itx.edit_original_response(
-                content="There was an error reaching the API. Please try again."
-            )
+            await itx.edit_original_response(content="There was an error reaching the API. Please try again.")
             return
 
         for c in self.view.walk_children():
@@ -138,17 +149,14 @@ class TournamentVerificationAcceptButton(ui.Button):
         if not job:
             await itx.edit_original_response(
                 content=(
-                    "There was an unknown error while processing. "
-                    "Please do not try again until it has been resolved."
+                    "There was an unknown error while processing. Please do not try again until it has been resolved."
                 )
             )
         elif job.status == "succeeded":
             await itx.edit_original_response(content="Successfully verified the tournament run.")
         else:
             await itx.edit_original_response(
-                content=(
-                    "There was an error while processing. Please do not try again until it has been resolved."
-                )
+                content=("There was an error while processing. Please do not try again until it has been resolved.")
             )
 
 
@@ -185,9 +193,7 @@ class TournamentVerificationRejectButton(ui.Button):
         try:
             job_status = await self.view.bot.api.reject_tournament_completion(self.view.completion_id)
         except (APIHTTPError, APIUnavailableError):
-            await itx.followup.send(
-                content="There was an error reaching the API. Please try again.", ephemeral=True
-            )
+            await itx.followup.send(content="There was an error reaching the API. Please try again.", ephemeral=True)
             return
 
         for c in self.view.walk_children():
@@ -202,8 +208,7 @@ class TournamentVerificationRejectButton(ui.Button):
         if not job:
             await itx.followup.send(
                 content=(
-                    "There was an unknown error while processing. "
-                    "Please do not try again until it has been resolved."
+                    "There was an unknown error while processing. Please do not try again until it has been resolved."
                 ),
                 ephemeral=True,
             )
@@ -211,9 +216,7 @@ class TournamentVerificationRejectButton(ui.Button):
             await itx.followup.send(content="Successfully rejected the tournament run.", ephemeral=True)
         else:
             await itx.followup.send(
-                content=(
-                    "There was an error while processing. Please do not try again until it has been resolved."
-                ),
+                content=("There was an error while processing. Please do not try again until it has been resolved."),
                 ephemeral=True,
             )
 
@@ -247,8 +250,7 @@ class TournamentVerificationView(ui.LayoutView):
         details = (
             f"New Tournament Submission from <@{self.event.user_id}>\n"
             f"**Time:** {self.event.time:.2f}s\n"
-            f"**Cycle:** {self.event.cycle_id}\n"
-            + (f"**Video:** {self.event.video}\n" if self.event.video else "")
+            f"**Cycle:** {self.event.cycle_id}\n" + (f"**Video:** {self.event.video}\n" if self.event.video else "")
         )
         container = ui.Container(
             ui.TextDisplay(details),
@@ -294,101 +296,125 @@ class TournamentHandler(BaseHandler):
         self.verification_channel = verification_channel
 
     @queue_consumer(
-        "api.tournament.cycle_started",
-        struct_type=TournamentCycleStartedEvent,
+        "api.tournament.cycles_started",
+        struct_type=TournamentCyclesStartedEvent,
         idempotent=True,
     )
-    async def _on_cycle_started(self, event: TournamentCycleStartedEvent, _: AbstractIncomingMessage) -> None:
-        """Post the new-cycle announcement embed (DSC-01 / D-02).
+    async def _on_cycle_started(self, event: TournamentCyclesStartedEvent, _: AbstractIncomingMessage) -> None:
+        """Post ONE combined CV2 new-cycle card for every category that rotated (DSC-01 / D-02).
 
-        Sources the category name and the map difficulty/banner from the API on receipt
-        (D-07). A missing map raises ``ValueError`` from ``get_map`` — let it propagate to
-        the DLQ rather than posting a broken embed.
+        A single rotation can start several categories' cycles at once; this renders one
+        blurple LayoutView with a static hero image and a per-category section (map link,
+        difficulty, ends-at) for each entry. The category name and map difficulty are
+        sourced from the API on receipt (D-07). A missing map raises ``ValueError`` from
+        ``get_map`` — let it propagate to the DLQ rather than posting a broken card.
         """
-        log.debug("[→] [Tournament] cycle_started cycle=%s category=%s", event.cycle_id, event.category_id)
-        category = await self.bot.api.get_tournament_category(event.category_id)
-        map_data = await self.bot.api.get_map(code=event.map_code)
-
-        embed = discord.Embed(
-            title=f"New Tournament Cycle: {category.name}",
-            description=(
-                f"**Map:** [{event.map_name}]({_WORKSHOP_URL.format(code=event.map_code)}) (`{event.map_code}`)"
-            ),
-            color=discord.Color.blurple(),
+        log.debug("[→] [Tournament] cycles_started rotation of %d cycle(s)", len(event.cycles))
+        container = ui.Container(
+            ui.TextDisplay("# 🏆 New Tournament Cycle\nFresh maps are live — set your time before the cycle ends!"),
+            ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
+            accent_color=discord.Color.blurple(),
         )
-        embed.add_field(name="Difficulty", value=str(map_data.difficulty), inline=True)
-        embed.add_field(name="Category", value=category.name, inline=True)
-        embed.add_field(name="Ends", value=discord.utils.format_dt(event.ends_at, "R"), inline=False)
-        if map_data.map_banner:
-            embed.set_thumbnail(url=map_data.map_banner)
+        for entry in event.cycles:
+            category = await self.bot.api.get_tournament_category(entry.category_id)
+            map_data = await self.bot.api.get_map(code=entry.map_code)
+            section = (
+                f"### {category.name}\n"
+                f"**Map:** [{entry.map_name}]({_WORKSHOP_URL.format(code=entry.map_code)}) (`{entry.map_code}`)\n"
+                f"**Difficulty:** {map_data.difficulty}\n"
+                f"**Ends:** {discord.utils.format_dt(entry.ends_at, 'R')} "
+                f"({discord.utils.format_dt(entry.ends_at, 'F')})"
+            )
+            container.add_item(ui.Separator())
+            container.add_item(ui.TextDisplay(section))
 
-        await self.announcement_channel.send(embed=embed)
-        log.info("[✓] [Tournament] posted new-cycle embed for cycle=%s", event.cycle_id)
+        view = ui.LayoutView(timeout=None)
+        view.add_item(container)
+        await self.announcement_channel.send(
+            view=view,
+            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False),
+        )
+        log.info("[✓] [Tournament] posted combined new-cycle card for %d cycle(s)", len(event.cycles))
 
     @queue_consumer(
-        "api.tournament.cycle_completed",
-        struct_type=TournamentCycleCompletedEvent,
+        "api.tournament.cycles_completed",
+        struct_type=TournamentCyclesCompletedEvent,
         idempotent=True,
     )
-    async def _on_cycle_completed(self, event: TournamentCycleCompletedEvent, _: AbstractIncomingMessage) -> None:
-        """Transfer the champion role, then post the single results embed.
+    async def _on_cycle_completed(self, event: TournamentCyclesCompletedEvent, _: AbstractIncomingMessage) -> None:
+        """Transfer every category's champion role, then post ONE combined CV2 results card.
 
-        Ordering (Pitfall 5): the role transfer runs FIRST and the single
+        Ordering (Pitfall 5): ALL role transfers run FIRST and the single
         ``channel.send`` LAST, so a role-op failure retries (claim released) before any
         message posts — a re-stripped/re-granted role is effectively idempotent whereas a
         duplicate ``send`` is visible spam.
 
-        Champion transfer (D-04 / D-05): the role is stripped from ALL current holders
-        (self-healing), then granted to the winner — or left vacant when ``winner_user_id``
-        is None. Member edits are staggered with ``_ROLE_OP_DELAY`` (Pitfall 2). A winner
-        who left the guild (``get_member`` None) is logged and skipped, never crashed
-        (Pitfall 3 — crashing would DLQ a valid event).
+        Champion transfer (D-04 / D-05): per cycle the role is stripped from ALL current
+        holders (self-healing), then granted to the winner — or left vacant when
+        ``winner_user_id`` is None. Member edits are staggered with ``_ROLE_OP_DELAY``
+        (Pitfall 2). A winner who left the guild (``get_member`` None) is logged and
+        skipped, never crashed (Pitfall 3 — crashing would DLQ a valid event).
 
-        Security: the winner is mentioned only by numeric ``<@user_id>``; the free-text
-        standings ``name`` is never used in a mention, and ``allowed_mentions`` restricts
-        pings to the winner (no ``@everyone``/role mentions). The embed deliberately omits
-        any experience-points line (D-03 deviation — XP is delivered separately via
-        ``api.xp.grant``).
+        Security (T-10-10 / T-11-19): winners are mentioned ONLY by numeric ``<@id>``; the
+        free-text standings ``name`` is never used in a mention, and ``allowed_mentions``
+        restricts pings to the explicit numeric winner allow-list (no ``@everyone``/role
+        mentions). The card deliberately omits any experience-points line (D-03 deviation —
+        XP is delivered separately via ``api.xp.grant``).
         """
-        log.debug("[→] [Tournament] cycle_completed cycle=%s category=%s", event.cycle_id, event.category_id)
-        category = await self.bot.api.get_tournament_category(event.category_id)
+        log.debug("[→] [Tournament] cycles_completed rotation of %d cycle(s)", len(event.cycles))
 
-        # 1) Champion role transfer FIRST (Pitfall 5).
-        await self._transfer_champion_role(event, category)
+        # 1) Champion role transfers FIRST (Pitfall 5). Cache each entry's category so the
+        # SAME object is reused for the transfer and the results rendering below.
+        categories: dict[int, TournamentCategoryResponse] = {}
+        for entry in event.cycles:
+            category = await self.bot.api.get_tournament_category(entry.category_id)
+            categories[entry.category_id] = category
+            await self._transfer_champion_role(entry, category)
 
-        # 2) Build + post the single results embed LAST.
-        embed = discord.Embed(title=f"{category.name} — Cycle Results", color=discord.Color.gold())
-        podium_lines = [
-            f"`#{entry.rank}` <@{entry.user_id}> — {entry.time:.2f}s" for entry in event.standings[:_PODIUM_SIZE]
-        ]
-        embed.add_field(name="Podium", value="\n".join(podium_lines) or "No submissions", inline=False)
+        # 2) Build + post the single combined results card LAST.
+        container = ui.Container(
+            ui.TextDisplay("# 🏅 Cycle Results\nThe results are in — congratulations to this rotation's champions!"),
+            ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
+            accent_color=discord.Color.gold(),
+        )
+        # Winners (numeric ids only) aggregated across every category for ONE ping +
+        # allow-list. Never derived from free-text names (T-10-10 / T-11-19).
+        winners: list[int] = []
+        for entry in event.cycles:
+            category = categories[entry.category_id]
+            header = f"### {category.name}"
+            if entry.winner_user_id is not None:
+                header += f" — 👑 <@{entry.winner_user_id}>"
+                winners.append(entry.winner_user_id)
+            podium_lines = [f"`#{e.rank}` <@{e.user_id}> — {e.time:.2f}s" for e in entry.standings[:_PODIUM_SIZE]]
+            section = header + "\n" + ("\n".join(podium_lines) or "No submissions")
+            container.add_item(ui.Separator())
+            container.add_item(ui.TextDisplay(section))
 
-        # The announcement (embed field, content ping, and allow-list) is driven by the
-        # EVENT's winner — the source of truth for who won — not by the role-transfer side
-        # effect, so the ping stays consistent even if the role grant could not complete.
-        content: str | None = None
-        allowed_users: list[discord.abc.Snowflake] = []
-        if event.winner_user_id is not None:
-            embed.add_field(
-                name="Champion",
-                value=f"<@{event.winner_user_id}> crowned Champion of {category.name}!",
-                inline=False,
-            )
-            content = f"<@{event.winner_user_id}>"
-            allowed_users = [discord.Object(id=event.winner_user_id)]
+        # The winners ping lives INSIDE the CV2 card (a LayoutView send overload accepts
+        # no `content` kwarg). The mentions still fire only because every winner id is on
+        # the AllowedMentions allow-list below; the ping text is built from numeric ids
+        # ONLY (never free-text names — T-10-10 / T-11-19).
+        if winners:
+            container.add_item(ui.Separator())
+            container.add_item(ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in winners) + "!"))
 
-        allowed_mentions = discord.AllowedMentions(users=allowed_users, everyone=False, roles=False)
-        await self.announcement_channel.send(content=content, embed=embed, allowed_mentions=allowed_mentions)
-        log.info("[✓] [Tournament] posted results embed for cycle=%s", event.cycle_id)
+        view = ui.LayoutView(timeout=None)
+        view.add_item(container)
+
+        allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in winners]
+        await self.announcement_channel.send(
+            view=view,
+            allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=False),
+        )
+        log.info("[✓] [Tournament] posted combined results card for %d cycle(s)", len(event.cycles))
 
     @queue_consumer(
         "api.tournament.completion.created",
         struct_type=TournamentCompletionCreatedEvent,
         idempotent=True,
     )
-    async def _on_completion_created(
-        self, event: TournamentCompletionCreatedEvent, _: AbstractIncomingMessage
-    ) -> None:
+    async def _on_completion_created(self, event: TournamentCompletionCreatedEvent, _: AbstractIncomingMessage) -> None:
         """Render the mod Accept/Reject card for a non-PB video tournament run (D-04).
 
         The event carries the run's screenshot/video/time/user (Plan 11-01), so the card
@@ -548,9 +574,7 @@ class TournamentLeaderboardPaginator(StaticPaginatorView[Any]):
         Returns:
             Sequence[ui.Item]: One ``TextDisplay`` with the page's rows.
         """
-        lines = [
-            f"`#{entry.rank}` <@{entry.user_id}> — {entry.time:.2f}s" for entry in self.get_current_page_data()
-        ]
+        lines = [f"`#{entry.rank}` <@{entry.user_id}> — {entry.time:.2f}s" for entry in self.get_current_page_data()]
         return [ui.TextDisplay("\n".join(lines))]
 
 
@@ -595,30 +619,22 @@ class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
         active = cycles[0]
         map_data = await itx.client.api.get_map(code=active.map_code)
 
-        embed = discord.Embed(
-            title=f"Active Tournament Cycle: {category_data.name}",
-            description=(
-                f"**Map:** [{active.map_name}]({_WORKSHOP_URL.format(code=active.map_code)}) (`{active.map_code}`)"
-            ),
-            color=discord.Color.blurple(),
-        )
-        embed.add_field(name="Difficulty", value=str(map_data.difficulty), inline=True)
-        embed.add_field(name="Category", value=category_data.name, inline=True)
+        lines = [
+            f"# Active Tournament Cycle: {category_data.name}",
+            f"**Map:** [{active.map_name}]({_WORKSHOP_URL.format(code=active.map_code)}) (`{active.map_code}`)",
+            f"**Difficulty:** {map_data.difficulty}",
+            f"**Category:** {category_data.name}",
+        ]
 
         # OQ1: the cycles list has no ends_at — compute it locally from started_at and the
         # category's cadence (weekly → 7d, biweekly → 14d). No API change required.
         if active.started_at is not None:
             ends_at = active.started_at + dt.timedelta(days=7 if category_data.cycle_frequency == "weekly" else 14)
-            embed.add_field(
-                name="Ends",
-                value=f"{discord.utils.format_dt(ends_at, 'R')} ({discord.utils.format_dt(ends_at, 'F')})",
-                inline=False,
-            )
+            lines.append(f"**Ends:** {discord.utils.format_dt(ends_at, 'R')} ({discord.utils.format_dt(ends_at, 'F')})")
 
-        if map_data.map_banner:
-            embed.set_thumbnail(url=map_data.map_banner)
-
-        await itx.edit_original_response(embed=embed)
+        view = ui.LayoutView(timeout=None)
+        view.add_item(ui.Container(ui.TextDisplay("\n".join(lines)), accent_color=discord.Color.blurple()))
+        await itx.edit_original_response(view=view)
         log.info("[✓] [Tournament] /tournament info rendered for cycle=%s", active.id)
 
     @app_commands.command(name="leaderboard")
@@ -683,13 +699,17 @@ class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
             if e.status != HTTPStatus.NOT_FOUND:
                 raise
 
-        embed = discord.Embed(title="Your Tournament Streak", color=discord.Color.green())
-        embed.add_field(name="Current Streak", value=str(current), inline=True)
-        embed.add_field(name="Max Streak", value=str(maximum), inline=True)
+        lines = [
+            "# Your Tournament Streak",
+            f"**Current Streak:** {current}",
+            f"**Max Streak:** {maximum}",
+        ]
         if current == 0 and maximum == 0:
-            embed.description = "Submit in a cycle to start your streak!"
+            lines.append("Submit in a cycle to start your streak!")
 
-        await itx.edit_original_response(embed=embed)
+        view = ui.LayoutView(timeout=None)
+        view.add_item(ui.Container(ui.TextDisplay("\n".join(lines)), accent_color=discord.Color.green()))
+        await itx.edit_original_response(view=view)
         log.info("[✓] [Tournament] /tournament streak rendered for user=%s", itx.user.id)
 
 
@@ -739,12 +759,14 @@ class TournamentRerollCog(BaseCog):
         else:
             result = await itx.client.api.choose_next_cycle(category, TournamentChooseMapRequest(map_code=code))
 
-        embed = discord.Embed(title="Next-Cycle Map Updated", color=discord.Color.blurple())
-        embed.description = (
-            f"**Map:** [{result.map_name}]({_WORKSHOP_URL.format(code=result.map_code)}) (`{result.map_code}`)"
+        section = (
+            "# Next-Cycle Map Updated\n"
+            f"**Map:** [{result.map_name}]({_WORKSHOP_URL.format(code=result.map_code)}) (`{result.map_code}`)\n"
+            f"**Difficulty:** {result.map_difficulty}"
         )
-        embed.add_field(name="Difficulty", value=str(result.map_difficulty), inline=True)
-        await itx.edit_original_response(embed=embed)
+        view = ui.LayoutView(timeout=None)
+        view.add_item(ui.Container(ui.TextDisplay(section), accent_color=discord.Color.blurple()))
+        await itx.edit_original_response(view=view)
         log.info("[✓] [Tournament] /tournament-reroll set next-cycle map %s for category=%s", result.map_code, category)
 
 
