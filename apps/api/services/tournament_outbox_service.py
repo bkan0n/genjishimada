@@ -375,13 +375,21 @@ async def process_awaiting_results_editions(
                 started=[],
                 results_pending=True,
             )
+            # Mark FIRST (inside the transaction), then publish (CR-01/CR-02). publish_message
+            # opens its own channel and does NOT join this conn's transaction, so if it
+            # succeeded BEFORE the mark and the mark then raised, the transaction would roll
+            # back start_announced and the next tick would re-publish the start-only rollover
+            # with a fresh public.jobs UUID (new message_id), defeating the bot's idempotency
+            # claim and double-announcing the start. Marking first guarantees that once the
+            # transaction commits, start_announced is set; a publish failure after the mark
+            # simply rolls back the mark too, so the pair stays atomic.
+            await repository.mark_edition_start_announced(edition_id, conn=conn)  # type: ignore[arg-type]
             await service.publish_message(
                 routing_key="api.tournament.rollover",
                 data=rollover,
                 headers=Headers({}),
                 idempotency_key=f"tournament:rollover:{edition_id}",
             )
-            await repository.mark_edition_start_announced(edition_id, conn=conn)  # type: ignore[arg-type]
             log.info("[→] start-only rollover (edition %s, results pending)", edition_id)
             continue
 
