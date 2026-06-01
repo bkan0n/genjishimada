@@ -43,6 +43,7 @@ from genjishimada_sdk.tournaments import (
     TournamentChooseMapRequest,
     TournamentCompletionCreatedEvent,
     TournamentCycleCompletedEvent,
+    TournamentEditionResultsEvent,
     TournamentLeaderboardEntryResponse,
     TournamentRolloverEvent,
     TournamentVerificationChangedEvent,
@@ -338,7 +339,17 @@ class TournamentHandler(BaseHandler):
         ``api.xp.grant``). Missing category/map data is fetched via the API on receipt — the
         bot NEVER reads Postgres (T-12-13 / CLAUDE.md).
 
-        Defensive: an event with neither results nor started cycles does nothing.
+        Results-pending placeholder (D-01): when ``event.results_pending`` is True the
+        finalized edition still has in-flight verifications, so the poller emits this
+        rollover with EMPTY ``results`` + ``results_pending=True``. The transfer loop below
+        naturally skips (empty results) — the previous champion KEEPS the role (D-05, held) —
+        and a ``## 🏅 Results / Results pending verification…`` placeholder renders in place
+        of the results section. A SEPARATE :meth:`_on_edition_results` event posts the real
+        results card and performs the held transfer once the queue drains (D-04 — new
+        message, never edited in place).
+
+        Defensive: an event with no results, no started cycles, and no pending placeholder
+        does nothing.
         """
         log.debug(
             "[→] [Tournament] edition_rollover edition=%s results=%d started=%d",
@@ -346,7 +357,7 @@ class TournamentHandler(BaseHandler):
             len(event.results),
             len(event.started),
         )
-        if not event.results and not event.started:
+        if not event.results and not event.started and not event.results_pending:
             log.info(
                 "[✓] [Tournament] edition_rollover %s carried no results/started; nothing to post", event.edition_id
             )
@@ -386,6 +397,16 @@ class TournamentHandler(BaseHandler):
                 section = header + "\n" + ("\n".join(podium_lines) or "No submissions")
                 container.add_item(ui.Separator())
                 container.add_item(ui.TextDisplay(section))
+
+        # Results-pending placeholder (D-01): when the finalized edition still has in-flight
+        # verifications, the poller emits a start-only rollover with empty ``results`` and
+        # ``results_pending=True``. The transfer loop above naturally skipped (empty results),
+        # so the previous champion keeps the role (D-05 — held). A SEPARATE
+        # ``api.tournament.results`` event will post the real results card + perform the held
+        # transfer once the queue drains (D-04 — new message, never edited in place).
+        if event.results_pending:
+            container.add_item(ui.Separator())
+            container.add_item(ui.TextDisplay("## 🏅 Results\nResults pending verification…"))
 
         # Starting section (iff event.started). Category name + map difficulty fetched on
         # receipt (D-07). A missing map raises ``ValueError`` from ``get_map`` — let it
@@ -429,6 +450,105 @@ class TournamentHandler(BaseHandler):
             event.edition_id,
             len(event.results),
             len(event.started),
+        )
+
+    @queue_consumer(
+        "api.tournament.results",
+        struct_type=TournamentEditionResultsEvent,
+        idempotent=True,
+    )
+    async def _on_edition_results(self, event: TournamentEditionResultsEvent, _: AbstractIncomingMessage) -> None:
+        """Post the DEFERRED results as a NEW card and perform the HELD champion transfer (D-04 / D-05).
+
+        Fires on ``api.tournament.results`` when a finalized edition's verification queue
+        drains (the deferred path — its on-time start + a ``Results pending verification…``
+        placeholder were already announced by :meth:`_on_edition_rollover` with
+        ``results_pending=True``). This is a SEPARATE, NEW announcement (D-04): the original
+        placeholder is never edited and no message id is stored.
+
+        Ordering mirrors :meth:`_on_edition_rollover` (Pitfall 5): the HELD champion-role
+        transfers run FIRST (per result entry, reusing :meth:`_transfer_champion_role`
+        verbatim — strip-all-then-grant, staggered, guild-leave-safe, vacant-on-None-winner),
+        then ONE results card is sent LAST so a role-op failure retries (claim released)
+        before any visible post. The previous champion held the role through the pending
+        window (D-05); the transfer happens HERE, now that results have settled.
+
+        Security (T-12.1-15 / mirrors the rollover card): winners are referenced ONLY by
+        numeric ``<@id>``; the free-text standings ``name`` is never used in a mention, and
+        ``allowed_mentions`` restricts pings to the explicit numeric winner allow-list. The
+        winners ping text lives INSIDE a ``ui.TextDisplay`` (a CV2 LayoutView ``send`` accepts
+        no ``content`` kwarg — MEMORY.md ``cv2-layoutview-no-content``). Category/champion-role
+        data is fetched via the API on receipt — the bot NEVER reads Postgres (CLAUDE.md).
+
+        Idempotency (T-12.1-16): the outbox sets ``message_id=tournament:results:{edition_id}``
+        and ``@queue_consumer(idempotent=True)`` claims on that id, so a re-delivered results
+        event cannot double-transfer the role or double-post — no key is hand-rolled here.
+
+        An empty / all-rejected edition (empty standings, ``winner_user_id`` None) posts a
+        no-winner card and transfers nothing (``_transfer_champion_role`` already leaves the
+        role vacant on a None winner, Pitfall 6).
+        """
+        log.debug(
+            "[→] [Tournament] edition_results edition=%s results=%d",
+            event.edition_id,
+            len(event.results),
+        )
+
+        # 1) HELD champion-role transfers FIRST (Pitfall 5 / D-05), per result entry. Cache
+        # each entry's category so the SAME object is reused for the transfer and rendering.
+        categories: dict[int, TournamentCategoryResponse] = {}
+        for entry in event.results:
+            category = await self.bot.api.get_tournament_category(entry.category_id)
+            categories[entry.category_id] = category
+            await self._transfer_champion_role(entry, category)
+
+        # 2) Build the results-only card (D-04 — a NEW, separate announcement).
+        container = ui.Container(
+            ui.TextDisplay(
+                "# 🏆 Tournament Results\nThe pending verifications have settled — here are the final results!"
+            ),
+            ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
+            accent_color=discord.Color.gold(),
+        )
+
+        # Winners (numeric ids only) aggregated across every category for ONE ping +
+        # allow-list. Never derived from free-text names (T-12.1-15).
+        winners: list[int] = []
+        container.add_item(ui.Separator())
+        container.add_item(
+            ui.TextDisplay("## 🏅 Results\nThe results are in — congratulations to this rotation's champions!")
+        )
+        for entry in event.results:
+            category = categories[entry.category_id]
+            header = f"### {category.name}"
+            if entry.winner_user_id is not None:
+                header += f" — 👑 <@{entry.winner_user_id}>"
+                winners.append(entry.winner_user_id)
+            podium_lines = [f"`#{e.rank}` <@{e.user_id}> — {e.time:.2f}s" for e in entry.standings[:_PODIUM_SIZE]]
+            section = header + "\n" + ("\n".join(podium_lines) or "No submissions")
+            container.add_item(ui.Separator())
+            container.add_item(ui.TextDisplay(section))
+
+        # The winners ping lives INSIDE the CV2 card (a LayoutView send accepts no `content`
+        # kwarg). The mentions still fire because every winner id is on the AllowedMentions
+        # allow-list below; the ping text is built from numeric ids ONLY (never free-text
+        # names — T-12.1-15).
+        if winners:
+            container.add_item(ui.Separator())
+            container.add_item(ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in winners) + "!"))
+
+        view = ui.LayoutView(timeout=None)
+        view.add_item(container)
+
+        allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in winners]
+        await self.announcement_channel.send(
+            view=view,
+            allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=False),
+        )
+        log.info(
+            "[✓] [Tournament] posted deferred results card for edition=%s (results=%d)",
+            event.edition_id,
+            len(event.results),
         )
 
     @queue_consumer(

@@ -30,6 +30,7 @@ from genjishimada_sdk.tournaments import (
     TournamentCompletionCreatedEvent,
     TournamentCycleCompletedEvent,
     TournamentCycleStartedEvent,
+    TournamentEditionResultsEvent,
     TournamentLeaderboardEntryResponse,
     TournamentRolloverEvent,
     TournamentVerificationChangedEvent,
@@ -329,6 +330,155 @@ async def test_rollover_results_empty_standings_renders_no_submissions(mock_api:
     assert len(channel.send_calls) == 1
     rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
     assert "No submissions" in rendered
+
+
+# ---------------------------------------------------------------------------
+# D-01 / D-04 / D-05: deferred results + held champion + results-pending placeholder
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rollover_results_pending_renders_placeholder_and_holds_champion(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-01/D-05: results_pending=True renders the 'pending' placeholder, start section, NO transfer.
+
+    The poller emits this start-only rollover with EMPTY ``results`` so the transfer loop
+    skips and the previous champion KEEPS the role (held). The real transfer happens later
+    in ``_on_edition_results`` when the queue drains.
+    """
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+    handler, channel = _rollover_handler(mock_api, sample_category)
+    started = _started_event()
+    event = TournamentRolloverEvent(edition_id=7, results=[], started=[started], results_pending=True)
+
+    await handler._on_edition_rollover(event, None)
+
+    assert len(channel.send_calls) == 1
+    rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
+    # the placeholder renders in place of the results section
+    assert "Results pending verification…" in rendered
+    # the start section still renders on time (D-01)
+    assert "Hanamura" in rendered
+    assert started.map_code in rendered
+    # champion held: NO transfer (empty results → no per-entry category fetch for transfer);
+    # the only category fetch is for the started entry's render.
+    mock_api.get_tournament_category.assert_awaited_once_with(started.category_id)
+    # no winner ping (no results)
+    assert "Congratulations" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_on_edition_results_posts_card_and_transfers_champion(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-04/D-05: _on_edition_results posts a NEW results card and performs the held transfer."""
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+    handler, channel = _rollover_handler(mock_api, sample_category)
+    event = TournamentEditionResultsEvent(edition_id=7, results=[_completed_event()])
+
+    await handler._on_edition_results(event, None)
+
+    # one new card posted (D-04: separate announcement)
+    assert len(channel.send_calls) == 1
+    call = channel.send_calls[0]
+    rendered = _view_text(call["kwargs"]["view"])
+    # results section: top-3 podium + crowned winner, rank-4 absent
+    assert "<@111>" in rendered and "<@222>" in rendered and "<@333>" in rendered
+    assert "<@444>" not in rendered
+    assert "👑 <@111>" in rendered
+    # held champion transfer ran (category fetched for the results entry)
+    mock_api.get_tournament_category.assert_any_await(1)
+    # winner ping lives INSIDE the card (no content kwarg) gated by an allow-list (T-12.1-15)
+    assert "Congratulations <@111>!" in rendered
+    assert "content" not in call["kwargs"]
+    allowed = call["kwargs"]["allowed_mentions"]
+    assert allowed.everyone is False
+    assert allowed.roles is False
+
+
+@pytest.mark.asyncio
+async def test_on_edition_results_calls_transfer_once_per_entry(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-05: _transfer_champion_role is called once per result entry (the held transfer)."""
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+    handler, channel = _rollover_handler(mock_api, sample_category)
+
+    transfer_calls: list[int] = []
+
+    async def _spy_transfer(entry: Any, category: Any) -> None:
+        transfer_calls.append(entry.cycle_id)
+
+    monkeypatch.setattr(handler, "_transfer_champion_role", _spy_transfer)
+
+    entry_a = TournamentCycleCompletedEvent(
+        cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111
+    )
+    entry_b = TournamentCycleCompletedEvent(
+        cycle_id=43, category_id=1, standings=_standings(), winner_user_id=222
+    )
+    event = TournamentEditionResultsEvent(edition_id=7, results=[entry_a, entry_b])
+
+    await handler._on_edition_results(event, None)
+
+    # transfer ran once per entry (the held transfer)
+    assert transfer_calls == [42, 43]
+    assert len(channel.send_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_on_edition_results_empty_standings_posts_no_winner_card_no_transfer(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pitfall 6: an empty/all-rejected edition posts a no-winner card and transfers nothing."""
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+    stale = FakeMember(member_id=901)
+    role = FakeRole(role_id=sample_category.champion_role_id, members=[stale])
+    guild = FakeGuild(roles={role.id: role}, members={})
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel, guild=guild)
+
+    completed = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=[], winner_user_id=None)
+    event = TournamentEditionResultsEvent(edition_id=7, results=[completed])
+
+    await handler._on_edition_results(event, None)
+
+    # a no-winner card still posts
+    assert len(channel.send_calls) == 1
+    rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
+    assert "No submissions" in rendered
+    assert "Congratulations" not in rendered  # no winner ping
+    # nobody granted the role (vacant on None winner); the stale holder is stripped
+    assert stale.add_roles_calls == []
+
+
+@pytest.mark.asyncio
+async def test_on_edition_results_mentions_winners_by_numeric_id_with_allow_list(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-12.1-15: winners are pinged ONLY by numeric <@id> with an AllowedMentions allow-list."""
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+    handler, channel = _rollover_handler(mock_api, sample_category)
+    # a malicious free-text name must never reach a mention
+    standings = [
+        TournamentLeaderboardEntryResponse(
+            rank=1, user_id=111, name="@everyone", time=9.5, verified=True, completion=True
+        )
+    ]
+    completed = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=standings, winner_user_id=111)
+    event = TournamentEditionResultsEvent(edition_id=7, results=[completed])
+
+    await handler._on_edition_results(event, None)
+
+    call = channel.send_calls[0]
+    rendered = _view_text(call["kwargs"]["view"])
+    assert "<@111>" in rendered
+    assert "@everyone" not in rendered  # free-text name never interpolated into a mention
+    allowed = call["kwargs"]["allowed_mentions"]
+    assert [obj.id for obj in allowed.users] == [111]
+    assert allowed.everyone is False
+    assert allowed.roles is False
 
 
 # ---------------------------------------------------------------------------
