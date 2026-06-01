@@ -1,22 +1,23 @@
 """Tournament announcement handler.
 
-Consumes the Phase-7 tournament lifecycle events and turns them into Discord
-announcements:
+Consumes the tournament edition-rollover event and turns it into a Discord
+announcement:
 
-- ``api.tournament.cycles_started`` → ONE combined Components V2 (LayoutView)
-  new-cycle card with a per-category section for every category that rotated.
-- ``api.tournament.cycles_completed`` → ONE combined CV2 results card transferring
-  every category's champion role FIRST, then posting a single gold card with a
-  per-category podium and crowning all winners in one ping.
+- ``api.tournament.rollover`` → ONE combined Components V2 (LayoutView) card with
+  CONDITIONAL sections (D-09 / D-10): a results section transferring every
+  finalized category's champion role FIRST and posting a per-category podium, and a
+  new-cycle section with a per-category map/difficulty/ends-at block. The two
+  sections cover the three rollover cases — normal (results + started),
+  into-hiatus (results only), and out-of-hiatus (started only).
 
-A single rotation can start/complete several categories' cycles together; the
-outbox poller groups those into ONE batch event per rotation, so each consumer
-renders exactly one combined card instead of one per category.
+One edition rollover finalizes the old edition and/or starts the next; the outbox
+poller emits ONE ``edition_rollover`` event per boundary keyed by ``edition_id``,
+so the consumer renders exactly one combined card.
 
-The bot is consumer-only: data missing from the events (category name +
+The bot is consumer-only: data missing from the event (category name +
 ``champion_role_id``, map difficulty) is sourced from existing API endpoints on
-event receipt (D-07). Both consumers are rotation-scoped idempotent — the outbox
-sets ``message_id=tournament:{event_type}:{created_at_iso}`` and
+event receipt (D-07). The consumer is edition-scoped idempotent — the outbox sets
+``message_id=tournament:rollover:{edition_id}`` and
 ``@queue_consumer(idempotent=True)`` claims on that id, so no key is hand-rolled
 here.
 
@@ -42,9 +43,8 @@ from genjishimada_sdk.tournaments import (
     TournamentChooseMapRequest,
     TournamentCompletionCreatedEvent,
     TournamentCycleCompletedEvent,
-    TournamentCyclesCompletedEvent,
-    TournamentCyclesStartedEvent,
     TournamentLeaderboardEntryResponse,
+    TournamentRolloverEvent,
     TournamentVerificationChangedEvent,
 )
 
@@ -295,105 +295,116 @@ class TournamentHandler(BaseHandler):
         self.verification_channel = verification_channel
 
     @queue_consumer(
-        "api.tournament.cycles_started",
-        struct_type=TournamentCyclesStartedEvent,
+        "api.tournament.rollover",
+        struct_type=TournamentRolloverEvent,
         idempotent=True,
     )
-    async def _on_cycle_started(self, event: TournamentCyclesStartedEvent, _: AbstractIncomingMessage) -> None:
-        """Post ONE combined CV2 new-cycle card for every category that rotated (DSC-01 / D-02).
+    async def _on_edition_rollover(self, event: TournamentRolloverEvent, _: AbstractIncomingMessage) -> None:
+        """Transfer champions then post ONE combined CV2 rollover card (D-09 / D-10).
 
-        A single rotation can start several categories' cycles at once; this renders one
-        blurple LayoutView with a static hero image and a per-category section (map link,
-        difficulty, ends-at) for each entry. The category name and map difficulty are
-        sourced from the API on receipt (D-07). A missing map raises ``ValueError`` from
-        ``get_map`` — let it propagate to the DLQ rather than posting a broken card.
+        Collapses the former ``cycles_started`` + ``cycles_completed`` consumer pair into a
+        single ``api.tournament.rollover`` handler. The card renders CONDITIONAL sections,
+        covering the three rollover cases (D-10):
+
+        - **normal** (``results`` + ``started`` non-empty): a results section AND a
+          starting section.
+        - **into-hiatus** (``results`` only): a results section, no starting section,
+          champion transfer still runs.
+        - **out-of-hiatus** (``started`` only): a starting section only, no champion
+          transfer.
+
+        Ordering (Pitfall 5): champion role transfers run FIRST (only when there are
+        results) and the single ``channel.send`` LAST, so a role-op failure retries (claim
+        released) before any message posts — a re-stripped/re-granted role is idempotent
+        whereas a duplicate ``send`` is visible spam. ``_transfer_champion_role`` strips the
+        role from ALL current holders (self-healing, A6) then grants the winner, or leaves
+        it vacant when ``winner_user_id`` is None. Member edits are staggered with
+        ``_ROLE_OP_DELAY`` (Pitfall 2); a winner who left the guild is logged and skipped,
+        never crashed (Pitfall 3 — crashing would DLQ a valid event).
+
+        Security (T-12-11 / T-10-10 / T-11-19): winners are mentioned ONLY by numeric
+        ``<@id>``; the free-text standings ``name`` is never used in a mention, and
+        ``allowed_mentions`` restricts pings to the explicit numeric winner allow-list (no
+        ``@everyone``/role mentions). The winners ping text lives INSIDE a ``ui.TextDisplay``
+        because a CV2 LayoutView ``send`` accepts no ``content`` kwarg (MEMORY.md). The card
+        deliberately omits any experience-points line (XP is delivered separately via
+        ``api.xp.grant``). Missing category/map data is fetched via the API on receipt — the
+        bot NEVER reads Postgres (T-12-13 / CLAUDE.md).
+
+        Defensive: an event with neither results nor started cycles does nothing.
         """
-        log.debug("[→] [Tournament] cycles_started rotation of %d cycle(s)", len(event.cycles))
-        container = ui.Container(
-            ui.TextDisplay("# 🏆 New Tournament Cycle\nFresh maps are live — set your time before the cycle ends!"),
-            ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
-            accent_color=discord.Color.blurple(),
+        log.debug(
+            "[→] [Tournament] edition_rollover edition=%s results=%d started=%d",
+            event.edition_id,
+            len(event.results),
+            len(event.started),
         )
-        for entry in event.cycles:
-            category = await self.bot.api.get_tournament_category(entry.category_id)
-            map_data = await self.bot.api.get_map(code=entry.map_code)
-            section = (
-                f"### {category.name}\n"
-                f"**Map:** [{entry.map_name}]({_WORKSHOP_URL.format(code=entry.map_code)}) (`{entry.map_code}`)\n"
-                f"**Difficulty:** {map_data.difficulty}\n"
-                f"**Ends:** {discord.utils.format_dt(entry.ends_at, 'R')} "
-                f"({discord.utils.format_dt(entry.ends_at, 'F')})"
+        if not event.results and not event.started:
+            log.info(
+                "[✓] [Tournament] edition_rollover %s carried no results/started; nothing to post", event.edition_id
             )
-            container.add_item(ui.Separator())
-            container.add_item(ui.TextDisplay(section))
+            return
 
-        view = ui.LayoutView(timeout=None)
-        view.add_item(container)
-        await self.announcement_channel.send(
-            view=view,
-            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False),
-        )
-        log.info("[✓] [Tournament] posted combined new-cycle card for %d cycle(s)", len(event.cycles))
-
-    @queue_consumer(
-        "api.tournament.cycles_completed",
-        struct_type=TournamentCyclesCompletedEvent,
-        idempotent=True,
-    )
-    async def _on_cycle_completed(self, event: TournamentCyclesCompletedEvent, _: AbstractIncomingMessage) -> None:
-        """Transfer every category's champion role, then post ONE combined CV2 results card.
-
-        Ordering (Pitfall 5): ALL role transfers run FIRST and the single
-        ``channel.send`` LAST, so a role-op failure retries (claim released) before any
-        message posts — a re-stripped/re-granted role is effectively idempotent whereas a
-        duplicate ``send`` is visible spam.
-
-        Champion transfer (D-04 / D-05): per cycle the role is stripped from ALL current
-        holders (self-healing), then granted to the winner — or left vacant when
-        ``winner_user_id`` is None. Member edits are staggered with ``_ROLE_OP_DELAY``
-        (Pitfall 2). A winner who left the guild (``get_member`` None) is logged and
-        skipped, never crashed (Pitfall 3 — crashing would DLQ a valid event).
-
-        Security (T-10-10 / T-11-19): winners are mentioned ONLY by numeric ``<@id>``; the
-        free-text standings ``name`` is never used in a mention, and ``allowed_mentions``
-        restricts pings to the explicit numeric winner allow-list (no ``@everyone``/role
-        mentions). The card deliberately omits any experience-points line (D-03 deviation —
-        XP is delivered separately via ``api.xp.grant``).
-        """
-        log.debug("[→] [Tournament] cycles_completed rotation of %d cycle(s)", len(event.cycles))
-
-        # 1) Champion role transfers FIRST (Pitfall 5). Cache each entry's category so the
-        # SAME object is reused for the transfer and the results rendering below.
+        # 1) Champion role transfers FIRST (Pitfall 5), only when there are results. Cache
+        # each entry's category so the SAME object is reused for the transfer and the
+        # results rendering below.
         categories: dict[int, TournamentCategoryResponse] = {}
-        for entry in event.cycles:
+        for entry in event.results:
             category = await self.bot.api.get_tournament_category(entry.category_id)
             categories[entry.category_id] = category
             await self._transfer_champion_role(entry, category)
 
-        # 2) Build + post the single combined results card LAST.
+        # 2) Build the single combined card with CONDITIONAL sections.
         container = ui.Container(
-            ui.TextDisplay("# 🏅 Cycle Results\nThe results are in — congratulations to this rotation's champions!"),
+            ui.TextDisplay("# 🏆 Tournament Rollover\nA new rotation has arrived!"),
             ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
             accent_color=discord.Color.gold(),
         )
-        # Winners (numeric ids only) aggregated across every category for ONE ping +
-        # allow-list. Never derived from free-text names (T-10-10 / T-11-19).
-        winners: list[int] = []
-        for entry in event.cycles:
-            category = categories[entry.category_id]
-            header = f"### {category.name}"
-            if entry.winner_user_id is not None:
-                header += f" — 👑 <@{entry.winner_user_id}>"
-                winners.append(entry.winner_user_id)
-            podium_lines = [f"`#{e.rank}` <@{e.user_id}> — {e.time:.2f}s" for e in entry.standings[:_PODIUM_SIZE]]
-            section = header + "\n" + ("\n".join(podium_lines) or "No submissions")
-            container.add_item(ui.Separator())
-            container.add_item(ui.TextDisplay(section))
 
-        # The winners ping lives INSIDE the CV2 card (a LayoutView send overload accepts
-        # no `content` kwarg). The mentions still fire only because every winner id is on
-        # the AllowedMentions allow-list below; the ping text is built from numeric ids
-        # ONLY (never free-text names — T-10-10 / T-11-19).
+        # Results section (iff event.results). Winners (numeric ids only) aggregated across
+        # every category for ONE ping + allow-list. Never derived from free-text names.
+        winners: list[int] = []
+        if event.results:
+            container.add_item(ui.Separator())
+            container.add_item(
+                ui.TextDisplay("## 🏅 Results\nThe results are in — congratulations to this rotation's champions!")
+            )
+            for entry in event.results:
+                category = categories[entry.category_id]
+                header = f"### {category.name}"
+                if entry.winner_user_id is not None:
+                    header += f" — 👑 <@{entry.winner_user_id}>"
+                    winners.append(entry.winner_user_id)
+                podium_lines = [f"`#{e.rank}` <@{e.user_id}> — {e.time:.2f}s" for e in entry.standings[:_PODIUM_SIZE]]
+                section = header + "\n" + ("\n".join(podium_lines) or "No submissions")
+                container.add_item(ui.Separator())
+                container.add_item(ui.TextDisplay(section))
+
+        # Starting section (iff event.started). Category name + map difficulty fetched on
+        # receipt (D-07). A missing map raises ``ValueError`` from ``get_map`` — let it
+        # propagate to the DLQ rather than posting a broken card.
+        if event.started:
+            container.add_item(ui.Separator())
+            container.add_item(
+                ui.TextDisplay("## 🏁 New Cycle\nFresh maps are live — set your time before the cycle ends!")
+            )
+            for entry in event.started:
+                category = await self.bot.api.get_tournament_category(entry.category_id)
+                map_data = await self.bot.api.get_map(code=entry.map_code)
+                section = (
+                    f"### {category.name}\n"
+                    f"**Map:** [{entry.map_name}]({_WORKSHOP_URL.format(code=entry.map_code)}) (`{entry.map_code}`)\n"
+                    f"**Difficulty:** {map_data.difficulty}\n"
+                    f"**Ends:** {discord.utils.format_dt(entry.ends_at, 'R')} "
+                    f"({discord.utils.format_dt(entry.ends_at, 'F')})"
+                )
+                container.add_item(ui.Separator())
+                container.add_item(ui.TextDisplay(section))
+
+        # The winners ping lives INSIDE the CV2 card (a LayoutView send overload accepts no
+        # `content` kwarg). The mentions still fire only because every winner id is on the
+        # AllowedMentions allow-list below; the ping text is built from numeric ids ONLY
+        # (never free-text names — T-12-11 / T-10-10 / T-11-19).
         if winners:
             container.add_item(ui.Separator())
             container.add_item(ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in winners) + "!"))
@@ -406,7 +417,12 @@ class TournamentHandler(BaseHandler):
             view=view,
             allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=False),
         )
-        log.info("[✓] [Tournament] posted combined results card for %d cycle(s)", len(event.cycles))
+        log.info(
+            "[✓] [Tournament] posted combined rollover card for edition=%s (results=%d, started=%d)",
+            event.edition_id,
+            len(event.results),
+            len(event.started),
+        )
 
     @queue_consumer(
         "api.tournament.completion.created",

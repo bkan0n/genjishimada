@@ -3,12 +3,11 @@
 Each test maps to one behavior in the Phase 9 VALIDATION map and is named so the
 documented ``-k`` selector picks exactly one group:
 
-- ``-k cycle_started``     → DSC-01: new-cycle embed posted after fetching category + map
-- ``-k results_embed``     → DSC-02: Top-3 results embed (no XP line, D-03)
+- ``-k rollover``          → D-09/D-10: ONE combined card; the three conditional cases
 - ``-k champion_role``     → DSC-03 / RWD-03: strip role from all holders then grant to winner
 - ``-k champion_vacant``   → DSC-03 / RWD-03: winner_user_id is None → strip-all, leave vacant (D-05)
 - ``-k stagger``           → DSC-03 / RWD-03: role ops staggered to respect Discord rate limits
-- ``-k idempotency``       → DSC-01/02: cycle-scoped dedupe; claim released on failure
+- ``-k idempotency``       → D-09: edition-scoped dedupe; claim released on failure
 
 The handler body is invoked directly with injected fakes (mock ``bot.api``, a fake
 announcement channel, the conftest fake guild/role/member trio). The ``@queue_consumer``
@@ -31,9 +30,8 @@ from genjishimada_sdk.tournaments import (
     TournamentCompletionCreatedEvent,
     TournamentCycleCompletedEvent,
     TournamentCycleStartedEvent,
-    TournamentCyclesCompletedEvent,
-    TournamentCyclesStartedEvent,
     TournamentLeaderboardEntryResponse,
+    TournamentRolloverEvent,
     TournamentVerificationChangedEvent,
 )
 
@@ -196,6 +194,12 @@ def _standings() -> list[TournamentLeaderboardEntryResponse]:
     ]
 
 
+def _completed_event(winner_user_id: int | None = 111) -> TournamentCycleCompletedEvent:
+    return TournamentCycleCompletedEvent(
+        cycle_id=42, category_id=1, standings=_standings(), winner_user_id=winner_user_id
+    )
+
+
 def _view_text(view: Any) -> str:
     """Flatten every ui.TextDisplay in a CV2 LayoutView into one searchable string.
 
@@ -209,94 +213,118 @@ def _view_text(view: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# DSC-01: cycle_started
+# D-09 / D-10: edition rollover — ONE combined card, three conditional cases
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_cycle_started_posts_new_cycle_embed(mock_api: AsyncMock) -> None:
-    """DSC-01: cycle_started consumer fetches category + map and posts the combined CV2 card."""
-    channel = FakeChannel()
-    handler = _make_handler(mock_api, channel)
-    started = _started_event()
-
-    await handler._on_cycle_started(TournamentCyclesStartedEvent(cycles=[started]), None)
-
-    mock_api.get_tournament_category.assert_awaited_once_with(started.category_id)
-    mock_api.get_map.assert_awaited_once_with(code=started.map_code)
-    assert len(channel.send_calls) == 1
-    # CV2 LayoutView (no embed/content); assert on the rendered TextDisplay sections.
-    rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
-    assert "Hanamura" in rendered
-    assert "Hard" in rendered  # difficulty + category name
-    assert started.map_code in rendered  # workshop code surfaced
-    assert "workshop.codes" in rendered  # clickable link
-
-
-@pytest.mark.asyncio
-async def test_cycle_started_no_thumbnail_when_banner_none(mock_api: AsyncMock) -> None:
-    """DSC-01: a null map_banner does not break the started card (CV2 hero card ignores banner)."""
-    mock_api.get_map.return_value = SimpleNamespace(difficulty="Hard", map_name="Hanamura", map_banner=None)
-    channel = FakeChannel()
-    handler = _make_handler(mock_api, channel)
-
-    await handler._on_cycle_started(TournamentCyclesStartedEvent(cycles=[_started_event()]), None)
-
-    assert len(channel.send_calls) == 1
-    rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
-    assert "Hanamura" in rendered
-
-
-# ---------------------------------------------------------------------------
-# DSC-02 / D-03 / D-06: results_embed
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_cycle_completed_posts_results_embed(
-    mock_api: AsyncMock, sample_category: TournamentCategoryResponse
-) -> None:
-    """DSC-02: cycle_completed posts ONE Top-3 results embed with a winner ping and NO XP line."""
-
+def _rollover_handler(mock_api: AsyncMock, sample_category: TournamentCategoryResponse) -> tuple[Any, FakeChannel]:
+    """Build a rollover handler with a champion role wired so transfers can run."""
     winner = FakeMember(member_id=111)
     role = FakeRole(role_id=sample_category.champion_role_id)
     guild = FakeGuild(roles={role.id: role}, members={111: winner})
     channel = FakeChannel()
     handler = _make_handler(mock_api, channel, guild=guild)
+    return handler, channel
 
-    completed = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
-    await handler._on_cycle_completed(TournamentCyclesCompletedEvent(cycles=[completed]), None)
+
+@pytest.mark.asyncio
+async def test_rollover_normal_renders_both_sections_and_transfers_champion(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-10 normal: results+started → both sections, champion transfer called, one send."""
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+    handler, channel = _rollover_handler(mock_api, sample_category)
+    started = _started_event()
+    event = TournamentRolloverEvent(edition_id=7, results=[_completed_event()], started=[started])
+
+    await handler._on_edition_rollover(event, None)
 
     assert len(channel.send_calls) == 1
     call = channel.send_calls[0]
     rendered = _view_text(call["kwargs"]["view"])
-    # Top-3 standings present, rank-4 absent
+    # results section: top-3 podium + crowned winner, rank-4 absent, no XP line
     assert "<@111>" in rendered and "<@222>" in rendered and "<@333>" in rendered
     assert "<@444>" not in rendered
-    # winner crowned with the 👑 marker
     assert "👑 <@111>" in rendered
-    # NO XP line anywhere
     assert "XP" not in rendered.upper().replace("EXPERIENCE", "")
-    # winner ping lives INSIDE the CV2 card (a LayoutView send takes no `content` kwarg)
+    # starting section: map link + difficulty
+    assert "Hanamura" in rendered
+    assert started.map_code in rendered
+    assert "workshop.codes" in rendered
+    # champion transfer ran (category fetched for the results entry)
+    mock_api.get_tournament_category.assert_any_await(1)
+    # winner ping lives INSIDE the card (no content kwarg) gated by an allow-list
     assert "Congratulations <@111>!" in rendered
     assert "content" not in call["kwargs"]
-    # allowed_mentions restricts pings to the explicit numeric winner only
     allowed = call["kwargs"]["allowed_mentions"]
     assert allowed.everyone is False
     assert allowed.roles is False
 
 
 @pytest.mark.asyncio
-async def test_cycle_completed_results_embed_empty_standings(mock_api: AsyncMock) -> None:
-    """DSC-02: empty standings render a 'No submissions' section and do not crash."""
+async def test_rollover_into_hiatus_results_only_no_starting_section(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-10 into-hiatus: results only → results section, champion transfer runs, no starting section."""
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+    handler, channel = _rollover_handler(mock_api, sample_category)
+    event = TournamentRolloverEvent(edition_id=7, results=[_completed_event()], started=[])
 
+    await handler._on_edition_rollover(event, None)
+
+    assert len(channel.send_calls) == 1
+    rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
+    assert "👑 <@111>" in rendered  # results rendered
+    assert "New Cycle" not in rendered  # no starting section
+    # no map lookup happened (no started entries)
+    mock_api.get_map.assert_not_awaited()
+    # champion transfer still ran (category fetched once for the single results entry)
+    mock_api.get_tournament_category.assert_awaited_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_rollover_out_of_hiatus_started_only_no_transfer(
+    mock_api: AsyncMock, sample_category: TournamentCategoryResponse, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D-10 out-of-hiatus: started only → starting section, NO champion transfer call."""
+    monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
+    handler, channel = _rollover_handler(mock_api, sample_category)
+    started = _started_event()
+    event = TournamentRolloverEvent(edition_id=7, results=[], started=[started])
+
+    await handler._on_edition_rollover(event, None)
+
+    assert len(channel.send_calls) == 1
+    rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
+    assert "Hanamura" in rendered  # starting section rendered
+    assert "Results" not in rendered  # no results section
+    assert "Congratulations" not in rendered  # no winner ping
+    # category fetched only for the started entry (results was empty → no transfer)
+    mock_api.get_tournament_category.assert_awaited_once_with(started.category_id)
+    mock_api.get_map.assert_awaited_once_with(code=started.map_code)
+
+
+@pytest.mark.asyncio
+async def test_rollover_empty_event_posts_nothing(mock_api: AsyncMock) -> None:
+    """Defensive: a rollover with neither results nor started cycles does not post a card."""
+    channel = FakeChannel()
+    handler = _make_handler(mock_api, channel)
+
+    await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[], started=[]), None)
+
+    assert channel.send_calls == []
+
+
+@pytest.mark.asyncio
+async def test_rollover_results_empty_standings_renders_no_submissions(mock_api: AsyncMock) -> None:
+    """D-10: a results entry with empty standings renders a 'No submissions' section, no crash."""
     role = FakeRole(role_id=999000111)
     guild = FakeGuild(roles={role.id: role}, members={})
     channel = FakeChannel()
     handler = _make_handler(mock_api, channel, guild=guild)
 
     completed = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=[], winner_user_id=None)
-    await handler._on_cycle_completed(TournamentCyclesCompletedEvent(cycles=[completed]), None)
+    await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[completed], started=[]), None)
 
     assert len(channel.send_calls) == 1
     rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
@@ -325,7 +353,7 @@ async def test_champion_role_transfer_strips_all_then_grants(
     monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
 
     event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
-    await handler._on_cycle_completed(TournamentCyclesCompletedEvent(cycles=[event]), None)
+    await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[event], started=[]), None)
 
     # both stale holders stripped, each with a reason
     assert len(stale1.remove_roles_calls) == 1
@@ -350,7 +378,7 @@ async def test_champion_vacant_when_no_winner(mock_api: AsyncMock, monkeypatch: 
     monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
 
     event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=[], winner_user_id=None)
-    await handler._on_cycle_completed(TournamentCyclesCompletedEvent(cycles=[event]), None)
+    await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[event], started=[]), None)
 
     assert len(stale1.remove_roles_calls) == 1
     assert len(stale2.remove_roles_calls) == 1
@@ -376,7 +404,7 @@ async def test_champion_no_role_configured_skips_transfer(
 
     event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
     # No champion role configured: must not raise, must not touch any role, still posts results.
-    await handler._on_cycle_completed(TournamentCyclesCompletedEvent(cycles=[event]), None)
+    await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[event], started=[]), None)
 
     assert role.members[0].remove_roles_calls == []  # no strip attempted
     assert len(channel.send_calls) == 1  # results embed still posts
@@ -398,7 +426,7 @@ async def test_champion_member_left_guild_does_not_crash(
 
     event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
     # must not raise (would DLQ a valid event)
-    await handler._on_cycle_completed(TournamentCyclesCompletedEvent(cycles=[event]), None)
+    await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[event], started=[]), None)
 
     assert len(stale1.remove_roles_calls) == 1
     assert len(channel.send_calls) == 1  # results embed still posts
@@ -422,7 +450,7 @@ async def test_role_ops_stagger_to_respect_rate_limits(
     monkeypatch.setattr(_tournaments.asyncio, "sleep", sleep_mock)
 
     event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=_standings(), winner_user_id=111)
-    await handler._on_cycle_completed(TournamentCyclesCompletedEvent(cycles=[event]), None)
+    await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[event], started=[]), None)
 
     # at least one stagger sleep per stale-holder strip
     assert sleep_mock.await_count >= 2
