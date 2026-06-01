@@ -65,8 +65,26 @@ def _completed_payload(cycle_id: int, category_id: int) -> str:
     )
 
 
-async def _seed_transition(pool: asyncpg.Pool, cycle_id: int, event_type: str, payload: str) -> int:
+async def _seed_transition(
+    pool: asyncpg.Pool,
+    cycle_id: int,
+    event_type: str,
+    payload: str,
+    created_at: dt.datetime | None = None,
+) -> int:
     async with pool.acquire() as conn:
+        if created_at is not None:
+            return await conn.fetchval(
+                """
+                INSERT INTO tournaments.pending_transitions (cycle_id, event_type, payload, created_at)
+                VALUES ($1, $2, $3::jsonb, $4)
+                RETURNING id
+                """,
+                cycle_id,
+                event_type,
+                payload,
+                created_at,
+            )
         return await conn.fetchval(
             """
             INSERT INTO tournaments.pending_transitions (cycle_id, event_type, payload)
@@ -76,6 +94,14 @@ async def _seed_transition(pool: asyncpg.Pool, cycle_id: int, event_type: str, p
             cycle_id,
             event_type,
             payload,
+        )
+
+
+async def _published_created_at(pool: asyncpg.Pool, transition_id: int) -> dt.datetime:
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "SELECT created_at FROM tournaments.pending_transitions WHERE id = $1",
+            transition_id,
         )
 
 
@@ -108,9 +134,9 @@ async def _make_cycle(create_test_category, create_test_cycle, create_test_map) 
 
 
 class TestPublishAndMark:
-    """The poller publishes unpublished rows and marks them published."""
+    """The poller groups rows by (event_type, created_at) into one batch publish each."""
 
-    async def test_poller_publishes_and_marks(
+    async def test_poller_groups_and_marks(
         self,
         asyncpg_pool: asyncpg.Pool,
         monkeypatch: pytest.MonkeyPatch,
@@ -118,13 +144,32 @@ class TestPublishAndMark:
         create_test_cycle,
         create_test_map,
     ):
-        """Two unpublished rows -> both published, both publish_message-d once each."""
-        category_id, map_id, cycle_id = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
-        started = await _seed_transition(
-            asyncpg_pool, cycle_id, "cycle_started", _started_payload(cycle_id, category_id, map_id)
+        """Two cycles rotating together -> ONE cycles_started + ONE cycles_completed publish.
+
+        Both cycles' started rows share one ``created_at`` (one rotation), and both
+        completed rows share a (different) ``created_at``. Each group publishes once
+        on the plural routing key, carrying a ``cycles`` list of length 2, and every
+        row is marked published.
+        """
+        cat_a, map_a, cycle_a = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
+        cat_b, map_b, cycle_b = await _make_cycle(create_test_category, create_test_cycle, create_test_map)
+
+        # Two distinct rotation timestamps (started vs completed groups) — both rows
+        # in each group share their group's created_at so they aggregate.
+        started_at = dt.datetime.now(dt.UTC)
+        completed_at = started_at + dt.timedelta(microseconds=1)
+
+        started_a = await _seed_transition(
+            asyncpg_pool, cycle_a, "cycle_started", _started_payload(cycle_a, cat_a, map_a), created_at=started_at
         )
-        completed = await _seed_transition(
-            asyncpg_pool, cycle_id, "cycle_completed", _completed_payload(cycle_id, category_id)
+        started_b = await _seed_transition(
+            asyncpg_pool, cycle_b, "cycle_started", _started_payload(cycle_b, cat_b, map_b), created_at=started_at
+        )
+        completed_a = await _seed_transition(
+            asyncpg_pool, cycle_a, "cycle_completed", _completed_payload(cycle_a, cat_a), created_at=completed_at
+        )
+        completed_b = await _seed_transition(
+            asyncpg_pool, cycle_b, "cycle_completed", _completed_payload(cycle_b, cat_b), created_at=completed_at
         )
 
         calls = _stub_publish(monkeypatch)
@@ -132,23 +177,31 @@ class TestPublishAndMark:
 
         await publish_pending_transitions(state)
 
-        assert await _published(asyncpg_pool, started) is True
-        assert await _published(asyncpg_pool, completed) is True
-        # Our two rows were published with their cycle-scoped idempotency keys. The
-        # shared DB may carry rows from other tests, so assert membership (subset),
-        # not an exact total count.
+        # Every seeded row marked published.
+        for tid in (started_a, started_b, completed_a, completed_b):
+            assert await _published(asyncpg_pool, tid) is True
+
+        # The shared DB may carry rows from other tests, so locate OUR two groups by
+        # their rotation-scoped idempotency keys.
+        started_key = f"tournament:cycle_started:{started_at.isoformat()}"
+        completed_key = f"tournament:cycle_completed:{completed_at.isoformat()}"
         keys = [c["idempotency_key"] for c in calls]
-        assert f"tournament:cycle_started:{cycle_id}" in keys
-        assert f"tournament:cycle_completed:{cycle_id}" in keys
-        # Each of our keys was published exactly once (no double-publish in one pass).
-        assert keys.count(f"tournament:cycle_started:{cycle_id}") == 1
-        assert keys.count(f"tournament:cycle_completed:{cycle_id}") == 1
-        our_calls = {
-            c["routing_key"]
-            for c in calls
-            if c["idempotency_key"] in {f"tournament:cycle_started:{cycle_id}", f"tournament:cycle_completed:{cycle_id}"}
-        }
-        assert our_calls == {"api.tournament.cycle_started", "api.tournament.cycle_completed"}
+
+        # Each group published exactly ONCE (no per-category fan-out, no re-publish).
+        assert keys.count(started_key) == 1
+        assert keys.count(completed_key) == 1
+
+        started_call = next(c for c in calls if c["idempotency_key"] == started_key)
+        completed_call = next(c for c in calls if c["idempotency_key"] == completed_key)
+
+        assert started_call["routing_key"] == "api.tournament.cycles_started"
+        assert completed_call["routing_key"] == "api.tournament.cycles_completed"
+
+        # Each batch event carries one entry per cycle that rotated together.
+        assert len(started_call["data"].cycles) == 2
+        assert len(completed_call["data"].cycles) == 2
+        assert {e.cycle_id for e in started_call["data"].cycles} == {cycle_a, cycle_b}
+        assert {e.cycle_id for e in completed_call["data"].cycles} == {cycle_a, cycle_b}
 
 
 class TestSkipLocked:
@@ -167,6 +220,7 @@ class TestSkipLocked:
         completed = await _seed_transition(
             asyncpg_pool, cycle_id, "cycle_completed", _completed_payload(cycle_id, category_id)
         )
+        completed_at = await _published_created_at(asyncpg_pool, completed)
 
         calls = _stub_publish(monkeypatch)
         state = State({"db_pool": asyncpg_pool})
@@ -187,7 +241,7 @@ class TestSkipLocked:
             assert any(r["id"] == completed for r in locked)
 
             # The poller sees our row as skip-locked -> never publishes it, leaves it FALSE.
-            our_key = f"tournament:cycle_completed:{cycle_id}"
+            our_key = f"tournament:cycle_completed:{completed_at.isoformat()}"
             await publish_pending_transitions(state)
             assert our_key not in [c["idempotency_key"] for c in calls]
             assert await _published(asyncpg_pool, completed) is False
