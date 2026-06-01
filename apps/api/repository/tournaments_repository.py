@@ -1619,14 +1619,20 @@ class TournamentRepository(BaseRepository):
             conn: Optional connection for transaction support.
 
         Returns:
-            List of ``{"id", "category_id"}`` dicts ordered by ``id``.
+            List of ``{"id", "category_id"}`` dicts ordered by ``id``, restricted to
+            cycles still in ``finalizing`` status (WR-02).
         """
         _conn = self._get_connection(conn)
+        # Filter on status='finalizing' (WR-02): results computation must only see the
+        # cycles the cron just stopped, not any cycle a prior partial run already flipped
+        # to 'completed'. Re-including completed cycles would insert a SECOND
+        # edition_results pending_transition row (no UNIQUE constraint on the table),
+        # making the outbox drain — and re-grant — the same edition twice.
         rows = await _conn.fetch(
             """
             SELECT id, category_id
             FROM tournaments.cycles
-            WHERE edition_id = $1
+            WHERE edition_id = $1 AND status = 'finalizing'
             ORDER BY id
             """,
             edition_id,
