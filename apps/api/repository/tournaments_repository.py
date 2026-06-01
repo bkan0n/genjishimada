@@ -1564,6 +1564,125 @@ class TournamentRepository(BaseRepository):
         )
         return count
 
+    async def fetch_awaiting_results_editions(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch editions in ``awaiting_results``, locking the selected rows (D-07).
+
+        The poller's drain state machine (Plan 12.1-04) processes each
+        ``awaiting_results`` edition independently when its own verification queue
+        drains; stacked editions are ordered ``ends_at ASC`` so the oldest is
+        handled first (Pitfall 5 — independent publishing, results may post out of
+        order, which is acceptable). The query appends ``FOR UPDATE SKIP LOCKED``
+        (the same idiom as :meth:`fetch_unpublished_transitions`) so concurrent
+        pollers never both process the same edition, and the row lock is held for
+        the duration of the caller's open transaction (in which the edition flip +
+        outbox-row write also run).
+
+        Args:
+            conn: Optional connection for transaction support. Should be inside an
+                open ``conn.transaction()`` so the row lock holds until the edition
+                is flipped to ``completed`` / its results row is written.
+
+        Returns:
+            List of ``awaiting_results`` edition dicts (id, status, start_announced,
+            started_at, ends_at, ...) ordered by ``ends_at ASC``.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            """
+            SELECT *
+            FROM tournaments.editions
+            WHERE status = 'awaiting_results'
+            ORDER BY ends_at ASC
+            FOR UPDATE SKIP LOCKED
+            """
+        )
+        return [dict(row) for row in rows]
+
+    async def fetch_edition_child_cycles(
+        self,
+        edition_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch an edition's child cycles (id + category_id) for results computation (D-07).
+
+        The poller builds one :class:`TournamentCycleCompletedEvent` per child
+        cycle from :meth:`fetch_leaderboard`, so it needs each finalizing child
+        cycle's ``id`` and ``category_id``.
+
+        Args:
+            edition_id: Parent edition whose child cycles are returned.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of ``{"id", "category_id"}`` dicts ordered by ``id``.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            """
+            SELECT id, category_id
+            FROM tournaments.cycles
+            WHERE edition_id = $1
+            ORDER BY id
+            """,
+            edition_id,
+        )
+        return [dict(row) for row in rows]
+
+    async def mark_edition_start_announced(
+        self,
+        edition_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Mark an edition's start-only announcement as emitted (D-06/D-07).
+
+        Set when the poller's first tick finds pending verifications and emits the
+        start-only :class:`TournamentRolloverEvent` (``results_pending=True``). On
+        later ticks ``start_announced = TRUE`` disambiguates "results still owed"
+        from "first tick".
+
+        Args:
+            edition_id: Edition to mark.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        await _conn.execute(
+            "UPDATE tournaments.editions SET start_announced = TRUE WHERE id = $1",
+            edition_id,
+        )
+
+    async def complete_edition(
+        self,
+        edition_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Flip an edition and all its child cycles to ``completed`` (D-07).
+
+        Called by the poller (and force-publish) only when results actually
+        publish (the no-pending first tick or the drained later tick) — never on
+        the start-only branch. The cron left the edition ``awaiting_results`` and
+        the cycles ``finalizing``; this is the poller-owned terminal flip.
+
+        Args:
+            edition_id: Edition to finalize along with its child cycles.
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        await _conn.execute(
+            "UPDATE tournaments.cycles SET status = 'completed' WHERE edition_id = $1",
+            edition_id,
+        )
+        await _conn.execute(
+            "UPDATE tournaments.editions SET status = 'completed' WHERE id = $1",
+            edition_id,
+        )
+
     async def fetch_tournament_completion(
         self,
         tournament_completion_id: int,

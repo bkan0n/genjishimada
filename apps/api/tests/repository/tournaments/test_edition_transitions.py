@@ -11,12 +11,17 @@ test DB, mirroring test_cycle_transitions.py). They prove the structural fix:
                        child cycle per active category, all sharing the edition
                        timing (D-01/D-05).
   * hiatus         -- with config.transitions_paused = TRUE, crossing the boundary
-                       completes the current edition AND creates NO next edition AND
-                       writes a results-only edition_rollover outbox row (D-12).
+                       moves the current edition to awaiting_results AND creates NO
+                       next edition (D-12).
 
-Wave 0 RED scaffold: these FAIL LOUDLY (not skip) until migration 0024 creates
-tournaments.editions / process_edition_transitions / the global config columns;
-the asyncpg calls raise UndefinedTable / UndefinedFunction / UndefinedColumn.
+Phase 12.1 (D-06/D-07): the cron is now TIMING-ONLY. Crossing the boundary flips
+the due edition active -> ``awaiting_results`` (NOT ``completed``), flips child
+cycles -> ``finalizing`` (NOT ``completed``), creates edition N+1 grid-anchored,
+and writes NO outbox row / NO leaderboard snapshot. The outbox POLLER owns
+results computation + the terminal ``completed`` flip when verification drains
+(see test_outbox_poller.py). These tests therefore assert the poller-owns-results
+model: the cron stops at ``awaiting_results``/``finalizing`` and emits no outbox
+row.
 """
 
 import datetime as dt
@@ -54,18 +59,21 @@ async def _edition(pool: asyncpg.Pool, edition_id: int) -> dict:
         return dict(await conn.fetchrow("SELECT * FROM tournaments.editions WHERE id = $1", edition_id))
 
 
-async def _roll_until_completed(pool: asyncpg.Pool, run_cron, edition_id: int, max_ticks: int = 20) -> None:
-    """Invoke the transition fn until the target edition is finalized.
+async def _roll_until_awaiting_results(pool: asyncpg.Pool, run_cron, edition_id: int, max_ticks: int = 20) -> None:
+    """Invoke the timing-only transition fn until the target edition flips to awaiting_results.
 
-    The fn rolls the globally-earliest due edition per call; on the shared test DB
-    sibling tests may leave other due editions, so we tick (bounded) until ours flips.
+    Phase 12.1 (D-06): the cron flips the due edition active -> ``awaiting_results``
+    (NOT ``completed``) -- results + the terminal ``completed`` flip are owned by
+    the outbox poller (D-07). The fn rolls the globally-earliest due edition per
+    call; on the shared test DB sibling tests may leave other due editions, so we
+    tick (bounded) until ours flips.
     """
     for _ in range(max_ticks):
-        if (await _edition(pool, edition_id))["status"] == "completed":
+        if (await _edition(pool, edition_id))["status"] == "awaiting_results":
             return
         await run_cron()
-    assert (await _edition(pool, edition_id))["status"] == "completed", (
-        f"edition {edition_id} not finalized after {max_ticks} ticks"
+    assert (await _edition(pool, edition_id))["status"] == "awaiting_results", (
+        f"edition {edition_id} not moved to awaiting_results after {max_ticks} ticks"
     )
 
 
@@ -134,8 +142,9 @@ class TestDrift:
         prev0 = await _edition(asyncpg_pool, edition0)
         # The transition fn rolls the globally-earliest due edition per call; on a
         # shared test DB other tests' editions may also be due, so tick until THIS
-        # edition has been finalized (bounded).
-        await _roll_until_completed(asyncpg_pool, simulate_late_cron, edition0)
+        # edition has flipped to awaiting_results (bounded). Phase 12.1: the cron is
+        # timing-only -- it stops at awaiting_results, the poller finalizes (D-06/D-07).
+        await _roll_until_awaiting_results(asyncpg_pool, simulate_late_cron, edition0)
 
         # The drift fix: next edition inherits the exact boundary, no now() leak.
         edition1 = await _find_chained_edition(asyncpg_pool, prev0["ends_at"])
@@ -145,15 +154,16 @@ class TestDrift:
         # Second rollover, also late.
         await advance_past_ends_at(edition1["id"], seconds=7200)  # 2h late
         prev1 = await _edition(asyncpg_pool, edition1["id"])
-        await _roll_until_completed(asyncpg_pool, simulate_late_cron, edition1["id"])
+        await _roll_until_awaiting_results(asyncpg_pool, simulate_late_cron, edition1["id"])
 
         edition2 = await _find_chained_edition(asyncpg_pool, prev1["ends_at"])
         assert edition2["started_at"] == prev1["ends_at"]
         assert edition2["ends_at"] == prev1["ends_at"] + dt.timedelta(weeks=1)
 
-        # The previous editions are completed (status flip only).
-        assert (await _edition(asyncpg_pool, edition0))["status"] == "completed"
-        assert (await _edition(asyncpg_pool, edition1["id"]))["status"] == "completed"
+        # The previous editions sit at awaiting_results (timing-only flip; the
+        # poller owns the terminal completed flip + results, D-06/D-07).
+        assert (await _edition(asyncpg_pool, edition0))["status"] == "awaiting_results"
+        assert (await _edition(asyncpg_pool, edition1["id"]))["status"] == "awaiting_results"
 
 
 class TestSingleEdition:
@@ -190,7 +200,7 @@ class TestSingleEdition:
 
         await advance_past_ends_at(edition0, seconds=120)
         prev0 = await _edition(asyncpg_pool, edition0)
-        await _roll_until_completed(asyncpg_pool, simulate_late_cron, edition0)
+        await _roll_until_awaiting_results(asyncpg_pool, simulate_late_cron, edition0)
 
         # Exactly ONE next edition was created (chained off the exact boundary, D-08).
         new_edition = await _find_chained_edition(asyncpg_pool, prev0["ends_at"])
@@ -210,9 +220,9 @@ class TestSingleEdition:
 
 
 class TestHiatus:
-    """hiatus: paused at boundary -> current completes, NO next edition, results-only event (D-12)."""
+    """hiatus: paused at boundary -> current goes awaiting_results, NO next edition, NO outbox row (D-06/D-12)."""
 
-    async def test_pause_completes_without_next_edition(
+    async def test_pause_awaits_results_without_next_edition(
         self,
         asyncpg_pool: asyncpg.Pool,
         create_test_category,
@@ -223,7 +233,7 @@ class TestHiatus:
         advance_past_ends_at,
         simulate_late_cron,
     ):
-        """transitions_paused=TRUE finalizes the edition and suppresses the next one."""
+        """transitions_paused=TRUE moves the edition to awaiting_results and suppresses the next one."""
         await set_global_config(cadence="weekly", transitions_paused=True)
         category = await create_test_category()
         active_map = await create_test_map(difficulty="Medium")
@@ -237,27 +247,24 @@ class TestHiatus:
         await advance_past_ends_at(edition0, seconds=60)
         # While paused the fn never creates a next edition, so chaining off ends_at
         # would find nothing -- assert by id instead.
-        await _roll_until_completed(asyncpg_pool, simulate_late_cron, edition0)
+        await _roll_until_awaiting_results(asyncpg_pool, simulate_late_cron, edition0)
 
-        # Current edition is completed.
-        completed = await _edition(asyncpg_pool, edition0)
-        assert completed["status"] == "completed"
+        # Phase 12.1: the timing-only cron stops at awaiting_results (the poller
+        # later finalizes + publishes results, D-06/D-07). Child cycles are
+        # finalizing (submissions stopped), NOT completed.
+        awaiting = await _edition(asyncpg_pool, edition0)
+        assert awaiting["status"] == "awaiting_results"
         # NO next edition created (hiatus): nothing chains off this edition's boundary.
         async with asyncpg_pool.acquire() as conn:
             chained = await conn.fetch(
                 "SELECT id FROM tournaments.editions WHERE started_at = $1",
-                completed["ends_at"],
+                awaiting["ends_at"],
             )
         assert chained == []
-        # also: no active child cycles remain for this edition.
-        assert all(c["status"] == "completed" for c in await _child_cycles(asyncpg_pool, edition0))
+        # Child cycles are finalizing (the cron stops new submissions; the poller
+        # flips them to completed when results publish).
+        assert all(c["status"] == "finalizing" for c in await _child_cycles(asyncpg_pool, edition0))
 
-        # A results-only edition_rollover outbox row exists FOR THIS edition.
-        rollovers = await _rollover_rows(asyncpg_pool, edition0)
-        assert len(rollovers) == 1
-        payload = rollovers[0]["payload"]
-        # Combined payload keys are byte-identical to TournamentRolloverEvent.
-        assert set(payload.keys()) == {"results", "started", "edition_id"}
-        assert payload["edition_id"] == edition0
-        assert len(payload["results"]) == 1  # one finalized child cycle
-        assert payload["started"] == []  # results-only: no new cycles started
+        # The timing-only cron writes NO outbox row (D-06): results computation +
+        # the edition_rollover/edition_results event are owned by the poller.
+        assert await _rollover_rows(asyncpg_pool, edition0) == []

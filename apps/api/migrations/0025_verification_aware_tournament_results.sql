@@ -118,6 +118,20 @@ COMMENT ON COLUMN tournaments.editions.start_announced IS
     'TRUE once the poller has emitted the start-only announcement for this edition (D-06/D-07). Distinguishes the poller first tick from later "results still owed" ticks.';
 
 -- =============================================================================
+-- (2b) Deferred-results outbox event type (D-07/D-09)
+-- =============================================================================
+-- The poller writes an 'edition_results' pending_transitions row when an
+-- awaiting_results edition's verification queue drains AFTER a start-only
+-- announcement (Pitfall 3 -- the deferred results ride the existing
+-- publish-before-mark at-least-once machinery). Extend the event_type CHECK to
+-- admit it (drop-by-name then re-add, the 0024:117-120 idiom).
+ALTER TABLE tournaments.pending_transitions
+    DROP CONSTRAINT IF EXISTS pending_transitions_event_type_check;
+ALTER TABLE tournaments.pending_transitions
+    ADD CONSTRAINT pending_transitions_event_type_check
+    CHECK (event_type IN ('cycle_started', 'cycle_completed', 'edition_rollover', 'edition_results'));
+
+-- =============================================================================
 -- (3) Timing-only process_edition_transitions() rewrite (D-06)
 -- =============================================================================
 -- Same signature () RETURNS void so the cron registration (below) is unchanged.

@@ -704,15 +704,17 @@ class TestPollerLaterTickDrained:
         monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
         state = State({"db_pool": asyncpg_pool})
 
-        # Tick 1: detects drain, writes an edition_results outbox row, flips completed; grants run when drained.
+        # Tick 1: detects drain, writes an edition_results outbox row, flips completed.
+        # The grant loop runs when the SAME poll loop drains the row (next tick),
+        # exactly like an edition_rollover row -- so no grant on tick 1.
         await publish_pending_transitions(state)
         rows = await _results_rows(asyncpg_pool, edition_id)
         assert len(rows) == 1
         assert (await _edition_row(asyncpg_pool, edition_id))["status"] == "completed"
         assert await _cycle_statuses(asyncpg_pool, edition_id) == ["completed"]
-        assert awarded == [cycle_a]
 
-        # Tick 2: the SAME loop drains the edition_results row and publishes it on the results key.
+        # Tick 2: the SAME loop drains the edition_results row, runs the grant loop,
+        # and publishes it on the results key.
         await publish_pending_transitions(state)
         key = f"tournament:results:{edition_id}"
         our = [c for c in calls if c["idempotency_key"] == key]
@@ -720,6 +722,7 @@ class TestPollerLaterTickDrained:
         evt = our[0]["data"]
         assert isinstance(evt, TournamentEditionResultsEvent)
         assert {e.cycle_id for e in evt.results} == {cycle_a}
+        assert awarded == [cycle_a]  # grant ran exactly once, when the row drained
 
 
 class TestPollerRerunNoDuplicateGrants:
