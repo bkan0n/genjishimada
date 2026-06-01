@@ -1577,13 +1577,19 @@ class TournamentRepository(BaseRepository):
                     tc.user_id,
                     tc.time,
                     tc.verified,
-                    tc.completion
+                    tc.completion,
+                    tc.inserted_at
                 FROM tournaments.completions tc
                 WHERE tc.cycle_id = $1
-                ORDER BY tc.user_id, tc.verified DESC, tc.time ASC
+                ORDER BY tc.user_id, tc.verified DESC, tc.time ASC, tc.inserted_at ASC
             )
             SELECT
-                RANK() OVER (ORDER BY bpu.verified DESC, bpu.time ASC)::int AS rank,
+                -- Stable tiebreak (earliest submission, then user_id) identical
+                -- to the winner-selection logic in process_edition_transitions()
+                -- so display ranks always agree with the awarded champion.
+                RANK() OVER (
+                    ORDER BY bpu.verified DESC, bpu.time ASC, bpu.inserted_at ASC, bpu.user_id ASC
+                )::int AS rank,
                 bpu.user_id,
                 COALESCE(u.global_name, u.nickname, 'Unknown') AS name,
                 bpu.time::float AS time,
@@ -1591,7 +1597,7 @@ class TournamentRepository(BaseRepository):
                 bpu.completion
             FROM best_per_user bpu
             JOIN core.users u ON u.id = bpu.user_id
-            ORDER BY bpu.verified DESC, bpu.time ASC
+            ORDER BY bpu.verified DESC, bpu.time ASC, bpu.inserted_at ASC, bpu.user_id ASC
         """
         rows = await _conn.fetch(query, cycle_id)
         return [dict(row) for row in rows]

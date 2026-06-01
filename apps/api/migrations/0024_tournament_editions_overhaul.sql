@@ -238,19 +238,30 @@ BEGIN
         -- fetch_leaderboard (verified DESC, time ASC). winner = the rank-1 user.
         WITH best_per_user AS (
             SELECT DISTINCT ON (tc.user_id)
-                tc.user_id, tc.time, tc.verified, tc.completion
+                tc.user_id, tc.time, tc.verified, tc.completion, tc.inserted_at
             FROM tournaments.completions tc
             WHERE tc.cycle_id = v_child.id
-            ORDER BY tc.user_id, tc.verified DESC, tc.time ASC
+            -- Earliest submission of a user's best (verified, time) wins the
+            -- per-user representative row, so a re-submission of the same time
+            -- cannot push a user ahead of an earlier competitor.
+            ORDER BY tc.user_id, tc.verified DESC, tc.time ASC, tc.inserted_at ASC
         ),
         ranked AS (
             SELECT
-                RANK() OVER (ORDER BY bpu.verified DESC, bpu.time ASC)::int AS rank,
+                -- Deterministic, fair tiebreak on tied rank-1 (and every tier):
+                -- earliest submission first, then lowest user_id as a final
+                -- stable fallback. Without inserted_at, MIN(user_id) silently
+                -- handed the champion role + XP to whoever had the oldest
+                -- Discord snowflake rather than the legitimately-first finisher.
+                RANK() OVER (
+                    ORDER BY bpu.verified DESC, bpu.time ASC, bpu.inserted_at ASC, bpu.user_id ASC
+                )::int AS rank,
                 bpu.user_id,
                 COALESCE(u.global_name, u.nickname, 'Unknown') AS name,
                 bpu.time::float AS time,
                 bpu.verified,
-                bpu.completion
+                bpu.completion,
+                bpu.inserted_at
             FROM best_per_user bpu
             JOIN core.users u ON u.id = bpu.user_id
         )
@@ -264,11 +275,19 @@ BEGIN
                         'time', ranked.time,
                         'verified', ranked.verified,
                         'completion', ranked.completion
-                    ) ORDER BY ranked.rank
+                    ) ORDER BY ranked.rank, ranked.inserted_at, ranked.user_id
                 ),
                 '[]'::jsonb
             ),
-            MIN(ranked.user_id) FILTER (WHERE ranked.rank = 1)
+            -- Champion = the single rank-1 row, broken deterministically by
+            -- earliest submission then user_id (matches the RANK() ordering).
+            (
+                SELECT r.user_id
+                FROM ranked r
+                WHERE r.rank = 1
+                ORDER BY r.inserted_at ASC, r.user_id ASC
+                LIMIT 1
+            )
         INTO v_standings, v_winner
         FROM ranked;
 
