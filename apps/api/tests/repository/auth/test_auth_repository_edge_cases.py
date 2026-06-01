@@ -260,9 +260,10 @@ class TestCaseSensitivity:
     ):
         """Test rate limiting with case variations of identifier."""
         # Arrange
-        identifier_lower = "test@example.com"
-        identifier_upper = "TEST@EXAMPLE.COM"
-        identifier_mixed = "TeSt@ExAmPlE.CoM"
+        base_identifier = fake.email()
+        identifier_lower = base_identifier.lower()
+        identifier_upper = base_identifier.upper()
+        identifier_mixed = base_identifier.title()
         action = "login"
         window_start = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)
 
