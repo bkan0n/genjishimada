@@ -1,61 +1,101 @@
 # Tournament Feature — Frontend Spec
 
 > Audience: frontend engineer building the tournament UI against the Genji Shimada API.
-> Everything here is verified against the live code (`apps/api/routes/v3/tournaments.py`,
-> `libs/sdk/src/genjishimada_sdk/tournaments.py`, migrations `0020`–`0022`).
+> Verified against the live code (`apps/api/routes/v3/tournaments.py`,
+> `libs/sdk/src/genjishimada_sdk/tournaments.py`) as of migration `0025`.
 
----
+**What the web frontend is:** a **public read-only display** of tournaments + an **admin
+dashboard** for staff. That is the whole surface.
 
-## 1. Mental Model (read this first)
-
-- A **Category** is a difficulty-grouped tournament track (e.g. "Hard", "Extreme"). Each category
-  has its own cadence (`weekly` or `biweekly`) and its own reward config.
-- A **Cycle** is one run of a category on one randomly-selected map. Exactly **one cycle is `active`
-  per category at a time**. When it ends, it finalizes and the next pre-rolled cycle takes over
-  automatically.
-- Players submit their **best completion time** to the active cycle. The **leaderboard** ranks
-  verified-then-fastest. Rank 1 at finalization becomes the **Champion** (gets a Discord role).
-- Cycle status flows: `pending → active → finalizing → completed`.
-- Transitions are **automatic** (a DB cron job), not triggered by any API call. The frontend learns
-  about a transition by re-polling (see §6).
-
-```
-Category "Hard" (weekly)
-  ├── Cycle #12  status=completed   map=ABC123   winner=PlayerX
-  ├── Cycle #13  status=active      map=DEF456   ← players submit here
-  └── Cycle #14  status=pending     map=GHI789   ← pre-rolled, admin preview only
-```
-
----
-
-## 2. Auth & Scopes
-
-All endpoints require an authenticated request (`X-API-KEY` header, same as the rest of the v3 API).
-Each endpoint requires one of two scopes:
-
-| Scope | Use |
-|-------|-----|
-| `tournaments:read` | All `GET` endpoints (player-facing views) |
-| `tournaments:write` | Submitting completions + all admin/config/cycle mutations |
-
-Superusers bypass scope checks. A missing/insufficient scope returns `401`.
+**What the web frontend is NOT:** it does not submit times and it does not verify/reject
+runs. Players submit their tournament times by submitting a **normal completion via the
+Discord bot** (the API auto-detects the active tournament cycle by map code). Mods
+verify/reject through the bot's mod-review flow. There is **no web submit UI** — do not
+build one.
 
 **Base path for everything below:** `/api/v3/tournaments`
 
 ---
 
-## 3. Data Models (what you render)
+## 1. Mental model — Edition vs Cycle vs Category
 
-All times are **floats in seconds**. All timestamps are ISO-8601 datetimes. `null` is possible
-wherever noted.
+- **Category** — a difficulty-grouped tournament track (e.g. "Hard", "Extreme") with its
+  own reward config (XP tiers, champion role). Categories no longer carry cadence — that is
+  now global config (see Edition / config). Status: `is_active` toggle.
+- **Cycle** — one run of a category on one selected map. Exactly **one `active` cycle per
+  category at a time**. Status flow: `pending → active → finalizing → completed`. A pending
+  cycle is the pre-rolled next map (admin preview only). Cycles link internally to an edition.
+- **Edition** — the shared, grid-anchored **timing parent** spanning all categories. It
+  carries the one shared `started_at` / `ends_at` for the whole tournament term. Status flow:
+  `active → awaiting_results → completed`. The countdown the frontend renders comes from
+  `edition.ends_at` directly — it is a **stored** field, not computed client-side.
+
+```
+Edition #7  status=active   started_at=2026-05-23T00:00:00Z  ends_at=2026-05-30T00:00:00Z
+  ├── Category "Hard"     active cycle → map=DEF456   pending cycle → map=GHI789
+  └── Category "Extreme"  active cycle → map=JKL012   pending cycle → map=MNO345
+```
+
+**Automatic transitions.** A `pg_cron` job runs every minute. At an edition boundary it:
+1. finalizes the current edition's cycles,
+2. sets the edition to `awaiting_results` (final standings may be deferred until in-flight
+   verifications drain),
+3. starts the **next** edition at the **exact** grid boundary — `started_at` of the new
+   edition = `ends_at` of the previous one, never `now()` (this is the drift fix),
+4. pre-rolls the next `pending` cycle per category.
+
+The frontend learns about transitions by **re-polling** (see §6). There is no API call that
+triggers a transition.
+
+- **`awaiting_results`** — the edition's term ended but final standings are deferred pending
+  the drain of in-flight verifications. Results publish automatically once verifications
+  settle, or can be force-published via `PATCH /publish-results`.
+
+---
+
+## 2. Auth & scopes
+
+All endpoints require an authenticated request via the `X-API-KEY` header (same as the rest
+of the v3 API).
+
+| Scope | Use |
+|-------|-----|
+| `tournaments:read` | All `GET` endpoints (public display) |
+| `tournaments:write` | Admin dashboard mutations (category CRUD, config, map select/reroll, pause, bootstrap, publish-results) |
+| `tournaments:verify` | Bot verify/reject only — **not** the web dashboard |
+
+Superusers bypass scope checks. A missing/insufficient scope returns `401`.
+
+---
+
+## 3. Data models
+
+All times are **floats in seconds**. All timestamps are ISO-8601 datetimes. `null` is
+possible wherever noted. These are the fields that exist now — do not assume others.
+
+### Config — `TournamentConfigResponse`
+Global config singleton (cadence is global, never per-category).
+```jsonc
+{
+  "blacklist_weeks": 4,            // weeks a map is excluded after use
+  "cadence": "weekly",            // "weekly" | "biweekly" (GLOBAL)
+  "anchor_weekday": 1,            // grid anchor weekday, 0=Sun..6=Sat
+  "anchor_time": "12:00:00",      // wall-clock time-of-day in anchor_tz
+  "anchor_tz": "America/New_York", // IANA timezone name
+  "transitions_paused": false,    // global hiatus lever
+  "debug_cycle_seconds": null,    // int | null — debug/test edition-length override
+  "created_at": "2026-05-01T00:00:00Z",
+  "updated_at": "2026-05-01T00:00:00Z"
+}
+```
 
 ### Category — `TournamentCategoryResponse`
+No `cycle_frequency` — cadence is global config.
 ```jsonc
 {
   "id": 1,
   "name": "Hard",
-  "difficulties": ["Hard", "Very Hard"],   // top-level tiers only (see §7)
-  "cycle_frequency": "weekly",             // "weekly" | "biweekly"
+  "difficulties": ["Hard", "Very Hard"],   // top-level DifficultyTop tiers (see §7)
   "participation_xp": 50,                  // flat XP for first submission in a cycle
   "placement_xp": [{"place": 1, "xp": 200}, {"place": 2, "xp": 100}],
   "streak_xp": [{"threshold": 5, "xp": 300}],
@@ -63,6 +103,18 @@ wherever noted.
   "is_active": true,
   "created_at": "2026-05-01T00:00:00Z",
   "updated_at": "2026-05-01T00:00:00Z"
+}
+```
+
+### Edition — `TournamentEditionResponse`
+The shared timing parent. `ends_at` is **stored**, read it directly.
+```jsonc
+{
+  "id": 7,
+  "started_at": "2026-05-23T00:00:00Z",  // exact grid value (anchor + N×period), never now()
+  "ends_at": "2026-05-30T00:00:00Z",     // STORED, not derived — use for the countdown
+  "status": "active",                     // active|awaiting_results|completed
+  "created_at": "2026-05-16T00:00:00Z"
 }
 ```
 
@@ -105,45 +157,57 @@ wherever noted.
   "user_id": 140728390589939712,
   "name": "PlayerX",
   "time": 42.51,        // seconds
-  "verified": true,     // verified always outranks unverified
-  "completion": true
-}
-```
-
-### Completion (returned on submit) — `TournamentCompletionResponse`
-```jsonc
-{
-  "id": 999, "cycle_id": 13, "user_id": 140728390589939712, "map_id": 456,
-  "time": 42.51, "screenshot": "https://cdn.genji.pk/...", "video": null,
-  "verified": false, "completion": false, "inserted_at": "2026-05-24T12:00:00Z"
+  "verified": true,     // verified always outranks unverified (see §7)
+  "completion": true    // counts as a full completion (quest/badge eligibility)
 }
 ```
 
 ### Streak — `TournamentStreakResponse`
 ```jsonc
-{ "user_id": 140728390589939712, "current_streak": 3, "max_streak": 7,
-  "last_cycle_id": 13, "updated_at": "2026-05-24T12:00:00Z" }
+{
+  "user_id": 140728390589939712,
+  "current_streak": 3,
+  "max_streak": 7,
+  "last_cycle_id": 13,     // int | null
+  "updated_at": "2026-05-24T12:00:00Z"
+}
 ```
 
-### Config — `TournamentConfigResponse`
+### Lifecycle — `TournamentLifecycleResponse`
+Returned by `PATCH /pause` and `PATCH /debug-cycle-length`.
 ```jsonc
-{ "blacklist_weeks": 4, "created_at": "...", "updated_at": "..." }
+{ "transitions_paused": false, "debug_cycle_seconds": null }
 ```
+
+### Request bodies (admin dashboard)
+
+- **`TournamentCategoryCreateRequest`** — `name` and `difficulties` required;
+  `participation_xp=0`, `placement_xp=[]`, `streak_xp=[]`, `champion_role_id=null` default.
+  No `cycle_frequency`.
+- **`TournamentCategoryPatchRequest`** — all optional: `name`, `difficulties`,
+  `participation_xp`, `placement_xp`, `streak_xp`, `champion_role_id`, `is_active`.
+- **`TournamentConfigPatchRequest`** — all optional: `blacklist_weeks`, `cadence`,
+  `anchor_weekday`, `anchor_time`, `anchor_tz`.
+- **`TournamentChooseMapRequest`** — `{ "map_code": "ABC123" }`.
+- **`TournamentPauseRequest`** — `{ "paused": true }`.
+- **`TournamentDebugCycleLengthRequest`** — `{ "seconds": 60 }` (or `null` to clear).
 
 ---
 
 ## 4. Endpoints
 
-### Player-facing (read)
+### Public read — scope `tournaments:read`
 
 | Method | Path | Returns | Notes |
 |--------|------|---------|-------|
-| `GET` | `/categories` | `TournamentCategoryResponse[]` | All categories. Build the tournament selector from this. |
-| `GET` | `/categories/{category_id}` | `TournamentCategoryResponse` | `404` if not found. |
-| `GET` | `/cycles` | `TournamentCycleListResponse` | **The main list/archive endpoint.** Query params below. |
-| `GET` | `/cycles/{cycle_id}/leaderboard` | `TournamentLeaderboardEntryResponse[]` | Full list, **not paginated**. Already ranked. |
-| `GET` | `/streaks/{user_id}` | `TournamentStreakResponse` | `404` if the user has no streak record yet. |
-| `GET` | `/config` | `TournamentConfigResponse` | Global config (map cooldown weeks). |
+| `GET` | `/config` | `TournamentConfigResponse` | Global config incl. cadence + anchor. |
+| `GET` | `/categories` | `TournamentCategoryResponse[]` | Build the category selector from this. |
+| `GET` | `/categories/{id}` | `TournamentCategoryResponse` | `404` if not found. |
+| `GET` | `/streaks/{user_id}` | `TournamentStreakResponse` | `404` = no streak yet (treat as 0). |
+| `GET` | `/cycles` | `TournamentCycleListResponse` | Main list/archive endpoint. Query params below. |
+| `GET` | `/cycles/{cycle_id}/leaderboard` | `TournamentLeaderboardEntryResponse[]` | Unpaginated, already ranked. |
+| `GET` | `/categories/{id}/next-cycle` | `TournamentNextCycleResponse` | `404` if category or pending cycle missing. |
+| `GET` | `/editions/active` | `TournamentEditionResponse` | The shared timing window. `404` if none active. |
 
 **`GET /cycles` query params:**
 - `status` — `pending` | `active` | `finalizing` | `completed` (optional)
@@ -151,139 +215,134 @@ wherever noted.
 - `limit` — 1–100, default `20`
 - `offset` — default `0`
 
-> **Getting the current active cycle for a category** (very common): there is no dedicated
+> **Getting the current active cycle for a category** (common): there is no dedicated
 > endpoint. Call `GET /cycles?status=active&category_id={id}` and take `cycles[0]`
-> (0 or 1 result). The `cycle_id` you get is what you pass to `/leaderboard` and `/submit`.
+> (0 or 1 result). The `cycle_id` is what you pass to `/leaderboard`.
 
-### Player-facing (write)
-
-| Method | Path | Body | Returns | Errors |
-|--------|------|------|---------|--------|
-| `POST` | `/cycles/{cycle_id}/submit` | `TournamentCompletionCreateRequest` | `TournamentCompletionResponse` (201) | `404` cycle not found · `409` cycle not active · `409` time not faster than your best |
-
-**Submit body — `TournamentCompletionCreateRequest`:**
-```jsonc
-{ "user_id": 140728390589939712, "time": 42.51,
-  "screenshot": "https://...", "video": "https://..." /* optional, nullable */ }
-```
-
-### Admin-facing (write) — for the staff/config UI
+### Admin dashboard write — scope `tournaments:write`
 
 | Method | Path | Body | Returns | Errors |
 |--------|------|------|---------|--------|
 | `POST` | `/categories` | `TournamentCategoryCreateRequest` | `TournamentCategoryResponse` (201) | `409` name exists |
-| `PATCH` | `/categories/{id}` | `TournamentCategoryPatchRequest` | `TournamentCategoryResponse` | `404` · `409` locked or name conflict |
+| `PATCH` | `/categories/{id}` | `TournamentCategoryPatchRequest` | `TournamentCategoryResponse` (200) | `404` · `409` locked or name conflict |
 | `DELETE` | `/categories/{id}` | — | `204` | `404` · `409` locked |
-| `GET` | `/categories/{id}/next-cycle` | — | `TournamentNextCycleResponse` | `404` category or pending cycle |
+| `PATCH` | `/config` | `TournamentConfigPatchRequest` | `TournamentConfigResponse` (200) | `422` invalid `anchor_tz` |
 | `POST` | `/categories/{id}/select-map` | — | `TournamentNextCycleResponse` (201) | `404` · `409` pending exists · `422` no eligible maps |
 | `POST` | `/categories/{id}/reroll` | — | `TournamentNextCycleResponse` (201) | `404` · `422` no eligible maps |
-| `PATCH` | `/categories/{id}/next-cycle` | `TournamentChooseMapRequest` `{ "map_code": "ABC123" }` | `TournamentNextCycleResponse` | `404` · `422` map not eligible |
-| `GET` | `/config` / `PATCH` `/config` | `TournamentConfigPatchRequest` `{ "blacklist_weeks": 4 }` | `TournamentConfigResponse` | — |
+| `POST` | `/categories/{id}/reroll-active` | — | `TournamentNextCycleResponse` (201) | `404` category/active not found · `422` no eligible maps |
+| `PATCH` | `/categories/{id}/next-cycle` | `TournamentChooseMapRequest` | `TournamentNextCycleResponse` (200) | `404` · `422` map not eligible |
+| `POST` | `/bootstrap` | — | `TournamentEditionResponse` (201) | `409` active edition exists · `422` a category has no eligible maps |
+| `PATCH` | `/publish-results` | — | `204` | `409` if no edition `awaiting_results` |
+| `PATCH` | `/pause` | `TournamentPauseRequest` | `TournamentLifecycleResponse` (200) | — |
+| `PATCH` | `/debug-cycle-length` | `TournamentDebugCycleLengthRequest` | `TournamentLifecycleResponse` (200) | `403` in production |
+
+Notes on the admin mutations:
+- **`reroll`** discards the pending cycle and re-randomizes the next map.
+- **`reroll-active`** rerolls the **live** active cycle's map — it **wipes that cycle's
+  submissions** and **preserves the edition window** (the deadline does not move).
+- **`next-cycle` (PATCH)** explicitly chooses the pending map by `map_code`.
+- **`bootstrap`** manually activates the **first** grid-snapped edition (one edition + one
+  child cycle per active category). Thereafter rollover is automatic.
+- **`publish-results`** force-publishes results, ignoring in-flight verifications.
+- **`pause`** is a **global** hiatus: the active edition still finishes its term, only the
+  **next** edition is suppressed.
+- **`debug-cycle-length`** is DEBUG/TEST ONLY (returns `403` in production); pass
+  `seconds: null` to clear the override.
 
 > "Locked" (`409`) on category edit/delete means the category currently has an `active` or
 > `finalizing` cycle. Surface this as "can't edit while a tournament is running."
 
-`TournamentCategoryCreateRequest` defaults: `cycle_frequency="weekly"`, `participation_xp=0`,
-`placement_xp=[]`, `streak_xp=[]`, `champion_role_id=null`. `TournamentCategoryPatchRequest` is
-fully partial — omit a field to leave it unchanged.
+### Discord-bot only — NOT the web dashboard — scope `tournaments:verify`
+
+| Method | Path | Returns | Errors |
+|--------|------|---------|--------|
+| `PATCH` | `/completions/{tournament_completion_id}/verify` | `JobStatusResponse` | `404` |
+| `PATCH` | `/completions/{tournament_completion_id}/reject` | `JobStatusResponse` | `404` · `409` already verified (verified is terminal) |
+
+These exist for the bot's mod-review flow. The web dashboard does not call them.
+
+**There is no `POST /cycles/{cycle_id}/submit`.** Tournament completions are created
+server-side when a user submits a **normal completion** via `POST /api/v3/completions/` —
+the API auto-detects an active tournament cycle by map code. That path is **async/job-based**
+(it returns a `CompletionSubmissionJobResponse` with `job_status` and `completion_id`), not a
+synchronous `201`. The web frontend does not submit tournament times.
 
 ---
 
-## 5. Core User Flows
+## 5. Frontend flows
 
-### A. View an active tournament
-1. `GET /categories` → user picks a category.
-2. `GET /cycles?status=active&category_id={id}` → `cycles[0]` is the active cycle.
-3. Render map (`map_name`, `map_code`, `map_difficulty`) and the **time remaining** (see §6 — you
-   compute this).
-4. `GET /cycles/{cycle_id}/leaderboard` → render standings.
+### A. View the active tournament + countdown
+1. `GET /editions/active` → the shared window (`started_at`, `ends_at`, `status`).
+2. For each category: `GET /cycles?status=active&category_id={id}` → take `cycles[0]` for the
+   current map (`map_name`, `map_code`, `map_difficulty`).
+3. Countdown = `edition.ends_at − now()`, read straight from the **stored** `ends_at`. Do
+   **not** derive it from `started_at` + cadence.
 
-### B. Submit a time
-1. `POST /cycles/{cycle_id}/submit` with `{user_id, time, screenshot, video?}`.
-2. **Synchronous** — you get the completion back immediately (201). No job polling.
-3. Handle `409`:
-   - "cycle not active" → the cycle ended; refresh the active cycle.
-   - "time not faster" → only a personal best is accepted; show "not faster than your best time."
-4. Optimistically update the leaderboard, or re-fetch it.
+### B. Leaderboard
+- `GET /cycles/{cycle_id}/leaderboard` → already ranked; render as-is.
 
-### C. Browse the archive / past winners
-- `GET /cycles?status=completed&category_id={id}&limit=20&offset=0`.
-- Each row carries `winner_name` / `winner_user_id` and `ended_at` — enough for a "Past Champions"
-  list without a second request. Use `total` for pagination.
+### C. Archive / past champions
+- `GET /cycles?status=completed` (optionally `&category_id={id}`). Each row carries
+  `winner_name` / `winner_user_id` and `ended_at` — enough for a "Past Champions" list. Use
+  `total` for pagination.
 
-### D. Champion display
-- The **champion is `winner_user_id` of a `completed` cycle** (rank 1 at finalization).
-- The Discord role transfer is handled by the bot automatically — the frontend just displays the
-  winner. `category.champion_role_id` tells you which Discord role represents that title (may be
-  `null`).
-
-### E. Player streak
+### D. Streaks
 - `GET /streaks/{user_id}` → `current_streak` / `max_streak`. Treat `404` as "no streak yet"
-  (show 0), don't surface it as an error.
+  (show 0), not an error.
 
-### F. Admin: pick / preview / reroll the next map
-- `GET /categories/{id}/next-cycle` to preview the pre-rolled map.
-- `POST .../select-map` (random), `POST .../reroll` (discard + re-random), or
-  `PATCH .../next-cycle` with a specific `map_code`.
-- All return the resulting `TournamentNextCycleResponse` synchronously.
+### E. Admin dashboard
+- Category CRUD (`POST` / `PATCH` / `DELETE /categories`).
+- Config (`PATCH /config`: cadence + anchor).
+- Map management: preview (`GET .../next-cycle`), random select (`POST .../select-map`),
+  reroll pending (`POST .../reroll`), reroll live (`POST .../reroll-active`), explicit choose
+  (`PATCH .../next-cycle`).
+- Lifecycle: pause/resume (`PATCH /pause`), bootstrap first edition (`POST /bootstrap`),
+  force-publish (`PATCH /publish-results`).
 
 ---
 
-## 6. Async Behavior & Polling (important)
+## 6. Polling & async behavior
 
-- **All write endpoints are synchronous.** There is **no job-id / `/jobs/{id}` polling** anywhere in
-  the tournament feature. You always get the final result in the response.
-- **Cycle transitions are automatic and server-driven.** A Postgres cron job runs roughly every
-  minute, finalizes a cycle when its duration elapses, promotes the next pending cycle, and pre-rolls
-  another. There is no event the browser receives directly.
-  - To detect a transition, **re-poll** `GET /cycles?status=active&category_id={id}`. A changed
-    `id`/`started_at` means a new cycle started. Suggested cadence: every 30–60s on an open
+- **All admin writes are synchronous** and return the final result — **except** verify/reject
+  and tournament-completion submission, which are **async/job-based** (and both happen via the
+  bot, not the web frontend).
+- **Edition/cycle transitions are automatic and server-driven** (a `pg_cron` job runs every
+  minute). There is no event the browser receives.
+  - To detect a transition, **re-poll** `GET /editions/active` and/or
+    `GET /cycles?status=active&category_id={id}`. A changed edition `id`/`ends_at` or cycle
+    `id`/`started_at` means a transition happened. Suggested cadence: every 30–60s on an open
     tournament page, plus on user focus.
-  - After submitting, re-fetch the leaderboard rather than assuming.
-- **Downstream effects you don't see directly:** Discord announcements and XP grants happen via the
-  bot/queue after a transition. They don't block or change any API response you get; ignore them on
-  the frontend except that a user's XP/lootbox will update on its next independent fetch.
+  - Render the countdown from the **stored** `edition.ends_at`.
+- Discord announcements and XP grants happen via the bot/queue after a transition; they do not
+  change any API response and need no frontend handling.
 
 ---
 
-## 7. Reference Values
+## 7. Reference values
 
-**Cycle status** (`status` field): `pending`, `active`, `finalizing`, `completed`.
-- `pending` — pre-rolled, no submissions, admin preview only.
-- `active` — open for submissions.
-- `finalizing` — brief transient state during finalization; submissions rejected.
+**Cycle status** (`status`): `pending`, `active`, `finalizing`, `completed`.
+- `pending` — pre-rolled next map, admin preview only.
+- `active` — the live cycle for the current edition term.
+- `finalizing` — brief transient state during finalization.
 - `completed` — done; results frozen; appears in archive.
 
-**Cycle frequency** (`cycle_frequency`): `weekly` (7 days) or `biweekly` (14 days).
+**Edition status** (`status`): `active`, `awaiting_results`, `completed`.
 
-**Time-remaining computation** (the API does not send an `ends_at` on cycle responses):
-```
-ends_at = started_at + (7 days if cycle_frequency == "weekly" else 14 days)
-```
-You need the category's `cycle_frequency` (from `GET /categories/{id}`) plus the cycle's
-`started_at`. ⚠️ If you'd prefer the server to send `ends_at` directly, flag it — see §8.
+**Cadence** (`config.cadence`, GLOBAL): `weekly` or `biweekly`.
 
-**Difficulty tiers** (`difficulties` on a category, top-level only):
+**Difficulty tiers** (`difficulties` on a category — `DifficultyTop`, top-level only):
 `Easy`, `Medium`, `Hard`, `Very Hard`, `Extreme`, `Hell`.
-(Note: maps internally have +/- sub-tiers, but categories group by these 6 top-level tiers.)
+(Maps internally have +/- sub-tiers, but categories group by these top-level tiers. Note
+`map_difficulty` on cycle responses is a free-form string label, not the typed enum.)
 
-**Leaderboard ranking rule:** `verified DESC, time ASC` — verified submissions always rank above
-unverified; within a tier, fastest wins. `rank` is precomputed; render as-is.
+**Leaderboard ranking rule:** verified `DESC`, then time `ASC` — a verified run always
+outranks an unverified one; within a tier the fastest wins. `rank` is precomputed; render
+as-is.
 
----
+**`verified` vs `completion`:** `verified` means the run passed verification and so affects
+its **ranking tier** (verified always outranks unverified). `completion` means the submission
+counts as a **full completion** for quest/badge eligibility — a distinct flag from `verified`.
 
-## 8. Gaps / things to confirm with backend
-
-These are real ergonomic gaps you'll hit — worth raising before building around them:
-
-1. **No `ends_at` / time-remaining field** on cycle responses. You must derive it client-side from
-   `started_at` + category `cycle_frequency`. Consider requesting the server add `ends_at`.
-2. **No single "active cycle for category" endpoint.** You use `GET /cycles?status=active&...` and
-   read element 0. Works, but slightly awkward.
-3. **Leaderboard is unpaginated** — returns the full ranked list. Fine for typical sizes; be aware
-   for very large cycles.
-4. **`map_difficulty` is a free-form string** on cycle/next-cycle responses (not the typed tier
-   enum). Don't assume it's one of the 6 top-level labels.
-5. **Submit requires `user_id` in the body** (not inferred from the auth token). Make sure you pass
-   the correct player id.
-```
+**Champion:** the `winner_user_id` of a `completed` cycle (rank 1 at finalization). The
+Discord role transfer is handled bot-side; `category.champion_role_id` names the role
+representing that title (may be `null`).
