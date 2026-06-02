@@ -31,6 +31,10 @@ pytestmark = [pytest.mark.domain_tournaments]
 # returns; it never reads now() itself (D-08).
 _NEXT_MONDAY = dt.datetime(2026, 1, 5, 0, 0, 0, tzinfo=dt.UTC)
 
+# Server-now the repo fetch_db_now() returns in the debug-only bootstrap branch.
+# A debug edition anchors at this instant verbatim (not a future grid boundary).
+_DEBUG_NOW = dt.datetime(2026, 6, 2, 12, 0, 0, tzinfo=dt.UTC)
+
 _config = lambda **kw: {
     "blacklist_weeks": 4,
     "cadence": "weekly",
@@ -101,6 +105,9 @@ class TestBootstrapEdition:
         ends_arg = call.args[1] if len(call.args) > 1 else call.kwargs["ends_at"]
         assert started_arg == _NEXT_MONDAY
         assert ends_arg == _NEXT_MONDAY + dt.timedelta(days=7)
+        # Production (no debug) path: grid boundary used, server-now NOT consulted.
+        mock_tournament_repo.next_grid_boundary.assert_called()
+        mock_tournament_repo.fetch_db_now.assert_not_called()
 
     async def test_bootstrap_one_edition_one_cycle_per_active_category(
         self, mock_pool, mock_state, mock_tournament_repo
@@ -133,30 +140,36 @@ class TestBootstrapEdition:
             started = c.kwargs.get("started_at", c.args[3] if len(c.args) > 3 else None)
             assert started == _NEXT_MONDAY
 
-    async def test_bootstrap_ends_at_uses_debug_period(self, mock_pool, mock_state, mock_tournament_repo):
-        """When debug_cycle_seconds is set, the period is that many seconds (debug wins)."""
+    async def test_bootstrap_debug_anchors_at_server_now(self, mock_pool, mock_state, mock_tournament_repo):
+        """When debug_cycle_seconds is set, started_at is server-now and ends_at is +debug period.
+
+        The debug edition anchors at the instant fetch_db_now() returns (so it starts
+        immediately) and next_grid_boundary is NOT consulted (production-disabled path).
+        """
         service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
 
         mock_tournament_repo.fetch_active_edition.return_value = None
-        mock_tournament_repo.fetch_config.return_value = _config(debug_cycle_seconds=30)
-        mock_tournament_repo.next_grid_boundary.return_value = _NEXT_MONDAY
+        mock_tournament_repo.fetch_config.return_value = _config(debug_cycle_seconds=300)
+        mock_tournament_repo.fetch_db_now.return_value = _DEBUG_NOW
         mock_tournament_repo.fetch_categories.return_value = [_category()]
         mock_tournament_repo.fetch_eligible_maps.return_value = [_map()]
         mock_tournament_repo.create_edition.return_value = _edition(
-            ends_at=_NEXT_MONDAY + dt.timedelta(seconds=30)
+            started_at=_DEBUG_NOW,
+            ends_at=_DEBUG_NOW + dt.timedelta(seconds=300),
         )
-        mock_tournament_repo.create_cycle_for_edition.return_value = _child_cycle()
+        mock_tournament_repo.create_cycle_for_edition.return_value = _child_cycle(started_at=_DEBUG_NOW)
         mock_tournament_repo.create_pending_transition.return_value = {"id": 1}
 
         await service.bootstrap_edition()
 
         call = mock_tournament_repo.create_edition.call_args
+        started_arg = call.args[0] if call.args else call.kwargs["started_at"]
         ends_arg = call.args[1] if len(call.args) > 1 else call.kwargs["ends_at"]
-        assert ends_arg == _NEXT_MONDAY + dt.timedelta(seconds=30)
-        # next_grid_boundary received the debug period.
-        gb_call = mock_tournament_repo.next_grid_boundary.call_args
-        period = gb_call.kwargs.get("period", gb_call.args[-1] if gb_call.args else None)
-        assert period == dt.timedelta(seconds=30)
+        assert started_arg == _DEBUG_NOW
+        assert ends_arg == _DEBUG_NOW + dt.timedelta(seconds=300)
+        # Debug branch anchors at server-now; the grid boundary is NOT consulted.
+        mock_tournament_repo.fetch_db_now.assert_called_once()
+        mock_tournament_repo.next_grid_boundary.assert_not_called()
 
     async def test_bootstrap_biweekly_period(self, mock_pool, mock_state, mock_tournament_repo):
         """Biweekly cadence yields a 14-day period."""
@@ -250,6 +263,24 @@ class TestBootstrapEdition:
 
         with pytest.raises(NoEligibleMapsError):
             await service.bootstrap_edition()
+
+    async def test_bootstrap_clears_transitions_paused(self, mock_pool, mock_state, mock_tournament_repo, mocker):
+        """Bootstrap clears transitions_paused=False even when it was True beforehand."""
+        service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
+
+        mock_tournament_repo.fetch_active_edition.return_value = None
+        mock_tournament_repo.fetch_config.return_value = _config(transitions_paused=True)
+        mock_tournament_repo.next_grid_boundary.return_value = _NEXT_MONDAY
+        mock_tournament_repo.fetch_categories.return_value = [_category()]
+        mock_tournament_repo.fetch_eligible_maps.return_value = [_map()]
+        mock_tournament_repo.create_edition.return_value = _edition()
+        mock_tournament_repo.create_cycle_for_edition.return_value = _child_cycle()
+        mock_tournament_repo.create_pending_transition.return_value = {"id": 1}
+
+        await service.bootstrap_edition()
+
+        # Unpause is atomic with edition creation; conn is the bootstrap conn (ANY).
+        mock_tournament_repo.set_transitions_paused.assert_called_once_with(False, conn=mocker.ANY)
 
 
 class TestFetchActiveEdition:
