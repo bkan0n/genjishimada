@@ -733,6 +733,24 @@ class TournamentRepository(BaseRepository):
             )
         )
 
+    async def fetch_db_now(self, *, conn: Connection | None = None) -> dt.datetime:
+        """Return the server's current instant for debug-only bootstrap anchoring.
+
+        Reads ``SELECT now()`` so the caller can store the returned (timezone-aware)
+        value verbatim as a debug edition's ``started_at``. The only intended caller
+        is ``bootstrap_edition`` when ``debug_cycle_seconds`` is set: the "never store
+        now()" rule (D-08) guards the auto-rotation chain against drift and does NOT
+        apply to the first debug edition, which is meant to start immediately.
+
+        Args:
+            conn: Optional connection so this participates in the bootstrap transaction.
+
+        Returns:
+            The server's current instant as a timezone-aware datetime.
+        """
+        _conn = self._get_connection(conn)
+        return await _conn.fetchval("SELECT now()")
+
     async def next_grid_boundary(
         self,
         anchor_weekday: int,
