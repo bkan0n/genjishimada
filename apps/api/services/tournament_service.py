@@ -44,6 +44,7 @@ from services.exceptions.tournaments import (
     InvalidTimezoneError,
     MapNotEligibleError,
     NoAwaitingResultsEditionError,
+    NoCycleActiveError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
@@ -743,6 +744,167 @@ class TournamentService(BaseService):
                 category_id,
                 conn=conn,  # type: ignore[arg-type]
             )
+
+        return msgspec.convert(result, TournamentNextCycleResponse)
+
+    async def reroll_active_cycle(
+        self,
+        category_id: int,
+        *,
+        headers: Headers | None = None,
+    ) -> TournamentNextCycleResponse:
+        """Reroll the LIVE (``status='active'``) cycle's map for a category.
+
+        Unlike :meth:`reroll_map` (which rerolls the pre-staged pending cycle), this
+        swaps the map players are actively submitting to. It is intentionally
+        destructive: the active cycle's submissions are wiped (scoped strictly by
+        that cycle's id) and the cycle row is replaced. The replacement cycle stays
+        ``status='active'`` attached to the SAME edition, so the original
+        ``started_at``/``ends_at`` deadline is preserved — the edition owns the
+        timing window and is never touched. After the transaction commits, the new
+        map is announced via the existing ``api.tournament.rollover`` event so the
+        live channel updates.
+
+        Args:
+            category_id: Category whose active cycle is rerolled.
+            headers: Request headers forwarded to the post-commit publish (carries
+                ``X-PYTEST-ENABLED`` so the publish no-ops under tests).
+
+        Returns:
+            The new active cycle with joined map details.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            NoCycleActiveError: If the category has no active cycle to reroll.
+            NoEligibleMapsError: If no eligible map is found and LRU fallback fails.
+        """
+        async with self._pool.acquire() as conn:
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            existing = await self._tournament_repo.fetch_active_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is None:
+                raise NoCycleActiveError(category_id)
+
+            old_cycle_id = existing["id"]
+            old_map_id = existing["map_id"]
+            edition_id = existing["edition_id"]
+
+            # Read the PRESERVED window from the parent edition (the cycle row has
+            # no ends_at; the edition owns the deadline). Re-attach to this edition.
+            # A live active cycle is always edition-linked under the current grid
+            # model (migration 0024); a missing link means there is no preservable
+            # window, so there is no active cycle this path can safely reroll.
+            edition = (
+                await self._tournament_repo.fetch_edition(
+                    edition_id,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if edition_id is not None
+                else None
+            )
+            if edition is None:
+                raise NoCycleActiveError(category_id)
+            preserved_started_at = edition["started_at"]
+            preserved_ends_at = edition["ends_at"]
+
+            # Deliberate scoped wipe FIRST (observable), then drop the cycle row.
+            deleted = await self._tournament_repo.delete_cycle_completions(
+                old_cycle_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            log.info(
+                "Active-cycle reroll for category %s: wiped %s completion(s) on cycle %s",
+                category_id,
+                deleted,
+                old_cycle_id,
+            )
+            await self._tournament_repo.delete_cycle(
+                old_cycle_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            # Reuse the existing eligibility/LRU selection (exclude the old map).
+            config = await self._tournament_repo.fetch_config(
+                conn=conn,  # type: ignore[arg-type]
+            )
+            eligible = await self._tournament_repo.fetch_eligible_maps(
+                category["difficulties"],
+                config["blacklist_weeks"],
+                exclude_map_ids=[old_map_id],
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if eligible:
+                selected = eligible[0]
+            else:
+                log.warning(
+                    "[!] Eligible map pool exhausted for category %s (active reroll), using LRU fallback",
+                    category_id,
+                )
+                selected = await self._tournament_repo.fetch_least_recently_used_map(
+                    category["difficulties"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if selected is None:
+                    raise NoEligibleMapsError(category_id)
+
+            # Recreate as ACTIVE on the SAME edition with the PRESERVED started_at.
+            created = await self._tournament_repo.create_cycle_for_edition(
+                edition_id,
+                category_id,
+                selected["id"],
+                preserved_started_at,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            new_cycle_id = created["id"]
+
+            result = await self._tournament_repo.fetch_active_cycle_with_map(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        # Transaction committed: announce the new map via the existing rollover
+        # pipeline (results empty -> no results section/champion transfer; started
+        # populated -> the bot renders the "new cycle" card). A publish failure must
+        # not be swallowed — the DB is already committed (mirrors _set_verified).
+        started_event = TournamentCycleStartedEvent(
+            cycle_id=new_cycle_id,
+            category_id=category_id,
+            map_id=selected["id"],
+            map_code=selected["code"],
+            map_name=selected["map_name"],
+            started_at=preserved_started_at,
+            ends_at=preserved_ends_at,
+        )
+        rollover = TournamentRolloverEvent(
+            edition_id=edition_id,
+            results=[],
+            started=[started_event],
+            results_pending=False,
+        )
+        try:
+            await self.publish_message(
+                routing_key="api.tournament.rollover",
+                data=rollover,
+                headers=headers or Headers(),
+                idempotency_key=f"tournament:active-reroll:{new_cycle_id}",
+            )
+        except Exception:
+            log.exception(
+                "Failed to publish active-cycle reroll rollover event after commit "
+                "(category_id=%s, new_cycle_id=%s) — DB is committed but the live "
+                "channel was not notified; reconcile manually.",
+                category_id,
+                new_cycle_id,
+            )
+            raise
 
         return msgspec.convert(result, TournamentNextCycleResponse)
 

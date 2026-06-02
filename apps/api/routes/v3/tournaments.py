@@ -48,6 +48,7 @@ from services.exceptions.tournaments import (
     MapNotEligibleError,
     NoActiveEditionError,
     NoAwaitingResultsEditionError,
+    NoCycleActiveError,
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
@@ -429,6 +430,56 @@ class TournamentsController(litestar.Controller):
                 detail=str(e),
             ) from e
         except PendingCycleNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except NoEligibleMapsError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            ) from e
+
+    @litestar.post(
+        path="/categories/{category_id:int}/reroll-active",
+        summary="Reroll Active Cycle",
+        description="Reroll the LIVE active cycle's map, wiping its submissions and preserving the edition window.",
+        status_code=HTTP_201_CREATED,
+        opt={"required_scopes": {"tournaments:write"}},
+    )
+    async def reroll_active_cycle(
+        self,
+        request: litestar.Request,
+        tournament_service: TournamentService,
+        category_id: Annotated[int, Parameter(description="Category ID")],
+    ) -> TournamentNextCycleResponse:
+        """Reroll the live active cycle's map for a category.
+
+        Wipes the active cycle's submissions (scoped by cycle id), selects a new
+        eligible map, recreates the cycle as ``status='active'`` on the SAME edition
+        (deadline preserved), and announces the new map via the existing rollover
+        event. Mod/Sensei access control is enforced bot-side before this is called.
+
+        Args:
+            request: HTTP request (for headers forwarded to the publish call).
+            tournament_service: Tournament service.
+            category_id: Category ID.
+
+        Returns:
+            New active cycle with map details.
+
+        Raises:
+            CustomHTTPException: 404 if category or active cycle not found,
+                422 if no eligible maps.
+        """
+        try:
+            return await tournament_service.reroll_active_cycle(category_id, headers=request.headers)
+        except CategoryNotFoundError as e:
+            raise CustomHTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=str(e),
+            ) from e
+        except NoCycleActiveError as e:
             raise CustomHTTPException(
                 status_code=HTTP_404_NOT_FOUND,
                 detail=str(e),

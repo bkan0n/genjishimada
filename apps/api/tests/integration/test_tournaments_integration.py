@@ -550,6 +550,175 @@ class TestRerollEndpoint:
         assert response.status_code == 404
 
 
+async def _seed_active_edition_cycle(
+    asyncpg_pool,
+    category_id: int,
+    map_id: int,
+    *,
+    started_at: dt.datetime,
+    ends_at: dt.datetime,
+) -> tuple[int, int]:
+    """Seed an active edition + one active child cycle for ``category_id``.
+
+    Returns ``(edition_id, cycle_id)``. The edition owns the timing window so the
+    active reroll can preserve ``started_at``/``ends_at`` by re-attaching the new
+    cycle to the SAME edition.
+    """
+    async with asyncpg_pool.acquire() as conn:
+        edition_id = await conn.fetchval(
+            "INSERT INTO tournaments.editions (started_at, ends_at, status) "
+            "VALUES ($1, $2, 'active') RETURNING id",
+            started_at,
+            ends_at,
+        )
+        cycle_id = await conn.fetchval(
+            """
+            INSERT INTO tournaments.cycles (edition_id, category_id, map_id, status, started_at)
+            VALUES ($1, $2, $3, 'active', $4)
+            RETURNING id
+            """,
+            edition_id,
+            category_id,
+            map_id,
+            started_at,
+        )
+    return edition_id, cycle_id
+
+
+class TestRerollActiveEndpoint:
+    """Tests for POST /api/v3/tournaments/categories/{id}/reroll-active."""
+
+    async def test_reroll_active_swaps_map_and_preserves_window(
+        self, test_client, asyncpg_pool, create_test_map
+    ):
+        """Active reroll returns a new active cycle on the SAME preserved edition window."""
+        name = f"RerollActive {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        await test_client.patch(f"{BASE}/config", json={"blacklist_weeks": 0})
+
+        # Original active map + spare eligible maps so the reroll can pick a different one.
+        old_map_id = await create_test_map(difficulty="Easy")
+        await create_test_map(difficulty="Easy")
+        await create_test_map(difficulty="Easy")
+
+        started_at = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
+        ends_at = started_at + dt.timedelta(days=7)
+        edition_id, _ = await _seed_active_edition_cycle(
+            asyncpg_pool, category_id, old_map_id, started_at=started_at, ends_at=ends_at
+        )
+
+        response = await test_client.post(f"{BASE}/categories/{category_id}/reroll-active")
+
+        assert response.status_code == 201
+        data = response.json()
+        assert data["status"] == "active"
+        assert data["map_id"] != old_map_id
+        assert "map_code" in data
+
+        # SAME edition window preserved (timer not reset).
+        async with asyncpg_pool.acquire() as conn:
+            ed_row = await conn.fetchrow(
+                "SELECT started_at, ends_at FROM tournaments.editions WHERE id = $1",
+                edition_id,
+            )
+            new_cycle = await conn.fetchrow(
+                "SELECT edition_id, started_at FROM tournaments.cycles WHERE id = $1",
+                data["id"],
+            )
+        assert ed_row["started_at"] == started_at
+        assert ed_row["ends_at"] == ends_at
+        assert new_cycle["edition_id"] == edition_id
+        assert new_cycle["started_at"] == started_at
+
+    async def test_reroll_active_wipes_scoped_completions_only(
+        self, test_client, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """Active reroll deletes ONLY the active cycle's completions; unrelated ones survive."""
+        name = f"RerollActiveWipe {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        await test_client.patch(f"{BASE}/config", json={"blacklist_weeks": 0})
+
+        old_map_id = await create_test_map(difficulty="Easy")
+        await create_test_map(difficulty="Easy")
+        await create_test_map(difficulty="Easy")
+        user_id = await create_test_user(nickname=f"RAW{uuid4().hex[:6]}")
+
+        started_at = dt.datetime(2026, 6, 1, tzinfo=dt.UTC)
+        ends_at = started_at + dt.timedelta(days=7)
+        _, active_cycle_id = await _seed_active_edition_cycle(
+            asyncpg_pool, category_id, old_map_id, started_at=started_at, ends_at=ends_at
+        )
+
+        # Seed a completion on the active cycle (to be wiped) and an unrelated cycle (to survive).
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status)
+                VALUES ($1, $2, $3, 12.0, 'https://x/s.png', 'pending')
+                """,
+                active_cycle_id,
+                user_id,
+                old_map_id,
+            )
+            other_cycle_id = await conn.fetchval(
+                """
+                INSERT INTO tournaments.cycles (category_id, map_id, status, started_at)
+                VALUES ($1, $2, 'completed', $3)
+                RETURNING id
+                """,
+                category_id,
+                old_map_id,
+                started_at,
+            )
+            await conn.execute(
+                """
+                INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status)
+                VALUES ($1, $2, $3, 34.0, 'https://x/s.png', 'verified')
+                """,
+                other_cycle_id,
+                user_id,
+                old_map_id,
+            )
+
+        response = await test_client.post(f"{BASE}/categories/{category_id}/reroll-active")
+        assert response.status_code == 201
+
+        async with asyncpg_pool.acquire() as conn:
+            wiped = await conn.fetchval(
+                "SELECT COUNT(*) FROM tournaments.completions WHERE cycle_id = $1",
+                active_cycle_id,
+            )
+            survived = await conn.fetchval(
+                "SELECT COUNT(*) FROM tournaments.completions WHERE cycle_id = $1",
+                other_cycle_id,
+            )
+        assert wiped == 0
+        assert survived == 1
+
+    async def test_reroll_active_no_active_cycle_returns_404(self, test_client):
+        """Active reroll returns 404 when the category has no active cycle."""
+        name = f"RerollActiveNone {uuid4().hex[:8]}"
+        create_resp = await test_client.post(
+            f"{BASE}/categories",
+            json={"name": name, "difficulties": ["Easy"]},
+        )
+        category_id = create_resp.json()["id"]
+
+        response = await test_client.post(f"{BASE}/categories/{category_id}/reroll-active")
+
+        assert response.status_code == 404
+
+
 class TestChooseMapEndpoint:
     """Tests for PATCH /api/v3/tournaments/categories/{id}/next-cycle"""
 

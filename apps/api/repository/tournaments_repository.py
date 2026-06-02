@@ -1146,6 +1146,96 @@ class TournamentRepository(BaseRepository):
         result = await _conn.fetchval(query, cycle_id)
         return result is not None
 
+    async def delete_cycle_completions(
+        self,
+        cycle_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> int:
+        """Delete every tournament completion belonging to a single cycle.
+
+        This is the DELIBERATE active-cycle reroll wipe: when a mod rerolls the
+        live ``status='active'`` cycle, that cycle's in-progress runs are discarded
+        on purpose. The DELETE is scoped STRICTLY by the passed ``cycle_id``
+        (``WHERE cycle_id = $1``) so an unrelated cycle's submissions are never
+        touched. Deleting the cycle row would cascade-delete these rows anyway
+        (``tournaments.completions.cycle_id`` is ``ON DELETE CASCADE``); this
+        explicit call makes the wipe observable and order-safe relative to the
+        ``core.completions.tournament_completion_id`` FK, which is
+        ``ON DELETE SET NULL`` — non-tournament completion history is preserved.
+
+        Args:
+            cycle_id: Cycle whose completions are deleted.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Number of completion rows deleted.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            "DELETE FROM tournaments.completions WHERE cycle_id = $1 RETURNING id",
+            cycle_id,
+        )
+        return len(rows)
+
+    async def fetch_active_cycle_with_map(
+        self,
+        category_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch the active cycle for a category with joined map details.
+
+        Mirrors :meth:`fetch_pending_cycle` but for the ``status='active'`` cycle,
+        returning the joined ``map_code``/``map_name``/``map_difficulty`` fields the
+        :class:`TournamentNextCycleResponse` requires.
+
+        Args:
+            category_id: Category ID to look up.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Active cycle dict with map details, or None if no active cycle.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT cy.id, cy.category_id, cy.map_id, cy.status,
+                   cy.started_at, cy.ended_at, cy.created_at, cy.edition_id,
+                   m.code AS map_code, m.map_name, m.difficulty AS map_difficulty
+            FROM tournaments.cycles cy
+            JOIN core.maps m ON m.id = cy.map_id
+            WHERE cy.category_id = $1 AND cy.status = 'active'
+            LIMIT 1
+        """
+        row = await _conn.fetchrow(query, category_id)
+        return dict(row) if row else None
+
+    async def fetch_edition(
+        self,
+        edition_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict | None:
+        """Fetch a single tournament edition by ID.
+
+        Used by the active-cycle reroll to read the PRESERVED timing window
+        (``started_at``/``ends_at``) that owns the deadline — the replacement cycle
+        re-attaches to this same edition so the timer is never reset.
+
+        Args:
+            edition_id: Edition ID to look up.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Edition dict, or None if not found.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            "SELECT * FROM tournaments.editions WHERE id = $1",
+            edition_id,
+        )
+        return dict(row) if row else None
+
     async def fetch_map_by_code(
         self,
         map_code: str,
