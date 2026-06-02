@@ -15,7 +15,7 @@ progress:
 
 # Tournament System — State
 
-Last activity: 2026-06-02 - Completed quick task 260602-iuz: reroll the current (active) tournament cycle (extend /tournament-reroll with a cycle target)
+Last activity: 2026-06-02 - Completed quick task 260602-ld2: rewrite tournament frontend spec for migration 0025
 
 ## Current Status
 
@@ -52,6 +52,7 @@ Controller → Service → Repository pattern:
 | 260602-d96 | Fix tournament end announcements: poller now populates rollover `started` from the active edition (was always `[]` → no new-cycle info + misleading "new rotation arrived" title); transition-accurate bot framing; dedupe winner mentions to fix results-card `50035` DLQ crash on multi-category winners | 2026-06-02 | b605b2f | [260602-d96-fix-tournament-end-announcements-poller-](./quick/260602-d96-fix-tournament-end-announcements-poller-/) |
 | 260602-dpm | Bootstrap UX: `debug_cycle_seconds` anchors first edition at server `now()` (no manual re-anchor in tests; prod weekly/biweekly `next_grid_boundary` path unchanged); bootstrap also clears `transitions_paused` so starting is one step (prod-applicable: bootstrapping unpauses rotation) | 2026-06-02 | 5b1fd17 | [260602-dpm-bootstrap-ux-debug-cycle-seconds-anchors](./quick/260602-dpm-bootstrap-ux-debug-cycle-seconds-anchors/) |
 | 260602-iuz | Reroll the CURRENT (active) cycle: extend `/tournament-reroll` with a `cycle` target (default `upcoming`, existing path byte-for-byte unchanged); `current` wipes the active cycle's submissions scoped by `cycle_id` (`delete_cycle_completions`), swaps to a new eligible map (reuses `fetch_eligible_maps`/LRU), recreates `status='active'` on the SAME edition so the deadline/window is preserved (timer never reset), announces via the existing `api.tournament.rollover` event. Mod/Sensei-gated. | 2026-06-02 | 51afde7 | [260602-iuz-add-ability-to-reroll-the-current-active](./quick/260602-iuz-add-ability-to-reroll-the-current-active/) |
+| 260602-ld2 | Rewrite tournament-frontend-spec.md to be factual/current as of migration 0025 and simpler: framed FE as public read-only display + admin dashboard (submission/verify happen via Discord, not web); removed nonexistent `POST /cycles/{id}/submit`; cadence shown as global `config.cadence` (not per-category); documented the Edition timing entity + `GET /editions/active` with stored `ends_at` (dropped client-side derivation); added `reroll-active`/`bootstrap`/`publish-results`/`pause`/`debug-cycle-length` endpoints + `tournaments:verify` scope. Doc-only. | 2026-06-02 | 3ecd817 | [260602-ld2-rewrite-tournament-frontend-spec-md-to-b](./quick/260602-ld2-rewrite-tournament-frontend-spec-md-to-b/) |
 
 ## Blockers/Concerns
 
