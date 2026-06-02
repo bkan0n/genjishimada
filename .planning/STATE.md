@@ -15,7 +15,7 @@ progress:
 
 # Tournament System — State
 
-Last activity: 2026-06-02 - Completed quick task 260601-ui4: fix tournament verify hang on finalizing cycles
+Last activity: 2026-06-02 - Completed quick task 260602-dpm: bootstrap UX (debug-now anchoring + bootstrap clears transitions_paused)
 
 ## Current Status
 
@@ -49,6 +49,8 @@ Controller → Service → Repository pattern:
 |---|-------------|------|--------|-----------|
 | 260601-bhy | Tournament cycle lifecycle control: bootstrap first cycle, pause/resume, debug cycle-length override | 2026-06-01 | 0df17d6 | [260601-bhy-tournament-cycle-lifecycle-control-boots](./quick/260601-bhy-tournament-cycle-lifecycle-control-boots/) |
 | 260601-ui4 | Fix tournament verify hang: PB propagation resolved cycle via active-only lookup, so verifying during a `finalizing` cycle never drained the gate (edition stuck in awaiting_results, no results announcement) | 2026-06-02 | 527a7ad | [260601-ui4-tournament-verification-needs-to-be-bake](./quick/260601-ui4-tournament-verification-needs-to-be-bake/) |
+| 260602-d96 | Fix tournament end announcements: poller now populates rollover `started` from the active edition (was always `[]` → no new-cycle info + misleading "new rotation arrived" title); transition-accurate bot framing; dedupe winner mentions to fix results-card `50035` DLQ crash on multi-category winners | 2026-06-02 | b605b2f | [260602-d96-fix-tournament-end-announcements-poller-](./quick/260602-d96-fix-tournament-end-announcements-poller-/) |
+| 260602-dpm | Bootstrap UX: `debug_cycle_seconds` anchors first edition at server `now()` (no manual re-anchor in tests; prod weekly/biweekly `next_grid_boundary` path unchanged); bootstrap also clears `transitions_paused` so starting is one step (prod-applicable: bootstrapping unpauses rotation) | 2026-06-02 | 5b1fd17 | [260602-dpm-bootstrap-ux-debug-cycle-seconds-anchors](./quick/260602-dpm-bootstrap-ux-debug-cycle-seconds-anchors/) |
 
 ## Blockers/Concerns
 
