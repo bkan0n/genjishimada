@@ -423,7 +423,9 @@ class TournamentHandler(BaseHandler):
         if event.started:
             container.add_item(ui.Separator())
             container.add_item(
-                ui.TextDisplay("## 🏁 New Tournament Begins!\nFresh maps are live. Set your time before the cycle ends!")
+                ui.TextDisplay(
+                    "## 🏁 New Tournament Begins!\nFresh maps are live. Set your time before the cycle ends!"
+                )
             )
             for entry in event.started:
                 category = await self.bot.api.get_tournament_category(entry.category_id)
@@ -634,13 +636,6 @@ class TournamentHandler(BaseHandler):
             event.user_id,
         )
         verdict = "verified" if event.verified else "rejected"
-        await self.verification_channel.send(
-            content=(
-                f"Tournament run from <@{event.user_id}> ({event.time:.2f}s) was **{verdict}** "
-                f"(completion `{event.tournament_completion_id}`, cycle `{event.cycle_id}`)."
-            ),
-            allowed_mentions=AllowedMentions(everyone=False, roles=False),
-        )
         log.info(
             "[✓] [Tournament] surfaced %s verdict for completion=%s",
             verdict,
