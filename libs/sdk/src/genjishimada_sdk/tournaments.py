@@ -12,6 +12,7 @@ __all__ = (
     "CycleStatus",
     "EditionStatus",
     "PlacementXpTier",
+    "RerollTarget",
     "StreakXpTier",
     "TournamentCategoryCreateRequest",
     "TournamentCategoryLifecycleResponse",
@@ -47,6 +48,13 @@ CycleFrequency = Literal["weekly", "biweekly"]
 CycleStatus = Literal["pending", "active", "finalizing", "completed"]
 Cadence = Literal["weekly", "biweekly"]
 EditionStatus = Literal["active", "awaiting_results", "completed"]
+RerollTarget = Literal["upcoming", "current"]
+"""Which cycle the ``/tournament-reroll`` command targets.
+
+``upcoming`` (default) rerolls the pre-staged pending cycle; ``current`` rerolls
+the live ``status='active'`` cycle (wiping its submissions, preserving the
+edition window).
+"""
 
 
 class PlacementXpTier(Struct):

@@ -32,7 +32,7 @@ import asyncio
 import os
 from http import HTTPStatus
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Sequence, cast
+from typing import TYPE_CHECKING, Any, Literal, Sequence, cast
 
 import discord
 from discord import AllowedMentions, ButtonStyle, MediaGalleryItem, TextChannel, app_commands, ui
@@ -451,9 +451,7 @@ class TournamentHandler(BaseHandler):
         deduped_winners = list(dict.fromkeys(winners))
         if deduped_winners:
             container.add_item(ui.Separator())
-            container.add_item(
-                ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in deduped_winners) + "!")
-            )
+            container.add_item(ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in deduped_winners) + "!"))
 
         view = ui.LayoutView(timeout=None)
         view.add_item(container)
@@ -568,9 +566,7 @@ class TournamentHandler(BaseHandler):
         deduped_winners = list(dict.fromkeys(winners))
         if deduped_winners:
             container.add_item(ui.Separator())
-            container.add_item(
-                ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in deduped_winners) + "!")
-            )
+            container.add_item(ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in deduped_winners) + "!"))
 
         view = ui.LayoutView(timeout=None)
         view.add_item(container)
@@ -905,8 +901,9 @@ class TournamentRerollCog(BaseCog):
         itx: GenjiItx,
         category: app_commands.Transform[int, transformers.CategoryTransformer],
         code: app_commands.Transform[OverwatchCode, transformers.CodeAllTransformer] | None = None,
+        cycle: Literal["upcoming", "current"] = "upcoming",
     ) -> None:
-        """Reroll (random) or explicitly choose the next-cycle map for a category.
+        """Reroll the upcoming (default) or current/live cycle map for a category.
 
         The authoritative access control is the bot-side Mod/Sensei role check below
         (D-07 / threat T-10-07): the bot's single full-scope API key does NOT distinguish
@@ -916,6 +913,10 @@ class TournamentRerollCog(BaseCog):
             itx: The interaction context.
             category: The tournament category (resolved to its id by the transformer).
             code: Optional explicit map code (D-15); when omitted a random reroll runs (D-14).
+                Only honored for the upcoming cycle — unsupported for the current cycle.
+            cycle: Which cycle to reroll. ``upcoming`` (default) rerolls the pre-staged
+                pending cycle (unchanged behavior). ``current`` rerolls the live active
+                cycle, wiping its submissions and preserving the edition window.
         """
         await itx.response.defer(ephemeral=True)
 
@@ -931,24 +932,47 @@ class TournamentRerollCog(BaseCog):
         )
         if not is_mod:
             # D-07: THE authoritative gate. Raised before any API write so a non-admin
-            # never triggers a reroll (asserted by the reroll_gate unit test).
+            # never triggers a reroll on ANY path (asserted by the reroll_gate unit tests).
             raise UserFacingError("This command is for moderators only.")
 
-        log.debug("[→] [Tournament] /tournament-reroll category=%s code=%s by=%s", category, code, itx.user.id)
-        if code is None:
+        log.debug(
+            "[→] [Tournament] /tournament-reroll category=%s code=%s cycle=%s by=%s",
+            category,
+            code,
+            cycle,
+            itx.user.id,
+        )
+        if cycle == "current":
+            # The explicit-code path is ambiguous for the live cycle (the random
+            # reroll is the must-have); reject it cleanly rather than silently ignoring.
+            if code is not None:
+                raise UserFacingError(
+                    "Choosing an explicit map for the current cycle is not supported; "
+                    "omit the code to reroll the live map."
+                )
+            result = await itx.client.api.reroll_active_cycle(category)
+            heading = "# Current-Cycle Map Updated"
+        elif code is None:
             result = await itx.client.api.reroll_next_cycle(category)  # D-14: random
+            heading = "# Next-Cycle Map Updated"
         else:
             result = await itx.client.api.choose_next_cycle(category, TournamentChooseMapRequest(map_code=code))
+            heading = "# Next-Cycle Map Updated"
 
         section = (
-            "# Next-Cycle Map Updated\n"
+            f"{heading}\n"
             f"**Map:** [{result.map_name}]({_WORKSHOP_URL.format(code=result.map_code)}) (`{result.map_code}`)\n"
             f"**Difficulty:** {result.map_difficulty}"
         )
         view = ui.LayoutView(timeout=None)
         view.add_item(ui.Container(ui.TextDisplay(section), accent_color=discord.Color.blurple()))
         await itx.edit_original_response(view=view)
-        log.info("[✓] [Tournament] /tournament-reroll set next-cycle map %s for category=%s", result.map_code, category)
+        log.info(
+            "[✓] [Tournament] /tournament-reroll set %s-cycle map %s for category=%s",
+            cycle,
+            result.map_code,
+            category,
+        )
 
     @app_commands.command(name="tournament-publish-results")
     @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))

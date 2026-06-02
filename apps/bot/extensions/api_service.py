@@ -1818,6 +1818,23 @@ class APIService:
         r = Route("POST", "/tournaments/categories/{category_id}/reroll", category_id=category_id)
         return self._request(r, response_model=TournamentNextCycleResponse)
 
+    def reroll_active_cycle(self, category_id: int) -> Response[TournamentNextCycleResponse]:
+        """Reroll the LIVE active cycle's map for a category (random selection).
+
+        Wipes the active cycle's submissions (scoped by cycle id), swaps to a new
+        eligible map, and keeps the cycle ``status='active'`` on the SAME edition so
+        the deadline is preserved. The API announces the new map via the existing
+        rollover event.
+
+        Args:
+            category_id (int): The category ID whose active cycle is rerolled.
+
+        Returns:
+            Response[TournamentNextCycleResponse]: The newly-selected active cycle.
+        """
+        r = Route("POST", "/tournaments/categories/{category_id}/reroll-active", category_id=category_id)
+        return self._request(r, response_model=TournamentNextCycleResponse)
+
     def choose_next_cycle(
         self, category_id: int, data: TournamentChooseMapRequest
     ) -> Response[TournamentNextCycleResponse]:
