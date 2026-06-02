@@ -866,3 +866,227 @@ class TestPollerEmptyEdition:
         assert evt.results[0].standings == []
         assert evt.results[0].winner_user_id is None
         assert (await _edition_row(asyncpg_pool, edition_id))["status"] == "completed"
+
+
+# =============================================================================
+# Quick task 260602-d96: boundary rollover carries the NEW edition's cycles
+# =============================================================================
+#
+# Bug #1: the poller emitted boundary rollover events with started=[] in both
+# branches, so the new tournament's cycle info never rode the boundary card.
+# fetch_active_edition_started_cycles now sources the started list from the
+# distinct status='active' edition the cron created at the boundary. These tests
+# assert started is populated in both poller branches, and empty (no crash) when
+# no active edition exists (paused/hiatus).
+
+
+async def _retire_other_active_editions(pool: asyncpg.Pool) -> None:
+    """Complete any pre-existing status='active' editions from sibling tests.
+
+    fetch_active_edition_started_cycles is a GLOBAL query (no edition filter), so
+    the session-shared DB may leak active editions/cycles from other tests into
+    the started list (MEMORY: shared test-DB cross-test contamination). Retiring
+    them first makes the started count deterministic for this test's own seed.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE tournaments.editions SET status = 'completed' WHERE status = 'active'")
+
+
+async def _seed_next_active_edition(
+    asyncpg_pool: asyncpg.Pool,
+    create_test_category,
+    create_test_edition,
+    create_test_child_cycle,
+    create_test_map,
+    n: int = 1,
+) -> tuple[int, list[tuple[int, int, int]]]:
+    """Create the 'next' status='active' edition with n active child cycles.
+
+    This mirrors what migration 0025 process_edition_transitions does at a
+    boundary: alongside flipping the due edition to awaiting_results, it creates
+    the NEXT edition with status='active' and active child cycles. The poller's
+    fetch_active_edition_started_cycles reads exactly this edition. Pre-existing
+    active editions are retired first so the started count is deterministic.
+    """
+    await _retire_other_active_editions(asyncpg_pool)
+    return await _make_edition_with_cycles(
+        asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=n
+    )
+
+
+class TestPollerStartedPopulatedCombined:
+    """Bug #1: combined branch publishes a rollover with started populated from the active edition."""
+
+    async def test_combined_branch_started_populated(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+    ):
+        """No pending -> combined rollover with results populated AND started from the next active edition."""
+        # The due edition (awaiting_results, one finalizing child cycle + a verified completion).
+        edition_id, children = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, map_a, cycle_a) = children[0]
+        user_id = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_a, user_id, map_a, status="verified")
+
+        # The NEXT active edition the cron created at the boundary (2 active child cycles).
+        next_ed, next_children = await _seed_next_active_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=2
+        )
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        async def _noop_award(self, event, *, conn):  # noqa: ANN001
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        evt = our[0]["data"]
+        assert isinstance(evt, TournamentRolloverEvent)
+        assert evt.results_pending is False
+        # results populated (the due edition's finalizing cycle).
+        assert {e.cycle_id for e in evt.results} == {cycle_a}
+        # started populated from the NEXT active edition's active child cycles.
+        assert len(evt.started) == 2
+        started_cycle_ids = {s.cycle_id for s in evt.started}
+        assert started_cycle_ids == {c[2] for c in next_children}
+        for s in evt.started:
+            assert s.map_code  # joined from core.maps
+            assert s.map_name
+            assert s.started_at is not None
+            assert s.ends_at is not None
+
+
+class TestPollerStartedPopulatedStartOnly:
+    """Bug #1: start-only branch (pending > 0) also publishes started populated, results empty."""
+
+    async def test_start_only_branch_started_populated(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+    ):
+        """Pending exists -> start-only rollover with results=[] AND started populated AND results_pending=True."""
+        edition_id, children = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, map_a, cycle_a) = children[0]
+        user_id = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_a, user_id, map_a, status="pending")
+
+        next_ed, next_children = await _seed_next_active_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        async def _noop_award(self, event, *, conn):  # noqa: ANN001
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        await publish_pending_transitions(state)
+
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        evt = our[0]["data"]
+        assert isinstance(evt, TournamentRolloverEvent)
+        assert evt.results_pending is True
+        assert evt.results == []  # held
+        assert len(evt.started) == 1
+        assert {s.cycle_id for s in evt.started} == {c[2] for c in next_children}
+
+
+class TestPollerStartedEmptyWhenPaused:
+    """Bug #1 edge: no active edition (paused/hiatus) -> started=[], ended-only card, no crash."""
+
+    async def test_no_active_edition_started_empty(
+        self,
+        asyncpg_pool: asyncpg.Pool,
+        monkeypatch: pytest.MonkeyPatch,
+        create_test_category,
+        create_test_edition,
+        create_test_child_cycle,
+        create_test_map,
+        create_test_user,
+    ):
+        """With NO status='active' edition, the combined rollover carries started=[] and still publishes."""
+        edition_id, children = await _make_awaiting_edition(
+            asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
+        )
+        (cat_a, map_a, cycle_a) = children[0]
+        user_id = await create_test_user()
+        await _seed_completion(asyncpg_pool, cycle_a, user_id, map_a, status="verified")
+
+        # Paused/hiatus: ensure NO status='active' edition exists anywhere (complete any
+        # leftover active editions from sibling tests so fetch_active_edition_started_cycles
+        # returns []).
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute("UPDATE tournaments.editions SET status = 'completed' WHERE status = 'active'")
+        await _clear_other_unpublished(asyncpg_pool, edition_id)
+
+        calls = _stub_publish(monkeypatch)
+        import services.tournament_reward_service as reward_module
+
+        async def _noop_award(self, event, *, conn):  # noqa: ANN001
+            return []
+
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        state = State({"db_pool": asyncpg_pool})
+
+        # Must NOT raise.
+        await publish_pending_transitions(state)
+
+        key = f"tournament:rollover:{edition_id}"
+        our = [c for c in calls if c["idempotency_key"] == key]
+        assert len(our) == 1
+        evt = our[0]["data"]
+        assert isinstance(evt, TournamentRolloverEvent)
+        assert evt.started == []  # ended-only card
+        assert {e.cycle_id for e in evt.results} == {cycle_a}
+        assert (await _edition_row(asyncpg_pool, edition_id))["status"] == "completed"
+
+
+class TestWinnerDedupeTransform:
+    """Bug #2: the order-preserving dedupe the bot handlers apply before AllowedMentions."""
+
+    def test_dict_fromkeys_dedupes_order_preserving(self):
+        """list(dict.fromkeys(...)) drops duplicates while preserving first-seen order.
+
+        This is the exact transform both _on_edition_rollover and _on_edition_results now
+        use to dedupe winner ids before discord.AllowedMentions(users=...). A user winning
+        multiple categories would otherwise appear twice and trigger Discord's 400 50035
+        'set already contains this value' DLQ crash. There is no bot pytest harness, so this
+        guards the pure transform directly.
+        """
+        winners = [111, 222, 111, 333, 222]
+        deduped = list(dict.fromkeys(winners))
+        # duplicate-free
+        assert len(deduped) == len(set(deduped))
+        # order-preserving (first occurrence wins)
+        assert deduped == [111, 222, 333]
+        # idempotent on an already-unique list
+        assert list(dict.fromkeys(deduped)) == deduped
