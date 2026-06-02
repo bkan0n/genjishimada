@@ -4,7 +4,9 @@
 ``tournaments.pending_transitions`` rows under ``FOR UPDATE SKIP LOCKED`` inside
 one transaction, builds each ``edition_rollover`` row into ONE
 ``TournamentRolloverEvent``, publishes it on ``api.tournament.rollover`` with the
-idempotency key ``tournament:rollover:{edition_id}`` (D-09/D-11), and marks it
+START-qualified idempotency key ``tournament:rollover:{edition_id}:start`` (every
+outbox rollover row is a bootstrap START; the edition END is published directly by
+``process_awaiting_results_editions`` under the un-suffixed key), and marks it
 published in the same transaction (publish-then-mark = at-least-once, D-11).
 
 The reward side-effects (``award_cycle_end`` + the non-participant streak reset)
@@ -181,7 +183,7 @@ class TestRolloverPublish:
 
         assert await _published(asyncpg_pool, row_id) is True
 
-        key = f"tournament:rollover:{edition_id}"
+        key = f"tournament:rollover:{edition_id}:start"
         our = [c for c in calls if c["idempotency_key"] == key]
         assert len(our) == 1
         call = our[0]
@@ -225,7 +227,7 @@ class TestRolloverIdempotentRepoll:
 
         monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
         state = State({"db_pool": asyncpg_pool})
-        key = f"tournament:rollover:{edition_id}"
+        key = f"tournament:rollover:{edition_id}:start"
 
         conn_a = await asyncpg_pool.acquire()
         try:
@@ -328,7 +330,7 @@ class TestRolloverHiatusSections:
 
         await publish_pending_transitions(state)
 
-        key = f"tournament:rollover:{edition_id}"
+        key = f"tournament:rollover:{edition_id}:start"
         our = [c for c in calls if c["idempotency_key"] == key]
         assert len(our) == 1
         assert our[0]["data"].started == []
@@ -367,7 +369,7 @@ class TestRolloverHiatusSections:
 
         await publish_pending_transitions(state)
 
-        key = f"tournament:rollover:{edition_id}"
+        key = f"tournament:rollover:{edition_id}:start"
         our = [c for c in calls if c["idempotency_key"] == key]
         assert len(our) == 1
         assert our[0]["data"].results == []

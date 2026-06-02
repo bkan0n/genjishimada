@@ -1,16 +1,20 @@
 """Outbox->RabbitMQ bridge for the combined tournament edition-rollover event.
 
-The pg_cron transition function writes ONE ``tournaments.pending_transitions``
-row per rollover (the transactional outbox) with ``event_type='edition_rollover'``
-and a combined payload ``{results, started, edition_id}`` (D-09). This module's
-:func:`publish_pending_transitions` poll-publish-mark loop reads unpublished rows
-under ``FOR UPDATE SKIP LOCKED``, converts each into one
+:meth:`TournamentService.bootstrap_edition` writes ONE
+``tournaments.pending_transitions`` row with ``event_type='edition_rollover'`` to
+announce a bootstrapped edition's START (payload ``{results: [], started, edition_id}``;
+migration 0025 stopped the pg_cron transition from writing rollover rows). This
+module's :func:`publish_pending_transitions` poll-publish-mark loop reads unpublished
+rows under ``FOR UPDATE SKIP LOCKED``, converts each into one
 :class:`TournamentRolloverEvent`, publishes it to ``api.tournament.rollover`` via
-:meth:`BaseService.publish_message` with the edition-scoped idempotency key
-``tournament:rollover:{edition_id}`` (D-11), and marks the row published in the
-SAME transaction. Publish happens BEFORE mark so a crash between the two
-re-publishes on the next poll (at-least-once, D-11); the stable idempotency key
-makes the duplicates harmless downstream.
+:meth:`BaseService.publish_message` with the START-qualified idempotency key
+``tournament:rollover:{edition_id}:start``, and marks the row published in the SAME
+transaction. Publish happens BEFORE mark so a crash between the two re-publishes on
+the next poll (at-least-once, D-11); the stable idempotency key makes the duplicates
+harmless downstream. The edition END rollover is published separately and directly by
+:func:`process_awaiting_results_editions` under the un-suffixed
+``tournament:rollover:{edition_id}`` — the ``:start`` qualifier keeps the START claim
+from shadowing that same edition's END card (see :func:`_idempotency_key`).
 
 The reward/streak side effects (``award_cycle_end`` +
 ``_reset_non_participant_streaks``) run once PER CHILD CYCLE — i.e. once per
@@ -120,10 +124,20 @@ def _build_event(row: dict) -> tuple[str, TournamentRolloverEvent | TournamentEd
 def _idempotency_key(event_type: str, edition_id: int) -> str:
     """Return the edition-scoped idempotency key for an outbox event type.
 
-    ``edition_rollover`` -> ``tournament:rollover:{edition_id}`` (D-11);
+    ``edition_rollover`` -> ``tournament:rollover:{edition_id}:start``;
     ``edition_results`` -> ``tournament:results:{edition_id}`` (Phase 12.1, D-09).
     Both keys are edition-scoped so a re-delivered message cannot double-grant XP
     or double-transfer the champion role.
+
+    The ``:start`` qualifier on the rollover key is load-bearing: every
+    ``edition_rollover`` OUTBOX row is a bootstrap START announcement
+    (:meth:`TournamentService.bootstrap_edition` is the sole writer — migration 0025
+    stopped the pg_cron transition from writing rollover rows). The edition END
+    rollover is published DIRECTLY by :func:`process_awaiting_results_editions` under
+    the un-suffixed ``tournament:rollover:{edition_id}``. Without the ``:start``
+    suffix the two share one key, so the bot's idempotency claim on the bootstrap
+    START silently drops the same edition's END card (the ``results_pending=True``
+    "rotation has ended" announcement) whenever that edition later drains.
 
     Args:
         event_type: The outbox row's ``event_type`` discriminator.
@@ -132,8 +146,9 @@ def _idempotency_key(event_type: str, edition_id: int) -> str:
     Returns:
         The idempotency key string.
     """
-    prefix = "results" if event_type == "edition_results" else "rollover"
-    return f"tournament:{prefix}:{edition_id}"
+    if event_type == "edition_results":
+        return f"tournament:results:{edition_id}"
+    return f"tournament:rollover:{edition_id}:start"
 
 
 async def publish_pending_transitions(state: State) -> None:
