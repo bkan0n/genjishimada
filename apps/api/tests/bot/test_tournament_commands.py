@@ -567,4 +567,4 @@ async def test_info_renders_card_for_active_cycle() -> None:
     rendered = _view_text(itx.edit_original_response.await_args.kwargs["view"])
     assert "Hanamura" in rendered
     assert "ABCD1" in rendered
-    assert "workshop.codes" in rendered
+    assert "genji.pk/search" in rendered

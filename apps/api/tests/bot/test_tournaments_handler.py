@@ -251,7 +251,7 @@ async def test_rollover_normal_renders_both_sections_and_transfers_champion(
     # starting section: map link + difficulty
     assert "Hanamura" in rendered
     assert started.map_code in rendered
-    assert "workshop.codes" in rendered
+    assert "genji.pk/search" in rendered
     # champion transfer ran (category fetched for the results entry)
     mock_api.get_tournament_category.assert_any_await(1)
     # winner ping lives INSIDE the card (no content kwarg) gated by an allow-list
