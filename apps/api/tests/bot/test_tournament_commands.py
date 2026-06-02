@@ -168,6 +168,19 @@ def _next_cycle() -> TournamentNextCycleResponse:
     )
 
 
+def _active_cycle() -> TournamentNextCycleResponse:
+    return TournamentNextCycleResponse(
+        id=101,
+        category_id=1,
+        map_id=12,
+        map_code="ABCD1",
+        map_name="Hanamura",
+        map_difficulty="Medium",
+        status="active",
+        created_at=_NOW,
+    )
+
+
 def _cycle_list(cycles: list[TournamentCycleWithWinnerResponse]) -> SimpleNamespace:
     return SimpleNamespace(total=len(cycles), cycles=cycles)
 
@@ -262,6 +275,63 @@ async def test_reroll_dispatch_explicit_code_calls_choose() -> None:
     payload = args.args[1]
     assert isinstance(payload, TournamentChooseMapRequest)
     assert payload.map_code == "WXYZ9"
+
+
+@pytest.mark.asyncio
+async def test_reroll_dispatch_default_upcoming_unchanged() -> None:
+    """Omitting cycle (default upcoming), code=None still calls reroll_next_cycle ONLY."""
+    cog = object.__new__(TournamentRerollCog)
+    itx = _make_itx(roles={_MOD_ROLE})
+    itx.client.api.reroll_next_cycle.return_value = _next_cycle()
+
+    # cycle omitted -> defaults to "upcoming" (existing byte-for-byte path).
+    await TournamentRerollCog.tournament_reroll.callback(cog, itx, 1, None)
+
+    itx.client.api.reroll_next_cycle.assert_awaited_once_with(1)
+    itx.client.api.reroll_active_cycle.assert_not_called()
+    itx.client.api.choose_next_cycle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reroll_dispatch_current_calls_reroll_active() -> None:
+    """cycle='current', code=None calls reroll_active_cycle(category) ONLY."""
+    cog = object.__new__(TournamentRerollCog)
+    itx = _make_itx(roles={_MOD_ROLE})
+    itx.client.api.reroll_active_cycle.return_value = _active_cycle()
+
+    await TournamentRerollCog.tournament_reroll.callback(cog, itx, 1, None, "current")
+
+    itx.client.api.reroll_active_cycle.assert_awaited_once_with(1)
+    itx.client.api.reroll_next_cycle.assert_not_called()
+    itx.client.api.choose_next_cycle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reroll_current_with_code_rejected() -> None:
+    """cycle='current' WITH an explicit code raises a clean error and calls NO API."""
+    cog = object.__new__(TournamentRerollCog)
+    itx = _make_itx(roles={_MOD_ROLE})
+
+    with pytest.raises(UserFacingError):
+        await TournamentRerollCog.tournament_reroll.callback(cog, itx, 1, "WXYZ9", "current")
+
+    itx.client.api.reroll_active_cycle.assert_not_called()
+    itx.client.api.reroll_next_cycle.assert_not_called()
+    itx.client.api.choose_next_cycle.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reroll_gate_rejects_non_admin_on_current_path() -> None:
+    """The Mod/Sensei gate also blocks the active (current) path before any API write."""
+    cog = object.__new__(TournamentRerollCog)
+    itx = _make_itx(roles=set())  # no admin roles
+
+    with pytest.raises(UserFacingError):
+        await TournamentRerollCog.tournament_reroll.callback(cog, itx, 1, None, "current")
+
+    itx.client.api.reroll_active_cycle.assert_not_called()
+    itx.client.api.reroll_next_cycle.assert_not_called()
+    itx.client.api.choose_next_cycle.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
