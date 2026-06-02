@@ -1111,7 +1111,19 @@ class CompletionsService(BaseService):
             return
 
         async def _do(active_conn: Connection) -> tuple[dict | None, list[Any], dict | None]:
-            cycle = await self._resolve_active_cycle(completion_info["code"], conn=active_conn)
+            # Resolve the cycle from the completion's OWN cycle_id (status-agnostic),
+            # mirroring TournamentService._set_verified. The active-only map lookup
+            # (_resolve_active_cycle -> get_active_cycle_by_map_id) excludes
+            # 'finalizing' cycles, which would no-op propagation during edition
+            # rollover and hang the drain gate (UI4-FINALIZING-PROPAGATION). The
+            # submit path keeps the active-only resolver — a new run must not join a
+            # finalizing cycle.
+            row = await self._tournament_repo.fetch_tournament_completion(  # type: ignore[union-attr]
+                tournament_completion_id, conn=active_conn
+            )
+            if row is None:
+                return None, [], None
+            cycle = await self._tournament_repo.fetch_cycle(row["cycle_id"], conn=active_conn)  # type: ignore[union-attr]
             if cycle is None:
                 return None, [], None
             row = await self._tournament_repo.set_tournament_verified(  # type: ignore[union-attr]
