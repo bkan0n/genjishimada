@@ -207,6 +207,10 @@ async def test_pb_path_verify_propagates_to_both_rows() -> None:
 
     ``set_tournament_verified`` side-effect inside the completion verify path
     marks ``tournaments.completions.verified`` TRUE and grants participation XP.
+
+    Propagation now resolves the cycle from the completion's OWN cycle_id
+    (fetch_tournament_completion -> fetch_cycle), NOT the active-only map lookup,
+    so a ``finalizing`` cycle still propagates (UI4-FINALIZING-PROPAGATION).
     """
     service, completions_repo, tournament_repo, reward_service = _make_service()
     conn = AsyncMock()
@@ -221,11 +225,19 @@ async def test_pb_path_verify_propagates_to_both_rows() -> None:
         "tournament_completion_id": 9001,
     }
     completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
-    tournament_repo.get_active_cycle_by_map_id.return_value = {
+    tournament_repo.fetch_tournament_completion.return_value = {
+        "id": 9001,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 8.0,
+        "status": "pending",
+    }
+    # finalizing locks in the UI4 bug fix: propagation must NOT gate on active-only.
+    tournament_repo.fetch_cycle.return_value = {
         "id": 42,
         "category_id": 3,
         "map_id": 777,
-        "status": "active",
+        "status": "finalizing",
     }
     tournament_repo.set_tournament_verified.return_value = {
         "id": 9001,
@@ -244,6 +256,8 @@ async def test_pb_path_verify_propagates_to_both_rows() -> None:
 
     tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, conn=conn)
     reward_service.award_participation.assert_awaited_once()
+    # Propagation no longer depends on the active-only map lookup.
+    tournament_repo.get_active_cycle_by_map_id.assert_not_awaited()
 
 
 async def test_pb_path_verify_idempotent_award_via_ledger() -> None:
@@ -264,11 +278,18 @@ async def test_pb_path_verify_idempotent_award_via_ledger() -> None:
         "tournament_completion_id": 9001,
     }
     completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
-    tournament_repo.get_active_cycle_by_map_id.return_value = {
+    tournament_repo.fetch_tournament_completion.return_value = {
+        "id": 9001,
+        "cycle_id": 42,
+        "user_id": 123,
+        "time": 8.0,
+        "status": "pending",
+    }
+    tournament_repo.fetch_cycle.return_value = {
         "id": 42,
         "category_id": 3,
         "map_id": 777,
-        "status": "active",
+        "status": "finalizing",
     }
     tournament_repo.set_tournament_verified.return_value = {
         "id": 9001,
