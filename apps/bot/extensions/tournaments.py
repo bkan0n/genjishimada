@@ -372,9 +372,18 @@ class TournamentHandler(BaseHandler):
             categories[entry.category_id] = category
             await self._transfer_champion_role(entry, category)
 
-        # 2) Build the single combined card with CONDITIONAL sections.
+        # 2) Build the single combined card with CONDITIONAL sections. The title reflects
+        # the REAL transition conveyed by the now-populated event fields (Bug #1) instead of
+        # a hardcoded "new rotation" — ended+started, started-only, or ended-only (hiatus).
+        has_ended = bool(event.results) or event.results_pending
+        if event.started and has_ended:
+            title = "# 🏆 Tournament Rollover\nThe previous rotation has ended and a new one has begun!"
+        elif event.started:
+            title = "# 🏆 Tournament Rollover\nA new rotation has arrived!"
+        else:
+            title = "# 🏆 Tournament Rollover\nThe rotation has ended."
         container = ui.Container(
-            ui.TextDisplay("# 🏆 Tournament Rollover\nA new rotation has arrived!"),
+            ui.TextDisplay(title),
             ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
             accent_color=discord.Color.gold(),
         )
@@ -433,14 +442,21 @@ class TournamentHandler(BaseHandler):
         # `content` kwarg). The mentions still fire only because every winner id is on the
         # AllowedMentions allow-list below; the ping text is built from numeric ids ONLY
         # (never free-text names — T-12-11 / T-10-10 / T-11-19).
-        if winners:
+        # Order-preservingly dedupe winner ids (Bug #2): a user who wins multiple categories
+        # would otherwise appear twice, and discord.AllowedMentions(users=...) rejects a
+        # duplicate snowflake with `400 50035` -> DLQ. Use the deduped list for BOTH the ping
+        # text AND the allow-list.
+        deduped_winners = list(dict.fromkeys(winners))
+        if deduped_winners:
             container.add_item(ui.Separator())
-            container.add_item(ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in winners) + "!"))
+            container.add_item(
+                ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in deduped_winners) + "!")
+            )
 
         view = ui.LayoutView(timeout=None)
         view.add_item(container)
 
-        allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in winners]
+        allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in deduped_winners]
         await self.announcement_channel.send(
             view=view,
             allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=False),
@@ -509,10 +525,13 @@ class TournamentHandler(BaseHandler):
             categories[entry.category_id] = category
             await self._transfer_champion_role(entry, category)
 
-        # 2) Build the results-only card (D-04 — a NEW, separate announcement).
+        # 2) Build the results-only card (D-04 — a NEW, separate announcement). The intro
+        # references the edition that ended so this drained-results card is clearly tied to
+        # the prior tournament (item D).
         container = ui.Container(
             ui.TextDisplay(
-                "# 🏆 Tournament Results\nThe pending verifications have settled — here are the final results!"
+                f"# 🏆 Tournament Results\nThe pending verifications for tournament #{event.edition_id} "
+                "have settled — here are the final results!"
             ),
             ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
             accent_color=discord.Color.gold(),
@@ -540,14 +559,21 @@ class TournamentHandler(BaseHandler):
         # kwarg). The mentions still fire because every winner id is on the AllowedMentions
         # allow-list below; the ping text is built from numeric ids ONLY (never free-text
         # names — T-12.1-15).
-        if winners:
+        # Order-preservingly dedupe winner ids (Bug #2): a user who wins multiple categories
+        # would otherwise appear twice, and discord.AllowedMentions(users=...) rejects a
+        # duplicate snowflake with `400 50035` -> DLQ. Use the deduped list for BOTH the ping
+        # text AND the allow-list.
+        deduped_winners = list(dict.fromkeys(winners))
+        if deduped_winners:
             container.add_item(ui.Separator())
-            container.add_item(ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in winners) + "!"))
+            container.add_item(
+                ui.TextDisplay("Congratulations " + " ".join(f"<@{w}>" for w in deduped_winners) + "!")
+            )
 
         view = ui.LayoutView(timeout=None)
         view.add_item(container)
 
-        allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in winners]
+        allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in deduped_winners]
         await self.announcement_channel.send(
             view=view,
             allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=False),
