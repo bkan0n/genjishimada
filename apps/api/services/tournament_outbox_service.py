@@ -47,6 +47,7 @@ import msgspec
 from asyncpg import Pool
 from genjishimada_sdk.tournaments import (
     TournamentCycleCompletedEvent,
+    TournamentCycleStartedEvent,
     TournamentEditionResultsEvent,
     TournamentLeaderboardEntryResponse,
     TournamentRolloverEvent,
@@ -366,13 +367,31 @@ async def process_awaiting_results_editions(
         inflight = await repository.count_inflight_verifications(edition_id, conn=conn)  # type: ignore[arg-type]
         start_announced = edition["start_announced"]
 
+        # The boundary cron created the NEXT edition (status='active') with its child
+        # cycles; ride that new tournament's cycle info on the rollover card so the bot
+        # can render the "new cycle" section (Bug #1). Empty when paused/hiatus -> the
+        # card reads ended-only without crashing.
+        started_rows = await repository.fetch_active_edition_started_cycles(conn=conn)  # type: ignore[arg-type]
+        started = [
+            TournamentCycleStartedEvent(
+                cycle_id=row["cycle_id"],
+                category_id=row["category_id"],
+                map_id=row["map_id"],
+                map_code=row["map_code"],
+                map_name=row["map_name"],
+                started_at=row["started_at"],
+                ends_at=row["ends_at"],
+            )
+            for row in started_rows
+        ]
+
         if not start_announced and inflight > 0:
             # First tick with pending verifications: start-only, hold the champion
             # role (empty results -> bot skips transfer, D-05), NO grants.
             rollover = TournamentRolloverEvent(
                 edition_id=edition_id,
                 results=[],
-                started=[],
+                started=started,
                 results_pending=True,
             )
             # Mark FIRST (inside the transaction), then publish (CR-01/CR-02). publish_message
@@ -406,7 +425,7 @@ async def process_awaiting_results_editions(
             rollover = TournamentRolloverEvent(
                 edition_id=edition_id,
                 results=results,
-                started=[],
+                started=started,
                 results_pending=False,
             )
             await service.publish_message(

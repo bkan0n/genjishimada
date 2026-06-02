@@ -1647,6 +1647,44 @@ class TournamentRepository(BaseRepository):
         )
         return [dict(row) for row in rows]
 
+    async def fetch_active_edition_started_cycles(
+        self,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch started-event fields for the active edition's child cycles.
+
+        At a boundary the cron flips the due edition to ``awaiting_results`` and
+        creates the NEXT edition with ``status='active'`` plus its child cycles
+        (``status='active'``). The poller emits the boundary rollover card and
+        needs the new tournament's cycle info so the bot can render the
+        "new cycle" section. This sources ``started_at``/``ends_at`` from
+        ``tournaments.editions`` (the cycle row has no ``ends_at`` column — the
+        edition owns the timing window).
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            List of dicts (cycle_id, category_id, map_id, map_code, map_name,
+            started_at, ends_at) for the active edition's active child cycles,
+            ordered by cycle id. Empty when no active edition exists
+            (paused/hiatus → ended-only card).
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            SELECT cy.id AS cycle_id, cy.category_id, cy.map_id,
+                   m.code AS map_code, m.map_name,
+                   ed.started_at, ed.ends_at
+            FROM tournaments.cycles cy
+            JOIN tournaments.editions ed ON ed.id = cy.edition_id
+            JOIN core.maps m ON m.id = cy.map_id
+            WHERE ed.status = 'active' AND cy.status = 'active'
+            ORDER BY cy.id
+        """
+        rows = await _conn.fetch(query)
+        return [dict(row) for row in rows]
+
     async def mark_edition_start_announced(
         self,
         edition_id: int,
