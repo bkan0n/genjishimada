@@ -392,6 +392,13 @@ class TournamentService(BaseService):
         populated). All steps run on one acquired connection inside a transaction
         (TOCTOU-safe + atomic outbox write).
 
+        Two debug-UX behaviors layer on top: (1) when ``debug_cycle_seconds`` is set
+        (production-disabled), the first edition anchors at server-now via
+        ``fetch_db_now`` instead of the grid boundary so a short debug edition starts
+        immediately; (2) bootstrap clears ``transitions_paused`` in the same
+        transaction, so one call both starts the first edition AND makes
+        auto-rotation live (intended in production too).
+
         Returns:
             The created active edition.
 
@@ -412,15 +419,28 @@ class TournamentService(BaseService):
             )
             period = self._period_from_config(config)
 
-            # now() is consulted ONLY to pick the boundary; the returned grid
-            # instant is stored verbatim (D-08/D-13a). now() is never stored.
-            started_at = await self._tournament_repo.next_grid_boundary(
-                config["anchor_weekday"],
-                config["anchor_time"],
-                config["anchor_tz"],
-                period,
-                conn=conn,  # type: ignore[arg-type]
-            )
+            if config["debug_cycle_seconds"] is not None:
+                # DEBUG-ONLY (production-disabled): anchor the first edition at
+                # server-now so a short debug edition starts immediately instead of
+                # days out. This is a deliberate exception to the "never store now()
+                # in started_at" rule (D-08): that rule prevents DRIFT in the
+                # auto-rotation chain, and the first debug edition starting at now()
+                # is intended. Subsequent editions still inherit prev.ends_at exactly
+                # (next_grid_boundary/cron unchanged), so there is no drift.
+                started_at = await self._tournament_repo.fetch_db_now(
+                    conn=conn,  # type: ignore[arg-type]
+                )
+            else:
+                # PRODUCTION path (unchanged): now() is consulted ONLY to pick the
+                # boundary; the returned grid instant is stored verbatim (D-08/D-13a).
+                # now() is never stored.
+                started_at = await self._tournament_repo.next_grid_boundary(
+                    config["anchor_weekday"],
+                    config["anchor_time"],
+                    config["anchor_tz"],
+                    period,
+                    conn=conn,  # type: ignore[arg-type]
+                )
             ends_at = started_at + period
 
             edition = await self._tournament_repo.create_edition(
@@ -429,6 +449,15 @@ class TournamentService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
             edition_id = edition["id"]
+
+            # Bootstrapping a tournament also makes auto-rotation live: clear the
+            # global pause flag atomically with edition creation so a failure rolls
+            # back both. This is intended in production too — starting a tournament
+            # means running it (no separate unpause step needed).
+            await self._tournament_repo.set_transitions_paused(
+                False,
+                conn=conn,  # type: ignore[arg-type]
+            )
 
             categories = await self._tournament_repo.fetch_categories(
                 conn=conn,  # type: ignore[arg-type]
