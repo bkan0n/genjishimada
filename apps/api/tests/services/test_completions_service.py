@@ -1718,11 +1718,21 @@ class TestVerifyCompletionTournamentSideEffect:
             "tournament_completion_id": 9001,
         }
         mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
-        tournament_repo.get_active_cycle_by_map_id.return_value = {
+        # Propagation resolves the cycle from the completion's own cycle_id
+        # (UI4-FINALIZING-PROPAGATION); finalizing locks in that a non-active cycle
+        # still propagates.
+        tournament_repo.fetch_tournament_completion.return_value = {
+            "id": 9001,
+            "cycle_id": 42,
+            "user_id": 123,
+            "time": 8.0,
+            "status": "pending",
+        }
+        tournament_repo.fetch_cycle.return_value = {
             "id": 42,
             "category_id": 3,
             "map_id": 777,
-            "status": "active",
+            "status": "finalizing",
         }
         tournament_repo.set_tournament_verified.return_value = {
             "id": 9001,
@@ -1742,6 +1752,7 @@ class TestVerifyCompletionTournamentSideEffect:
         tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, conn=conn)
         reward_service.award_participation.assert_awaited_once()
         reward_service.publish_xp_events.assert_awaited_once_with(["xp-event"])
+        tournament_repo.get_active_cycle_by_map_id.assert_not_awaited()
         tournament_publishes = [
             c
             for c in service.publish_message.call_args_list
@@ -1780,7 +1791,13 @@ class TestVerifyCompletionTournamentSideEffect:
     async def test_verify_on_non_cycle_map_no_side_effect(
         self, mock_pool, mock_state, mock_completions_repo, mocker
     ):
-        """A linked row whose map is not an active cycle triggers no side-effect."""
+        """A linked row that no longer resolves to a cycle triggers no side-effect.
+
+        Propagation now resolves the cycle from the completion's own cycle_id
+        (fetch_tournament_completion -> fetch_cycle, UI4-FINALIZING-PROPAGATION).
+        When fetch_tournament_completion returns None (row gone), the closure
+        no-ops: no set_tournament_verified, no award_participation.
+        """
         service, tournament_repo, reward_service = _tournament_service(
             mocker, mock_pool, mock_state, mock_completions_repo
         )
@@ -1798,7 +1815,8 @@ class TestVerifyCompletionTournamentSideEffect:
             "tournament_completion_id": 9001,
         }
         mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
-        tournament_repo.get_active_cycle_by_map_id.return_value = None
+        # The linked tournament row no longer resolves -> propagation no-ops.
+        tournament_repo.fetch_tournament_completion.return_value = None
         service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
 
         data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
@@ -1809,3 +1827,5 @@ class TestVerifyCompletionTournamentSideEffect:
 
         tournament_repo.set_tournament_verified.assert_not_awaited()
         reward_service.award_participation.assert_not_awaited()
+        # Propagation no longer consults the active-only map lookup.
+        tournament_repo.get_active_cycle_by_map_id.assert_not_awaited()
