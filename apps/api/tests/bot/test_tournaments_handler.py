@@ -448,7 +448,10 @@ async def test_on_edition_results_empty_standings_posts_no_winner_card_no_transf
     assert len(channel.send_calls) == 1
     rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
     assert "No submissions" in rendered
-    assert "Congratulations" not in rendered  # no winner ping
+    # No winner ping: the winner line is "Congratulations <@id>!" and is gated on having
+    # winners. The unconditional "...Congratulations to this rotation's champions!" header
+    # is always present, so assert the absence of the ping form, not the bare word.
+    assert "Congratulations <@" not in rendered
     # nobody granted the role (vacant on None winner); the stale holder is stripped
     assert stale.add_roles_calls == []
 
@@ -832,8 +835,12 @@ async def test_reject_button_empty_reason_cancels(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
-async def test_verification_changed_surfaces_verdict() -> None:
-    """The verification-changed consumer posts the verdict with mention mitigation."""
+async def test_verification_changed_posts_no_per_run_message() -> None:
+    """The per-run verdict message was dropped (commit d2554d6): the consumer is now a no-op.
+
+    `_on_verification_changed` only logs the verdict for observability and posts nothing to
+    the verification channel.
+    """
     api = AsyncMock()
     channel = FakeChannel()
     handler = _make_verification_handler(api, channel)
@@ -843,10 +850,4 @@ async def test_verification_changed_surfaces_verdict() -> None:
     )
     await handler._on_verification_changed(event, None)
 
-    assert len(channel.send_calls) == 1
-    kwargs = channel.send_calls[0]["kwargs"]
-    assert "verified" in kwargs["content"]
-    assert "<@111>" in kwargs["content"]
-    allowed = kwargs["allowed_mentions"]
-    assert allowed.everyone is False
-    assert allowed.roles is False
+    assert channel.send_calls == []

@@ -617,13 +617,13 @@ class TournamentHandler(BaseHandler):
     async def _on_verification_changed(
         self, event: TournamentVerificationChangedEvent, _: AbstractIncomingMessage
     ) -> None:
-        """Surface the verdict of a tournament verification to the verification channel.
+        """Acknowledge a tournament verification verdict.
 
-        On verify the moderator gets a confirmation post; a reject leaves the row
-        unverified and is announced as such. The submitting user is referenced ONLY by
-        numeric ``<@user_id>`` with ``AllowedMentions(everyone=False, roles=False)``
-        (T-11-19). Idempotent — the outbox ``message_id``
-        (``tournament:verify|reject:{tc_id}``) is the dedupe key (T-11-20).
+        The per-run verdict message was intentionally dropped (commit d2554d6), so this
+        consumer no longer posts to the verification channel — it only logs the verdict for
+        observability. It stays a registered, idempotent consumer so the outbox
+        ``message_id`` (``tournament:verify|reject:{tc_id}``) is acknowledged and deduped
+        (T-11-20).
         """
         log.debug(
             "[→] [Tournament] verification_changed completion=%s verified=%s user=%s",
