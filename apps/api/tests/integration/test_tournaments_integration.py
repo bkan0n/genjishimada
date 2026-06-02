@@ -1251,3 +1251,68 @@ class TestForcePublishResultsService:
 
         with pytest.raises(NoAwaitingResultsEditionError):
             await service.force_publish_results()
+
+
+# =============================================================================
+# Quick task 260601-ui4: finalizing-cycle PB verify clears the drain gate
+# =============================================================================
+#
+# Regression for UI4-FINALIZING-PROPAGATION: verifying a PB tournament completion
+# while its cycle is 'finalizing' (the edition-rollover window) must persist
+# status='verified' so count_inflight_verifications drains to 0. The old
+# implementation gated propagation on the active-only get_active_cycle_by_map_id
+# lookup, which excludes 'finalizing', so the row stayed 'pending' and the drain
+# gate never cleared — hanging the edition in awaiting_results forever.
+
+
+class TestFinalizingCyclePropagation:
+    """CompletionsService propagation resolves the cycle by the completion's own cycle_id."""
+
+    async def test_finalizing_pb_verify_flips_row_and_drains_gate(
+        self, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """A finalizing-cycle PB verify flips status='verified' and count_inflight==0."""
+        from litestar.datastructures import Headers, State
+
+        from repository.completions_repository import CompletionsRepository
+        from repository.tournaments_repository import TournamentRepository
+        from services.completions_service import CompletionsService
+
+        edition_id, _cycle_id, pending_id = await _seed_awaiting_edition_for_service(
+            asyncpg_pool, with_pending=True, create_test_map=create_test_map, create_test_user=create_test_user
+        )
+        assert pending_id is not None
+
+        tournament_repo = TournamentRepository(asyncpg_pool)
+        # Gate is non-zero before the verify (one pending run on the finalizing cycle).
+        assert await tournament_repo.count_inflight_verifications(edition_id) >= 1
+
+        service = CompletionsService(
+            asyncpg_pool,
+            State({}),
+            CompletionsRepository(asyncpg_pool),
+            tournament_repo=tournament_repo,
+            # reward_service omitted: this test isolates the row-flip + drain-gate
+            # behavior. award_participation is skipped, set_tournament_verified still runs.
+        )
+
+        # Drive the production verify-propagation path directly against the real pool.
+        # code is no longer used by propagation (cycle resolves via the row's cycle_id),
+        # so a placeholder is sufficient.
+        await service._propagate_tournament_verification(  # noqa: SLF001
+            completion_info={
+                "tournament_completion_id": pending_id,
+                "user_id": 0,
+                "code": "UNUSED",
+            },
+            headers=Headers({"X-PYTEST-ENABLED": "1"}),
+            conn=None,
+        )
+
+        async with asyncpg_pool.acquire() as conn:
+            status = await conn.fetchval(
+                "SELECT status FROM tournaments.completions WHERE id = $1", pending_id
+            )
+        assert status == "verified"
+        # The drain gate now reads 0 so edition rollover can proceed.
+        assert await tournament_repo.count_inflight_verifications(edition_id) == 0
