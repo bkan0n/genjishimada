@@ -70,7 +70,7 @@ log = getLogger(__name__)
 _ROLE_OP_DELAY: float = 1.0
 
 # Community host for Overwatch workshop codes (clickable link in the new-cycle card).
-_WORKSHOP_URL = "https://workshop.codes/{code}"
+_WORKSHOP_URL = "https://genji.pk/search?section=map_search&modal=map&modal_code={code}"
 
 # Top-N standings shown on the results podium (D-03 — compact card).
 _PODIUM_SIZE = 3
@@ -78,7 +78,7 @@ _PODIUM_SIZE = 3
 # Static hero image shown on the started/completed announcement cards. Replaces the
 # old per-map banner so tournament surfaces carry consistent artwork.
 # TODO: swap for real tournament artwork.
-_TOURNAMENT_GALLERY_IMAGE = "https://cdn.genji.pk/assets/tournament-hero.png"
+_TOURNAMENT_GALLERY_IMAGE = "https://cdn.genji.pk/assets/map_banners/weeklytournament.png"
 
 
 class TournamentRejectionReasonModal(ui.Modal):
@@ -377,11 +377,11 @@ class TournamentHandler(BaseHandler):
         # a hardcoded "new rotation" — ended+started, started-only, or ended-only (hiatus).
         has_ended = bool(event.results) or event.results_pending
         if event.started and has_ended:
-            title = "# 🏆 Tournament Rollover\nThe previous rotation has ended and a new one has begun!"
+            title = "# 🏆 Tournament Ended!\nThe previous rotation has ended and a new one has begun!"
         elif event.started:
-            title = "# 🏆 Tournament Rollover\nA new rotation has arrived!"
+            title = "# 🏆 Tournament Ended!\nA new rotation has arrived!"
         else:
-            title = "# 🏆 Tournament Rollover\nThe rotation has ended."
+            title = "# 🏆 Tournament Ended!\nThe rotation has ended."
         container = ui.Container(
             ui.TextDisplay(title),
             ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
@@ -394,15 +394,15 @@ class TournamentHandler(BaseHandler):
         if event.results:
             container.add_item(ui.Separator())
             container.add_item(
-                ui.TextDisplay("## 🏅 Results\nThe results are in — congratulations to this rotation's champions!")
+                ui.TextDisplay("## 🏅 Results\nThe results are in. Congratulations to this rotation's champions!")
             )
             for entry in event.results:
                 category = categories[entry.category_id]
                 header = f"### {category.name}"
                 if entry.winner_user_id is not None:
-                    header += f" — 👑 <@{entry.winner_user_id}>"
+                    header += f" 👑 <@{entry.winner_user_id}>"
                     winners.append(entry.winner_user_id)
-                podium_lines = [f"`#{e.rank}` <@{e.user_id}> — {e.time:.2f}s" for e in entry.standings[:_PODIUM_SIZE]]
+                podium_lines = [f"`#{e.rank}` <@{e.user_id}> {e.time:.2f}s" for e in entry.standings[:_PODIUM_SIZE]]
                 section = header + "\n" + ("\n".join(podium_lines) or "No submissions")
                 container.add_item(ui.Separator())
                 container.add_item(ui.TextDisplay(section))
@@ -423,7 +423,7 @@ class TournamentHandler(BaseHandler):
         if event.started:
             container.add_item(ui.Separator())
             container.add_item(
-                ui.TextDisplay("## 🏁 New Cycle\nFresh maps are live — set your time before the cycle ends!")
+                ui.TextDisplay("## 🏁 New Tournament Begins!\nFresh maps are live. Set your time before the cycle ends!")
             )
             for entry in event.started:
                 category = await self.bot.api.get_tournament_category(entry.category_id)
@@ -531,7 +531,7 @@ class TournamentHandler(BaseHandler):
         container = ui.Container(
             ui.TextDisplay(
                 f"# 🏆 Tournament Results\nThe pending verifications for tournament #{event.edition_id} "
-                "have settled — here are the final results!"
+                "have been settled. Here are the final results!"
             ),
             ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
             accent_color=discord.Color.gold(),
@@ -542,15 +542,15 @@ class TournamentHandler(BaseHandler):
         winners: list[int] = []
         container.add_item(ui.Separator())
         container.add_item(
-            ui.TextDisplay("## 🏅 Results\nThe results are in — congratulations to this rotation's champions!")
+            ui.TextDisplay("## 🏅 Results\nThe results are in. Congratulations to this rotation's champions!")
         )
         for entry in event.results:
             category = categories[entry.category_id]
             header = f"### {category.name}"
             if entry.winner_user_id is not None:
-                header += f" — 👑 <@{entry.winner_user_id}>"
+                header += f" 👑 <@{entry.winner_user_id}>"
                 winners.append(entry.winner_user_id)
-            podium_lines = [f"`#{e.rank}` <@{e.user_id}> — {e.time:.2f}s" for e in entry.standings[:_PODIUM_SIZE]]
+            podium_lines = [f"`#{e.rank}` <@{e.user_id}> {e.time:.2f}s" for e in entry.standings[:_PODIUM_SIZE]]
             section = header + "\n" + ("\n".join(podium_lines) or "No submissions")
             container.add_item(ui.Separator())
             container.add_item(ui.TextDisplay(section))
@@ -749,7 +749,7 @@ class TournamentLeaderboardPaginator(StaticPaginatorView[Any]):
         Returns:
             Sequence[ui.Item]: One ``TextDisplay`` with the page's rows.
         """
-        lines = [f"`#{entry.rank}` <@{entry.user_id}> — {entry.time:.2f}s" for entry in self.get_current_page_data()]
+        lines = [f"`#{entry.rank}` <@{entry.user_id}> {entry.time:.2f}s" for entry in self.get_current_page_data()]
         return [ui.TextDisplay("\n".join(lines))]
 
 
@@ -795,7 +795,7 @@ class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
         map_data = await itx.client.api.get_map(code=active.map_code)
 
         lines = [
-            f"# Active Tournament Cycle: {category_data.name}",
+            f"# Active Tournament: {category_data.name}",
             f"**Map:** [{active.map_name}]({_WORKSHOP_URL.format(code=active.map_code)}) (`{active.map_code}`)",
             f"**Difficulty:** {map_data.difficulty}",
             f"**Category:** {category_data.name}",
@@ -846,10 +846,10 @@ class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
         # and navigation does modulo by the page count → ZeroDivisionError. Short-circuit
         # the friendly empty message BEFORE constructing the view.
         if not entries:
-            await itx.edit_original_response(content="No submissions yet — be the first!")
+            await itx.edit_original_response(content="No submissions yet. Be the first!")
             return
 
-        view = TournamentLeaderboardPaginator(f"{category_data.name} — Leaderboard", entries)
+        view = TournamentLeaderboardPaginator(f"{category_data.name} Leaderboard", entries)
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
         log.info("[✓] [Tournament] /tournament leaderboard rendered for cycle=%s", active.id)
