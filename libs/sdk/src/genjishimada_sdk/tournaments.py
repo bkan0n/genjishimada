@@ -369,7 +369,9 @@ class TournamentCycleWithWinnerResponse(Struct):
         id: Cycle identifier.
         category_id: Category this cycle belongs to.
         map_id: Map selected for this cycle.
-        map_code: Workshop code of the selected map.
+        map_code: Workshop code of the selected map. For maps whose code was
+            released (migration 0019), this falls back to the preserved
+            ``original_code`` so historical cycles still show the code used.
         map_name: Display name of the selected map.
         map_difficulty: Difficulty rating of the selected map.
         status: Current lifecycle status.

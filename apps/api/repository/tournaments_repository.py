@@ -981,7 +981,7 @@ class TournamentRepository(BaseRepository):
         data_query = f"""
             SELECT
                 cy.id, cy.category_id, cy.map_id,
-                m.code AS map_code, m.map_name, m.difficulty AS map_difficulty,
+                COALESCE(m.code, m.original_code) AS map_code, m.map_name, m.difficulty AS map_difficulty,
                 cy.status, cy.started_at, cy.ended_at, cy.created_at,
                 w.name AS winner_name, w.user_id AS winner_user_id
             FROM tournaments.cycles cy
@@ -1117,7 +1117,7 @@ class TournamentRepository(BaseRepository):
         query = """
             SELECT cy.id, cy.category_id, cy.map_id, cy.status,
                    cy.started_at, cy.ended_at, cy.created_at,
-                   m.code AS map_code, m.map_name, m.difficulty AS map_difficulty
+                   COALESCE(m.code, m.original_code) AS map_code, m.map_name, m.difficulty AS map_difficulty
             FROM tournaments.cycles cy
             JOIN core.maps m ON m.id = cy.map_id
             WHERE cy.category_id = $1 AND cy.status = 'pending'
@@ -1201,7 +1201,7 @@ class TournamentRepository(BaseRepository):
         query = """
             SELECT cy.id, cy.category_id, cy.map_id, cy.status,
                    cy.started_at, cy.ended_at, cy.created_at, cy.edition_id,
-                   m.code AS map_code, m.map_name, m.difficulty AS map_difficulty
+                   COALESCE(m.code, m.original_code) AS map_code, m.map_name, m.difficulty AS map_difficulty
             FROM tournaments.cycles cy
             JOIN core.maps m ON m.id = cy.map_id
             WHERE cy.category_id = $1 AND cy.status = 'active'
@@ -1782,7 +1782,7 @@ class TournamentRepository(BaseRepository):
         _conn = self._get_connection(conn)
         query = """
             SELECT cy.id AS cycle_id, cy.category_id, cy.map_id,
-                   m.code AS map_code, m.map_name,
+                   COALESCE(m.code, m.original_code) AS map_code, m.map_name,
                    ed.started_at, ed.ends_at
             FROM tournaments.cycles cy
             JOIN tournaments.editions ed ON ed.id = cy.edition_id
