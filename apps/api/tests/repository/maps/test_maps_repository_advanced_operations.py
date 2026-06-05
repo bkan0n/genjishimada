@@ -418,6 +418,59 @@ class TestUnlinkMapCodes:
         assert linked1 is None
 
 
+class TestUpdateLinkedMapCode:
+    """Regression: renaming the code of a map that has a linked_code.
+
+    See debug session map-linked-code-cannot-change: the BEFORE trigger
+    trg_sync_linked_code previously rejected a plain ``code`` rename on a
+    linked map with "Code X is already linked to Y, cannot also link to Z".
+    The FK ON UPDATE CASCADE should keep the partner's back-pointer in sync.
+    """
+
+    @pytest.mark.asyncio
+    async def test_rename_linked_map_code_succeeds(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        used_codes: set[str],
+    ) -> None:
+        """Changing a linked map's code must succeed and cascade to the partner."""
+        code1 = f"R1{uuid4().hex[:4].upper()}"
+        code2 = f"R2{uuid4().hex[:4].upper()}"
+        new_code1 = f"R3{uuid4().hex[:4].upper()}"
+        used_codes.update([code1, code2, new_code1])
+
+        await create_test_map(db_pool, code1)
+        await create_test_map(db_pool, code2)
+
+        # Establish a bidirectional link.
+        await maps_repo.link_map_codes(code1, code2)
+
+        # Rename code1 -> new_code1 (the operation that previously failed).
+        await maps_repo.update_core_map(code1, {"code": new_code1})
+
+        async with db_pool.acquire() as conn:
+            # The renamed map exists under its new code and keeps its link.
+            linked_new = await conn.fetchval(
+                "SELECT linked_code FROM core.maps WHERE code = $1",
+                new_code1,
+            )
+            # The old code no longer exists.
+            old_exists = await conn.fetchval(
+                "SELECT 1 FROM core.maps WHERE code = $1",
+                code1,
+            )
+            # The partner's back-pointer followed the rename via FK cascade.
+            partner_link = await conn.fetchval(
+                "SELECT linked_code FROM core.maps WHERE code = $1",
+                code2,
+            )
+
+        assert old_exists is None
+        assert linked_new == code2
+        assert partner_link == new_code1
+
+
 # ==============================================================================
 # INTEGRATION TESTS
 # ==============================================================================
