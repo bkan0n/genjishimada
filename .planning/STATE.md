@@ -15,7 +15,7 @@ progress:
 
 # Tournament System — State
 
-Last activity: 2026-06-03 - Completed quick task 260603-mla: add boundary-streak cohorts to tournament seed data
+Last activity: 2026-06-05 - Completed quick task 260605-gjy: start-only rollover title no longer announces a non-existent ended tournament
 
 ## Current Status
 
@@ -54,6 +54,7 @@ Controller → Service → Repository pattern:
 | 260602-iuz | Reroll the CURRENT (active) cycle: extend `/tournament-reroll` with a `cycle` target (default `upcoming`, existing path byte-for-byte unchanged); `current` wipes the active cycle's submissions scoped by `cycle_id` (`delete_cycle_completions`), swaps to a new eligible map (reuses `fetch_eligible_maps`/LRU), recreates `status='active'` on the SAME edition so the deadline/window is preserved (timer never reset), announces via the existing `api.tournament.rollover` event. Mod/Sensei-gated. | 2026-06-02 | 51afde7 | [260602-iuz-add-ability-to-reroll-the-current-active](./quick/260602-iuz-add-ability-to-reroll-the-current-active/) |
 | 260602-ld2 | Rewrite tournament-frontend-spec.md to be factual/current as of migration 0025 and simpler: framed FE as public read-only display + admin dashboard (submission/verify happen via Discord, not web); removed nonexistent `POST /cycles/{id}/submit`; cadence shown as global `config.cadence` (not per-category); documented the Edition timing entity + `GET /editions/active` with stored `ends_at` (dropped client-side derivation); added `reroll-active`/`bootstrap`/`publish-results`/`pause`/`debug-cycle-length` endpoints + `tournaments:verify` scope. Doc-only. | 2026-06-02 | 3ecd817 | [260602-ld2-rewrite-tournament-frontend-spec-md-to-b](./quick/260602-ld2-rewrite-tournament-frontend-spec-md-to-b/) |
 | 260603-mla | Add boundary-streak cohorts to `scripts/seed_tournament_fake_data.sql`: 9 disjoint non-regular users sliced from one random draw, pinned to consecutive trailing edition runs of 2/3/5 (excluded from filler selection) so the unchanged gaps-and-islands derivation lands them on current_streak 2/3/5 — exercising the `streak_xp` thresholds (3 and 5) that the old bimodal {1, 26} distribution never hit. Debug-seed only — script left untracked per its DO-NOT-COMMIT banner; only planning docs committed. | 2026-06-03 | 41ffd64 | [260603-mla-add-boundary-streak-cohorts-to-tournamen](./quick/260603-mla-add-boundary-streak-cohorts-to-tournamen/) |
+| 260605-gjy | Fix start-only rollover announcement: the `elif event.started` branch in `_on_edition_rollover` now leads with `# 🏆 New Tournament!` instead of `Tournament Ended!` — the start-only case (out-of-hiatus or never-started, `has_ended` False) had nothing end, so it no longer announces a non-existent prior tournament. Normal (results+started) and into-hiatus (results-only) branches keep their `Tournament Ended!` framing unchanged. Locked with assertions in the three existing rollover handler tests. | 2026-06-05 | 07f4745 | [260605-gjy-start-only-rollover-title](./quick/260605-gjy-start-only-rollover-title/) |
 
 ## Blockers/Concerns
 
