@@ -379,7 +379,7 @@ class TournamentHandler(BaseHandler):
         if event.started and has_ended:
             title = "# 🏆 Tournament Ended!\nThe previous rotation has ended and a new one has begun!"
         elif event.started:
-            title = "# 🏆 Tournament Ended!\nA new rotation has arrived!"
+            title = "# 🏆 New Tournament!\nA new rotation has arrived!"
         else:
             title = "# 🏆 Tournament Ended!\nThe rotation has ended."
         container = ui.Container(

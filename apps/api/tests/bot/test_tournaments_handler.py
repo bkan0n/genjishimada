@@ -243,6 +243,8 @@ async def test_rollover_normal_renders_both_sections_and_transfers_champion(
     assert len(channel.send_calls) == 1
     call = channel.send_calls[0]
     rendered = _view_text(call["kwargs"]["view"])
+    # normal branch keeps its ended messaging
+    assert "Tournament Ended" in rendered
     # results section: top-3 podium + crowned winner, rank-4 absent, no XP line
     assert "<@111>" in rendered and "<@222>" in rendered and "<@333>" in rendered
     assert "<@444>" not in rendered
@@ -275,6 +277,7 @@ async def test_rollover_into_hiatus_results_only_no_starting_section(
 
     assert len(channel.send_calls) == 1
     rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
+    assert "Tournament Ended" in rendered  # into-hiatus keeps ended messaging
     assert "👑 <@111>" in rendered  # results rendered
     assert "New Cycle" not in rendered  # no starting section
     # no map lookup happened (no started entries)
@@ -297,6 +300,8 @@ async def test_rollover_out_of_hiatus_started_only_no_transfer(
 
     assert len(channel.send_calls) == 1
     rendered = _view_text(channel.send_calls[0]["kwargs"]["view"])
+    assert "Tournament Ended" not in rendered  # start-only must NOT announce an ending
+    assert "New Tournament" in rendered  # start-only uses the new start framing
     assert "Hanamura" in rendered  # starting section rendered
     assert "Results" not in rendered  # no results section
     assert "Congratulations" not in rendered  # no winner ping
