@@ -6,10 +6,7 @@
 version: 2
 updates:
   - package-ecosystem: "uv" # See documentation for possible values
-    directories: # Location of package manifests
-    - "/apps/bot"
-    - "/apps/api"
-    - "/"
+    directory: "/"
     schedule:
       interval: "weekly"
     ignore:
