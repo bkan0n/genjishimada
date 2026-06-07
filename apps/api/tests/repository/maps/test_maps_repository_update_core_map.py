@@ -278,8 +278,12 @@ async def test_update_timestamps_are_automatic(
 
     await asyncio.sleep(0.1)
 
-    # Update the map
-    await maps_repo.update_core_map(existing_map["code"], {"map_name": "Dorado"})
+    # Update the map. The fixture's map_name is randomized, and the set_updated_at()
+    # trigger only bumps updated_at when `new IS DISTINCT FROM old` — so pick a target
+    # guaranteed to differ from the current value, otherwise a no-op update leaves
+    # updated_at unchanged and this assertion flakes.
+    new_map_name = "Dorado" if existing_map["map_name"] != "Dorado" else "Hanamura"
+    await maps_repo.update_core_map(existing_map["code"], {"map_name": new_map_name})
 
     # Get new timestamps
     async with db_pool.acquire() as conn:

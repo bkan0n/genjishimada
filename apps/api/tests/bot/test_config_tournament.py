@@ -15,8 +15,8 @@ from types import ModuleType
 import msgspec
 import pytest
 
-_DEV_ANNOUNCEMENTS = 1377808369997447254
-_PROD_ANNOUNCEMENTS = 975820285343301674
+_DEV_ANNOUNCEMENTS = 1513314536130609192
+_PROD_ANNOUNCEMENTS = 1513306277885902990
 
 
 def _config_dir(repo_root: pathlib.Path) -> pathlib.Path:

@@ -156,7 +156,15 @@ def _make_handler(bot_api: AsyncMock, channel: Any, guild: Any | None = None) ->
     bot is ready; we side-step that and inject the resolved attributes directly.
     """
     handler = object.__new__(TournamentHandler)
-    handler.bot = SimpleNamespace(api=bot_api)
+    # The handler reads bot.config.roles.mentionable.tournament_announcements when
+    # building the announcement role ping; the `0` sentinel keeps the ping a no-op
+    # (no <@&id> line, roles=False) so these card/allow-list assertions are unchanged.
+    handler.bot = SimpleNamespace(
+        api=bot_api,
+        config=SimpleNamespace(
+            roles=SimpleNamespace(mentionable=SimpleNamespace(tournament_announcements=0)),
+        ),
+    )
     handler.announcement_channel = channel
     if guild is not None:
         handler.guild = guild
