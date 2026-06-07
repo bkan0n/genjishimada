@@ -302,6 +302,26 @@ class TournamentHandler(BaseHandler):
         assert isinstance(verification_channel, TextChannel)
         self.verification_channel = verification_channel
 
+    def _tournament_ping(self) -> tuple[list[ui.TextDisplay], list[discord.abc.Snowflake] | bool]:
+        """Build the tournament-announcement role ping for a CV2 card.
+
+        Returns the leading ``ui.TextDisplay`` item(s) to prepend to the announcement
+        container and the ``roles`` value for ``discord.AllowedMentions``. A CV2 LayoutView
+        ``send`` accepts no ``content`` kwarg, so the ``<@&role_id>`` mention must live inside
+        the card; the ping only fires because the role is on the AllowedMentions allow-list.
+
+        The ``tournament_announcements`` config defaults to the ``0`` sentinel until a real
+        role ID is set; while it is falsy this returns no ping line and ``roles=False`` so an
+        unconfigured role never renders a broken ``<@&0>`` mention or attempts to ping.
+
+        Returns:
+            A ``(leading_items, allowed_roles)`` pair for the container and AllowedMentions.
+        """
+        role_id = self.bot.config.roles.mentionable.tournament_announcements
+        if not role_id:
+            return [], False
+        return [ui.TextDisplay(f"<@&{role_id}>")], [discord.Object(id=role_id)]
+
     @queue_consumer(
         "api.tournament.rollover",
         struct_type=TournamentRolloverEvent,
@@ -382,7 +402,14 @@ class TournamentHandler(BaseHandler):
             title = "# 🏆 New Tournament!\nA new rotation has arrived!"
         else:
             title = "# 🏆 Tournament Ended!\nThe rotation has ended."
+
+        # Tournament-announcement role ping (lives INSIDE the card — a CV2 LayoutView send
+        # accepts no `content` kwarg). The ping only fires when the role is on the
+        # AllowedMentions allow-list built below; a `0` config sentinel yields no ping line
+        # and no allow-list, so an unconfigured role never renders a broken `<@&0>` mention.
+        ping_items, allowed_roles = self._tournament_ping()
         container = ui.Container(
+            *ping_items,
             ui.TextDisplay(title),
             ui.MediaGallery(MediaGalleryItem(_TOURNAMENT_GALLERY_IMAGE)),
             accent_color=discord.Color.gold(),
@@ -459,7 +486,7 @@ class TournamentHandler(BaseHandler):
         allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in deduped_winners]
         await self.announcement_channel.send(
             view=view,
-            allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=False),
+            allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=allowed_roles),
         )
         log.info(
             "[✓] [Tournament] posted combined rollover card for edition=%s (results=%d, started=%d)",
@@ -528,7 +555,14 @@ class TournamentHandler(BaseHandler):
         # 2) Build the results-only card (D-04 — a NEW, separate announcement). The intro
         # references the edition that ended so this drained-results card is clearly tied to
         # the prior tournament (item D).
+        #
+        # Tournament-announcement role ping (lives INSIDE the card — a CV2 LayoutView send
+        # accepts no `content` kwarg). The ping only fires when the role is on the
+        # AllowedMentions allow-list built below; a `0` config sentinel yields no ping line
+        # and no allow-list, so an unconfigured role never renders a broken `<@&0>` mention.
+        ping_items, allowed_roles = self._tournament_ping()
         container = ui.Container(
+            *ping_items,
             ui.TextDisplay(
                 f"# 🏆 Tournament Results\nThe pending verifications for tournament #{event.edition_id} "
                 "have been settled. Here are the final results!"
@@ -574,7 +608,7 @@ class TournamentHandler(BaseHandler):
         allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in deduped_winners]
         await self.announcement_channel.send(
             view=view,
-            allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=False),
+            allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=allowed_roles),
         )
         log.info(
             "[✓] [Tournament] posted deferred results card for edition=%s (results=%d)",
