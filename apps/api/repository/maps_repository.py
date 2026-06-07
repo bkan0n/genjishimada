@@ -1470,7 +1470,7 @@ class MapsRepository(BaseRepository):
                     id, code, map_name, category, checkpoints, difficulty,
                     description, title, custom_banner, hidden, archived, official
                 FROM core.maps
-                WHERE code = $1
+                WHERE id = $1
             ),
             mechanics AS (
                 SELECT ml.map_id, array_agg(mech.name ORDER BY mech.position) AS mechanics
@@ -1503,7 +1503,7 @@ class MapsRepository(BaseRepository):
             LEFT JOIN restrictions res ON res.map_id = tm.id
             LEFT JOIN tags tag ON tag.map_id = tm.id
             """,
-            edit_row["code"],
+            edit_row["map_id"],
         )
 
         creator_rows = await _conn.fetch(
@@ -1521,9 +1521,9 @@ class MapsRepository(BaseRepository):
             SELECT gold, silver, bronze
             FROM maps.medals md
             JOIN core.maps m ON m.id = md.map_id
-            WHERE m.code = $1
+            WHERE m.id = $1
             """,
-            edit_row["code"],
+            edit_row["map_id"],
         )
 
         return {
