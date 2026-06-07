@@ -436,27 +436,46 @@ class ServerRoleSelectView(ui.LayoutView):
     def rebuild_components(self) -> None:
         """Rebuild the necessary components."""
         self.clear_items()
+
+        # Announcement Pings buttons are built as a list so the Tournament Announcements
+        # toggle can be conditionally appended only when the role is configured. The
+        # `tournament_announcements` config defaults to the `0` sentinel until a real role
+        # ID is set; a button with role_id=0 would crash on click
+        # (ServerRoleToggleButton._set_guild_and_role asserts get_role(0) is truthy), so we
+        # skip the button entirely while the role is unconfigured. (A row holds up to 5
+        # buttons; 4 is fine.)
+        announcement_buttons: list[ServerRoleToggleButton] = [
+            ServerRoleToggleButton(
+                bot=self.bot,
+                label="General Announcements",
+                role_id=self.bot.config.roles.mentionable.general_announcements,
+            ),
+            ServerRoleToggleButton(
+                bot=self.bot,
+                label="Framework Patch Notes",
+                role_id=self.bot.config.roles.mentionable.framework_patch_notes,
+            ),
+            ServerRoleToggleButton(
+                bot=self.bot,
+                label="Website/Bot Patch Notes",
+                role_id=self.bot.config.roles.mentionable.website_patch_notes,
+            ),
+        ]
+        if self.bot.config.roles.mentionable.tournament_announcements:
+            announcement_buttons.append(
+                ServerRoleToggleButton(
+                    bot=self.bot,
+                    label="Tournament Announcements",
+                    role_id=self.bot.config.roles.mentionable.tournament_announcements,
+                    emoji="🏆",
+                )
+            )
+
         container = ui.Container(
             ui.TextDisplay("# Role Customization\n-# You can also adjust these roles here <id:customize>"),
             ui.Separator(),
             ui.TextDisplay("### Announcement Pings"),
-            ui.ActionRow(
-                ServerRoleToggleButton(
-                    bot=self.bot,
-                    label="General Announcements",
-                    role_id=self.bot.config.roles.mentionable.general_announcements,
-                ),
-                ServerRoleToggleButton(
-                    bot=self.bot,
-                    label="Framework Patch Notes",
-                    role_id=self.bot.config.roles.mentionable.framework_patch_notes,
-                ),
-                ServerRoleToggleButton(
-                    bot=self.bot,
-                    label="Website/Bot Patch Notes",
-                    role_id=self.bot.config.roles.mentionable.website_patch_notes,
-                ),
-            ),
+            ui.ActionRow(*announcement_buttons),
             ui.Separator(),
             ui.TextDisplay("### Regions"),
             ui.ActionRow(
