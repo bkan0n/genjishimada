@@ -10,6 +10,7 @@ class Base(msgspec.Struct, forbid_unknown_fields=True): ...
 
 class Mentionable(Base):
     general_announcements: int
+    tournament_announcements: int
     website_patch_notes: int
     framework_patch_notes: int
     modmail: int

@@ -2,6 +2,7 @@ guild = 1377808368873377964
 
 [roles.mentionable]
 general_announcements = 1377808368978235404
+tournament_announcements = 0  # TODO: real tournament announcement role ID
 website_patch_notes = 1377808368978235405
 framework_patch_notes = 1377808368978235406
 modmail = 1377808368978235402
