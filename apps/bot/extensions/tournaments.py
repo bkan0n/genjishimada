@@ -767,11 +767,11 @@ class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
         itx: GenjiItx,
         category: app_commands.Transform[int, transformers.CategoryTransformer],
     ) -> None:
-        """Show the active cycle's rich card for a category (D-08 / D-11 / D-12).
+        """Show the active tournament information.
 
         Args:
             itx: The interaction context.
-            category: The tournament category (resolved to its id by the transformer).
+            category: The tournament category.
         """
         await itx.response.defer(ephemeral=True)
         log.debug("[→] [Tournament] /tournament info category=%s user=%s", category, itx.user.id)
@@ -815,11 +815,11 @@ class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
         itx: GenjiItx,
         category: app_commands.Transform[int, transformers.CategoryTransformer],
     ) -> None:
-        """Show the active cycle leaderboard, paginated 10-per-page (D-16).
+        """Show the active tournament leaderboard.
 
         Args:
             itx: The interaction context.
-            category: The tournament category (resolved to its id by the transformer).
+            category: The tournament category.
         """
         await itx.response.defer(ephemeral=True)
         log.debug("[→] [Tournament] /tournament leaderboard category=%s user=%s", category, itx.user.id)
@@ -847,11 +847,7 @@ class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
 
     @app_commands.command(name="streak")
     async def streak(self, itx: GenjiItx) -> None:
-        """Show the invoker's own participation streak (self-only — D-02 / D-03).
-
-        The streak endpoint 404s when no record exists (Plan 10-01); the bot owns the
-        zero-state mapping (D-04): a 404 renders current 0 / max 0 with encouraging copy.
-        Any other status propagates.
+        """View your streak.
 
         Args:
             itx: The interaction context.
@@ -905,18 +901,11 @@ class TournamentRerollCog(BaseCog):
     ) -> None:
         """Reroll the upcoming (default) or current/live cycle map for a category.
 
-        The authoritative access control is the bot-side Mod/Sensei role check below
-        (D-07 / threat T-10-07): the bot's single full-scope API key does NOT distinguish
-        Discord callers, and ``default_member_permissions`` is only a UI hint.
-
         Args:
             itx: The interaction context.
-            category: The tournament category (resolved to its id by the transformer).
-            code: Optional explicit map code (D-15); when omitted a random reroll runs (D-14).
-                Only honored for the upcoming cycle — unsupported for the current cycle.
-            cycle: Which cycle to reroll. ``upcoming`` (default) rerolls the pre-staged
-                pending cycle (unchanged behavior). ``current`` rerolls the live active
-                cycle, wiping its submissions and preserving the edition window.
+            category: The tournament category.
+            code: Optional explicit map code.
+            cycle: Which cycle to reroll.
         """
         await itx.response.defer(ephemeral=True)
 
@@ -978,17 +967,7 @@ class TournamentRerollCog(BaseCog):
     @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
     @app_commands.default_permissions(manage_guild=True)
     async def tournament_publish_results(self, itx: GenjiItx) -> None:
-        """Force-publish the awaiting-results edition's results, abandoning pending runs (D-03).
-
-        The escape hatch for a stuck verification queue (D-02 is drain-only with no time
-        cap): publishes the results immediately using whatever is currently verified,
-        abandoning still-pending runs. Edition-scoped server-side to the single edition
-        currently ``awaiting_results`` — no id is passed.
-
-        The authoritative access control is the bot-side Mod/Sensei role check below
-        (D-03 / threat T-12.1-14): the bot's single full-scope API key does NOT distinguish
-        Discord callers, and ``default_member_permissions`` is only a UI hint. A confirmation
-        gate guards the abandon (pending runs are dropped from this edition's results).
+        """Force-publish the awaiting-results edition's results, abandoning pending runs.
 
         Args:
             itx: The interaction context.
