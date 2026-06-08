@@ -780,13 +780,6 @@ class TournamentLeaderboardPaginator(StaticPaginatorView[Any]):
 
 @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
 class TournamentCommandCog(commands.GroupCog, group_name="tournament"):
-    """Player-facing ``/tournament`` slash commands (info, leaderboard, streak — D-05).
-
-    All responses are ephemeral (D-10): each subcommand defers ``ephemeral=True`` as its
-    first line so per-user data is only ever visible to the invoker (threats T-10-08 /
-    T-10-09).
-    """
-
     def __init__(self, bot: core.Genji) -> None:
         """Store the running bot instance.
 
