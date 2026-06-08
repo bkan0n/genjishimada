@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: unknown
-last_updated: "2026-06-01T22:40:10.726Z"
-last_activity: 2026-06-01
+last_updated: "2026-06-08T22:16:27.539Z"
+last_activity: 2026-06-08
 progress:
   total_phases: 2
   completed_phases: 2
@@ -15,7 +15,7 @@ progress:
 
 # Tournament System — State
 
-Last activity: 2026-06-07 - Completed quick task 260607-oqy: add tournament announcement role ping (config + announcements + role-react toggle)
+Last activity: 2026-06-08 - Completed quick task 260608-ntz: Add an API route to remove a suspicious flag
 
 ## Current Status
 
@@ -56,6 +56,7 @@ Controller → Service → Repository pattern:
 | 260603-mla | Add boundary-streak cohorts to `scripts/seed_tournament_fake_data.sql`: 9 disjoint non-regular users sliced from one random draw, pinned to consecutive trailing edition runs of 2/3/5 (excluded from filler selection) so the unchanged gaps-and-islands derivation lands them on current_streak 2/3/5 — exercising the `streak_xp` thresholds (3 and 5) that the old bimodal {1, 26} distribution never hit. Debug-seed only — script left untracked per its DO-NOT-COMMIT banner; only planning docs committed. | 2026-06-03 | 41ffd64 | [260603-mla-add-boundary-streak-cohorts-to-tournamen](./quick/260603-mla-add-boundary-streak-cohorts-to-tournamen/) |
 | 260605-gjy | Fix start-only rollover announcement: the `elif event.started` branch in `_on_edition_rollover` now leads with `# 🏆 New Tournament!` instead of `Tournament Ended!` — the start-only case (out-of-hiatus or never-started, `has_ended` False) had nothing end, so it no longer announces a non-existent prior tournament. Normal (results+started) and into-hiatus (results-only) branches keep their `Tournament Ended!` framing unchanged. Locked with assertions in the three existing rollover handler tests. | 2026-06-05 | 07f4745 | [260605-gjy-start-only-rollover-title](./quick/260605-gjy-start-only-rollover-title/) |
 | 260607-oqy | Add a pingable tournament announcement role: new `mentionable.tournament_announcements` config field (struct + dev/prod TOML, `0` sentinel placeholder for maintainer-supplied IDs); both public announcement cards (`_on_edition_rollover`, `_on_edition_results`) prepend a `<@&id>` ping via shared `_tournament_ping()` helper with role allow-listed in `AllowedMentions`; self-assignable "Tournament Announcements" 🏆 toggle added to the `#role-react` view (`ServerRoleSelectView`), sourced from the same config field. Every touch point guards the `0` sentinel (no broken `<@&0>`, no crash-on-click button). | 2026-06-07 | 43e0904 | [260607-oqy-add-a-role-ping-to-tournament-announceme](./quick/260607-oqy-add-a-role-ping-to-tournament-announceme/) |
+| 260608-ntz | Add an API route to remove a suspicious flag: symmetric `DELETE /completions/suspicious` mirroring the add route across all four layers (SDK `SuspiciousCompletionDeleteRequest`, repo `delete_suspicious_flag_by_message` reusing the insert's message/verification CTE, service `remove_suspicious_flags`, controller handler with the same 400 identifier guard + `status_code=200`) plus a bot `remove_suspicious_flags` client. Removing a non-existent flag returns 200 count 0. Fixes #50. | 2026-06-08 | 66c0b11 | [260608-ntz-add-an-api-route-to-remove-a-suspicious-](./quick/260608-ntz-add-an-api-route-to-remove-a-suspicious-/) |
 
 ## Blockers/Concerns
 

@@ -36,6 +36,7 @@ from genjishimada_sdk.completions import (
     PendingVerificationResponse,
     QualityUpdateRequest,
     SuspiciousCompletionCreateRequest,
+    SuspiciousCompletionDeleteRequest,
     UpvoteCreateRequest,
     UpvoteSubmissionJobResponse,
 )
@@ -1316,6 +1317,20 @@ class APIService:
             Response[SuspiciousCompletionCreateRequest]: The created suspicious flag record.
         """
         r = Route("POST", "/completions/suspicious")
+        return self._request(r, data=data)
+
+    def remove_suspicious_flags(
+        self, data: SuspiciousCompletionDeleteRequest
+    ) -> Response[SuspiciousCompletionDeleteRequest]:
+        """Remove a suspicious flag from a completion.
+
+        Args:
+            data: Payload identifying the suspicious flag to remove (message_id or verification_id).
+
+        Returns:
+            Response[SuspiciousCompletionDeleteRequest]: The number of flags removed.
+        """
+        r = Route("DELETE", "/completions/suspicious")
         return self._request(r, data=data)
 
     def upvote_submission(self, data: UpvoteCreateRequest) -> Response[UpvoteSubmissionJobResponse]:

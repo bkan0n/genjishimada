@@ -26,6 +26,7 @@ from genjishimada_sdk.completions import (
     OcrResponse,
     PendingVerificationResponse,
     SuspiciousCompletionCreateRequest,
+    SuspiciousCompletionDeleteRequest,
     SuspiciousCompletionResponse,
     UpvoteCreateRequest,
     UpvoteSubmissionJobResponse,
@@ -1224,6 +1225,17 @@ class CompletionsService(BaseService):
             raise DuplicateFlagError(data.verification_id or 0)
         except ForeignKeyViolationError:
             raise CompletionNotFoundError(data.verification_id or 0)
+
+    async def remove_suspicious_flags(self, data: SuspiciousCompletionDeleteRequest) -> int:
+        """Remove a suspicious flag from a completion resolved by message or verification ID.
+
+        Returns:
+            Number of flags removed (0 if no matching flag existed).
+        """
+        return await self._completions_repo.delete_suspicious_flag_by_message(
+            message_id=data.message_id,
+            verification_id=data.verification_id,
+        )
 
     async def get_upvotes_from_message_id(self, message_id: int) -> int:
         """Get the upvotes for a particular completion by message_id."""
