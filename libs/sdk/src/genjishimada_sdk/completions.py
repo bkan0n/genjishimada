@@ -24,6 +24,7 @@ __all__ = (
     "PendingVerificationResponse",
     "QualityUpdateRequest",
     "SuspiciousCompletionCreateRequest",
+    "SuspiciousCompletionDeleteRequest",
     "SuspiciousCompletionResponse",
     "SuspiciousFlag",
     "TimePlayedPerRankResponse",
@@ -372,6 +373,21 @@ class SuspiciousCompletionCreateRequest(Struct):
     context: str
     flag_type: SuspiciousFlag
     flagged_by: int
+    message_id: int | None = None
+    verification_id: int | None = None
+
+
+class SuspiciousCompletionDeleteRequest(Struct):
+    """Request payload for removing a suspicious flag from a completion.
+
+    The completion is identified by either ``message_id`` or ``verification_id``,
+    mirroring the identifier model used when the flag was created.
+
+    Attributes:
+        message_id: Discord message ID associated with the run.
+        verification_id: Verification record ID, if applicable.
+    """
+
     message_id: int | None = None
     verification_id: int | None = None
 

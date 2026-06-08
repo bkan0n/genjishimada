@@ -2017,6 +2017,43 @@ class CompletionsRepository(BaseRepository):
 
         return deleted_count
 
+    async def delete_suspicious_flag_by_message(
+        self,
+        message_id: int | None,
+        verification_id: int | None,
+        *,
+        conn: Connection | None = None,
+    ) -> int:
+        """Delete suspicious flag(s) for a completion resolved by message or verification ID.
+
+        Resolves the completion using the same identifier model as
+        ``insert_suspicious_flag`` (message_id OR verification_id), then deletes
+        any matching suspicious flags. Returns 0 when no flag matched.
+
+        Args:
+            message_id: Discord message ID (if completion has been posted).
+            verification_id: Discord verification message ID (if pending).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Number of flags deleted.
+        """
+        _conn = self._get_connection(conn)
+        query = """
+            WITH message_to_completion_id AS (
+            SELECT id
+            FROM core.completions
+            WHERE
+                ($1::bigint IS NOT NULL AND message_id = $1::bigint) OR
+                ($1::bigint IS NULL     AND verification_id = $2::bigint)
+            LIMIT 1
+            )
+            DELETE FROM users.suspicious_flags
+            WHERE completion_id IN (SELECT id FROM message_to_completion_id);
+        """
+        result = await _conn.execute(query, message_id, verification_id)
+        return int(result.split()[-1])
+
 
 async def provide_completions_repository(state: State) -> CompletionsRepository:
     """Litestar DI provider for CompletionsRepository."""
