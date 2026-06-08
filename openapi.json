@@ -14914,6 +14914,1463 @@
         "deprecated": false
       }
     },
+    "/api/v3/tournaments/bootstrap": {
+      "post": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Bootstrap First Edition",
+        "description": "Manually activate the FIRST grid-snapped edition (one edition + one child cycle per active category) so it then rolls over automatically via the pg_cron transition machinery. Idempotent-safe: an active edition already existing returns 409. The shared started_at is grid-snapped (never now()).",
+        "operationId": "ApiV3TournamentsBootstrapBootstrapEdition",
+        "responses": {
+          "201": {
+            "description": "Document created, URL follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentEditionResponse"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/categories/{category_id}/next-cycle": {
+      "get": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Preview Next Cycle",
+        "description": "Preview the pending next cycle for a category.",
+        "operationId": "ApiV3TournamentsCategoriesCategoryIdNextCycleGetNextCycle",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Category ID"
+            },
+            "description": "Category ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentNextCycleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "patch": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Choose Map",
+        "description": "Explicitly set the map for next cycle.",
+        "operationId": "ApiV3TournamentsCategoriesCategoryIdNextCycleChooseMap",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Category ID"
+            },
+            "description": "Category ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TournamentChooseMapRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentNextCycleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/categories": {
+      "get": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "List Tournament Categories",
+        "description": "List all tournament categories.",
+        "operationId": "ApiV3TournamentsCategoriesListCategories",
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TournamentCategoryResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "post": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Create Tournament Category",
+        "description": "Create a new tournament category with difficulty groupings.",
+        "operationId": "ApiV3TournamentsCategoriesCreateCategory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TournamentCategoryCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Document created, URL follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentCategoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/categories/{category_id}": {
+      "get": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Get Tournament Category",
+        "description": "Get a single tournament category by ID.",
+        "operationId": "ApiV3TournamentsCategoriesCategoryIdGetCategory",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Category ID"
+            },
+            "description": "Category ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentCategoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "delete": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Delete Tournament Category",
+        "description": "Delete a tournament category.",
+        "operationId": "ApiV3TournamentsCategoriesCategoryIdDeleteCategory",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Category ID"
+            },
+            "description": "Category ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Request fulfilled, nothing follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "patch": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Update Tournament Category",
+        "description": "Update a tournament category's fields.",
+        "operationId": "ApiV3TournamentsCategoriesCategoryIdUpdateCategory",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Category ID"
+            },
+            "description": "Category ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TournamentCategoryPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentCategoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/publish-results": {
+      "patch": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Force-Publish Edition Results",
+        "description": "Admin escape hatch (D-03): force-publish the results of the edition currently awaiting_results, IGNORING any remaining in-flight verifications. Computes results from currently-verified runs, writes the deferred results event, and completes the edition. Abandoned (still-pending) runs are left pending (audit trail). Returns 409 if no edition is awaiting results. Requires tournaments:write; the bot-side mod gate (Plan 05) is the authoritative caller check.",
+        "operationId": "ApiV3TournamentsPublishResultsForcePublishResults",
+        "responses": {
+          "204": {
+            "description": "Request fulfilled, nothing follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/editions/active": {
+      "get": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Get Active Edition",
+        "description": "Return the single active edition's shared grid-anchored timing (id/started_at/ends_at/status). ``ends_at`` is STORED, not derived \u2014 the frontend reads it here instead of computing it (D-05/D-08, closes frontend-spec \u00a78).",
+        "operationId": "ApiV3TournamentsEditionsActiveGetActiveEdition",
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentEditionResponse"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/config": {
+      "get": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Get Tournament Config",
+        "description": "Get global tournament configuration.",
+        "operationId": "ApiV3TournamentsConfigGetConfig",
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentConfigResponse"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      },
+      "patch": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Update Tournament Config",
+        "description": "Update global tournament configuration fields.",
+        "operationId": "ApiV3TournamentsConfigUpdateConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TournamentConfigPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/cycles/{cycle_id}/leaderboard": {
+      "get": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Get Tournament Leaderboard",
+        "operationId": "ApiV3TournamentsCyclesCycleIdLeaderboardGetLeaderboard",
+        "parameters": [
+          {
+            "name": "cycle_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Cycle ID"
+            },
+            "description": "Cycle ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TournamentLeaderboardEntryResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/streaks/{user_id}": {
+      "get": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Get User Streak",
+        "description": "Get a single user's tournament participation streak.",
+        "operationId": "ApiV3TournamentsStreaksUserIdGetStreak",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "User ID"
+            },
+            "description": "User ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentStreakResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/cycles": {
+      "get": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "List Tournament Cycles",
+        "operationId": "ApiV3TournamentsCyclesListCycles",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by cycle status"
+            },
+            "description": "Filter by cycle status",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "category_id",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by category ID"
+            },
+            "description": "Filter by category ID",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 100.0,
+              "minimum": 1.0,
+              "description": "Max results",
+              "default": 20
+            },
+            "description": "Max results",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0.0,
+              "description": "Result offset",
+              "default": 0
+            },
+            "description": "Result offset",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentCycleListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/completions/{tournament_completion_id}/reject": {
+      "patch": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Reject Tournament Completion",
+        "description": "Reject a non-PB tournament completion (bot mod-review callback).",
+        "operationId": "ApiV3TournamentsCompletionsTournamentCompletionIdRejectRejectTournamentCompletion",
+        "parameters": [
+          {
+            "name": "tournament_completion_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Tournament completion ID"
+            },
+            "description": "Tournament completion ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/categories/{category_id}/reroll-active": {
+      "post": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Reroll Active Cycle",
+        "description": "Reroll the LIVE active cycle's map, wiping its submissions and preserving the edition window.",
+        "operationId": "ApiV3TournamentsCategoriesCategoryIdRerollActiveRerollActiveCycle",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Category ID"
+            },
+            "description": "Category ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Document created, URL follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentNextCycleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/categories/{category_id}/reroll": {
+      "post": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Reroll Map",
+        "description": "Delete current pending cycle and select a new map.",
+        "operationId": "ApiV3TournamentsCategoriesCategoryIdRerollRerollMap",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Category ID"
+            },
+            "description": "Category ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Document created, URL follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentNextCycleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/categories/{category_id}/select-map": {
+      "post": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Select Map",
+        "description": "Trigger random map selection for next cycle.",
+        "operationId": "ApiV3TournamentsCategoriesCategoryIdSelectMapSelectMap",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Category ID"
+            },
+            "description": "Category ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Document created, URL follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentNextCycleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/debug-cycle-length": {
+      "patch": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Override Edition Length (DEBUG/TEST ONLY)",
+        "description": "DEBUG/TEST ONLY: override the GLOBAL edition length in seconds so the next transition recomputes from the override. Pass seconds=null to clear the override and restore the normal cadence. Rejected in production (T-12-07).",
+        "operationId": "ApiV3TournamentsDebugCycleLengthSetDebugCycleLength",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TournamentDebugCycleLengthRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentLifecycleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/pause": {
+      "patch": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Pause or Resume Edition Transitions",
+        "description": "GLOBAL hiatus lever (D-03/D-12): pause (paused=true) or resume (paused=false) automatic edition transitions. While paused the active edition still runs its full term; only creation of the NEXT edition is suppressed at the boundary. Resuming restores the normal cadence.",
+        "operationId": "ApiV3TournamentsPauseSetTransitionsPaused",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TournamentPauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TournamentLifecycleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/tournaments/completions/{tournament_completion_id}/verify": {
+      "patch": {
+        "tags": [
+          "Tournaments"
+        ],
+        "summary": "Verify Tournament Completion",
+        "description": "Verify a non-PB tournament completion (bot mod-review callback).",
+        "operationId": "ApiV3TournamentsCompletionsTournamentCompletionIdVerifyVerifyTournamentCompletion",
+        "parameters": [
+          {
+            "name": "tournament_completion_id",
+            "in": "path",
+            "schema": {
+              "type": "integer",
+              "description": "Tournament completion ID"
+            },
+            "description": "Tournament completion ID",
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
     "/api/v3/maps/map-edits": {
       "post": {
         "tags": [
@@ -21661,6 +23118,22 @@
         ],
         "title": "PendingVerificationResponse"
       },
+      "PlacementXpTier": {
+        "properties": {
+          "place": {
+            "type": "integer"
+          },
+          "xp": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place",
+          "xp"
+        ],
+        "title": "PlacementXpTier"
+      },
       "PlayersPerSkillTierResponse": {
         "properties": {
           "tier": {
@@ -23279,6 +24752,22 @@
         ],
         "title": "StoreConfigResponse"
       },
+      "StreakXpTier": {
+        "properties": {
+          "threshold": {
+            "type": "integer"
+          },
+          "xp": {
+            "type": "integer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "threshold",
+          "xp"
+        ],
+        "title": "StreakXpTier"
+      },
       "SuspiciousCompletionCreateRequest": {
         "properties": {
           "context": {
@@ -23953,6 +25442,633 @@
           "name"
         ],
         "title": "TopCreatorsResponse"
+      },
+      "TournamentCategoryCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "difficulties": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "Easy",
+                "Medium",
+                "Hard",
+                "Very Hard",
+                "Extreme",
+                "Hell"
+              ]
+            },
+            "type": "array"
+          },
+          "participation_xp": {
+            "type": "integer",
+            "default": 0
+          },
+          "placement_xp": {
+            "items": {
+              "$ref": "#/components/schemas/PlacementXpTier"
+            },
+            "type": "array"
+          },
+          "streak_xp": {
+            "items": {
+              "$ref": "#/components/schemas/StreakXpTier"
+            },
+            "type": "array"
+          },
+          "champion_role_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "difficulties",
+          "name"
+        ],
+        "title": "TournamentCategoryCreateRequest"
+      },
+      "TournamentCategoryPatchRequest": {
+        "properties": {
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "difficulties": {
+            "oneOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "Easy",
+                    "Medium",
+                    "Hard",
+                    "Very Hard",
+                    "Extreme",
+                    "Hell"
+                  ]
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "participation_xp": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "placement_xp": {
+            "oneOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PlacementXpTier"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "streak_xp": {
+            "oneOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StreakXpTier"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "champion_role_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_active": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "TournamentCategoryPatchRequest"
+      },
+      "TournamentCategoryResponse": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "difficulties": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "Easy",
+                "Medium",
+                "Hard",
+                "Very Hard",
+                "Extreme",
+                "Hell"
+              ]
+            },
+            "type": "array"
+          },
+          "participation_xp": {
+            "type": "integer"
+          },
+          "placement_xp": {
+            "items": {
+              "$ref": "#/components/schemas/PlacementXpTier"
+            },
+            "type": "array"
+          },
+          "streak_xp": {
+            "items": {
+              "$ref": "#/components/schemas/StreakXpTier"
+            },
+            "type": "array"
+          },
+          "champion_role_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "created_at",
+          "difficulties",
+          "id",
+          "is_active",
+          "name",
+          "participation_xp",
+          "placement_xp",
+          "streak_xp",
+          "updated_at"
+        ],
+        "title": "TournamentCategoryResponse"
+      },
+      "TournamentChooseMapRequest": {
+        "properties": {
+          "map_code": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "map_code"
+        ],
+        "title": "TournamentChooseMapRequest"
+      },
+      "TournamentConfigPatchRequest": {
+        "properties": {
+          "blacklist_weeks": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "cadence": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "weekly",
+                  "biweekly"
+                ]
+              }
+            ]
+          },
+          "anchor_weekday": {
+            "oneOf": [
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "anchor_time": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "duration"
+              }
+            ]
+          },
+          "anchor_tz": {
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "TournamentConfigPatchRequest"
+      },
+      "TournamentConfigResponse": {
+        "properties": {
+          "blacklist_weeks": {
+            "type": "integer"
+          },
+          "cadence": {
+            "type": "string",
+            "enum": [
+              "weekly",
+              "biweekly"
+            ]
+          },
+          "anchor_weekday": {
+            "type": "integer"
+          },
+          "anchor_time": {
+            "type": "string",
+            "format": "duration"
+          },
+          "anchor_tz": {
+            "type": "string"
+          },
+          "transitions_paused": {
+            "type": "boolean"
+          },
+          "debug_cycle_seconds": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anchor_time",
+          "anchor_tz",
+          "anchor_weekday",
+          "blacklist_weeks",
+          "cadence",
+          "created_at",
+          "transitions_paused",
+          "updated_at"
+        ],
+        "title": "TournamentConfigResponse"
+      },
+      "TournamentCycleListResponse": {
+        "properties": {
+          "total": {
+            "type": "integer"
+          },
+          "cycles": {
+            "items": {
+              "$ref": "#/components/schemas/TournamentCycleWithWinnerResponse"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cycles",
+          "total"
+        ],
+        "title": "TournamentCycleListResponse"
+      },
+      "TournamentCycleWithWinnerResponse": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "category_id": {
+            "type": "integer"
+          },
+          "map_id": {
+            "type": "integer"
+          },
+          "map_code": {
+            "type": "string"
+          },
+          "map_name": {
+            "type": "string"
+          },
+          "map_difficulty": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "finalizing",
+              "completed"
+            ]
+          },
+          "started_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ended_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "winner_name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "winner_user_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "category_id",
+          "created_at",
+          "id",
+          "map_code",
+          "map_difficulty",
+          "map_id",
+          "map_name",
+          "status"
+        ],
+        "title": "TournamentCycleWithWinnerResponse"
+      },
+      "TournamentDebugCycleLengthRequest": {
+        "properties": {
+          "seconds": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [],
+        "title": "TournamentDebugCycleLengthRequest"
+      },
+      "TournamentEditionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "awaiting_results",
+              "completed"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "created_at",
+          "ends_at",
+          "id",
+          "started_at",
+          "status"
+        ],
+        "title": "TournamentEditionResponse"
+      },
+      "TournamentLeaderboardEntryResponse": {
+        "properties": {
+          "rank": {
+            "type": "integer"
+          },
+          "user_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "time": {
+            "type": "number"
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "completion": {
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "completion",
+          "name",
+          "rank",
+          "time",
+          "user_id",
+          "verified"
+        ],
+        "title": "TournamentLeaderboardEntryResponse"
+      },
+      "TournamentLifecycleResponse": {
+        "properties": {
+          "transitions_paused": {
+            "type": "boolean"
+          },
+          "debug_cycle_seconds": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "transitions_paused"
+        ],
+        "title": "TournamentLifecycleResponse"
+      },
+      "TournamentNextCycleResponse": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "category_id": {
+            "type": "integer"
+          },
+          "map_id": {
+            "type": "integer"
+          },
+          "map_code": {
+            "type": "string"
+          },
+          "map_name": {
+            "type": "string"
+          },
+          "map_difficulty": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "finalizing",
+              "completed"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category_id",
+          "created_at",
+          "id",
+          "map_code",
+          "map_difficulty",
+          "map_id",
+          "map_name",
+          "status"
+        ],
+        "title": "TournamentNextCycleResponse"
+      },
+      "TournamentPauseRequest": {
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paused"
+        ],
+        "title": "TournamentPauseRequest"
+      },
+      "TournamentStreakResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          },
+          "current_streak": {
+            "type": "integer"
+          },
+          "max_streak": {
+            "type": "integer"
+          },
+          "last_cycle_id": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_streak",
+          "max_streak",
+          "updated_at",
+          "user_id"
+        ],
+        "title": "TournamentStreakResponse"
       },
       "TrendingMapResponse": {
         "properties": {
@@ -24761,7 +26877,8 @@
               "Record",
               "World Record",
               "Quest",
-              "Other"
+              "Other",
+              "Tournament"
             ]
           },
           "reason": {
