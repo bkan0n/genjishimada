@@ -429,6 +429,112 @@ class TestGetSuspiciousFlags:
             assert "created_at" in flag
 
 
+class TestRemoveSuspiciousFlag:
+    """DELETE /api/v3/completions/suspicious"""
+
+    async def test_happy_path_removes_flag(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id, asyncpg_pool
+    ):
+        """Deleting a suspicious flag by message_id returns 200 with count 1 and removes the flag."""
+        user_id = await create_test_user()
+        flagger_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        message_id = unique_message_id
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+        completion_id = submit_response.json()["completion_id"]
+
+        # Completions are created pending (message_id NULL); the suspicious-flag identifier
+        # model resolves the completion by message_id, so attach it the way verification does.
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE core.completions SET message_id=$1 WHERE id=$2", message_id, completion_id
+            )
+
+        # Flag the completion as suspicious via the existing add route
+        flag_response = await test_client.post(
+            "/api/v3/completions/suspicious",
+            json={
+                "context": "Suspiciously fast run",
+                "flag_type": "Cheating",
+                "flagged_by": flagger_id,
+                "message_id": message_id,
+            },
+        )
+        assert flag_response.status_code in (200, 201)
+
+        # Sanity check: the flag is listed for the flagged user
+        list_before = await test_client.get("/api/v3/completions/suspicious", params={"user_id": user_id})
+        assert list_before.status_code == 200
+        assert any(flag["message_id"] == message_id for flag in list_before.json())
+
+        # Remove the flag
+        delete_response = await test_client.request(
+            "DELETE",
+            "/api/v3/completions/suspicious",
+            json={"message_id": message_id},
+        )
+        assert delete_response.status_code == 200
+        assert delete_response.json() == 1
+
+        # The flag should no longer be listed
+        list_after = await test_client.get("/api/v3/completions/suspicious", params={"user_id": user_id})
+        assert list_after.status_code == 200
+        assert not any(flag["message_id"] == message_id for flag in list_after.json())
+
+    async def test_remove_nonexistent_flag_returns_zero(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id, asyncpg_pool
+    ):
+        """Deleting a flag when none exists returns 200 with count 0 (no error)."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        message_id = unique_message_id
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+        completion_id = submit_response.json()["completion_id"]
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE core.completions SET message_id=$1 WHERE id=$2", message_id, completion_id
+            )
+
+        delete_response = await test_client.request(
+            "DELETE",
+            "/api/v3/completions/suspicious",
+            json={"message_id": message_id},
+        )
+        assert delete_response.status_code == 200
+        assert delete_response.json() == 0
+
+    async def test_remove_requires_identifier(self, test_client):
+        """Deleting without message_id or verification_id returns 400."""
+        delete_response = await test_client.request(
+            "DELETE",
+            "/api/v3/completions/suspicious",
+            json={},
+        )
+        assert delete_response.status_code == 400
+
+
 class TestEditCompletion:
     """PATCH /api/v3/completions/{record_id}"""
 
