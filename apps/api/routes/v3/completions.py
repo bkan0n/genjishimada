@@ -17,6 +17,7 @@ from genjishimada_sdk.completions import (
     PendingVerificationResponse,
     QualityUpdateRequest,
     SuspiciousCompletionCreateRequest,
+    SuspiciousCompletionDeleteRequest,
     SuspiciousCompletionResponse,
     UpvoteCreateRequest,
     UpvoteSubmissionJobResponse,
@@ -24,7 +25,7 @@ from genjishimada_sdk.completions import (
 from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
-from litestar import Controller, Request, Response, get, patch, post, put
+from litestar import Controller, Request, Response, delete, get, patch, post, put
 from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.exceptions import HTTPException
@@ -240,6 +241,24 @@ class CompletionsController(Controller):
                 detail="One of message_id or verification_id must be used.", status_code=HTTP_400_BAD_REQUEST
             )
         return await svc.set_suspicious_flags(data)
+
+    @delete(
+        path="/suspicious",
+        summary="Remove Suspicious Flag",
+        description="Remove an existing suspicious flag from a completion.",
+        status_code=200,
+    )
+    async def delete_suspicious_flags(
+        self,
+        svc: CompletionsService,
+        data: SuspiciousCompletionDeleteRequest,
+    ) -> int:
+        """Remove a suspicious flag from a completion. Returns the number of flags removed."""
+        if not data.message_id and not data.verification_id:
+            raise CustomHTTPException(
+                detail="One of message_id or verification_id must be used.", status_code=HTTP_400_BAD_REQUEST
+            )
+        return await svc.remove_suspicious_flags(data)
 
     @post(
         path="/upvoting",
