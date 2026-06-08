@@ -2,6 +2,7 @@ guild = 842778964673953812
 
 [roles.mentionable]
 general_announcements = 1073292414271356938
+tournament_announcements = 1513313857563791411
 website_patch_notes = 1328055776358563990
 framework_patch_notes = 1073292274877878314
 modmail = 1120076555293569081
@@ -59,3 +60,6 @@ change_requests = 1342953312000934069
 [channels.admin]
 development = 999420219900571658
 round_table = 858150590659821598
+
+[channels.tournament]
+announcements = 1513306277885902990

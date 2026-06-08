@@ -23,6 +23,7 @@ from repository.playtest_repository import PlaytestRepository
 from repository.rank_card_repository import RankCardRepository
 from repository.store_repository import StoreRepository
 from repository.users_repository import UsersRepository
+from repository.tournaments_repository import TournamentRepository
 from repository.utilities_repository import UtilitiesRepository
 from services.image_storage_service import ImageStorageService
 from services.notifications_service import NotificationsService
@@ -209,6 +210,12 @@ def mock_image_storage_service(mocker):
 def mock_notifications_service(mocker):
     """Mock NotificationsService."""
     return mocker.AsyncMock(spec=NotificationsService)
+
+
+@pytest.fixture
+def mock_tournament_repo(mocker):
+    """Mock TournamentRepository."""
+    return mocker.AsyncMock(spec=TournamentRepository)
 
 
 @pytest.fixture

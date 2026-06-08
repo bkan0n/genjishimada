@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-30",
+  "phase": "8",
+  "phase_name": "Rewards Engine",
+  "phase_dir": ".planning/phases/08-rewards-engine",
+  "plan": 0,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "discuss-phase 8 (--auto): write 08-CONTEXT.md + 08-DISCUSSION-LOG.md, record STATE.md", "status": "done", "commit": "n/a (commit_docs disabled)"}
+  ],
+  "remaining_tasks": [
+    {"id": 2, "name": "plan-phase 8 (--auto): research -> plan -> verify", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "Tool-result batching/latency this session exhausted context before the plan-phase planner could spawn", "type": "external", "workaround": "Resume in a fresh session; prefer --chunked planning and targeted reads"}
+  ],
+  "human_actions_pending": [],
+  "decisions": [
+    {"decision": "Participation XP awarded in TournamentService submit path on first cycle completion; once-per-cycle via DB-state guard", "rationale": "RWD-01; reuses existing submit flow; DB state is source of truth since api.xp.grant is non-idempotent", "phase": "8"},
+    {"decision": "Placement XP computed in Python at cycle finalization from Phase-7 cycle_completed outbox payload mapped to tournaments.categories.placement_xp tiers", "rationale": "RWD-02; placements already snapshotted by Phase 7; hook into existing outbox flow not a new scheduler", "phase": "8"},
+    {"decision": "Streaks updated at cycle-end finalization; >=1 category submission increments, miss resets to 0; stored in tournaments.streaks", "rationale": "RWD-04", "phase": "8"},
+    {"decision": "Streak bonus thresholds from tournaments.categories.streak_xp; granted same finalization step on threshold crossing", "rationale": "RWD-05; config is per-category jsonb, not a separate xp_config table", "phase": "8"},
+    {"decision": "Double-grant prevention via DB-recorded award state + deterministic tournament:{reason}:{cycle_id}:{user_id} keys", "rationale": "api.xp.grant is in IGNORE_IDEMPOTENCY (non-idempotent)", "phase": "8"},
+    {"decision": "Reuse existing api.xp.grant queue + BaseService.publish_message()", "rationale": "no new frameworks; lootbox_service.py:377-412 is the reference impl", "phase": "8"}
+  ],
+  "uncommitted_files": [
+    ".planning/phases/08-rewards-engine/08-CONTEXT.md",
+    ".planning/phases/08-rewards-engine/08-DISCUSSION-LOG.md",
+    ".planning/phases/08-rewards-engine/.continue-here.md",
+    ".planning/HANDOFF.json",
+    ".planning/STATE.md"
+  ],
+  "next_action": "Fresh session: run /gsd:plan-phase 8 --auto (or --auto --chunked). CONTEXT.md is authoritative and ready.",
+  "context_notes": "discuss-phase produced clean source-verified context. plan-phase did not run only because of environment tool-result latency, not any planning blocker. Trust 08-CONTEXT.md over 08-DISCUSSION-LOG.md (the log's xp_config mention is the wrong pre-verification guess)."
+}

@@ -88,7 +88,7 @@ class TestRecordAttempt:
     ):
         """Test that identifier is stored in lowercase."""
         # Arrange
-        identifier = "TeSt@ExAmPlE.CoM"
+        identifier = fake.email().title()
         action = "login"
 
         # Act
@@ -218,8 +218,9 @@ class TestFetchRateLimitCount:
     ):
         """Test that identifier matching is case-insensitive."""
         # Arrange
-        identifier_lower = "test@example.com"
-        identifier_upper = "TEST@EXAMPLE.COM"
+        base_identifier = fake.email()
+        identifier_lower = base_identifier.lower()
+        identifier_upper = base_identifier.upper()
         action = "login"
         window_start = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=5)
 

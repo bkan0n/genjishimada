@@ -10,6 +10,7 @@ class Base(msgspec.Struct, forbid_unknown_fields=True): ...
 
 class Mentionable(Base):
     general_announcements: int
+    tournament_announcements: int
     website_patch_notes: int
     framework_patch_notes: int
     modmail: int
@@ -86,12 +87,17 @@ class AdminChannel(Base):
     round_table: int
 
 
+class Tournament(Base):
+    announcements: int
+
+
 class Channels(Base):
     updates: Updates
     information: Information
     submission: Submission
     help: Help
     admin: AdminChannel
+    tournament: Tournament
 
 
 class Config(Base):

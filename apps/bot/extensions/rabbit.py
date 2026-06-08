@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable, TypeVar
 
 from aio_pika import Channel, DeliveryMode, Message, connect_robust
 from aio_pika.abc import AbstractIncomingMessage
+from aio_pika.exceptions import ChannelNotFoundEntity
 from aio_pika.pool import Pool
 from discord import TextChannel
 
@@ -267,14 +268,18 @@ class RabbitHandler:
             int: Total number of DLQ messages processed in this sweep.
         """
         total = 0
-        async with self._channel_pool.acquire() as channel:
-            await channel.set_qos(prefetch_count=100)
-            for base_queue in self._queues:
-                try:
-                    n = await self._process_one_dlq(channel, base_queue)
-                    total += n
-                except Exception:
-                    log.exception(f"[DLQ] Error processing DLQ for base queue '{base_queue}'")
+        # Acquire a FRESH channel PER base queue: a channel-level error (e.g. a NOT_FOUND
+        # on a missing <queue>.dlq passive-declare) closes the channel at the broker, so a
+        # single shared channel reused across the loop would poison every subsequent queue
+        # with ChannelInvalidStateError. Per-queue isolation means one failing DLQ cannot
+        # cascade into the rest of the sweep.
+        for base_queue in self._queues:
+            try:
+                async with self._channel_pool.acquire() as channel:
+                    await channel.set_qos(prefetch_count=100)
+                    total += await self._process_one_dlq(channel, base_queue)
+            except Exception:
+                log.exception(f"[DLQ] Error processing DLQ for base queue '{base_queue}'")
         return total
 
     async def _process_one_dlq(self, channel: Channel, base_queue: str) -> int:
@@ -288,7 +293,15 @@ class RabbitHandler:
         """
         dlq_name = f"{base_queue}{self._dlq_suffix}"
 
-        dlq = await channel.declare_queue(dlq_name, passive=True)
+        # Defensive guard: a missing .dlq makes the passive declare raise NOT_FOUND, which is
+        # a channel-level error. Per-queue channel isolation (see _process_all_dlqs_once)
+        # already prevents this from poisoning the sweep; logging + skipping here keeps the
+        # sweep quiet and the intent explicit until definitions.json carries every .dlq.
+        try:
+            dlq = await channel.declare_queue(dlq_name, passive=True)
+        except ChannelNotFoundEntity:
+            log.info("[!] [DLQ] %s does not exist yet; skipping.", dlq_name)
+            return 0
         initial_count = dlq.declaration_result.message_count or 0
         cap = min(initial_count, DLQ_MAX_PER_QUEUE_TICK)
         if cap == 0:

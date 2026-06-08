@@ -98,6 +98,15 @@ from genjishimada_sdk.tags import (
     TagsSearchFilters,
     TagsSearchResponse,
 )
+from genjishimada_sdk.tournaments import (
+    TournamentCategoryResponse,
+    TournamentChooseMapRequest,
+    TournamentCycleListResponse,
+    TournamentEditionResponse,
+    TournamentLeaderboardEntryResponse,
+    TournamentNextCycleResponse,
+    TournamentStreakResponse,
+)
 from genjishimada_sdk.users import (
     OverwatchUsernamesResponse,
     OverwatchUsernamesUpdateRequest,
@@ -1081,6 +1090,59 @@ class APIService:
         r = Route("PUT", "/completions/{record_id}/verification", record_id=record_id)
         return self._request(r, data=data, response_model=JobStatusResponse)
 
+    def verify_tournament_completion(self, tc_id: int) -> Response[JobStatusResponse]:
+        """Verify a non-PB tournament completion (bot mod-review Accept callback).
+
+        Routes the moderator's Accept verdict to the ``tournaments:verify`` endpoint from
+        Plan 11-03 — the bot never writes the DB. The flip + participation-XP grant happen
+        server-side; this returns the job status of the published verification-changed
+        event.
+
+        Args:
+            tc_id (int): The tournament completion ID to verify.
+
+        Returns:
+            Response[JobStatusResponse]: The job status of the verification.
+        """
+        r = Route("PATCH", "/tournaments/completions/{tc_id}/verify", tc_id=tc_id)
+        return self._request(r, response_model=JobStatusResponse)
+
+    def reject_tournament_completion(self, tc_id: int) -> Response[JobStatusResponse]:
+        """Reject a non-PB tournament completion (bot mod-review Reject callback).
+
+        Routes the moderator's Reject verdict to the ``tournaments:verify`` endpoint from
+        Plan 11-03 — the bot never writes the DB. The endpoint takes no reason payload (the
+        row is simply left unverified, Open-Q1), so no body is sent.
+
+        Args:
+            tc_id (int): The tournament completion ID to reject.
+
+        Returns:
+            Response[JobStatusResponse]: The job status of the rejection.
+        """
+        r = Route("PATCH", "/tournaments/completions/{tc_id}/reject", tc_id=tc_id)
+        return self._request(r, response_model=JobStatusResponse)
+
+    def force_publish_tournament_results(self) -> Response[None]:
+        """Force-publish the awaiting-results edition's results, abandoning pending runs (D-03).
+
+        The escape hatch for a stuck verification queue: routes the moderator's force-publish
+        to Plan 04's ``PATCH /tournaments/publish-results`` route (``tournaments:write``),
+        which runs the drained path IGNORING remaining in-flight verifications and publishes
+        the results immediately. The route is edition-scoped to the single edition currently
+        ``awaiting_results`` (no id param). The bot never writes the DB — this HTTP call is
+        the only path to the database (CLAUDE.md).
+
+        The route returns ``204 No Content`` (CR-01): the results announcement is delivered
+        asynchronously via the deferred ``edition_results`` outbox event, so there is no
+        synchronous body to decode.
+
+        Returns:
+            Response[None]: No content; the forced publish is fire-and-forget.
+        """
+        r = Route("PATCH", "/tournaments/publish-results")
+        return self._request(r)
+
     def get_records_filtered(  # noqa: PLR0913
         self,
         code: OverwatchCode | None = None,
@@ -1662,6 +1724,131 @@ class APIService:
         """Get upvotes count."""
         r = Route("GET", "/completions/upvoting/{message_id}", message_id=message_id)
         return self._request(r, response_model=int)
+
+    def get_tournament_category(self, category_id: int) -> Response[TournamentCategoryResponse]:
+        """Get a tournament category by ID.
+
+        Returns:
+            Response[TournamentCategoryResponse]: The tournament category.
+        """
+        r = Route("GET", "/tournaments/categories/{category_id}", category_id=category_id)
+        return self._request(r, response_model=TournamentCategoryResponse)
+
+    def get_active_edition(self) -> Response[TournamentEditionResponse]:
+        """Get the active tournament edition's stored shared timing (D-05/D-08).
+
+        Returns the single active edition's grid-anchored started_at/ends_at. The
+        ``ends_at`` is STORED (not derived from cadence) — callers must read it here
+        rather than recomputing from started_at + cadence (closes frontend-spec §8).
+
+        Returns:
+            Response[TournamentEditionResponse]: The active edition timing.
+        """
+        r = Route("GET", "/tournaments/editions/active")
+        return self._request(r, response_model=TournamentEditionResponse)
+
+    def get_tournament_streak(self, user_id: int) -> Response[TournamentStreakResponse]:
+        """Get a user's tournament participation streak.
+
+        Args:
+            user_id (int): The Discord user ID to fetch the streak for.
+
+        Returns:
+            Response[TournamentStreakResponse]: The user's streak record.
+        """
+        r = Route("GET", "/tournaments/streaks/{user_id}", user_id=user_id)
+        return self._request(r, response_model=TournamentStreakResponse)
+
+    def list_tournament_categories(self) -> Response[list[TournamentCategoryResponse]]:
+        """List all tournament categories.
+
+        Returns:
+            Response[list[TournamentCategoryResponse]]: All tournament categories.
+        """
+        r = Route("GET", "/tournaments/categories")
+        return self._request(r, response_model=list[TournamentCategoryResponse])
+
+    def list_tournament_cycles(
+        self,
+        *,
+        status: str | None = None,
+        category_id: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> Response[TournamentCycleListResponse]:
+        """List tournament cycles, optionally filtered by status and category.
+
+        Args:
+            status (str | None): Optional cycle status filter (e.g. "active").
+            category_id (int | None): Optional category ID filter.
+            limit (int): Maximum number of cycles to return.
+            offset (int): Pagination offset.
+
+        Returns:
+            Response[TournamentCycleListResponse]: The matching cycles.
+        """
+        r = Route("GET", "/tournaments/cycles")
+        return self._request(
+            r,
+            response_model=TournamentCycleListResponse,
+            params={"status": status, "category_id": category_id, "limit": limit, "offset": offset},
+        )
+
+    def get_tournament_leaderboard(self, cycle_id: int) -> Response[list[TournamentLeaderboardEntryResponse]]:
+        """Get the full leaderboard for a tournament cycle.
+
+        Args:
+            cycle_id (int): The cycle ID to fetch the leaderboard for.
+
+        Returns:
+            Response[list[TournamentLeaderboardEntryResponse]]: The leaderboard entries.
+        """
+        r = Route("GET", "/tournaments/cycles/{cycle_id}/leaderboard", cycle_id=cycle_id)
+        return self._request(r, response_model=list[TournamentLeaderboardEntryResponse])
+
+    def reroll_next_cycle(self, category_id: int) -> Response[TournamentNextCycleResponse]:
+        """Reroll the next-cycle map for a category (random selection).
+
+        Args:
+            category_id (int): The category ID to reroll.
+
+        Returns:
+            Response[TournamentNextCycleResponse]: The newly-selected next cycle.
+        """
+        r = Route("POST", "/tournaments/categories/{category_id}/reroll", category_id=category_id)
+        return self._request(r, response_model=TournamentNextCycleResponse)
+
+    def reroll_active_cycle(self, category_id: int) -> Response[TournamentNextCycleResponse]:
+        """Reroll the LIVE active cycle's map for a category (random selection).
+
+        Wipes the active cycle's submissions (scoped by cycle id), swaps to a new
+        eligible map, and keeps the cycle ``status='active'`` on the SAME edition so
+        the deadline is preserved. The API announces the new map via the existing
+        rollover event.
+
+        Args:
+            category_id (int): The category ID whose active cycle is rerolled.
+
+        Returns:
+            Response[TournamentNextCycleResponse]: The newly-selected active cycle.
+        """
+        r = Route("POST", "/tournaments/categories/{category_id}/reroll-active", category_id=category_id)
+        return self._request(r, response_model=TournamentNextCycleResponse)
+
+    def choose_next_cycle(
+        self, category_id: int, data: TournamentChooseMapRequest
+    ) -> Response[TournamentNextCycleResponse]:
+        """Explicitly choose the next-cycle map for a category.
+
+        Args:
+            category_id (int): The category ID to set the next-cycle map for.
+            data (TournamentChooseMapRequest): The explicit map selection payload.
+
+        Returns:
+            Response[TournamentNextCycleResponse]: The chosen next cycle.
+        """
+        r = Route("PATCH", "/tournaments/categories/{category_id}/next-cycle", category_id=category_id)
+        return self._request(r, response_model=TournamentNextCycleResponse, data=data)
 
     def claim_idempotency(self, data: ClaimCreateRequest) -> Response[ClaimResponse]:
         """Claim an idempotency key for a queue message action."""

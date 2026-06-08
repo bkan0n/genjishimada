@@ -1,0 +1,1300 @@
+"""Service for tournament domain business logic."""
+
+from __future__ import annotations
+
+import datetime as dt
+import os
+import re
+from logging import getLogger
+from typing import TYPE_CHECKING
+
+import msgspec
+from asyncpg import Pool
+from genjishimada_sdk.internal import JobStatusResponse
+from genjishimada_sdk.tournaments import (
+    TournamentCategoryCreateRequest,
+    TournamentCategoryPatchRequest,
+    TournamentCategoryResponse,
+    TournamentChooseMapRequest,
+    TournamentConfigPatchRequest,
+    TournamentConfigResponse,
+    TournamentCycleListResponse,
+    TournamentCycleStartedEvent,
+    TournamentCycleWithWinnerResponse,
+    TournamentEditionResponse,
+    TournamentLeaderboardEntryResponse,
+    TournamentLifecycleResponse,
+    TournamentNextCycleResponse,
+    TournamentRolloverEvent,
+    TournamentStreakResponse,
+    TournamentVerificationChangedEvent,
+)
+from litestar.datastructures import Headers, State
+
+from repository.exceptions import UniqueConstraintViolationError
+from repository.tournaments_repository import TournamentRepository
+from services.base import BaseService
+from services.exceptions.tournaments import (
+    AlreadyVerifiedError,
+    CategoryLockedError,
+    CategoryNameExistsError,
+    CategoryNotFoundError,
+    CycleAlreadyLiveError,
+    DebugRouteDisabledError,
+    InvalidTimezoneError,
+    MapNotEligibleError,
+    NoAwaitingResultsEditionError,
+    NoCycleActiveError,
+    NoEligibleMapsError,
+    PendingCycleAlreadyExistsError,
+    PendingCycleNotFoundError,
+    StreakNotFoundError,
+    TournamentCompletionNotFoundError,
+)
+from services.tournament_outbox_service import _write_drained_results_row
+from services.tournament_reward_service import TournamentRewardService
+
+if TYPE_CHECKING:
+    from asyncpg import Connection
+    from genjishimada_sdk.xp import XpGrantEvent
+
+log = getLogger(__name__)
+
+
+class TournamentService(BaseService):
+    """Service for tournament config and category business logic."""
+
+    def __init__(
+        self,
+        pool: Pool,
+        state: State,
+        tournament_repo: TournamentRepository,
+        reward_service: TournamentRewardService | None = None,
+    ) -> None:
+        """Initialize service.
+
+        Args:
+            pool: AsyncPG connection pool.
+            state: Application state.
+            tournament_repo: Tournament repository instance.
+            reward_service: Reward service for participation XP grants. Optional so
+                existing unit tests can construct the service without it; the DI
+                provider always supplies one in production.
+        """
+        super().__init__(pool, state)
+        self._tournament_repo = tournament_repo
+        self._reward_service = reward_service
+
+    async def get_config(self) -> TournamentConfigResponse:
+        """Get tournament configuration.
+
+        Returns:
+            Tournament configuration.
+        """
+        config = await self._tournament_repo.fetch_config()
+        return msgspec.convert(config, TournamentConfigResponse)
+
+    async def update_config(self, data: TournamentConfigPatchRequest) -> TournamentConfigResponse:
+        """Update tournament configuration.
+
+        Only updates fields that are not UNSET. When ``anchor_tz`` is provided it
+        is validated against ``pg_timezone_names`` before persisting (T-12-04): an
+        unknown timezone would otherwise crash the grid-boundary PL/pgSQL
+        ``AT TIME ZONE`` on every cron tick and stall edition transitions.
+
+        Args:
+            data: Partial config update request.
+
+        Returns:
+            Updated tournament configuration.
+
+        Raises:
+            InvalidTimezoneError: If ``anchor_tz`` is not a known IANA timezone.
+        """
+        updates: dict[str, object] = {}
+        if data.blacklist_weeks is not msgspec.UNSET:
+            updates["blacklist_weeks"] = data.blacklist_weeks
+        if data.cadence is not msgspec.UNSET:
+            updates["cadence"] = data.cadence
+        if data.anchor_weekday is not msgspec.UNSET:
+            updates["anchor_weekday"] = data.anchor_weekday
+        if data.anchor_time is not msgspec.UNSET:
+            updates["anchor_time"] = data.anchor_time
+        if data.anchor_tz is not msgspec.UNSET:
+            if not await self._tournament_repo.is_valid_timezone(data.anchor_tz):
+                raise InvalidTimezoneError(data.anchor_tz)
+            updates["anchor_tz"] = data.anchor_tz
+        if updates:
+            await self._tournament_repo.update_config(updates)
+        return await self.get_config()
+
+    async def create_category(self, data: TournamentCategoryCreateRequest) -> TournamentCategoryResponse:
+        """Create a tournament category.
+
+        No active cycle check is required for category creation.
+
+        Args:
+            data: Category creation request.
+
+        Returns:
+            Created tournament category.
+
+        Raises:
+            CategoryNameExistsError: If a category with this name already exists.
+        """
+        try:
+            row = await self._tournament_repo.create_category(
+                name=data.name,
+                difficulties=[str(d) for d in data.difficulties],
+                participation_xp=data.participation_xp,
+                placement_xp=msgspec.json.encode(data.placement_xp).decode(),
+                streak_xp=msgspec.json.encode(data.streak_xp).decode(),
+                champion_role_id=data.champion_role_id,
+            )
+        except UniqueConstraintViolationError as e:
+            if "name" in (e.constraint_name or ""):
+                raise CategoryNameExistsError(data.name) from e
+            raise
+        return msgspec.convert(row, TournamentCategoryResponse)
+
+    async def list_categories(self) -> list[TournamentCategoryResponse]:
+        """List all tournament categories.
+
+        Returns:
+            List of tournament categories ordered by name.
+        """
+        rows = await self._tournament_repo.fetch_categories()
+        return [msgspec.convert(row, TournamentCategoryResponse) for row in rows]
+
+    async def get_category(self, category_id: int) -> TournamentCategoryResponse:
+        """Get a single tournament category by ID.
+
+        Args:
+            category_id: Category ID.
+
+        Returns:
+            Tournament category.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+        """
+        row = await self._tournament_repo.fetch_category(category_id)
+        if row is None:
+            raise CategoryNotFoundError(category_id)
+        return msgspec.convert(row, TournamentCategoryResponse)
+
+    async def get_streak(self, user_id: int) -> TournamentStreakResponse:
+        """Get a single user's participation streak.
+
+        Args:
+            user_id: User ID.
+
+        Returns:
+            User participation streak.
+
+        Raises:
+            StreakNotFoundError: If no streak record exists for the user.
+        """
+        row = await self._tournament_repo.fetch_streak(user_id)
+        if row is None:
+            raise StreakNotFoundError(user_id)
+        return msgspec.convert(row, TournamentStreakResponse)
+
+    async def update_category(
+        self,
+        category_id: int,
+        data: TournamentCategoryPatchRequest,
+    ) -> TournamentCategoryResponse:
+        """Update a tournament category.
+
+        Runs the active-cycle check and the update inside one transaction on the
+        same connection, so the guard is atomic and free of TOCTOU races.
+
+        Args:
+            category_id: Category ID to update.
+            data: Partial category update request.
+
+        Returns:
+            Updated tournament category.
+
+        Raises:
+            CategoryLockedError: If an active or finalizing cycle exists.
+            CategoryNotFoundError: If the category does not exist.
+            CategoryNameExistsError: If the updated name already exists.
+        """
+        updates: dict[str, object] = {}
+        if data.name is not msgspec.UNSET:
+            updates["name"] = data.name
+        if data.difficulties is not msgspec.UNSET:
+            updates["difficulties"] = [str(d) for d in data.difficulties]
+        if data.participation_xp is not msgspec.UNSET:
+            updates["participation_xp"] = data.participation_xp
+        if data.placement_xp is not msgspec.UNSET:
+            updates["placement_xp"] = msgspec.json.encode(data.placement_xp).decode()
+        if data.streak_xp is not msgspec.UNSET:
+            updates["streak_xp"] = msgspec.json.encode(data.streak_xp).decode()
+        if data.champion_role_id is not msgspec.UNSET:
+            updates["champion_role_id"] = data.champion_role_id
+        if data.is_active is not msgspec.UNSET:
+            updates["is_active"] = data.is_active
+
+        # Wrap the check + mutation in a single transaction so the active-cycle
+        # guard is atomic (closes the TOCTOU gap: a pg_cron tick or a concurrent
+        # admin request can no longer activate a cycle between the read and the
+        # write). Mirrors the bootstrap_edition pattern.
+        async with self._pool.acquire() as conn, conn.transaction():
+            cycle_id = await self._tournament_repo.check_active_cycle_for_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if cycle_id is not None:
+                raise CategoryLockedError(category_id, cycle_id=cycle_id)
+
+            try:
+                row = await self._tournament_repo.update_category(
+                    category_id,
+                    updates,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+            except UniqueConstraintViolationError as e:
+                if "name" in (e.constraint_name or ""):
+                    name = str(updates.get("name", ""))
+                    raise CategoryNameExistsError(name) from e
+                raise
+
+        if row is None:
+            raise CategoryNotFoundError(category_id)
+        return msgspec.convert(row, TournamentCategoryResponse)
+
+    async def delete_category(self, category_id: int) -> None:
+        """Delete a tournament category.
+
+        Runs the active-cycle check and the delete inside one transaction on the
+        same connection, so the guard is atomic and free of TOCTOU races (a
+        pg_cron tick or concurrent admin request cannot activate a cycle between
+        the read and the delete).
+
+        Args:
+            category_id: Category ID to delete.
+
+        Raises:
+            CategoryLockedError: If an active or finalizing cycle exists.
+            CategoryNotFoundError: If the category does not exist.
+        """
+        async with self._pool.acquire() as conn, conn.transaction():
+            cycle_id = await self._tournament_repo.check_active_cycle_for_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if cycle_id is not None:
+                raise CategoryLockedError(category_id, cycle_id=cycle_id)
+
+            deleted = await self._tournament_repo.delete_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+        if not deleted:
+            raise CategoryNotFoundError(category_id)
+
+    async def select_map(self, category_id: int) -> TournamentNextCycleResponse:
+        """Trigger random map selection for the next cycle.
+
+        Acquires a connection so the pending-check, config fetch, map selection,
+        and cycle creation all happen on the same connection, preventing TOCTOU races.
+
+        Args:
+            category_id: Category ID to select a map for.
+
+        Returns:
+            Pending cycle preview with joined map details.
+
+        Raises:
+            PendingCycleAlreadyExistsError: If a pending cycle already exists.
+            CategoryNotFoundError: If the category does not exist.
+            NoEligibleMapsError: If no eligible maps are found and LRU fallback also fails.
+        """
+        async with self._pool.acquire() as conn:
+            existing = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is not None:
+                raise PendingCycleAlreadyExistsError(category_id)
+
+            config = await self._tournament_repo.fetch_config(
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            eligible = await self._tournament_repo.fetch_eligible_maps(
+                category["difficulties"],
+                config["blacklist_weeks"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            if eligible:
+                selected = eligible[0]
+            else:
+                log.warning("[!] Eligible map pool exhausted for category %s, using LRU fallback", category_id)
+                selected = await self._tournament_repo.fetch_least_recently_used_map(
+                    category["difficulties"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if selected is None:
+                    raise NoEligibleMapsError(category_id)
+
+            await self._tournament_repo.create_cycle(
+                category_id,
+                selected["id"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            result = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        return msgspec.convert(result, TournamentNextCycleResponse)
+
+    @staticmethod
+    def _period_from_config(config: dict) -> dt.timedelta:
+        """Derive the edition period interval from the global config (debug wins).
+
+        Args:
+            config: The ``tournaments.config`` singleton row.
+
+        Returns:
+            The cadence/debug period as a timedelta (debug_cycle_seconds overrides
+            the weekly/biweekly cadence).
+        """
+        debug_seconds = config.get("debug_cycle_seconds")
+        if debug_seconds is not None:
+            return dt.timedelta(seconds=debug_seconds)
+        return dt.timedelta(days=14 if config.get("cadence") == "biweekly" else 7)
+
+    async def bootstrap_edition(self) -> TournamentEditionResponse:
+        """Activate the FIRST grid-snapped edition so the system then auto-rotates.
+
+        The pg_cron transition function only rolls an EXISTING edition forward; it
+        has no first-edition path. Bootstrap fills that gap (D-13a): it computes the
+        next grid boundary via ``next_grid_boundary()`` (now() is consulted only to
+        pick the boundary, NEVER stored — D-08), creates ONE edition snapped to that
+        boundary, and creates one ACTIVE child cycle per active category sharing the
+        edition's exact ``started_at``. Each child inherits the same selection block
+        as select_map (eligible-map + LRU fallback). A single combined
+        ``edition_rollover`` outbox row (D-09) is written in the same transaction so
+        the bot announces the start (start-only: ``results`` empty, ``started``
+        populated). All steps run on one acquired connection inside a transaction
+        (TOCTOU-safe + atomic outbox write).
+
+        Two debug-UX behaviors layer on top: (1) when ``debug_cycle_seconds`` is set
+        (production-disabled), the first edition anchors at server-now via
+        ``fetch_db_now`` instead of the grid boundary so a short debug edition starts
+        immediately; (2) bootstrap clears ``transitions_paused`` in the same
+        transaction, so one call both starts the first edition AND makes
+        auto-rotation live (intended in production too).
+
+        Returns:
+            The created active edition.
+
+        Raises:
+            CycleAlreadyLiveError: If an active edition already exists.
+            NoEligibleMapsError: If a category has no eligible map and LRU fallback
+                also fails.
+        """
+        async with self._pool.acquire() as conn, conn.transaction():
+            active = await self._tournament_repo.fetch_active_edition(
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if active is not None:
+                raise CycleAlreadyLiveError(0, cycle_id=active["id"])
+
+            config = await self._tournament_repo.fetch_config(
+                conn=conn,  # type: ignore[arg-type]
+            )
+            period = self._period_from_config(config)
+
+            if config["debug_cycle_seconds"] is not None:
+                # DEBUG-ONLY (production-disabled): anchor the first edition at
+                # server-now so a short debug edition starts immediately instead of
+                # days out. This is a deliberate exception to the "never store now()
+                # in started_at" rule (D-08): that rule prevents DRIFT in the
+                # auto-rotation chain, and the first debug edition starting at now()
+                # is intended. Subsequent editions still inherit prev.ends_at exactly
+                # (next_grid_boundary/cron unchanged), so there is no drift.
+                started_at = await self._tournament_repo.fetch_db_now(
+                    conn=conn,  # type: ignore[arg-type]
+                )
+            else:
+                # PRODUCTION path (unchanged): now() is consulted ONLY to pick the
+                # boundary; the returned grid instant is stored verbatim (D-08/D-13a).
+                # now() is never stored.
+                started_at = await self._tournament_repo.next_grid_boundary(
+                    config["anchor_weekday"],
+                    config["anchor_time"],
+                    config["anchor_tz"],
+                    period,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+            ends_at = started_at + period
+
+            edition = await self._tournament_repo.create_edition(
+                started_at,
+                ends_at,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            edition_id = edition["id"]
+
+            # Bootstrapping a tournament also makes auto-rotation live: clear the
+            # global pause flag atomically with edition creation so a failure rolls
+            # back both. This is intended in production too — starting a tournament
+            # means running it (no separate unpause step needed).
+            await self._tournament_repo.set_transitions_paused(
+                False,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            categories = await self._tournament_repo.fetch_categories(
+                conn=conn,  # type: ignore[arg-type]
+            )
+            started_events: list[TournamentCycleStartedEvent] = []
+            for category in categories:
+                if not category.get("is_active", True):
+                    continue
+                category_id = category["id"]
+                eligible = await self._tournament_repo.fetch_eligible_maps(
+                    category["difficulties"],
+                    config["blacklist_weeks"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if eligible:
+                    selected = eligible[0]
+                else:
+                    log.warning("[!] Eligible map pool exhausted for category %s, using LRU fallback", category_id)
+                    selected = await self._tournament_repo.fetch_least_recently_used_map(
+                        category["difficulties"],
+                        conn=conn,  # type: ignore[arg-type]
+                    )
+                    if selected is None:
+                        raise NoEligibleMapsError(category_id)
+
+                created = await self._tournament_repo.create_cycle_for_edition(
+                    edition_id,
+                    category_id,
+                    selected["id"],
+                    started_at,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                started_events.append(
+                    TournamentCycleStartedEvent(
+                        cycle_id=created["id"],
+                        category_id=category_id,
+                        map_id=selected["id"],
+                        map_code=selected["code"],
+                        map_name=selected["map_name"],
+                        started_at=started_at,
+                        ends_at=ends_at,
+                    )
+                )
+
+            # ONE combined edition_rollover row (D-09). Bootstrap is start-only:
+            # results empty, started populated. Keys are byte-identical to
+            # TournamentRolloverEvent so the poller round-trips it (Pitfall 5).
+            rollover = TournamentRolloverEvent(
+                edition_id=edition_id,
+                results=[],
+                started=started_events,
+            )
+            await self._tournament_repo.create_pending_transition(
+                None,
+                "edition_rollover",
+                msgspec.json.encode(rollover).decode(),
+                edition_id=edition_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        return msgspec.convert(edition, TournamentEditionResponse)
+
+    async def fetch_active_edition(self) -> TournamentEditionResponse | None:
+        """Return the single active edition's shared timing, or None (three-layer).
+
+        Thin Service-layer wrapper over the repo ``fetch_active_edition`` that
+        Plan 04's ``GET /editions/active`` route binds to — the route MUST NOT call
+        the repository directly (three-layer rule). The shared
+        ``started_at``/``ends_at`` close frontend-spec §8 (timing is stored, not
+        derived).
+
+        Returns:
+            The active :class:`TournamentEditionResponse`, or None if no edition is
+            currently active.
+        """
+        row = await self._tournament_repo.fetch_active_edition()
+        if row is None:
+            return None
+        return msgspec.convert(row, TournamentEditionResponse)
+
+    async def force_publish_results(self, *, conn: Connection | None = None) -> None:
+        """Admin force-publish the results of the awaiting_results edition (D-03).
+
+        The escape hatch for a stuck verification queue under the drain-only model
+        (D-02, no time cap). It runs the SAME drained-path the poller uses
+        (:func:`_write_drained_results_row`) but IGNORING remaining in-flight
+        verifications: it computes results from the currently-``verified`` runs,
+        writes the ``edition_results`` outbox row (the existing poller drains +
+        publishes + grants it on its next tick — Pitfall 3, at-least-once
+        preserved), and flips the edition + its child cycles to ``completed``.
+
+        Still-``pending`` (abandoned) completions are LEFT ``pending`` (Open
+        Question 2): the leaderboard already excludes any non-``verified`` run, so
+        leaving them pending cannot mis-rank, and it preserves the audit trail that
+        they were never reviewed. No 4th status is introduced.
+
+        Factoring the write through the shared :func:`_write_drained_results_row`
+        helper keeps the force-publish path and the poller's drain branch from
+        diverging. The whole unit (results row write + status flips) runs in ONE
+        transaction via the atomic acquire-or-inject pattern.
+
+        Args:
+            conn: Optional connection for transaction support. When None a
+                connection is acquired and a transaction is opened so the row
+                write + status flips are atomic.
+
+        Returns:
+            None. The deferred-publish design means the real result is delivered
+            asynchronously via the ``edition_results`` outbox event drained on the
+            poller's next tick; there is no useful synchronous body to return, and
+            returning a pre-flip edition snapshot would be a stale-status lie (CR-01).
+
+        Raises:
+            NoAwaitingResultsEditionError: If no edition is currently
+                ``awaiting_results`` (nothing to publish).
+        """
+
+        async def _do(active_conn: Connection) -> None:
+            editions = await self._tournament_repo.fetch_awaiting_results_editions(conn=active_conn)
+            if not editions:
+                raise NoAwaitingResultsEditionError
+            # Single awaiting_results edition expected; force the oldest (ends_at
+            # ASC) — the same ordering the poller uses for stacked editions.
+            edition = editions[0]
+            await _write_drained_results_row(
+                self._tournament_repo,
+                edition["id"],
+                conn=active_conn,
+            )
+
+        if conn is None:
+            async with self._pool.acquire() as raw_conn, raw_conn.transaction():
+                await _do(raw_conn)  # type: ignore[arg-type]
+        else:
+            await _do(conn)
+
+    async def set_transitions_paused(self, paused: bool) -> TournamentLifecycleResponse:
+        """Pause or resume automatic edition transitions (GLOBAL, D-03/D-12).
+
+        Pause is a HIATUS lever, not a freeze (D-12): the active edition still runs
+        its full term and finalizes on its boundary; only the creation of the NEXT
+        edition is suppressed while paused. Resuming does NOT itself create an
+        edition — the next grid boundary (cron) or an explicit bootstrap does. The
+        flag lives on the ``tournaments.config`` singleton, never per-category.
+
+        Args:
+            paused: True suppresses the next edition (hiatus); False resumes.
+
+        Returns:
+            The updated global lifecycle state.
+        """
+        row = await self._tournament_repo.set_transitions_paused(paused)
+        return msgspec.convert(row, TournamentLifecycleResponse)
+
+    async def set_debug_cycle_length(self, seconds: int | None) -> TournamentLifecycleResponse:
+        """Override the GLOBAL edition length in seconds (DEBUG/TEST ONLY, D-03).
+
+        Disabled in production (T-12-07): the production guard is preserved verbatim
+        and rejects before any DB mutation. When seconds is None the override is
+        cleared and the normal weekly/biweekly cadence resumes. The lever is global
+        (on ``tournaments.config``), never per-category.
+
+        Args:
+            seconds: Override length in seconds, or None to clear the override.
+
+        Returns:
+            The updated global lifecycle state.
+
+        Raises:
+            DebugRouteDisabledError: If APP_ENVIRONMENT is production.
+        """
+        if os.getenv("APP_ENVIRONMENT") == "production":
+            raise DebugRouteDisabledError
+        row = await self._tournament_repo.set_debug_cycle_seconds(seconds)
+        return msgspec.convert(row, TournamentLifecycleResponse)
+
+    # --- Deprecated per-category shims -------------------------------------
+    # Migration 0024 made bootstrap edition-scoped and pause/debug GLOBAL
+    # (D-03/D-13a). These shims keep the still-category-scoped route handlers
+    # type-checking/importing until the route wave (12-04) rewrites them to the
+    # edition/global surface. The category_id argument is intentionally ignored.
+
+    async def bootstrap_cycle(self, category_id: int) -> TournamentEditionResponse:
+        """Deprecated: delegates to the edition-scoped :meth:`bootstrap_edition`.
+
+        ``category_id`` is ignored (bootstrap creates ONE edition spanning all
+        active categories since 0024). Retained until the 12-04 route rewrite.
+        """
+        _ = category_id
+        return await self.bootstrap_edition()
+
+    async def get_next_cycle(self, category_id: int) -> TournamentNextCycleResponse:
+        """Preview the pending next cycle for a category.
+
+        Args:
+            category_id: Category ID to look up.
+
+        Returns:
+            Pending cycle preview with joined map details.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            PendingCycleNotFoundError: If no pending cycle exists.
+        """
+        category = await self._tournament_repo.fetch_category(category_id)
+        if category is None:
+            raise CategoryNotFoundError(category_id)
+
+        row = await self._tournament_repo.fetch_pending_cycle(category_id)
+        if row is None:
+            raise PendingCycleNotFoundError(category_id)
+
+        return msgspec.convert(row, TournamentNextCycleResponse)
+
+    async def reroll_map(self, category_id: int) -> TournamentNextCycleResponse:
+        """Delete the current pending cycle and select a new map.
+
+        Acquires a connection so all operations happen atomically.
+
+        Args:
+            category_id: Category ID to reroll for.
+
+        Returns:
+            New pending cycle preview with joined map details.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            PendingCycleNotFoundError: If no pending cycle exists to reroll.
+            NoEligibleMapsError: If no eligible maps are found and LRU fallback also fails.
+        """
+        async with self._pool.acquire() as conn:
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            existing = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is None:
+                raise PendingCycleNotFoundError(category_id)
+
+            old_map_id = existing["map_id"]
+            old_cycle_id = existing["id"]
+
+            await self._tournament_repo.delete_cycle(
+                old_cycle_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            config = await self._tournament_repo.fetch_config(
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            eligible = await self._tournament_repo.fetch_eligible_maps(
+                category["difficulties"],
+                config["blacklist_weeks"],
+                exclude_map_ids=[old_map_id],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            if eligible:
+                selected = eligible[0]
+            else:
+                log.warning("[!] Eligible map pool exhausted for category %s, using LRU fallback", category_id)
+                selected = await self._tournament_repo.fetch_least_recently_used_map(
+                    category["difficulties"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if selected is None:
+                    raise NoEligibleMapsError(category_id)
+
+            await self._tournament_repo.create_cycle(
+                category_id,
+                selected["id"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            result = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        return msgspec.convert(result, TournamentNextCycleResponse)
+
+    async def reroll_active_cycle(
+        self,
+        category_id: int,
+        *,
+        headers: Headers | None = None,
+    ) -> TournamentNextCycleResponse:
+        """Reroll the LIVE (``status='active'``) cycle's map for a category.
+
+        Unlike :meth:`reroll_map` (which rerolls the pre-staged pending cycle), this
+        swaps the map players are actively submitting to. It is intentionally
+        destructive: the active cycle's submissions are wiped (scoped strictly by
+        that cycle's id) and the cycle row is replaced. The replacement cycle stays
+        ``status='active'`` attached to the SAME edition, so the original
+        ``started_at``/``ends_at`` deadline is preserved — the edition owns the
+        timing window and is never touched. After the transaction commits, the new
+        map is announced via the existing ``api.tournament.rollover`` event so the
+        live channel updates.
+
+        Args:
+            category_id: Category whose active cycle is rerolled.
+            headers: Request headers forwarded to the post-commit publish (carries
+                ``X-PYTEST-ENABLED`` so the publish no-ops under tests).
+
+        Returns:
+            The new active cycle with joined map details.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            NoCycleActiveError: If the category has no active cycle to reroll.
+            NoEligibleMapsError: If no eligible map is found and LRU fallback fails.
+        """
+        async with self._pool.acquire() as conn:
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            existing = await self._tournament_repo.fetch_active_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is None:
+                raise NoCycleActiveError(category_id)
+
+            old_cycle_id = existing["id"]
+            old_map_id = existing["map_id"]
+            edition_id = existing["edition_id"]
+
+            # Read the PRESERVED window from the parent edition (the cycle row has
+            # no ends_at; the edition owns the deadline). Re-attach to this edition.
+            # A live active cycle is always edition-linked under the current grid
+            # model (migration 0024); a missing link means there is no preservable
+            # window, so there is no active cycle this path can safely reroll.
+            edition = (
+                await self._tournament_repo.fetch_edition(
+                    edition_id,
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if edition_id is not None
+                else None
+            )
+            if edition is None:
+                raise NoCycleActiveError(category_id)
+            preserved_started_at = edition["started_at"]
+            preserved_ends_at = edition["ends_at"]
+
+            # Deliberate scoped wipe FIRST (observable), then drop the cycle row.
+            deleted = await self._tournament_repo.delete_cycle_completions(
+                old_cycle_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            log.info(
+                "Active-cycle reroll for category %s: wiped %s completion(s) on cycle %s",
+                category_id,
+                deleted,
+                old_cycle_id,
+            )
+            await self._tournament_repo.delete_cycle(
+                old_cycle_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            # Reuse the existing eligibility/LRU selection (exclude the old map).
+            config = await self._tournament_repo.fetch_config(
+                conn=conn,  # type: ignore[arg-type]
+            )
+            eligible = await self._tournament_repo.fetch_eligible_maps(
+                category["difficulties"],
+                config["blacklist_weeks"],
+                exclude_map_ids=[old_map_id],
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if eligible:
+                selected = eligible[0]
+            else:
+                log.warning(
+                    "[!] Eligible map pool exhausted for category %s (active reroll), using LRU fallback",
+                    category_id,
+                )
+                selected = await self._tournament_repo.fetch_least_recently_used_map(
+                    category["difficulties"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+                if selected is None:
+                    raise NoEligibleMapsError(category_id)
+
+            # Recreate as ACTIVE on the SAME edition with the PRESERVED started_at.
+            created = await self._tournament_repo.create_cycle_for_edition(
+                edition_id,
+                category_id,
+                selected["id"],
+                preserved_started_at,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            new_cycle_id = created["id"]
+
+            result = await self._tournament_repo.fetch_active_cycle_with_map(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        # Transaction committed: announce the new map via the existing rollover
+        # pipeline (results empty -> no results section/champion transfer; started
+        # populated -> the bot renders the "new cycle" card). A publish failure must
+        # not be swallowed — the DB is already committed (mirrors _set_verified).
+        started_event = TournamentCycleStartedEvent(
+            cycle_id=new_cycle_id,
+            category_id=category_id,
+            map_id=selected["id"],
+            map_code=selected["code"],
+            map_name=selected["map_name"],
+            started_at=preserved_started_at,
+            ends_at=preserved_ends_at,
+        )
+        rollover = TournamentRolloverEvent(
+            edition_id=edition_id,
+            results=[],
+            started=[started_event],
+            results_pending=False,
+        )
+        try:
+            await self.publish_message(
+                routing_key="api.tournament.rollover",
+                data=rollover,
+                headers=headers or Headers(),
+                idempotency_key=f"tournament:active-reroll:{new_cycle_id}",
+            )
+        except Exception:
+            log.exception(
+                "Failed to publish active-cycle reroll rollover event after commit "
+                "(category_id=%s, new_cycle_id=%s) — DB is committed but the live "
+                "channel was not notified; reconcile manually.",
+                category_id,
+                new_cycle_id,
+            )
+            raise
+
+        return msgspec.convert(result, TournamentNextCycleResponse)
+
+    async def choose_map(
+        self,
+        category_id: int,
+        data: TournamentChooseMapRequest,
+    ) -> TournamentNextCycleResponse:
+        """Explicitly set the map for the next cycle.
+
+        Validates the map exists and its difficulty matches the category,
+        then creates (or replaces) the pending cycle.
+
+        Args:
+            category_id: Category ID to set the map for.
+            data: Request containing the map code.
+
+        Returns:
+            Pending cycle preview with joined map details.
+
+        Raises:
+            CategoryNotFoundError: If the category does not exist.
+            MapNotEligibleError: If the map is not found or its difficulty doesn't match.
+        """
+        async with self._pool.acquire() as conn:
+            category = await self._tournament_repo.fetch_category(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if category is None:
+                raise CategoryNotFoundError(category_id)
+
+            map_row = await self._tournament_repo.fetch_map_by_code(
+                data.map_code,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if map_row is None:
+                raise MapNotEligibleError(0, reason=f"Map with code '{data.map_code}' not found.")
+
+            base_difficulty = re.sub(r"\s*[-+]\s*$", "", map_row["difficulty"])
+            if base_difficulty not in category["difficulties"]:
+                raise MapNotEligibleError(
+                    map_row["id"],
+                    reason=f"Map difficulty '{map_row['difficulty']}' does not match category difficulties.",
+                )
+
+            existing = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if existing is not None:
+                await self._tournament_repo.delete_cycle(
+                    existing["id"],
+                    conn=conn,  # type: ignore[arg-type]
+                )
+
+            await self._tournament_repo.create_cycle(
+                category_id,
+                map_row["id"],
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+            result = await self._tournament_repo.fetch_pending_cycle(
+                category_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+
+        return msgspec.convert(result, TournamentNextCycleResponse)
+
+    async def verify_tournament_completion(
+        self,
+        tournament_completion_id: int,
+        *,
+        headers: Headers | None = None,
+        conn: Connection | None = None,
+    ) -> JobStatusResponse:
+        """Verify a non-PB tournament completion and award participation XP.
+
+        This is the tournament row's OWN verification (D-04): a slower-than-PB run
+        has no core completion, so it never fires a core verification event. The
+        verdict flips ``tournaments.completions.verified`` TRUE, the first verified
+        run auto-enrolls the player by granting participation XP (D-02/D-06,
+        idempotent via the 08-01 ledger), and a verified=True
+        TournamentVerificationChangedEvent is published. When ``conn`` is None a
+        fresh connection + transaction is acquired so the flip + XP grant are
+        atomic (mirrors verify_completion_with_pool); the deferred XP notification
+        is flushed only after the transaction commits (CR-02).
+
+        Args:
+            tournament_completion_id: ID of the tournament completion row to verify.
+            headers: Optional request headers forwarded to the publish call
+                (carries X-PYTEST-ENABLED in tests so the broker is skipped).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Job status of the published verification-changed event.
+
+        Raises:
+            TournamentCompletionNotFoundError: If no tournament completion row matches.
+        """
+        return await self._set_verified(
+            tournament_completion_id,
+            verified=True,
+            idempotency_key=f"tournament:verify:{tournament_completion_id}",
+            award_xp=True,
+            headers=headers,
+            conn=conn,
+        )
+
+    async def reject_tournament_completion(
+        self,
+        tournament_completion_id: int,
+        *,
+        headers: Headers | None = None,
+        conn: Connection | None = None,
+    ) -> JobStatusResponse:
+        """Reject a non-PB tournament completion (drives it to status='rejected').
+
+        Reject now writes ``status = 'rejected'`` (D-08): the run ranks below
+        verified runs AND is distinguishable from an un-reviewed ``pending`` one,
+        so the poller can detect when the verification queue has drained. No
+        participation XP is granted, and a verified=False
+        TournamentVerificationChangedEvent is published.
+
+        Args:
+            tournament_completion_id: ID of the tournament completion row to reject.
+            headers: Optional request headers forwarded to the publish call
+                (carries X-PYTEST-ENABLED in tests so the broker is skipped).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Job status of the published verification-changed event.
+
+        Raises:
+            TournamentCompletionNotFoundError: If no tournament completion row matches.
+        """
+        return await self._set_verified(
+            tournament_completion_id,
+            verified=False,
+            idempotency_key=f"tournament:reject:{tournament_completion_id}",
+            award_xp=False,
+            headers=headers,
+            conn=conn,
+        )
+
+    async def _set_verified(  # noqa: PLR0913
+        self,
+        tournament_completion_id: int,
+        *,
+        verified: bool,
+        idempotency_key: str,
+        award_xp: bool,
+        headers: Headers | None = None,
+        conn: Connection | None = None,
+    ) -> JobStatusResponse:
+        """Shared verify/reject body: flip the row, optionally award XP, publish.
+
+        Args:
+            tournament_completion_id: Tournament completion row ID.
+            verified: Target verified value (True verify, False reject).
+            idempotency_key: Publish idempotency key for the changed event.
+            award_xp: Whether to award participation XP (verify only).
+            headers: Optional request headers forwarded to the publish call.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            Job status of the published verification-changed event.
+
+        Raises:
+            TournamentCompletionNotFoundError: If no tournament completion row matches.
+            AlreadyVerifiedError: If a reject is attempted on an already-verified run
+                (the participation XP grant is not reversible, so the verdict is
+                terminal once verified — CR-01).
+        """
+        existing = await self._tournament_repo.fetch_tournament_completion(
+            tournament_completion_id,
+            conn=conn,  # type: ignore[arg-type]
+        )
+        if existing is None:
+            raise TournamentCompletionNotFoundError(tournament_completion_id)
+
+        # Terminal guard (CR-01 / T-12.1-06): a verified run cannot be rejected
+        # back, because reject takes the award_xp=False path and never reverses
+        # the participation XP already granted. Forbid the illegal transition
+        # instead of silently de-syncing the ledger and the row. Reads the
+        # tri-state ``status`` (since 0025 ``verified`` is a read-only generated
+        # column); a verdict is terminal once ``status == 'verified'``.
+        if not verified and existing["status"] == "verified":
+            raise AlreadyVerifiedError(tournament_completion_id)
+
+        # No-op RE-VERIFY only (idempotent redelivery, CR-01 / T-12.1-07): a
+        # verify replayed against an already-'verified' row is a true no-op — the
+        # participation XP was already granted and the event already published, so
+        # short-circuit without re-granting/re-publishing. This guard deliberately
+        # does NOT cover reject-of-a-pending-row: that is a legitimate first-time
+        # verdict that must still persist status='rejected' (the D-08 drain signal)
+        # and publish the verified=False event so the bot surfaces the rejection.
+        # (Reject AFTER verify is already refused above via AlreadyVerifiedError.)
+        if verified and existing["status"] == "verified":
+            return await self._noop_verdict_job(
+                tournament_completion_id,
+                idempotency_key=idempotency_key,
+            )
+
+        pending_xp_events: list[XpGrantEvent] = []
+
+        async def _do(active_conn: Connection) -> dict | None:
+            nonlocal pending_xp_events
+            row = await self._tournament_repo.set_tournament_verified(
+                tournament_completion_id,
+                verified,
+                conn=active_conn,
+            )
+            if award_xp and self._reward_service is not None and row is not None:
+                cycle = await self._tournament_repo.fetch_cycle(row["cycle_id"], conn=active_conn)
+                if cycle is not None:
+                    pending_xp_events = await self._reward_service.award_participation(
+                        cycle=cycle,
+                        user_id=row["user_id"],
+                        conn=active_conn,
+                    )
+            return row
+
+        if conn is None:
+            async with self._pool.acquire() as raw_conn, raw_conn.transaction():
+                updated = await _do(raw_conn)  # type: ignore[arg-type]
+        else:
+            updated = await _do(conn)
+
+        # The guarded UPDATE matched no row. Two cases:
+        #   (a) TOCTOU delete (WR-06): the completion was removed between the
+        #       precheck and the UPDATE. Re-fetch confirms it is gone -> 404,
+        #       and crucially we never publish a phantom event off the stale
+        #       precheck row.
+        #   (b) Reject of an already-unverified (pending) row: with the single
+        #       `verified` bool (WR-03) this is a no-op at the DB level, but it
+        #       is still a legitimate first-time reject verdict that must publish
+        #       the verified=False event so the bot surfaces the rejection. The
+        #       row still exists, so we publish from the (re-fetched) row.
+        if updated is None:
+            current = await self._tournament_repo.fetch_tournament_completion(
+                tournament_completion_id,
+                conn=conn,  # type: ignore[arg-type]
+            )
+            if current is None:
+                raise TournamentCompletionNotFoundError(tournament_completion_id)
+            # TOCTOU no-op (WR-01): a concurrent verdict landed between the precheck
+            # fetch and the guarded UPDATE, so the row is ALREADY in the target state.
+            # The concurrent call already granted XP and published the event — publishing
+            # a second event here would ride a fresh public.jobs UUID (new message_id) and
+            # could be processed twice by the bot. Treat it as an idempotent no-op instead.
+            target_status = "verified" if verified else "rejected"
+            if current["status"] == target_status:
+                return await self._noop_verdict_job(
+                    tournament_completion_id,
+                    idempotency_key=idempotency_key,
+                )
+            updated = current
+
+        # Transaction committed: now safe to publish the deferred XP notification.
+        if pending_xp_events and self._reward_service is not None:
+            await self._reward_service.publish_xp_events(pending_xp_events)
+
+        event = TournamentVerificationChangedEvent(
+            tournament_completion_id=tournament_completion_id,
+            cycle_id=updated["cycle_id"],
+            user_id=updated["user_id"],
+            verified=verified,
+            time=float(updated["time"]),
+        )
+        # WR-01: the DB txn is already committed. A publish failure must not be
+        # silently swallowed — log it at exception level with the completion id
+        # so a dropped verification-changed event is reconcilable.
+        try:
+            return await self.publish_message(
+                routing_key="api.tournament.verification.changed",
+                data=event,
+                headers=headers or Headers(),
+                idempotency_key=idempotency_key,
+            )
+        except Exception:
+            log.exception(
+                "Failed to publish tournament verification-changed event after commit "
+                "(tournament_completion_id=%s, verified=%s) — DB is committed but the bot "
+                "was not notified; reconcile manually.",
+                tournament_completion_id,
+                verified,
+            )
+            raise
+
+    async def _noop_verdict_job(
+        self,
+        tournament_completion_id: int,
+        *,
+        idempotency_key: str,
+    ) -> JobStatusResponse:
+        """Return a succeeded job for a no-op verdict without re-granting/re-publishing.
+
+        Used when a verdict is replayed for a row already in the target state
+        (idempotent redelivery). The publish is idempotent via the
+        ``idempotency_key`` so re-emitting the changed event is harmless and
+        keeps the bot's poll observable, but no XP is granted.
+
+        Args:
+            tournament_completion_id: Tournament completion row ID (for logging).
+            idempotency_key: Publish idempotency key for the changed event.
+
+        Returns:
+            Job status of the (idempotent) verification-changed publish.
+        """
+        log.info(
+            "Tournament verdict no-op for tournament_completion_id=%s (already in target state).",
+            tournament_completion_id,
+        )
+        existing = await self._tournament_repo.fetch_tournament_completion(tournament_completion_id)
+        if existing is None:
+            raise TournamentCompletionNotFoundError(tournament_completion_id)
+        event = TournamentVerificationChangedEvent(
+            tournament_completion_id=tournament_completion_id,
+            cycle_id=existing["cycle_id"],
+            user_id=existing["user_id"],
+            # Derive from the tri-state source of truth (status), not the generated
+            # verified mirror, so the no-op replay event matches the verdict (D-08).
+            verified=existing["status"] == "verified",
+            time=float(existing["time"]),
+        )
+        return await self.publish_message(
+            routing_key="api.tournament.verification.changed",
+            data=event,
+            headers=Headers(),
+            idempotency_key=idempotency_key,
+        )
+
+    async def get_leaderboard(self, cycle_id: int) -> list[TournamentLeaderboardEntryResponse]:
+        """Get the ranked leaderboard for a tournament cycle.
+
+        Args:
+            cycle_id: Cycle to fetch leaderboard for.
+
+        Returns:
+            List of ranked leaderboard entries.
+        """
+        rows = await self._tournament_repo.fetch_leaderboard(cycle_id)
+        return [msgspec.convert(row, TournamentLeaderboardEntryResponse) for row in rows]
+
+    async def list_cycles(
+        self,
+        *,
+        status: str | None = None,
+        category_id: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> TournamentCycleListResponse:
+        """List tournament cycles with optional filters and winner info.
+
+        Args:
+            status: Optional cycle status filter.
+            category_id: Optional category ID filter.
+            limit: Maximum number of results.
+            offset: Result offset for pagination.
+
+        Returns:
+            Paginated cycle list with winner info.
+        """
+        total, rows = await self._tournament_repo.fetch_cycles(
+            status=status,
+            category_id=category_id,
+            limit=limit,
+            offset=offset,
+        )
+        return TournamentCycleListResponse(
+            total=total,
+            cycles=[msgspec.convert(row, TournamentCycleWithWinnerResponse) for row in rows],
+        )
+
+
+async def provide_tournament_service(
+    state: State,
+    tournament_repo: TournamentRepository,
+    tournament_reward_service: TournamentRewardService,
+) -> TournamentService:
+    """Litestar DI provider for tournament service.
+
+    Args:
+        state: Application state containing the database pool.
+        tournament_repo: Tournament repository instance.
+        tournament_reward_service: Reward service for participation XP grants,
+            resolved from the controller's dependencies dict.
+
+    Returns:
+        TournamentService instance.
+    """
+    return TournamentService(state.db_pool, state, tournament_repo, tournament_reward_service)

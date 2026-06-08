@@ -1492,3 +1492,340 @@ class TestCompletionsServiceErrorTranslation:
 
         with pytest.raises(CompletionNotFoundError):
             await service.edit_completion(mock_state_obj, 999, data)
+
+
+# ---------------------------------------------------------------------------
+# Phase 11-02: tournament auto-detect (D-01) + PB cross-write link (D-04) +
+# D-07 slower-than-PB relax on tournament maps only.
+# ---------------------------------------------------------------------------
+
+
+def _tournament_service(mocker, mock_pool, mock_state, mock_completions_repo):
+    """Build a CompletionsService wired with tournament dep mocks for 11-02."""
+    tournament_repo = mocker.AsyncMock()
+    tournament_repo.get_active_cycle_by_map_id.return_value = None
+    reward_service = mocker.AsyncMock()
+    reward_service.award_participation.return_value = []
+    service = CompletionsService(
+        mock_pool,
+        mock_state,
+        mock_completions_repo,
+        tournament_repo=tournament_repo,
+        tournament_reward_service=reward_service,
+    )
+    return service, tournament_repo, reward_service
+
+
+class TestSubmitTournamentAutoDetect:
+    """D-01/D-04: PB submit on an active cycle map links a tournament row."""
+
+    async def test_pb_on_cycle_map_creates_linked_tournament_row(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """PB on the active cycle map inserts core + tournament rows and links them."""
+        service, tournament_repo, _ = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        mock_completions_repo.get_pending_verification.return_value = None
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        mock_completions_repo.insert_completion.return_value = 5001
+        service.get_suspicious_flags = mocker.AsyncMock(return_value=[])
+        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+        tournament_repo.get_active_cycle_by_map_id.return_value = {
+            "id": 42,
+            "category_id": 3,
+            "map_id": 777,
+            "status": "active",
+        }
+        tournament_repo.create_tournament_completion.return_value = {"id": 9001}
+
+        data = CompletionCreateRequest(
+            user_id=123,
+            code="ABC123",
+            time=8.0,
+            screenshot="https://example.com/s.png",
+            video="https://example.com/v.mp4",
+        )
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        await service.submit_completion(data, mock_request, mocker.AsyncMock(), mocker.AsyncMock())
+
+        tournament_repo.get_active_cycle_by_map_id.assert_awaited()
+        tournament_repo.create_tournament_completion.assert_awaited_once()
+        mock_completions_repo.set_completion_tournament_link.assert_awaited_once()
+        args = mock_completions_repo.set_completion_tournament_link.await_args
+        assert args.args[0] == 5001
+        assert args.args[1] == 9001
+
+    async def test_pb_on_non_cycle_map_creates_no_tournament_row(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """PB on a non-cycle map behaves exactly as before (no tournament row)."""
+        service, tournament_repo, _ = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        mock_completions_repo.get_pending_verification.return_value = None
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        mock_completions_repo.insert_completion.return_value = 5001
+        service.get_suspicious_flags = mocker.AsyncMock(return_value=[])
+        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+        tournament_repo.get_active_cycle_by_map_id.return_value = None
+
+        data = CompletionCreateRequest(
+            user_id=123,
+            code="ABC123",
+            time=8.0,
+            screenshot="https://example.com/s.png",
+            video="https://example.com/v.mp4",
+        )
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        await service.submit_completion(data, mock_request, mocker.AsyncMock(), mocker.AsyncMock())
+
+        tournament_repo.create_tournament_completion.assert_not_awaited()
+        mock_completions_repo.set_completion_tournament_link.assert_not_awaited()
+
+
+class TestSubmitTournamentSlowerRelax:
+    """D-07: slower-than-PB run relaxed ONLY on tournament maps."""
+
+    async def test_slower_on_cycle_map_records_tournament_row_no_core(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """A slower run on the cycle map: 0017 trigger fires, no core row, tournament row made."""
+        from asyncpg.exceptions import CheckViolationError
+
+        service, tournament_repo, _ = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        mock_completions_repo.get_pending_verification.return_value = None
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        mock_completions_repo.insert_completion.side_effect = CheckViolationError("speed trigger")
+        service.get_suspicious_flags = mocker.AsyncMock(return_value=[])
+        tournament_repo.get_active_cycle_by_map_id.return_value = {
+            "id": 42,
+            "category_id": 3,
+            "map_id": 777,
+            "status": "active",
+        }
+        tournament_repo.create_tournament_completion.return_value = {"id": 9002}
+
+        data = CompletionCreateRequest(
+            user_id=123,
+            code="ABC123",
+            time=99.0,
+            screenshot="https://example.com/s.png",
+            video=None,
+        )
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        # Must NOT raise (D-07).
+        await service.submit_completion(data, mock_request, mocker.AsyncMock(), mocker.AsyncMock())
+
+        tournament_repo.create_tournament_completion.assert_awaited_once()
+        mock_completions_repo.set_completion_tournament_link.assert_not_awaited()
+
+    async def test_slower_on_non_cycle_map_propagates_check_violation(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """D-07 guard: slower run on a non-tournament map re-raises (preserves HTTP 400)."""
+        from asyncpg.exceptions import CheckViolationError
+
+        service, tournament_repo, _ = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        mock_completions_repo.get_pending_verification.return_value = None
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        mock_completions_repo.insert_completion.side_effect = CheckViolationError("speed trigger")
+        tournament_repo.get_active_cycle_by_map_id.return_value = None
+
+        data = CompletionCreateRequest(
+            user_id=123,
+            code="ABC123",
+            time=99.0,
+            screenshot="https://example.com/s.png",
+            video=None,
+        )
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        with pytest.raises(CheckViolationError):
+            await service.submit_completion(data, mock_request, mocker.AsyncMock(), mocker.AsyncMock())
+        tournament_repo.create_tournament_completion.assert_not_awaited()
+
+    async def test_unique_violation_still_propagates_as_duplicate(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """P7: a genuine UniqueViolation from insert_completion is NOT swallowed by the relax."""
+        service, tournament_repo, _ = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        mock_completions_repo.get_pending_verification.return_value = None
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        mock_completions_repo.insert_completion.side_effect = UniqueConstraintViolationError(
+            "uq", "core.completions", "dup"
+        )
+        tournament_repo.get_active_cycle_by_map_id.return_value = {
+            "id": 42,
+            "category_id": 3,
+            "map_id": 777,
+            "status": "active",
+        }
+
+        data = CompletionCreateRequest(
+            user_id=123,
+            code="ABC123",
+            time=8.0,
+            screenshot="https://example.com/s.png",
+            video=None,
+        )
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        with pytest.raises(DuplicateCompletionError):
+            await service.submit_completion(data, mock_request, mocker.AsyncMock(), mocker.AsyncMock())
+
+
+# ---------------------------------------------------------------------------
+# Phase 11-02 Task 2: verify_completion tournament side-effect (D-04a).
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyCompletionTournamentSideEffect:
+    """D-04a: verifying a linked PB completion flips the tournament row + XP."""
+
+    async def test_verify_propagates_to_linked_tournament_row(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """Verify on a PB-linked cycle completion sets tournament verified + awards XP."""
+        service, tournament_repo, reward_service = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        # old_verified=False flips this run False->True, which also runs the
+        # quest-progress branch; stub that helper so the test isolates tournament
+        # propagation rather than the unrelated quest/medal/lootbox chain.
+        mocker.patch.object(service, "_update_quest_progress_for_completion", mocker.AsyncMock())
+        conn = mocker.AsyncMock()
+        mock_completions_repo.check_completion_exists.return_value = True
+        mock_completions_repo.fetch_completion_for_moderation.return_value = {
+            "user_id": 123,
+            "code": "ABC123",
+            "old_time": 8.0,
+            "old_verified": False,
+            "tournament_completion_id": 9001,
+        }
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        # Propagation resolves the cycle from the completion's own cycle_id
+        # (UI4-FINALIZING-PROPAGATION); finalizing locks in that a non-active cycle
+        # still propagates.
+        tournament_repo.fetch_tournament_completion.return_value = {
+            "id": 9001,
+            "cycle_id": 42,
+            "user_id": 123,
+            "time": 8.0,
+            "status": "pending",
+        }
+        tournament_repo.fetch_cycle.return_value = {
+            "id": 42,
+            "category_id": 3,
+            "map_id": 777,
+            "status": "finalizing",
+        }
+        tournament_repo.set_tournament_verified.return_value = {
+            "id": 9001,
+            "cycle_id": 42,
+            "user_id": 123,
+            "time": 8.0,
+        }
+        reward_service.award_participation.return_value = ["xp-event"]
+        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+
+        data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        await service.verify_completion(mock_request, 5001, data, conn=conn)
+
+        tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, conn=conn)
+        reward_service.award_participation.assert_awaited_once()
+        reward_service.publish_xp_events.assert_awaited_once_with(["xp-event"])
+        tournament_repo.get_active_cycle_by_map_id.assert_not_awaited()
+        tournament_publishes = [
+            c
+            for c in service.publish_message.call_args_list
+            if c.kwargs.get("routing_key") == "api.tournament.verification.changed"
+        ]
+        assert len(tournament_publishes) == 1
+        assert tournament_publishes[0].kwargs["idempotency_key"] == "tournament:verify:9001"
+
+    async def test_verify_no_tournament_link_no_side_effect(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """A core completion with no tournament link triggers no side-effect."""
+        service, tournament_repo, reward_service = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        conn = mocker.AsyncMock()
+        mock_completions_repo.check_completion_exists.return_value = True
+        mock_completions_repo.fetch_completion_for_moderation.return_value = {
+            "user_id": 123,
+            "code": "ABC123",
+            "old_time": 8.0,
+            "old_verified": False,
+            "tournament_completion_id": None,
+        }
+        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+
+        data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        await service.verify_completion(mock_request, 5001, data, conn=conn)
+
+        tournament_repo.set_tournament_verified.assert_not_awaited()
+        reward_service.award_participation.assert_not_awaited()
+
+    async def test_verify_on_non_cycle_map_no_side_effect(
+        self, mock_pool, mock_state, mock_completions_repo, mocker
+    ):
+        """A linked row that no longer resolves to a cycle triggers no side-effect.
+
+        Propagation now resolves the cycle from the completion's own cycle_id
+        (fetch_tournament_completion -> fetch_cycle, UI4-FINALIZING-PROPAGATION).
+        When fetch_tournament_completion returns None (row gone), the closure
+        no-ops: no set_tournament_verified, no award_participation.
+        """
+        service, tournament_repo, reward_service = _tournament_service(
+            mocker, mock_pool, mock_state, mock_completions_repo
+        )
+        # old_verified=False flips this run False->True, which also runs the
+        # quest-progress branch; stub that helper so the test isolates the
+        # no-side-effect assertion rather than the unrelated quest chain.
+        mocker.patch.object(service, "_update_quest_progress_for_completion", mocker.AsyncMock())
+        conn = mocker.AsyncMock()
+        mock_completions_repo.check_completion_exists.return_value = True
+        mock_completions_repo.fetch_completion_for_moderation.return_value = {
+            "user_id": 123,
+            "code": "ABC123",
+            "old_time": 8.0,
+            "old_verified": False,
+            "tournament_completion_id": 9001,
+        }
+        mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
+        # The linked tournament row no longer resolves -> propagation no-ops.
+        tournament_repo.fetch_tournament_completion.return_value = None
+        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+
+        data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
+        mock_request = mocker.Mock()
+        mock_request.headers = {}
+
+        await service.verify_completion(mock_request, 5001, data, conn=conn)
+
+        tournament_repo.set_tournament_verified.assert_not_awaited()
+        reward_service.award_participation.assert_not_awaited()
+        # Propagation no longer consults the active-only map lookup.
+        tournament_repo.get_active_cycle_by_map_id.assert_not_awaited()
