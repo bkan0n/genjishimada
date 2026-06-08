@@ -898,7 +898,7 @@ dev-api = [
     { name = "httpx-sse", specifier = ">=0.4.0" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
-    { name = "pytest-databases", extras = ["postgres"], specifier = ">=0.14.0" },
+    { name = "pytest-databases", extras = ["postgres"], specifier = ">=0.19.0" },
     { name = "pytest-testmon", specifier = ">=2.1.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "types-boto3", specifier = ">=1.40.25" },
@@ -1953,16 +1953,16 @@ wheels = [
 
 [[package]]
 name = "pytest-databases"
-version = "0.16.0"
+version = "0.19.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "docker" },
     { name = "filelock" },
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b4/6e/49c740d77f80ff3c7c9bd8d791191555f987ed889a9cc243a1b7185e865c/pytest_databases-0.16.0.tar.gz", hash = "sha256:5df82ac5650dc714d5341dad6cbe526dca183c430ef4a2e5de303267d420fbf0", size = 315183, upload-time = "2026-01-20T22:03:31.885Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/4e/e899556b3876eec2db9bd630ad3054ced94a9541c26319bec5c4cd00579d/pytest_databases-0.19.0.tar.gz", hash = "sha256:ba7b8e51b551455daf3bd144384f6d4fba23d747b001f071795b02e6be2a3cbf", size = 350034, upload-time = "2026-05-23T18:33:49.262Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/de/a6/3665fc96d3b3e17a54bdd9488d870e923d34330e71be7e02989f8619d14f/pytest_databases-0.16.0-py3-none-any.whl", hash = "sha256:1c9d78dd89f67aee511b801533affb1af82ea77bafe23b08d7b762d8508a5cd2", size = 33243, upload-time = "2026-01-20T22:03:29.554Z" },
+    { url = "https://files.pythonhosted.org/packages/de/f4/d6e2edae47a0421a8531a9805fb787b993380222f00dc25cee1634f55f3c/pytest_databases-0.19.0-py3-none-any.whl", hash = "sha256:d14651e23a716ed6f2317bf9ac317c9e7891db701253abf78e9cef1049e8f26b", size = 41525, upload-time = "2026-05-23T18:33:47.983Z" },
 ]
 
 [package.optional-dependencies]
