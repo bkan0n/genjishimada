@@ -318,7 +318,7 @@ class CommunityRepository(BaseRepository):
         map_data AS (
             SELECT DISTINCT ON (m.id, c.user_id)
                 c.user_id,
-                regexp_replace(trim(m.difficulty), '\s*[+-]\s*$', '') AS difficulty
+                regexp_replace(trim(m.difficulty), '\\s*[+-]\\s*$', '') AS difficulty
             FROM all_completions c
             LEFT JOIN core.maps m ON c.map_id = m.id
             WHERE m.official = TRUE
