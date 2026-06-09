@@ -301,6 +301,7 @@ class CommunityRepository(BaseRepository):
                 completion,
                 NULL AS medal
             FROM core.completions
+            WHERE c.verified
             ORDER BY map_id, user_id, inserted_at DESC
         ),
         thresholds AS (
@@ -317,10 +318,12 @@ class CommunityRepository(BaseRepository):
         map_data AS (
             SELECT DISTINCT ON (m.id, c.user_id)
                 c.user_id,
-                m.difficulty
+                regexp_replace(trim(m.difficulty), '\s*[+-]\s*$', '') AS difficulty
             FROM all_completions c
             LEFT JOIN core.maps m ON c.map_id = m.id
             WHERE m.official = TRUE
+            AND m.archived = FALSE
+            AND m.playtesting = 'Approved'
         ),
         skill_rank_data AS (
             SELECT
