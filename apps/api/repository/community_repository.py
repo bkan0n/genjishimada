@@ -301,7 +301,7 @@ class CommunityRepository(BaseRepository):
                 completion,
                 NULL AS medal
             FROM core.completions
-            WHERE c.verified
+            WHERE verified
             ORDER BY map_id, user_id, inserted_at DESC
         ),
         thresholds AS (
