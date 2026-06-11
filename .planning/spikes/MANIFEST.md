@@ -42,5 +42,5 @@ Design decisions that emerged while spiking. Non-negotiable for the real build.
 | # | Name | Type | Validates | Verdict | Tags |
 |---|------|------|-----------|---------|------|
 | 001 | skill-input-query | standard | One query yields per-(user,map) `(raw_difficulty, time, time_pct_vs_field, medal, rank, is_wr, suspicious)` over real data, excluding legacy/unverified/archived/suspicious | ✓ VALIDATED | data, sql, asyncpg |
-| 002 | scoring-farming-resistance | standard | Easy-map grinder ranks below genuine hard-map performer under diminishing returns | PENDING | algorithm, farming |
+| 002 | scoring-farming-resistance | standard | Easy-map grinder ranks below genuine hard-map performer under diminishing returns | ✓ VALIDATED | algorithm, farming |
 | 003 | leaderboard-feel | standard | Interactive leaderboard + live weight sliders + per-player breakdown; ranking matches intuition | PENDING | ui, leaderboard |
