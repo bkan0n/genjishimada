@@ -52,6 +52,7 @@ class CommunityService(BaseService):
             "playtest_count",
             "discord_tag",
             "skill_rank",
+            "skill_score",
         ] = "xp_amount",
         sort_direction: Literal["asc", "desc"] = "asc",
         page_size: int = 10,

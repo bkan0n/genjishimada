@@ -28,6 +28,7 @@ class CommunityRepository(BaseRepository):
             "playtest_count",
             "discord_tag",
             "skill_rank",
+            "skill_score",
         ] = "xp_amount",
         sort_direction: Literal["asc", "desc"] = "asc",
         page_size: int = 10,
@@ -48,7 +49,9 @@ class CommunityRepository(BaseRepository):
             skill_rank: Exact derived skill rank to match (e.g., "Master").
             sort_column: Column to sort by. One of:
                 "xp_amount", "nickname", "prestige_level", "wr_count", "map_count",
-                "playtest_count", "discord_tag", "skill_rank".
+                "playtest_count", "discord_tag", "skill_rank", "skill_score".
+                "skill_score" sorts by the numeric skill score (D-08), coalesced to 0
+                for zero-eligible players via the lean snapshot LEFT JOIN (D-07).
             sort_direction: Sort direction, "asc" or "desc".
             page_size: Page size; one of 10, 20, 25, 50.
             page_number: 1-based page number.
@@ -56,7 +59,8 @@ class CommunityRepository(BaseRepository):
 
         Returns:
             list[dict]: Paged leaderboard rows including XP, tiers, WR count, map count,
-            playtest count, Discord tag, and derived skill rank.
+            playtest count, Discord tag, derived skill rank, and numeric skill score
+            (coalesced to 0).
         """
         _conn = self._get_connection(conn)
 
@@ -214,12 +218,14 @@ class CommunityRepository(BaseRepository):
             coalesce(ptc.amount, 0) AS playtest_count,
             coalesce(u.global_name, 'Unknown Username') AS discord_tag,
             coalesce(rank_name, 'Ninja') AS skill_rank,
+            coalesce(ss.skill_score, 0) AS skill_score,
             count(*) OVER () AS total_results
         FROM xp_tiers u
         LEFT JOIN playtest_counts ptc ON u.id = ptc.user_id
         LEFT JOIN map_counts mc ON u.id = mc.user_id
         LEFT JOIN world_records wr ON u.id = wr.user_id
         LEFT JOIN highest_ranks hr ON u.id = hr.user_id
+        LEFT JOIN skill.snapshot ss ON u.id = ss.user_id
         WHERE ($3::text IS NULL OR (nickname ILIKE $3::text OR u.global_name ILIKE $3::text))
           AND ($4::text IS NULL OR full_tier_name = $4::text)
           AND ($5::text IS NULL OR rank_name = $5::text)
