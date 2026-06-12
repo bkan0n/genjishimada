@@ -209,6 +209,51 @@ class TestVerifyRejectFlagFreshness:
         # req 9: rejecting returns the score to its pre-verification value (float tolerance).
         assert math.isclose(rejected_score, pre_score, abs_tol=1e-6)
 
+    async def test_moderate_verify_change_refreshes_score(self, test_client, asyncpg_pool, seed):
+        """Moderation verify/un-verify is a fifth state-change path and refreshes the score (CR-01, req 8/9).
+
+        Mirrors ``test_verify_raises_and_reject_restores`` but drives the verify flip
+        through ``PUT /completions/{id}/moderate`` (the moderation endpoint) instead
+        of the verification endpoint, proving ``moderate_completion`` now emits
+        ``skill.recompute.requested`` (the snapshot no longer waits for the nightly backstop).
+        """
+        user_id = await seed.make_user()
+        map_id = await seed.make_map(difficulty="Hell", raw=9.0)
+        msg_id = int(uuid4().int % 9_000_000_000)
+        await seed.make_completion(
+            user_id=user_id, map_id=map_id, time=30.0, verified=False, message_id=msg_id
+        )
+        completion_id = await asyncpg_pool.fetchval(
+            "SELECT id FROM core.completions WHERE message_id = $1", msg_id
+        )
+
+        # Pre-moderation: a pending run is not eligible -> score 0 (req 9 baseline).
+        await _recompute(asyncpg_pool)
+        pre_score = await _score(test_client, user_id)
+        assert pre_score == 0.0
+
+        # Verify via the MODERATION endpoint (emits skill.recompute.requested post-commit, CR-01).
+        verify = await test_client.put(
+            f"/api/v3/completions/{completion_id}/moderate",
+            json={"moderated_by": user_id, "verified": True},
+        )
+        assert verify.status_code == 200
+        await _recompute(asyncpg_pool)
+        verified_score = await _score(test_client, user_id)
+        # req 8: moderation-verifying a pending run raises the submitter's score on the next read.
+        assert verified_score > pre_score
+
+        # Un-verify via the same moderation endpoint (symmetric removal).
+        unverify = await test_client.put(
+            f"/api/v3/completions/{completion_id}/moderate",
+            json={"moderated_by": user_id, "verified": False, "verification_reason": "rejected"},
+        )
+        assert unverify.status_code == 200
+        await _recompute(asyncpg_pool)
+        unverified_score = await _score(test_client, user_id)
+        # req 9: un-verifying returns the score to its pre-verification value (float tolerance).
+        assert math.isclose(unverified_score, pre_score, abs_tol=1e-6)
+
     async def test_field_relativity_second_player_updates(self, test_client, asyncpg_pool, seed):
         """A second player on the same map updates when the field shifts (req 8)."""
         map_id = await seed.make_map(difficulty="Hell", raw=9.0)
