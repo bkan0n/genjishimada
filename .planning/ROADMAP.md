@@ -103,3 +103,17 @@ Plans:
 
 **Wave 4** *(blocked on Waves 1 + 3)*
 - [x] 12.1-05-PLAN.md — Bot _on_edition_results handler + results-pending placeholder (D-01/D-04/D-05) + /tournament publish-results command (D-03)
+
+### Phase 13: Skill score
+
+**Goal:** Add a performance-based **skill score** (separate from XP and from the
+existing Ninja→God completion-rank label), computed from verified non-legacy
+completions using the spike-validated hybrid algorithm (difficulty floor +
+video-gated proof multipliers + diminishing returns), persisted to a lightweight
+snapshot so the existing community leaderboard can sort/paginate by it, and served
+via new `/api/v3/skill/*` endpoints. API-only vertical; bot + website surfaces are
+later phases.
+**Requirements:** See `13-SPEC.md` (spec-phase). Grounded in
+`Skill("spike-findings-genjishimada")` (spikes 001/002/003).
+**Depends on:** Phase 11 (verification flow)
+**Plans:** Not yet planned
