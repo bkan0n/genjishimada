@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: unknown
-last_updated: "2026-06-12T18:59:22.309Z"
+last_updated: "2026-06-12T19:04:16.607Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 16
-  completed_plans: 10
-  percent: 63
+  completed_plans: 11
+  percent: 67
 ---
 
 # Tournament System — State
@@ -64,6 +64,25 @@ Controller → Service → Repository pattern:
 - PROJECT.md originally listed manual cycle transitions as Out of Scope; quick-task work intentionally amends that for bootstrap + test tooling only.
 
 ## Accumulated Context
+
+### Phase 13 Progress
+
+- **13-01 complete (2026-06-12):** Migration `0027_skill_score.sql` — the data
+  foundation for the skill-score phase. Creates `CREATE SCHEMA IF NOT EXISTS skill`;
+  a **lean** `skill.snapshot` cache (`user_id bigint PRIMARY KEY`, no FK — only
+  players with ≥1 eligible run get a row, D-07; `skill_score`, `maps_cleared`,
+  `video_clears`, `hardest_raw`, `breakdown jsonb DEFAULT '[]'` per-map array D-06,
+  `computed_at`); and a single typed-column `skill.weight_config` row (one column per
+  weight, D-09) with `CHECK (gamma >= 0.5)` (T-13-01 — the farm-enabling gamma=0 is
+  unrepresentable). Seeded idempotently (`INSERT ... SELECT ... WHERE NOT EXISTS`) with
+  the adopted defaults (diff_base=1.44, gamma=0.68, time_bonus=0.55, shrink_k=10.0,
+  wr_bonus=0.10, partial_factor=0.60, medals 1.12/1.07/1.03). **No pg_cron block** —
+  the scorer is Python (`SkillService`), so the nightly rebuild backstop is an app-side
+  lifespan task in plan 13-05, NOT a SQL cron (D-03); omitting cron also keeps "applies
+  cleanly on a fresh test DB" trivially true. Verified on a throwaway DB: both apply
+  exit 0, tables resolve via `to_regclass`, seed count 1 (and stays 1 on re-apply),
+  gamma=0.0 insert rejected, 0 `cron`/`lootbox`/`xp`/`skill_rank` references. No
+  deviations. Commit `de2456d`.
 
 ### Phase 12.1 Progress
 
