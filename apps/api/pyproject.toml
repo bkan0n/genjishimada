@@ -54,6 +54,7 @@ markers = [
     "domain_notifications: Notifications domain tests",
     "domain_playtests: Playtests domain tests",
     "domain_rank_card: Rank card domain tests",
+    "domain_skill: Skill-score domain tests",
     "domain_tournaments: Tournament domain tests",
     "domain_users: Users domain tests",
     "domain_utilities: Utilities domain tests",
