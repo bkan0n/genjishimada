@@ -12,13 +12,52 @@ appear as constants.
 
 from __future__ import annotations
 
+import asyncio
+from collections import defaultdict
+from datetime import datetime, timezone
+
+import msgspec
 from asyncpg import Pool
-from genjishimada_sdk.skill import Weights
+from genjishimada_sdk.skill import (
+    SkillBreakdownRow,
+    SkillConfigUpdateRequest,
+    SkillSummaryResponse,
+    Weights,
+)
 from litestar.datastructures import State
 
 from repository.skill_repository import SkillRepository
+from services.exceptions.skill import InvalidGammaError
 
 from .base import BaseService
+
+# The safe diminishing-returns floor (SPEC Constraint / T-13-09): below this the score
+# approaches a pure sum and becomes farmable. The DB CHECK (gamma >= 0.5) is the backstop.
+_GAMMA_FLOOR = 0.5
+
+
+class _RecomputeGuard:
+    """Process-wide in-flight collapse guard for recompute_all (D-05).
+
+    Litestar constructs a fresh SkillService per request via DI, so a per-instance lock would
+    never coalesce a burst across requests — the guard MUST live at module scope to be
+    one-per-process. The lock is created lazily on first use so it binds to the running loop.
+    """
+
+    def __init__(self) -> None:
+        self._lock: asyncio.Lock | None = None
+        self.rerun_requested = False
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+
+# Single process-wide guard instance shared by every SkillService.
+_GUARD = _RecomputeGuard()
+
 
 # Structural constants of the spike scorer formula (NOT tunable weights):
 #   _FLOOR_OFFSET — the `raw - 1.5` recentre so Easy(~1.5) -> ~1.
@@ -127,6 +166,113 @@ class SkillService(BaseService):
         """
         super().__init__(pool, state)
         self._skill_repo = skill_repo
+
+    async def recompute_all(self) -> None:
+        """Rebuild the entire skill snapshot from scratch — THE single rebuild routine (D-04).
+
+        Called by the in-process verification-change event (13-05), the nightly backstop
+        (13-05), and PATCH config (13-05). Reads the weights from the DB config (req 5 — never
+        literals), re-runs the input query, scores every player, captures the per-map
+        breakdown (D-06), and atomically replaces the lean snapshot (only players with >=1
+        eligible run get a row, D-07).
+
+        A per-process in-flight collapse guard (D-05) ensures a burst of triggers does not
+        launch N overlapping full rebuilds: while one rebuild runs, additional calls set a
+        "rerun requested" flag instead of starting their own; the holder loops once more so
+        the final snapshot is consistent with the latest inputs.
+        """
+        _GUARD.rerun_requested = True
+        if _GUARD.lock.locked():
+            # A rebuild is already running; it will pick up the rerun_requested flag.
+            return
+        async with _GUARD.lock:
+            while _GUARD.rerun_requested:
+                _GUARD.rerun_requested = False
+                await self._do_recompute()
+
+    async def _do_recompute(self) -> None:
+        """Run one full snapshot rebuild (no locking; callers hold the in-flight guard)."""
+        w = msgspec.convert(await self._skill_repo.fetch_weights(), Weights)
+        rows = await self._skill_repo.fetch_skill_inputs()
+
+        by_user: dict[int, list[dict]] = defaultdict(list)
+        for r in rows:
+            by_user[r["user_id"]].append(r)
+
+        computed_at = datetime.now(timezone.utc)
+        snapshot_rows: list[dict] = []
+        for user_id, urows in by_user.items():
+            snapshot_rows.append(
+                {
+                    "user_id": user_id,
+                    "skill_score": _player_score(urows, w),
+                    "maps_cleared": len(urows),
+                    "video_clears": sum(1 for r in urows if r["fully_verified"]),
+                    "hardest_raw": max(r["raw_difficulty"] for r in urows),
+                    "breakdown": _player_breakdown(urows, w),
+                    "computed_at": computed_at,
+                }
+            )
+        await self._skill_repo.replace_snapshot(snapshot_rows)
+
+    async def get_user_skill(self, user_id: int) -> SkillSummaryResponse:
+        """Fetch a player's skill summary, honoring the D-07 empty-player rule.
+
+        Args:
+            user_id: Discord user ID.
+
+        Returns:
+            The player's summary, or an all-zero summary when no snapshot row exists.
+        """
+        row = await self._skill_repo.fetch_snapshot(user_id)
+        if row is None:
+            return SkillSummaryResponse(
+                user_id=user_id,
+                skill_score=0.0,
+                maps_cleared=0,
+                video_clears=0,
+                hardest_raw=0.0,
+            )
+        return msgspec.convert(row, SkillSummaryResponse)
+
+    async def get_user_breakdown(self, user_id: int) -> list[SkillBreakdownRow]:
+        """Fetch a player's per-map breakdown (D-06), or [] when no snapshot row exists (D-07).
+
+        Args:
+            user_id: Discord user ID.
+
+        Returns:
+            The decoded per-map breakdown rows, or an empty list for zero-eligible players.
+        """
+        row = await self._skill_repo.fetch_snapshot(user_id)
+        if row is None:
+            return []
+        return msgspec.convert(row["breakdown"], list[SkillBreakdownRow])
+
+    async def get_weights(self) -> Weights:
+        """Read the current tuning weights from the DB config (req 5)."""
+        return msgspec.convert(await self._skill_repo.fetch_weights(), Weights)
+
+    async def update_weights(self, data: SkillConfigUpdateRequest) -> Weights:
+        """Partial-update the weight config (pure write; PATCH triggers recompute in the route).
+
+        Only the set (non-UNSET) fields are written. A gamma below the safe floor is rejected
+        before the write (SPEC Constraint / T-13-09); the DB CHECK is the backstop.
+
+        Args:
+            data: The partial PATCH body.
+
+        Returns:
+            The full updated weight config.
+
+        Raises:
+            InvalidGammaError: If gamma is being set below 0.5.
+        """
+        updates = {field: value for field, value in msgspec.structs.asdict(data).items() if value is not msgspec.UNSET}
+        gamma = updates.get("gamma")
+        if gamma is not None and gamma < _GAMMA_FLOOR:
+            raise InvalidGammaError(gamma)
+        return msgspec.convert(await self._skill_repo.update_weights(updates), Weights)
 
 
 async def provide_skill_service(state: State, skill_repo: SkillRepository) -> SkillService:
