@@ -226,7 +226,8 @@ class CommunityLeaderboardResponse(Struct):
         map_count: Number of maps created.
         playtest_count: Number of playtests performed.
         discord_tag: Discord tag for the user.
-        skill_rank: Skill rank label.
+        skill_rank: Derived difficulty-tier label (Ninja..God).
+        skill_score: Numeric skill score (COALESCE'd to 0 in SQL, never null).
         total_results: Total results in a paginated query.
     """
 
@@ -242,4 +243,5 @@ class CommunityLeaderboardResponse(Struct):
     playtest_count: int
     discord_tag: str
     skill_rank: str
+    skill_score: float
     total_results: int
