@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: unknown
-last_updated: "2026-06-12T19:07:43.871Z"
+last_updated: "2026-06-12T19:13:03.756Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 16
-  completed_plans: 12
-  percent: 75
+  completed_plans: 13
+  percent: 67
 ---
 
 # Tournament System — State
@@ -66,6 +66,27 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 13 Progress
+
+- **13-03 complete (2026-06-12):** Skill repository (data-access layer). New
+  `apps/api/repository/skill_repository.py` — the only place raw SQL for skill lives.
+  `fetch_skill_inputs` ports the spike 4-CTE input query
+  (`best → field → video_ranked → fully`) **verbatim** into a `SKILL_INPUT_QUERY` module
+  constant, with every gotcha preserved: the `best` eligibility WHERE
+  (`verified=TRUE AND legacy=FALSE AND archived=FALSE AND code IS NOT NULL`,
+  `DISTINCT ON (user_id, map_id) ORDER BY time ASC`); a distinct `video_ranked` CTE
+  (ranks only `completion = FALSE`) LEFT JOINed back instead of an invalid
+  `rank() OVER (...) FILTER (...)`; `raw_difficulty::float8` (never the text tier) and
+  `time_pct = percent_rank() ... ORDER BY time DESC` (1.0 = fastest, never raw time
+  across maps); computed `medal`/`has_medal_thresholds`/`suspicious`. Suspicious rows are
+  dropped in Python (`if not row["suspicious"]`, mirroring the spike harness) so the SQL
+  stays a verbatim port. Plus `fetch_snapshot` (single lean row, breakdown rides the
+  jsonb codec), `replace_snapshot` (atomic `TRUNCATE` + `executemany` bulk insert in one
+  transaction via the `tags_repository` acquire-if-`Pool` pattern; empty-list-safe),
+  `fetch_weights` (the single `weight_config` row — SPEC req 5 the only weight source),
+  `update_weights` (allow-listed partial PATCH SET from a `_WEIGHT_COLUMNS` frozenset,
+  T-13-07; empty update returns the current row), and `provide_skill_repository`.
+  `just lint-api` clean (ruff + basedpyright 0 errors). No deviations. Commits `542c810`
+  (Task 1) / `ab6b981` (Task 2).
 
 - **13-02 complete (2026-06-12):** Skill SDK wire contracts (interface-first, no DB
   dependency). New `libs/sdk/.../skill.py` exports four msgspec structs: `Weights`

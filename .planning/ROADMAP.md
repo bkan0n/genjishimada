@@ -120,7 +120,7 @@ later phases.
 **Requirements:** See `13-SPEC.md` (spec-phase). Grounded in
 `Skill("spike-findings-genjishimada")` (spikes 001/002/003).
 **Depends on:** Phase 11 (verification flow)
-**Plans:** 2/6 plans executed
+**Plans:** 3/6 plans executed
 
 Plans:
 **Wave 1**
@@ -130,7 +130,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 13-03-PLAN.md — skill_repository: 4-CTE input-query port + snapshot/weights CRUD (req 2, 3, 5) [wave 2]
+- [x] 13-03-PLAN.md — skill_repository: 4-CTE input-query port + snapshot/weights CRUD (req 2, 3, 5) [wave 2]
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
