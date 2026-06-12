@@ -1,10 +1,10 @@
 ---
 phase: 13-skill-score
 verified: 2026-06-12T00:00:00Z
-status: human_needed
+status: passed
 score: 9/9 must-haves verified
 overrides_applied: 0
-re_verification: null
+re_verification: "Human verification items confirmed by user on 2026-06-12 (integration suite vs live PostgreSQL, migration 0027 applied to live DB, leaderboard skill_score sort exercised). Follow-up: snapshot cold-start auto-population tracked separately via /gsd:quick."
 gaps: []
 human_verification:
   - test: "Run the full integration test suite with testmon disabled and confirm all 11 tests pass"
@@ -22,8 +22,8 @@ human_verification:
 
 **Phase Goal:** Add a performance-based skill score (separate from XP and the existing Ninja->God completion-rank label), computed from verified non-legacy completions using the spike-validated hybrid algorithm (difficulty floor + video-gated proof multipliers + diminishing returns), persisted to a lightweight snapshot so the existing community leaderboard can sort/paginate by it, and served via new /api/v3/skill/* endpoints. API-only vertical; bot + website surfaces are later phases.
 **Verified:** 2026-06-12
-**Status:** human_needed — all 9 SPEC requirements verified in source; 3 live-environment checks deferred to human
-**Re-verification:** No — initial verification
+**Status:** passed — all 9 SPEC requirements verified in source; the 3 live-environment checks were confirmed by the user on 2026-06-12
+**Re-verification:** Human verification items confirmed by user (live integration suite, migration applied, leaderboard sort exercised). Known follow-up: the snapshot starts empty on a fresh deploy and is not auto-populated until the first verification event / nightly 04:00 UTC rebuild / PATCH config — a cold-start auto-population fix is being handled separately via /gsd:quick (not a SPEC acceptance-criteria failure).
 
 ---
 

@@ -120,7 +120,7 @@ later phases.
 **Requirements:** See `13-SPEC.md` (spec-phase). Grounded in
 `Skill("spike-findings-genjishimada")` (spikes 001/002/003).
 **Depends on:** Phase 11 (verification flow)
-**Plans:** 6/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
