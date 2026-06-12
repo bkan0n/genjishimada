@@ -36,6 +36,17 @@ Design decisions that emerged while spiking. Non-negotiable for the real build.
 - **Diminishing returns across maps** — farming many easy maps must not outweigh a few strong hard
   clears. (Validated in Spike 002.)
 - **One best completion per (user, map)** — fastest verified non-legacy time; no double-counting.
+- **Community-tuned default weights (tester round 1, adopted)** — starting point for the real build,
+  validated by a domain-expert tester feeling the live leaderboard (Spike 003):
+  ```
+  diff_base=1.44  gamma=0.68  time_bonus=0.55  shrink_k=10.0
+  wr_bonus=0.10   partial_factor=0.60   medals={Gold:1.12, Silver:1.07, Bronze:1.03}
+  ```
+  Philosophy: **skill = difficulty × breadth of clears; video-vs-screenshot is the main
+  differentiator; time/medal/WR are light garnish.** These are *defaults*, not hardcoded — the real
+  `SkillService` must keep them config-tunable. Known trade-off the tester accepted: flat proof
+  bonuses mean the most prolific *video* player (Arrow, 45 video maps, Extreme+) ranks below
+  Hell-breadth grinders.
 
 ## Spikes
 
@@ -43,4 +54,4 @@ Design decisions that emerged while spiking. Non-negotiable for the real build.
 |---|------|------|-----------|---------|------|
 | 001 | skill-input-query | standard | One query yields per-(user,map) `(raw_difficulty, time, time_pct_vs_field, medal, rank, is_wr, suspicious)` over real data, excluding legacy/unverified/archived/suspicious | ✓ VALIDATED | data, sql, asyncpg |
 | 002 | scoring-farming-resistance | standard | Easy-map grinder ranks below genuine hard-map performer under diminishing returns | ✓ VALIDATED | algorithm, farming |
-| 003 | leaderboard-feel | standard | Interactive leaderboard + live weight sliders + per-player breakdown; ranking matches intuition | PENDING | ui, leaderboard |
+| 003 | leaderboard-feel | standard | Interactive leaderboard + live weight sliders + per-player breakdown; ranking matches intuition | ✓ VALIDATED | ui, leaderboard |

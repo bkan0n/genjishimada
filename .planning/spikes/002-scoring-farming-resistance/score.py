@@ -27,14 +27,17 @@ DATA = Path(__file__).parent.parent / "001-skill-input-query" / "skill_inputs.js
 
 @dataclass
 class Weights:
-    diff_base: float = 1.41          # diff_weight(raw) = diff_base ** (raw - 1.5)  -> Easy~1, Hell~16
-    gamma: float = 0.5               # diminishing-returns exponent across a player's maps
-    time_bonus: float = 1.0          # max additional multiplier for a field-topping time (video only)
-    shrink_k: float = 4.0            # field-size shrinkage so small fields don't mint fake "wins"
-    wr_bonus: float = 0.5            # extra multiplier when video_rank == 1 (world record)
-    partial_factor: float = 1.0      # multiplier on the difficulty floor for partial (no-video) clears
+    # Community-tuned defaults (tester round 1, adopted). Philosophy: skill = difficulty x breadth,
+    # video-vs-screenshot is the main differentiator, time/medal/WR are light garnish.
+    # Original exploratory defaults in comments for reference.
+    diff_base: float = 1.44          # (was 1.41) diff_weight(raw) = diff_base ** (raw - 1.5) -> Easy~1, Hell~17
+    gamma: float = 0.68              # (was 0.5)  diminishing-returns exponent; the anti-farm dial
+    time_bonus: float = 0.55         # (was 1.0)  max additional multiplier for a field-topping time (video only)
+    shrink_k: float = 10.0           # (was 4.0)  field-size shrinkage so small fields don't mint fake "wins"
+    wr_bonus: float = 0.10           # (was 0.5)  extra multiplier when video_rank == 1 (world record)
+    partial_factor: float = 0.60     # (was 1.0)  multiplier on the difficulty floor for partial (no-video) clears
     medal_mult: dict[str, float] = field(
-        default_factory=lambda: {"Gold": 1.5, "Silver": 1.3, "Bronze": 1.15}
+        default_factory=lambda: {"Gold": 1.12, "Silver": 1.07, "Bronze": 1.03}  # (was 1.5/1.3/1.15)
     )
 
 
@@ -62,6 +65,28 @@ def player_score(rows: list[dict], w: Weights) -> float:
     """Aggregate one player's per-map scores with diminishing returns."""
     scores = sorted((map_score(r, w) for r in rows), reverse=True)
     return sum(s / (i ** w.gamma) for i, s in enumerate(scores, start=1))
+
+
+def player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
+    """Per-map contributions for one player, after diminishing-returns decay. Sorted by contribution."""
+    scored = sorted(
+        ((map_score(r, w), r) for r in rows), key=lambda t: t[0], reverse=True
+    )
+    out = []
+    for i, (s, r) in enumerate(scored, start=1):
+        decay = i ** w.gamma
+        out.append({
+            "map_name": r.get("map_name") or r.get("code") or f"map {r.get('map_id')}",
+            "difficulty": r.get("difficulty", ""),
+            "raw": r["raw_difficulty"],
+            "fully_verified": r["fully_verified"],
+            "medal": r.get("medal"),
+            "wr": r.get("video_rank") == 1,
+            "raw_score": s,
+            "contribution": s / decay,
+            "rank": i,
+        })
+    return out
 
 
 def score_all(rows: list[dict], w: Weights) -> dict[int, dict]:
