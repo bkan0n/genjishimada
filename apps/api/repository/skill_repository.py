@@ -8,6 +8,7 @@ and the single-row weight config read/write.
 from __future__ import annotations
 
 from asyncpg import Connection, Pool
+from asyncpg.pool import PoolConnectionProxy
 from litestar.datastructures import State
 
 from repository.base import BaseRepository
@@ -94,6 +95,23 @@ GROUP BY f.user_id, f.map_id, m.code, m.map_name, m.difficulty, m.raw_difficulty
 ORDER BY f.user_id, m.raw_difficulty DESC
 """
 
+# Allow-list of the nine weight columns (D-09). A partial PATCH (D-10) may only set
+# these names — the UPDATE SET clause is built exclusively from this set, never from
+# arbitrary caller-supplied keys (T-13-07).
+_WEIGHT_COLUMNS = frozenset(
+    {
+        "diff_base",
+        "gamma",
+        "time_bonus",
+        "shrink_k",
+        "wr_bonus",
+        "partial_factor",
+        "medal_gold",
+        "medal_silver",
+        "medal_bronze",
+    }
+)
+
 
 class SkillRepository(BaseRepository):
     """Repository for the skill-score domain."""
@@ -124,6 +142,120 @@ class SkillRepository(BaseRepository):
         _conn = self._get_connection(conn)
         rows = await _conn.fetch(SKILL_INPUT_QUERY)
         return [dict(row) for row in rows if not row["suspicious"]]
+
+    async def fetch_snapshot(self, user_id: int, *, conn: Connection | None = None) -> dict | None:
+        """Fetch a single player's lean snapshot row.
+
+        The ``breakdown`` jsonb column decodes to a Python list automatically via the
+        app's jsonb<->msgspec codec (D-06); no manual JSON handling.
+
+        Args:
+            user_id: Discord user ID to fetch the snapshot for.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The snapshot row as a dict, or None if the player has no eligible runs (D-07).
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow("SELECT * FROM skill.snapshot WHERE user_id = $1", user_id)
+        return dict(row) if row else None
+
+    async def replace_snapshot(self, rows: list[dict], *, conn: Connection | None = None) -> None:
+        """Atomically replace the entire lean snapshot with the supplied rows (D-04/D-07).
+
+        Runs inside a single transaction: TRUNCATE then bulk-insert. An empty ``rows``
+        list leaves the snapshot empty (truncate only) without error. Each dict supplies
+        ``user_id, skill_score, maps_cleared, video_clears, hardest_raw, breakdown,
+        computed_at``; the ``breakdown`` value is a Python list serialized by the
+        jsonb codec (app.py:132).
+
+        Args:
+            rows: The full new snapshot — one dict per player with an eligible run.
+            conn: Optional connection for transaction support.
+        """
+
+        async def _do_replace(c: Connection | PoolConnectionProxy) -> None:
+            async with c.transaction():
+                await c.execute("TRUNCATE skill.snapshot")
+                if not rows:
+                    return
+                await c.executemany(
+                    """
+                    INSERT INTO skill.snapshot
+                        (user_id, skill_score, maps_cleared, video_clears, hardest_raw, breakdown, computed_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    """,
+                    [
+                        (
+                            r["user_id"],
+                            r["skill_score"],
+                            r["maps_cleared"],
+                            r["video_clears"],
+                            r["hardest_raw"],
+                            r["breakdown"],
+                            r["computed_at"],
+                        )
+                        for r in rows
+                    ],
+                )
+
+        _conn = self._get_connection(conn)
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                await _do_replace(acquired)
+        else:
+            await _do_replace(_conn)
+
+    async def fetch_weights(self, *, conn: Connection | None = None) -> dict:
+        """Read the single weight-config row (SPEC req 5: the only source of weights).
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            A dict of exactly the nine weight columns.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT diff_base, gamma, time_bonus, shrink_k, wr_bonus, partial_factor,
+                   medal_gold, medal_silver, medal_bronze
+            FROM skill.weight_config
+            LIMIT 1
+            """
+        )
+        return dict(row) if row else {}
+
+    async def update_weights(self, weights: dict, *, conn: Connection | None = None) -> dict:
+        """Partial-update the single weight-config row (D-10) and return the full row.
+
+        The SET clause is built from an allow-list of the nine known weight columns
+        (T-13-07: never arbitrary caller-supplied column names); values are bound
+        positionally. An empty/all-unknown update returns the current row unchanged.
+
+        Args:
+            weights: Mapping of weight column name -> new value (partial PATCH).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The full updated weight-config row as a dict.
+        """
+        _conn = self._get_connection(conn)
+        updates = {k: v for k, v in weights.items() if k in _WEIGHT_COLUMNS}
+        if not updates:
+            return await self.fetch_weights(conn=conn)
+        columns = list(updates)
+        set_clause = ", ".join(f"{col} = ${i}" for i, col in enumerate(columns, start=1))
+        row = await _conn.fetchrow(
+            f"""
+            UPDATE skill.weight_config
+            SET {set_clause}
+            RETURNING diff_base, gamma, time_bonus, shrink_k, wr_bonus, partial_factor,
+                      medal_gold, medal_silver, medal_bronze
+            """,
+            *(updates[col] for col in columns),
+        )
+        return dict(row) if row else {}
 
 
 async def provide_skill_repository(state: State) -> SkillRepository:
