@@ -16,7 +16,7 @@ stopped_at: Milestone complete (Phase 13 was final phase)
 
 # Tournament System — State
 
-Last activity: 2026-06-12
+Last activity: 2026-06-12 - Completed quick task 260612-oqg: Fix skill-score leaderboard cold-start (auto-populate skill.snapshot on API startup)
 
 ## Current Status
 
@@ -58,6 +58,7 @@ Controller → Service → Repository pattern:
 | 260605-gjy | Fix start-only rollover announcement: the `elif event.started` branch in `_on_edition_rollover` now leads with `# 🏆 New Tournament!` instead of `Tournament Ended!` — the start-only case (out-of-hiatus or never-started, `has_ended` False) had nothing end, so it no longer announces a non-existent prior tournament. Normal (results+started) and into-hiatus (results-only) branches keep their `Tournament Ended!` framing unchanged. Locked with assertions in the three existing rollover handler tests. | 2026-06-05 | 07f4745 | [260605-gjy-start-only-rollover-title](./quick/260605-gjy-start-only-rollover-title/) |
 | 260607-oqy | Add a pingable tournament announcement role: new `mentionable.tournament_announcements` config field (struct + dev/prod TOML, `0` sentinel placeholder for maintainer-supplied IDs); both public announcement cards (`_on_edition_rollover`, `_on_edition_results`) prepend a `<@&id>` ping via shared `_tournament_ping()` helper with role allow-listed in `AllowedMentions`; self-assignable "Tournament Announcements" 🏆 toggle added to the `#role-react` view (`ServerRoleSelectView`), sourced from the same config field. Every touch point guards the `0` sentinel (no broken `<@&0>`, no crash-on-click button). | 2026-06-07 | 43e0904 | [260607-oqy-add-a-role-ping-to-tournament-announceme](./quick/260607-oqy-add-a-role-ping-to-tournament-announceme/) |
 | 260608-ntz | Add an API route to remove a suspicious flag: symmetric `DELETE /completions/suspicious` mirroring the add route across all four layers (SDK `SuspiciousCompletionDeleteRequest`, repo `delete_suspicious_flag_by_message` reusing the insert's message/verification CTE, service `remove_suspicious_flags`, controller handler with the same 400 identifier guard + `status_code=200`) plus a bot `remove_suspicious_flags` client. Removing a non-existent flag returns 200 count 0. Fixes #50. | 2026-06-08 | 66c0b11 | [260608-ntz-add-an-api-route-to-remove-a-suspicious-](./quick/260608-ntz-add-an-api-route-to-remove-a-suspicious-/) |
+| 260612-oqg | Fix skill-score leaderboard cold-start: `skill.snapshot` (created empty by migration 0027) is now auto-populated on API startup. New `SkillRepository.snapshot_is_empty()` (`NOT EXISTS` probe); `skill_nightly_rebuild_poller` in `app.py` runs `recompute_all()` ONCE after a 5s db_pool-warmup sleep when the snapshot is empty, reusing the exact existing `provide_skill_*`/`recompute_all` path (D-04, no forked logic) before the unchanged nightly 04:00 UTC loop. Broad-except + `log.exception` + clean cancel/await teardown preserved; populated-snapshot restarts skip the redundant rebuild. Verified live: cold boot auto-filled 261 rows in ~7s, leaderboard `sort_column=skill_score&sort_direction=desc` returns descending non-zero scores with `skill_rank` unchanged, restart-with-populated-snapshot is clean. | 2026-06-12 | 07467e1 | [260612-oqg-fix-skill-score-leaderboard-cold-start-p](./quick/260612-oqg-fix-skill-score-leaderboard-cold-start-p/) |
 
 ## Blockers/Concerns
 
