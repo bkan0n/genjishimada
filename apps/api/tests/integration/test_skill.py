@@ -530,3 +530,37 @@ class TestConfigPatchAuthz:
         # Restore the original gamma so sibling tests see the seeded config.
         restore = await test_client.patch(f"{SKILL}/config", json={"gamma": original_gamma})
         assert restore.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# cold-start — snapshot_is_empty() guard for the one-time initial population
+# ---------------------------------------------------------------------------
+
+
+class TestSnapshotIsEmpty:
+    """SkillRepository.snapshot_is_empty() — the cold-start population guard (QUICK-260612-oqg)."""
+
+    async def test_empty_before_recompute_false_after_population(self, asyncpg_pool, seed):
+        """True on a fresh/empty snapshot; False after recompute_all populates an eligible run."""
+        repo = SkillRepository(asyncpg_pool)
+
+        # Fresh DB / post-truncate: no rows in skill.snapshot -> empty.
+        # Truncate first so a sibling test that populated the shared snapshot does not
+        # leak into this assertion (the snapshot is a single global cache table).
+        await asyncpg_pool.execute("TRUNCATE skill.snapshot")
+        assert await repo.snapshot_is_empty() is True
+
+        # Seed one eligible (verified, video) completion, then run the shared rebuild.
+        user_id = await seed.make_user()
+        map_id = await seed.make_map(difficulty="Hell", raw=9.0)
+        await seed.make_completion(
+            user_id=user_id,
+            map_id=map_id,
+            time=30.0,
+            verified=True,
+            message_id=int(uuid4().int % 9_000_000_000),
+        )
+        await _recompute(asyncpg_pool)
+
+        # After population, the snapshot has at least one row -> not empty.
+        assert await repo.snapshot_is_empty() is False
