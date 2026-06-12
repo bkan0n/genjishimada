@@ -564,3 +564,127 @@ class TestSnapshotIsEmpty:
 
         # After population, the snapshot has at least one row -> not empty.
         assert await repo.snapshot_is_empty() is False
+
+
+# ---------------------------------------------------------------------------
+# PYO-TIER — percentile-based tier system (boundaries / tier / percentile / floor)
+# ---------------------------------------------------------------------------
+
+
+class TestSkillTiers:
+    """Percentile tier system: assignment, legend, Unranked/0 case, and population floor.
+
+    The tier boundaries are computed from ``skill.snapshot`` (``skill_score > 0`` rows) by
+    ``SkillRepository.compute_tier_boundaries`` — the SAME routine ``_do_recompute`` calls
+    after ``replace_snapshot``. ``recompute_all`` rebuilds the WHOLE snapshot from every row
+    in ``core.completions`` (shared across the integration DB), so these tests seed
+    ``skill.snapshot`` DIRECTLY and invoke the real boundary routine to get a deterministic,
+    isolated non-zero population — then exercise the real read endpoints (``/skill/tiers``,
+    ``/skill/users/{id}``, ``/community/leaderboard``) over the resulting boundaries.
+    """
+
+    @staticmethod
+    async def _seed_snapshot(pool: asyncpg.Pool, scores: dict[int, float]) -> None:
+        """Replace skill.snapshot with the given user_id -> skill_score rows, then compute boundaries."""
+        async with pool.acquire() as conn:
+            await conn.execute("TRUNCATE skill.snapshot")
+            for uid, score in scores.items():
+                await conn.execute(
+                    """
+                    INSERT INTO skill.snapshot
+                        (user_id, skill_score, maps_cleared, video_clears, hardest_raw, breakdown, computed_at)
+                    VALUES ($1, $2, 1, 1, 9.0, '[]'::jsonb, now())
+                    """,
+                    uid,
+                    score,
+                )
+        # Drive the SAME boundary routine _do_recompute uses (no fork).
+        await SkillRepository(pool).compute_tier_boundaries()
+
+    async def test_tier_assignment_and_legend(self, test_client, asyncpg_pool, seed):
+        """>=20 scored players -> 6 increasing boundaries; per-user tier matches the leaderboard (PYO-TIER-02/03/04/05)."""
+        # Seed >= 20 distinct non-zero scores (a clean increasing spread) so percentile_cont
+        # yields strictly increasing cut-points.
+        users = [await seed.make_user() for _ in range(24)]
+        scores = {uid: float(10 + i) for i, uid in enumerate(users)}  # 10.0 .. 33.0, all distinct
+        await self._seed_snapshot(asyncpg_pool, scores)
+
+        # PYO-TIER-05: the legend exposes 6 percentiles + 6 boundaries.
+        tiers_resp = await test_client.get(f"{SKILL}/tiers")
+        assert tiers_resp.status_code == 200
+        legend = tiers_resp.json()
+        assert len(legend["percentiles"]) == 6
+        assert len(legend["boundaries"]) == 6
+        # PYO-TIER-02: boundaries are strictly increasing (monotone cut-points).
+        boundaries = [float(b) for b in legend["boundaries"]]
+        assert boundaries == sorted(boundaries)
+        assert all(b2 > b1 for b1, b2 in zip(boundaries[:-1], boundaries[1:], strict=True))
+
+        # The top-scoring seeded user.
+        top_user = max(scores, key=lambda u: scores[u])
+
+        # PYO-TIER-03: the top scorer's per-user read carries a real tier (1..7) + percentile.
+        user_resp = await test_client.get(f"{SKILL}/users/{top_user}")
+        assert user_resp.status_code == 200
+        user_json = user_resp.json()
+        assert 1 <= int(user_json["tier"]) <= 7
+        assert 0.0 <= float(user_json["percentile"]) <= 1.0
+
+        # PYO-TIER-04: the same user's leaderboard row carries the SAME tier, and the
+        # skill_rank / skill_score columns are still present/unchanged.
+        lb = await test_client.get(
+            f"{COMMUNITY}/leaderboard",
+            params={"sort_column": "skill_score", "sort_direction": "desc", "page_size": 50},
+        )
+        assert lb.status_code == 200
+        lb_rows = lb.json()
+        assert lb_rows
+        assert all("skill_rank" in r and isinstance(r["skill_rank"], str) for r in lb_rows)
+        assert all("skill_score" in r for r in lb_rows)
+        lb_tier_by_user = {int(r["user_id"]): int(r["tier"]) for r in lb_rows}
+        assert top_user in lb_tier_by_user
+        assert lb_tier_by_user[top_user] == int(user_json["tier"])
+
+    async def test_unranked_zero_eligible(self, test_client, asyncpg_pool, seed):
+        """A user with no eligible score is tier 0 / Unranked on both the user read and leaderboard (PYO-TIER-03)."""
+        # Populate a valid >=20 non-zero population (so boundaries exist), then add one
+        # user who is NOT in the snapshot at all -> tier 0 / Unranked.
+        users = [await seed.make_user() for _ in range(20)]
+        scores = {uid: float(10 + i) for i, uid in enumerate(users)}
+        await self._seed_snapshot(asyncpg_pool, scores)
+
+        empty = await seed.make_user()  # never inserted into skill.snapshot
+        user_resp = await test_client.get(f"{SKILL}/users/{empty}")
+        assert user_resp.status_code == 200
+        user_json = user_resp.json()
+        assert int(user_json["tier"]) == 0
+        assert float(user_json["skill_score"]) == 0.0
+
+        lb = await test_client.get(
+            f"{COMMUNITY}/leaderboard",
+            params={"sort_column": "skill_score", "sort_direction": "desc", "page_size": 50},
+        )
+        assert lb.status_code == 200
+        tier_by_user = {int(r["user_id"]): int(r["tier"]) for r in lb.json()}
+        # If present on this page, the zero-eligible player is Unranked (tier 0).
+        if empty in tier_by_user:
+            assert tier_by_user[empty] == 0
+
+    async def test_population_floor_fallback(self, test_client, asyncpg_pool, seed):
+        """Fewer than 20 scored players -> empty boundaries -> everyone Unranked, no crash (PYO-TIER-06)."""
+        # Seed only a few (< 20) scored users so the population floor is not met.
+        users = [await seed.make_user() for _ in range(5)]
+        scores = {uid: float(10 + i) for i, uid in enumerate(users)}
+        await self._seed_snapshot(asyncpg_pool, scores)
+
+        # PYO-TIER-06: below the floor the legend has empty boundaries.
+        tiers_resp = await test_client.get(f"{SKILL}/tiers")
+        assert tiers_resp.status_code == 200
+        assert tiers_resp.json()["boundaries"] == []
+
+        # Every scored user is Unranked (tier 0) with no crash, even with a positive score.
+        for uid in users:
+            user_resp = await test_client.get(f"{SKILL}/users/{uid}")
+            assert user_resp.status_code == 200
+            assert int(user_resp.json()["tier"]) == 0
+            assert float(user_resp.json()["skill_score"]) > 0
