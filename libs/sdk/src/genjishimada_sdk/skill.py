@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from msgspec import UNSET, Struct, UnsetType
 
 __all__ = (
     "SkillBreakdownRow",
     "SkillConfigUpdateRequest",
     "SkillSummaryResponse",
+    "SkillTiersResponse",
     "Weights",
 )
 
@@ -78,6 +81,8 @@ class SkillSummaryResponse(Struct):
         maps_cleared: Number of distinct eligible maps cleared.
         video_clears: Number of fully-verified (video-proof) clears.
         hardest_raw: Highest `raw_difficulty` cleared (0 when no eligible runs).
+        tier: Percentile tier 1..7, 0 = Unranked (no eligible runs / population floor not met).
+        percentile: 0..1 population percentile of skill_score (0 when no eligible runs).
     """
 
     user_id: int
@@ -85,6 +90,27 @@ class SkillSummaryResponse(Struct):
     maps_cleared: int
     video_clears: int
     hardest_raw: float
+    tier: int
+    percentile: float
+
+
+class SkillTiersResponse(Struct):
+    """Current tier legend for `GET /skill/tiers`.
+
+    Exposes the cached percentile-based tier boundaries so the website can render a
+    tier legend. Boundaries are DERIVED from the live distribution by recompute_all;
+    an empty `boundaries` array means the population floor is not met (everyone
+    Unranked). The `percentiles` array is the only tunable (seeded in migration 0028).
+
+    Attributes:
+        boundaries: The 6 computed cut-point scores (empty until a qualifying recompute).
+        percentiles: The 6 configured percentiles that produce the boundaries.
+        computed_at: When the boundaries were last computed.
+    """
+
+    boundaries: list[float]
+    percentiles: list[float]
+    computed_at: datetime
 
 
 class SkillBreakdownRow(Struct):
