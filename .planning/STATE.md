@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: unknown
-last_updated: "2026-06-12T19:13:03.756Z"
+last_updated: "2026-06-12T20:30:00.000Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 16
-  completed_plans: 13
-  percent: 67
+  completed_plans: 14
+  percent: 73
 ---
 
 # Tournament System — State
@@ -66,6 +66,30 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 13 Progress
+
+- **13-04 complete (2026-06-12):** SkillService — the scoring engine (heart of the
+  phase). New `apps/api/services/skill_service.py` ports the spike's hybrid scorer
+  (`score.py:44-106`) into module-level helpers over the SDK `Weights` struct:
+  `_diff_weight` (`diff_base**(raw-1.5)` floor), `_map_score` (partial→`floor*partial_factor`
+  only; video→floor × time/medal/WR multipliers with field-size shrink `field/(field+k)`),
+  `_player_score` (`Σ sᵢ/iᵞ` over desc-sorted per-map scores), `_player_breakdown` (the D-06
+  per-map JSONB array, keys mirror `SkillBreakdownRow`). **Proven equivalent to the spike
+  within 1e-6 across all 261 real-data players** (`test_skill_scorer.py` loads
+  `.planning/spikes/001…/skill_inputs.json` + imports the spike `score.py` as the oracle);
+  plus partial<video and the gamma break-even dial. **No weight literal anywhere** in the
+  service (SPEC req 5; grep clean). `recompute_all` is THE single rebuild routine (D-04 —
+  event + nightly + PATCH): `fetch_weights`→`msgspec.convert(Weights)`→`fetch_skill_inputs`→
+  group-by-user→score+breakdown→`replace_snapshot` (lean, D-07), wrapped in a **process-wide
+  in-flight collapse guard** (`_RecomputeGuard`, lazy `asyncio.Lock` + rerun flag — module
+  scope because DI builds a fresh service per request; D-05/T-13-08). Read methods honor the
+  D-07 empty-player rule (`get_user_skill`→all-zero summary, `get_user_breakdown`→`[]`) and
+  decode the D-06 JSONB breakdown; `update_weights` rejects `gamma<0.5` (`InvalidGammaError`,
+  new `services/exceptions/skill.py`) before writing only the non-UNSET fields (PATCH→recompute
+  stays in the route, D-10/13-05). `just lint-api` clean; 10 skill tests pass. Deviations: 2
+  Rule-3 (blocking) test-infra fixes — corrected the equivalence-test inputs path to the
+  `.planning/spikes/` location that exists + registered the `domain_skill` marker; registered
+  the importlib-loaded spike module in `sys.modules` before exec so its `@dataclass` resolves.
+  Commits `10e6586` (Task 1) / `017fafa` (Task 2).
 
 - **13-03 complete (2026-06-12):** Skill repository (data-access layer). New
   `apps/api/repository/skill_repository.py` — the only place raw SQL for skill lives.

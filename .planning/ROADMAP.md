@@ -134,7 +134,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 13-04-PLAN.md — SkillService: spike scorer port + recompute_all + reads + in-flight guard (req 4, 5) [wave 3]
+- [x] 13-04-PLAN.md — SkillService: spike scorer port + recompute_all + reads + in-flight guard (req 4, 5) [wave 3]
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
