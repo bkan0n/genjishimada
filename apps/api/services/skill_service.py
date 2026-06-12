@@ -22,6 +22,7 @@ from genjishimada_sdk.skill import (
     SkillBreakdownRow,
     SkillConfigUpdateRequest,
     SkillSummaryResponse,
+    SkillTiersResponse,
     Weights,
 )
 from litestar.datastructures import State
@@ -214,6 +215,12 @@ class SkillService(BaseService):
                 }
             )
         await self._skill_repo.replace_snapshot(snapshot_rows)
+        # Flicker decision: recompute the tier boundaries on EVERY snapshot rebuild, riding
+        # the single D-04 routine (no fork) so verify/reject/flag events, the nightly
+        # backstop, and PATCH config all keep skill.tier_config consistent with the snapshot
+        # that produced it. Tradeoff: a player's tier can shift when the field around them
+        # moves even if their own score is unchanged — acceptable for a display-only badge.
+        await self._skill_repo.compute_tier_boundaries()
 
     async def get_user_skill(self, user_id: int) -> SkillSummaryResponse:
         """Fetch a player's skill summary, honoring the D-07 empty-player rule.
@@ -222,9 +229,10 @@ class SkillService(BaseService):
             user_id: Discord user ID.
 
         Returns:
-            The player's summary, or an all-zero summary when no snapshot row exists.
+            The player's summary (incl. tier + percentile), or an all-zero / Unranked
+            summary when no snapshot row exists.
         """
-        row = await self._skill_repo.fetch_snapshot(user_id)
+        row = await self._skill_repo.fetch_snapshot_with_tier(user_id)
         if row is None:
             return SkillSummaryResponse(
                 user_id=user_id,
@@ -232,6 +240,8 @@ class SkillService(BaseService):
                 maps_cleared=0,
                 video_clears=0,
                 hardest_raw=0.0,
+                tier=0,
+                percentile=0.0,
             )
         return msgspec.convert(row, SkillSummaryResponse)
 
@@ -248,6 +258,15 @@ class SkillService(BaseService):
         if row is None:
             return []
         return msgspec.convert(row["breakdown"], list[SkillBreakdownRow])
+
+    async def get_tier_config(self) -> SkillTiersResponse:
+        """Read the current tier legend: boundaries, percentiles, and computed_at (PYO-TIER-05).
+
+        Returns:
+            The current tier configuration. An empty ``boundaries`` array means the
+            population floor is not met (everyone Unranked).
+        """
+        return msgspec.convert(await self._skill_repo.fetch_tier_config(), SkillTiersResponse)
 
     async def get_weights(self) -> Weights:
         """Read the current tuning weights from the DB config (req 5)."""
