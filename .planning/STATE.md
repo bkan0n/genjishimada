@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: unknown
-last_updated: "2026-06-12T19:26:52.132Z"
+last_updated: "2026-06-12T19:39:11.230Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 16
-  completed_plans: 15
-  percent: 67
+  completed_plans: 16
+  percent: 100
 ---
 
 # Tournament System — State
@@ -66,6 +66,38 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 13 Progress
+
+- **13-06 complete (2026-06-12):** Skill freshness contract + leaderboard column —
+  the riskiest integration point, closing the symmetric add/remove acceptance
+  criteria. `completions_service.py` gains a `_emit_skill_recompute` helper
+  (post-commit, fire-and-forget, guarded for the optional-request/event-driven case)
+  that fires `request.app.emit("skill.recompute.requested", SkillRecomputeRequestedEvent(...),
+  skill_service=skill_service)` from **all four D-02 state-change paths**:
+  `verify_completion` emits in BOTH the verify (`data.verified=True`) and un-verify/reject
+  (`False`) branches after `update_verification` commits, and `set_suspicious_flags` /
+  `remove_suspicious_flags` — which previously took neither a `request` nor a
+  `skill_service` — were threaded with both and emit post-commit (flag drops a user's
+  contribution → score 0; un-flag restores it). The route handlers (verify + POST/DELETE
+  suspicious) inject `request: Request` + `skill_service: SkillService`, and
+  `provide_skill_service`/`provide_skill_repository` were added to
+  `CompletionsController.dependencies` so the listener's `skill_service` arg resolves
+  (5 `skill.recompute.requested` occurrences, ≥4 emit sites). The community leaderboard
+  (`community_repository.fetch_community_leaderboard`) gained `LEFT JOIN skill.snapshot ss
+  ON u.id = ss.user_id` + `coalesce(ss.skill_score, 0) AS skill_score` (D-07 zero-eligible
+  ranked last) and `"skill_score"` (D-08) in the `sort_column` Literal — duplicated into
+  the service + route Literals; it sorts via the existing plain-column branch (no CASE
+  added) and `skill_rank` + its CASE are UNTOUCHED (SPEC req 6). New
+  `tests/integration/test_skill.py` (10 tests, all passing) proves the full SPEC matrix:
+  verify→raises / reject→restores within 1e-6 / flag→0 / unflag→restores; field relativity
+  (a second player on the same map shifts after the field changes); `sort=skill_score`
+  descending + paginated with `skill_rank` intact; zero-eligible player score 0 ranked last
+  + `GET /skill/users/{id}` returns 0 / empty breakdown; PATCH 401 unauth / 401-403
+  non-superuser / 200 superuser with scores changing; breakdown contributions sum to total.
+  The test drives the deterministic snapshot via the shared `recompute_all` on its own pool
+  (last writer, after a 0.1s settle yield) while still firing the real background emit via the
+  HTTP endpoints — sidestepping the background-listener app-pool-teardown race (a logged,
+  non-fatal listener error). `just lint-api` clean. No deviations. Commits `8222496` (Task 1)
+  / `affd0ad` (Task 2) / `58df609` (Task 3). **Phase 13 complete (6/6 plans).**
 
 - **13-05 complete (2026-06-12):** Skill HTTP surface + recompute machinery — the
   service becomes a reachable API. New `apps/api/routes/v3/skill.py` `SkillController`

@@ -120,7 +120,7 @@ later phases.
 **Requirements:** See `13-SPEC.md` (spec-phase). Grounded in
 `Skill("spike-findings-genjishimada")` (spikes 001/002/003).
 **Depends on:** Phase 11 (verification flow)
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -142,4 +142,4 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 13-06-PLAN.md — Emit recompute from all 4 verify paths + leaderboard skill_score column + integration test (req 6, 8, 9) [wave 4]
+- [x] 13-06-PLAN.md — Emit recompute from all 4 verify paths + leaderboard skill_score column + integration test (req 6, 8, 9) [wave 5]
