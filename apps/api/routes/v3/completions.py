@@ -362,17 +362,25 @@ class CompletionsController(Controller):
         summary="Moderate Completion",
         description="Moderate a completion record (change time, verification status, suspicious flag).",
     )
-    async def moderate_completion(
+    async def moderate_completion(  # noqa: PLR0913
         self,
         svc: CompletionsService,
         notifications: NotificationsService,
         request: Request,
+        skill_service: SkillService,
         record_id: int,
         data: CompletionModerateRequest,
     ) -> None:
         """Moderate a completion record."""
         try:
-            return await svc.moderate_completion(record_id, data, notifications, request.headers)
+            return await svc.moderate_completion(
+                record_id,
+                data,
+                notifications,
+                request.headers,
+                request=request,
+                skill_service=skill_service,
+            )
         except CompletionNotFoundError as e:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         except DuplicateCompletionError as e:

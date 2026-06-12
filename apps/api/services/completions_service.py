@@ -1408,14 +1408,35 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
-    async def moderate_completion(  # noqa: PLR0912
+    async def moderate_completion(  # noqa: PLR0912, PLR0913, PLR0915
         self,
         completion_id: int,
         data: CompletionModerateRequest,
         notification_service: NotificationsService | None = None,
         headers: Headers | None = None,
+        *,
+        request: Request | None = None,
+        skill_service: SkillService | None = None,
     ) -> None:
         """Moderate a completion record.
+
+        Moderation is a fifth verification-state-change path (alongside verify /
+        un-verify / set_suspicious_flags / remove_suspicious_flags): it flips
+        ``verified`` and adds/removes suspicious flags, both of which change a
+        row's skill eligibility. So whenever this method actually changes an
+        eligibility-relevant field, it emits ``skill.recompute.requested`` via the
+        SAME ``_emit_skill_recompute`` helper as the other four paths (SPEC req
+        8/9). The ``request`` / ``skill_service`` emit handle is threaded from the
+        route (D-02); for event-driven calls without a request the emit is skipped
+        and the nightly backstop self-heals.
+
+        Args:
+            completion_id: Completion record ID to moderate.
+            data: Moderation request payload.
+            notification_service: Notifications service for user alerts.
+            headers: Request headers for notification dispatch.
+            request: HTTP request carrying the app to emit the recompute on.
+            skill_service: DI-injected skill service for the recompute listener.
 
         Raises:
             CompletionNotFoundError: If completion not found.
@@ -1431,6 +1452,11 @@ class CompletionsService(BaseService):
         old_verified = completion_info["old_verified"]
 
         notification_messages: list[str] = []
+
+        # D-02 skill recompute: track whether this moderation changed an
+        # eligibility-relevant field (verified flip, flag insert, flag delete).
+        # A single post-commit emit covers any combination (D-04 full rebuild).
+        skill_dirty = False
 
         if data.time is not msgspec.UNSET:
             if data.time_change_reason is msgspec.UNSET:
@@ -1455,6 +1481,9 @@ class CompletionsService(BaseService):
             )
 
             if verified != old_verified:
+                # Verified flag flipped -> changes the verified = TRUE eligibility
+                # filter for the skill input query (req 8/9).
+                skill_dirty = True
                 if verified:
                     await self._update_quest_progress_for_completion(
                         user_id=user_id,
@@ -1494,6 +1523,8 @@ class CompletionsService(BaseService):
                     unique_error=DuplicateFlagError(completion_id),
                     fk_error=CompletionNotFoundError(completion_id),
                 )
+                # New suspicious flag drops the user's eligibility -> recompute (req 9).
+                skill_dirty = True
                 notification_messages.append(
                     f"Your completion on **{map_code}** has been flagged as suspicious ({suspicious_flag_type}).\n"
                     f"Context: {suspicious_context}"
@@ -1502,6 +1533,8 @@ class CompletionsService(BaseService):
         if data.unmark_suspicious:
             deleted_count = await self._completions_repo.delete_suspicious_flag(completion_id)
             if deleted_count > 0:
+                # Removing a suspicious flag restores the user's eligibility -> recompute (req 9).
+                skill_dirty = True
                 notification_messages.append(
                     f"The suspicious flag on your completion for **{map_code}** has been removed."
                 )
@@ -1519,6 +1552,13 @@ class CompletionsService(BaseService):
             )
 
             await notification_service.create_and_dispatch(notification_data, headers)
+
+        # D-02 skill recompute: fire once post-commit if any eligibility-relevant
+        # field changed (verified flip / flag insert / flag delete). One emit
+        # covers multiple changes since the recompute is a full global rebuild (D-04).
+        # Fire-and-forget; guarded for the optional-request / event-driven case.
+        if skill_dirty:
+            self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:moderate")
 
 
 async def provide_completions_service(
