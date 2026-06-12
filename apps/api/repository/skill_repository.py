@@ -143,6 +143,23 @@ class SkillRepository(BaseRepository):
         rows = await _conn.fetch(SKILL_INPUT_QUERY)
         return [dict(row) for row in rows if not row["suspicious"]]
 
+    async def snapshot_is_empty(self, *, conn: Connection | None = None) -> bool:
+        """Report whether the lean snapshot cache holds zero rows.
+
+        Used by the app-side poller to decide whether to run the one-time initial
+        population on startup (cold-start fix): a fresh DB, a post-truncate state, or
+        a DB with no eligible players all read as empty. Uses a ``NOT EXISTS`` probe so
+        the query short-circuits on the first row instead of counting the whole table.
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            True if ``skill.snapshot`` has no rows, otherwise False.
+        """
+        _conn = self._get_connection(conn)
+        return await _conn.fetchval("SELECT NOT EXISTS (SELECT 1 FROM skill.snapshot)")
+
     async def fetch_snapshot(self, user_id: int, *, conn: Connection | None = None) -> dict | None:
         """Fetch a single player's lean snapshot row.
 
