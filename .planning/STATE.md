@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: unknown
-last_updated: "2026-06-12T19:04:16.607Z"
+last_updated: "2026-06-12T19:07:43.871Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 16
-  completed_plans: 11
-  percent: 67
+  completed_plans: 12
+  percent: 75
 ---
 
 # Tournament System — State
@@ -66,6 +66,27 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 13 Progress
+
+- **13-02 complete (2026-06-12):** Skill SDK wire contracts (interface-first, no DB
+  dependency). New `libs/sdk/.../skill.py` exports four msgspec structs: `Weights`
+  (1:1 with the D-09 `skill.weight_config` row — `diff_base, gamma, time_bonus,
+  shrink_k, wr_bonus, partial_factor, medal_gold/silver/bronze`, all `float`, all
+  required, **no defaults** so SPEC req 5 "no hardcoded weights" holds — defaults live
+  only in the 0027 seed); `SkillConfigUpdateRequest` (one `float | UnsetType = UNSET`
+  per weight, PATCH partial-update semantics, mirrors the `content.py` UNSET pattern);
+  `SkillSummaryResponse` (`user_id, skill_score, maps_cleared, video_clears,
+  hardest_raw`); and `SkillBreakdownRow` (9 fields `map_name, difficulty, raw,
+  fully_verified, medal: str | None, wr, raw_score, contribution, rank` — names mirror
+  the spike `player_breakdown` keys `score.py:78-88` exactly so the stored D-06 JSONB
+  array decodes straight into `list[SkillBreakdownRow]` via the jsonb<->msgspec codec).
+  Registered the `skill` module in the SDK `__init__.py` re-export convention. Added a
+  single non-optional `skill_score: float` to `CommunityLeaderboardResponse` adjacent to
+  the **untouched** `skill_rank` label (non-optional because the leaderboard SQL
+  `COALESCE(ss.skill_score, 0)` guarantees a value, D-07/D-08); docstring documents both,
+  no existing field renamed/reordered. Plan verifies pass (weights round-trip with
+  `.gamma==0.68`, missing key raises, `SkillConfigUpdateRequest()` round-trips all-UNSET,
+  `SkillBreakdownRow` decodes with `medal=None`, both leaderboard fields present);
+  `just lint-sdk` clean. No deviations. Commits `77985ef` (Task 1) / `1250506` (Task 2).
 
 - **13-01 complete (2026-06-12):** Migration `0027_skill_score.sql` — the data
   foundation for the skill-score phase. Creates `CREATE SCHEMA IF NOT EXISTS skill`;

@@ -120,13 +120,13 @@ later phases.
 **Requirements:** See `13-SPEC.md` (spec-phase). Grounded in
 `Skill("spike-findings-genjishimada")` (spikes 001/002/003).
 **Depends on:** Phase 11 (verification flow)
-**Plans:** 1/6 plans executed
+**Plans:** 2/6 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 13-01-PLAN.md — Migration 0027: skill schema + lean snapshot table + seeded weight config (req 1, 5) [wave 1]
-- [ ] 13-02-PLAN.md — SDK skill structs + CommunityLeaderboardResponse.skill_score field (req 5, 6, 7) [wave 1]
+- [x] 13-02-PLAN.md — SDK skill structs + CommunityLeaderboardResponse.skill_score field (req 5, 6, 7) [wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
