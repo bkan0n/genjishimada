@@ -116,4 +116,12 @@ later phases.
 **Requirements:** See `13-SPEC.md` (spec-phase). Grounded in
 `Skill("spike-findings-genjishimada")` (spikes 001/002/003).
 **Depends on:** Phase 11 (verification flow)
-**Plans:** Not yet planned
+**Plans:** 6 plans (4 waves)
+
+Plans:
+- [ ] 13-01-PLAN.md — Migration 0027: skill schema + lean snapshot table + seeded weight config (req 1, 5) [wave 1]
+- [ ] 13-02-PLAN.md — SDK skill structs + CommunityLeaderboardResponse.skill_score field (req 5, 6, 7) [wave 1]
+- [ ] 13-03-PLAN.md — skill_repository: 4-CTE input-query port + snapshot/weights CRUD (req 2, 3, 5) [wave 2]
+- [ ] 13-04-PLAN.md — SkillService: spike scorer port + recompute_all + reads + in-flight guard (req 4, 5) [wave 3]
+- [ ] 13-05-PLAN.md — /skill/* endpoints + in-process recompute listener + app-side nightly backstop (req 4, 5, 7, 8) [wave 4]
+- [ ] 13-06-PLAN.md — Emit recompute from all 4 verify paths + leaderboard skill_score column + integration test (req 6, 8, 9) [wave 4]
