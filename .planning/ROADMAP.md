@@ -92,16 +92,20 @@ Amends Phase 12's D-09/D-10/D-11 (combined-announcement) decisions.
 
 Plans:
 **Wave 1** *(parallel — disjoint files)*
+
 - [x] 12.1-01-PLAN.md — Migration 0025: tri-state status (D-08) + awaiting_results/start_announced + timing-only cron rewrite (D-06) + Wave 0 schema scaffolds
 - [x] 12.1-02-PLAN.md — SDK: TournamentEditionResultsEvent + results_pending flag + EditionStatus awaiting_results (D-09); msgspec old-payload compat
 
 **Wave 2** *(blocked on Wave 1)*
+
 - [x] 12.1-03-PLAN.md — Repo + service tri-state writes (verify/reject) + count_inflight_verifications drain query (D-08)
 
 **Wave 3** *(blocked on Wave 2)*
+
 - [x] 12.1-04-PLAN.md — Poller drain state machine, 3 emit paths + deferred-results outbox row (D-01/D-02/D-05/D-07) + force-publish route/service (D-03)
 
 **Wave 4** *(blocked on Waves 1 + 3)*
+
 - [x] 12.1-05-PLAN.md — Bot _on_edition_results handler + results-pending placeholder (D-01/D-04/D-05) + /tournament publish-results command (D-03)
 
 ### Phase 13: Skill score
@@ -119,9 +123,23 @@ later phases.
 **Plans:** 6 plans (4 waves)
 
 Plans:
+**Wave 1**
+
 - [ ] 13-01-PLAN.md — Migration 0027: skill schema + lean snapshot table + seeded weight config (req 1, 5) [wave 1]
 - [ ] 13-02-PLAN.md — SDK skill structs + CommunityLeaderboardResponse.skill_score field (req 5, 6, 7) [wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 13-03-PLAN.md — skill_repository: 4-CTE input-query port + snapshot/weights CRUD (req 2, 3, 5) [wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 13-04-PLAN.md — SkillService: spike scorer port + recompute_all + reads + in-flight guard (req 4, 5) [wave 3]
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 13-05-PLAN.md — /skill/* endpoints + in-process recompute listener + app-side nightly backstop (req 4, 5, 7, 8) [wave 4]
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 13-06-PLAN.md — Emit recompute from all 4 verify paths + leaderboard skill_score column + integration test (req 6, 8, 9) [wave 4]

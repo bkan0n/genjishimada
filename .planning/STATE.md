@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: unknown
-last_updated: "2026-06-12T18:23:10.804Z"
-last_activity: "2026-06-08 - Completed quick task 260608-ntz: Add an API route to remove a suspicious flag"
+last_updated: "2026-06-12T18:59:22.309Z"
+last_activity: 2026-06-12
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 10
+  total_plans: 16
   completed_plans: 10
-  percent: 67
+  percent: 63
 ---
 
 # Tournament System — State
 
-Last activity: 2026-06-08 - Completed quick task 260608-ntz: Add an API route to remove a suspicious flag
+Last activity: 2026-06-12
 
 ## Current Status
 
