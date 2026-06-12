@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: unknown
-last_updated: "2026-06-12T20:30:00.000Z"
+last_updated: "2026-06-12T19:26:52.132Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 16
-  completed_plans: 14
-  percent: 73
+  completed_plans: 15
+  percent: 67
 ---
 
 # Tournament System — State
@@ -66,6 +66,27 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 13 Progress
+
+- **13-05 complete (2026-06-12):** Skill HTTP surface + recompute machinery — the
+  service becomes a reachable API. New `apps/api/routes/v3/skill.py` `SkillController`
+  (`path="/skill"`, auto-registered): three typed GET reads (`/users/{id}` →
+  `SkillSummaryResponse` with the D-07 zero-player rule, `/users/{id}/breakdown` → the
+  D-06 per-map JSONB `list[SkillBreakdownRow]`, `/config` → `Weights`) plus a
+  superuser-only `PATCH /config` (`opt={"required_scopes": {"skill:admin"}}` sentinel —
+  superuser bypasses the reused `scope_guard`, everyone else 401/403; NO new scope
+  minted) that runs `update_weights` then an immediate `recompute_all` (D-10), mapping
+  `InvalidGammaError`→422 before any rebuild. New `apps/api/events/skill.py` —
+  `@listener("skill.recompute.requested") handle_skill_recompute` running the single
+  `recompute_all` (D-04), auto-registered by `events/__init__.py` discovery (6 listeners,
+  no `__init__.py` edit); `SkillRecomputeRequestedEvent` (optional `reason` only, no
+  required fields) added to `events/schemas.py`. In `app.py`, a new
+  `skill_nightly_rebuild_poller` lifespan task (mirrors `tournament_outbox_poller`) is the
+  D-03 durability backstop: sleeps to the next 04:00 UTC slot, builds the service via the
+  existing `provide_skill_repository`/`provide_skill_service` DI from `_app.state`, runs the
+  SAME `recompute_all` (D-04), CancelledError-safe, registered in `lifespan=[...]`. **No
+  pg_cron added** — the scorer is Python, so the app-side scheduler is the chosen mechanism
+  (PATTERNS flag resolved). `just lint-api` clean; `import app` succeeds. No deviations.
+  Commits `e6e47af` (Task 1) / `7e8ca94` (Task 2) / `d712a42` (Task 3).
 
 - **13-04 complete (2026-06-12):** SkillService — the scoring engine (heart of the
   phase). New `apps/api/services/skill_service.py` ports the spike's hybrid scorer
