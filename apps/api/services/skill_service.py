@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone
+from itertools import pairwise
 
 import msgspec
 from asyncpg import Pool
@@ -28,13 +29,17 @@ from genjishimada_sdk.skill import (
 from litestar.datastructures import State
 
 from repository.skill_repository import SkillRepository
-from services.exceptions.skill import InvalidGammaError
+from services.exceptions.skill import InvalidGammaError, InvalidPercentilesError
 
 from .base import BaseService
 
 # The safe diminishing-returns floor (SPEC Constraint / T-13-09): below this the score
 # approaches a pure sum and becomes farmable. The DB CHECK (gamma >= 0.5) is the backstop.
 _GAMMA_FLOOR = 0.5
+
+# The percentile tier system mints exactly this many cut-points (PYO-TIER-02), so a tier
+# update MUST supply exactly this many percentiles — one per boundary.
+_TIER_PERCENTILE_COUNT = 6
 
 
 class _RecomputeGuard:
@@ -292,6 +297,40 @@ class SkillService(BaseService):
         if gamma is not None and gamma < _GAMMA_FLOOR:
             raise InvalidGammaError(gamma)
         return msgspec.convert(await self._skill_repo.update_weights(updates), Weights)
+
+    async def update_tier_config(self, percentiles: list[float]) -> SkillTiersResponse:
+        """Replace the tier percentiles, then re-derive the boundaries (U82-TIER-PATCH-01).
+
+        Validates the supplied percentiles BEFORE any write (nothing is persisted on a
+        rejected update, T-u82-02): exactly ``_TIER_PERCENTILE_COUNT`` values, every value
+        strictly within ``(0, 1)``, and strictly increasing. On valid input it persists the
+        percentiles and re-derives the boundaries from the CURRENT snapshot on a SINGLE
+        connection (one transaction) by reusing the existing ``compute_tier_boundaries`` — it
+        does NOT re-run the full ``recompute_all`` (scores are unchanged; only the percentile
+        config and its derived boundaries move).
+
+        Args:
+            percentiles: The full replacement percentile array.
+
+        Returns:
+            The updated tier configuration (boundaries re-derived, computed_at refreshed).
+
+        Raises:
+            InvalidPercentilesError: If the array is not exactly 6 values, any value is not
+                strictly within (0, 1), or the values are not strictly increasing.
+        """
+        if len(percentiles) != _TIER_PERCENTILE_COUNT:
+            raise InvalidPercentilesError(f"percentiles must contain exactly {_TIER_PERCENTILE_COUNT} values.")
+        if any(not (0.0 < p < 1.0) for p in percentiles):
+            raise InvalidPercentilesError("every percentile must be strictly between 0 and 1.")
+        if any(b <= a for a, b in pairwise(percentiles)):
+            raise InvalidPercentilesError("percentiles must be strictly increasing.")
+
+        async with self._pool.acquire() as conn, conn.transaction():
+            await self._skill_repo.update_percentiles(percentiles, conn=conn)  # type: ignore[arg-type]
+            await self._skill_repo.compute_tier_boundaries(conn=conn)  # type: ignore[arg-type]
+            row = await self._skill_repo.fetch_tier_config(conn=conn)  # type: ignore[arg-type]
+        return msgspec.convert(row, SkillTiersResponse)
 
 
 async def provide_skill_service(state: State, skill_repo: SkillRepository) -> SkillService:

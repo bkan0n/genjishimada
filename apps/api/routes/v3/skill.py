@@ -7,15 +7,16 @@ from genjishimada_sdk.skill import (
     SkillConfigUpdateRequest,
     SkillSummaryResponse,
     SkillTiersResponse,
+    SkillTiersUpdateRequest,
     Weights,
 )
 from litestar import Controller, get, patch
 from litestar.di import Provide
 from litestar.exceptions import HTTPException
-from litestar.status_codes import HTTP_422_UNPROCESSABLE_ENTITY
+from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_422_UNPROCESSABLE_ENTITY
 
 from repository.skill_repository import provide_skill_repository
-from services.exceptions.skill import InvalidGammaError
+from services.exceptions.skill import InvalidGammaError, InvalidPercentilesError
 from services.skill_service import SkillService, provide_skill_service
 
 
@@ -88,6 +89,44 @@ class SkillController(Controller):
             SkillTiersResponse: The current boundaries, percentiles, and computed_at.
         """
         return await skill_service.get_tier_config()
+
+    @patch(
+        path="/tiers",
+        summary="Update Skill Tier Percentiles",
+        description=(
+            "Update the tier percentiles (superuser only) and immediately re-derive the "
+            "boundaries from the current snapshot — scores are unchanged (U82-TIER-PATCH-01). "
+            "Invalid percentiles return 400 and persist nothing."
+        ),
+        opt={"required_scopes": {"skill:admin"}},
+    )
+    async def update_tiers(
+        self,
+        skill_service: SkillService,
+        data: SkillTiersUpdateRequest,
+    ) -> SkillTiersResponse:
+        """Update the tier percentiles then re-derive boundaries (superuser only, U82-TIER-PATCH-01).
+
+        Gated by the SAME ``skill:admin`` sentinel ``update_config`` uses — no new scope is
+        minted; it is a guard sentinel no normal token holds, so a superuser bypasses the
+        guard while any non-superuser is rejected 401/403. On invalid percentiles nothing is
+        persisted (the 400 is raised before any write).
+
+        Args:
+            skill_service: Skill service dependency.
+            data: The replacement percentiles body.
+
+        Returns:
+            SkillTiersResponse: The updated boundaries, percentiles, and computed_at.
+
+        Raises:
+            HTTPException: 400 if the percentiles are not exactly 6 values strictly within
+                (0, 1) and strictly increasing.
+        """
+        try:
+            return await skill_service.update_tier_config(data.percentiles)
+        except InvalidPercentilesError as e:
+            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     @get(
         path="/config",
