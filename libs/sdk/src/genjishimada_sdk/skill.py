@@ -5,13 +5,45 @@ from datetime import datetime
 from msgspec import UNSET, Struct, UnsetType
 
 __all__ = (
+    "SKILL_TIER_NAMES",
     "SkillBreakdownRow",
     "SkillConfigUpdateRequest",
     "SkillSummaryResponse",
     "SkillTiersResponse",
     "SkillTiersUpdateRequest",
     "Weights",
+    "skill_tier_name",
 )
+
+
+# The SINGLE source of truth mapping an integer percentile tier (0..8) to its display
+# name. 7 seeded percentiles mint integer tiers 1..8 via ``width_bucket``; tier 0 is
+# reserved for Unranked (no eligible runs / population floor not met). Reused by both the
+# community leaderboard rows and the per-user skill summary so the names never drift.
+SKILL_TIER_NAMES: dict[int, str] = {
+    0: "Unranked",
+    1: "Bronze",
+    2: "Silver",
+    3: "Gold",
+    4: "Emerald",
+    5: "Diamond",
+    6: "Ascendant",
+    7: "Elite",
+    8: "Champion",
+}
+
+
+def skill_tier_name(tier: int) -> str:
+    """Map an integer percentile tier to its display name.
+
+    Args:
+        tier: Integer tier (0..8). 0 is Unranked; 1..8 are Bronze..Champion.
+
+    Returns:
+        The tier's display name, falling back to ``"Unranked"`` for any out-of-range
+        tier so callers never raise on an unexpected value.
+    """
+    return SKILL_TIER_NAMES.get(tier, "Unranked")
 
 
 class Weights(Struct):
@@ -78,12 +110,12 @@ class SkillTiersUpdateRequest(Struct):
 
     Carries the full replacement ``percentiles`` array for the percentile-based tier
     system. msgspec strict typing rejects non-float inputs at decode; the semantic
-    rules — exactly 6 values, each strictly in ``(0, 1)``, strictly increasing — are
+    rules — exactly 7 values, each strictly in ``(0, 1)``, strictly increasing — are
     enforced server-side in ``SkillService.update_tier_config`` (raising a 400), NOT
     by msgspec. On any violation nothing is persisted.
 
     Attributes:
-        percentiles: The 6 replacement percentiles (strictly increasing, all in ``(0, 1)``)
+        percentiles: The 7 replacement percentiles (strictly increasing, all in ``(0, 1)``)
             that the existing boundary routine re-derives the tier cut-points from.
     """
 
@@ -99,8 +131,9 @@ class SkillSummaryResponse(Struct):
         maps_cleared: Number of distinct eligible maps cleared.
         video_clears: Number of fully-verified (video-proof) clears.
         hardest_raw: Highest `raw_difficulty` cleared (0 when no eligible runs).
-        tier: Percentile tier 1..7, 0 = Unranked (no eligible runs / population floor not met).
+        tier: Percentile tier 1..8, 0 = Unranked (no eligible runs / population floor not met).
         percentile: 0..1 population percentile of skill_score (0 when no eligible runs).
+        skill_tier_name: Mapped tier name (Unranked..Champion) for the integer ``tier``.
     """
 
     user_id: int
@@ -110,6 +143,7 @@ class SkillSummaryResponse(Struct):
     hardest_raw: float
     tier: int
     percentile: float
+    skill_tier_name: str
 
 
 class SkillTiersResponse(Struct):
@@ -121,8 +155,8 @@ class SkillTiersResponse(Struct):
     Unranked). The `percentiles` array is the only tunable (seeded in migration 0028).
 
     Attributes:
-        boundaries: The 6 computed cut-point scores (empty until a qualifying recompute).
-        percentiles: The 6 configured percentiles that produce the boundaries.
+        boundaries: The 7 computed cut-point scores (empty until a qualifying recompute).
+        percentiles: The 7 configured percentiles that produce the boundaries.
         computed_at: When the boundaries were last computed.
     """
 
