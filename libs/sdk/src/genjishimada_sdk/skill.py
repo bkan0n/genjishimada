@@ -9,6 +9,7 @@ __all__ = (
     "SkillConfigUpdateRequest",
     "SkillSummaryResponse",
     "SkillTiersResponse",
+    "SkillTiersUpdateRequest",
     "Weights",
 )
 
@@ -70,6 +71,23 @@ class SkillConfigUpdateRequest(Struct):
     medal_gold: float | UnsetType = UNSET
     medal_silver: float | UnsetType = UNSET
     medal_bronze: float | UnsetType = UNSET
+
+
+class SkillTiersUpdateRequest(Struct):
+    """Update body for `PATCH /skill/tiers` (superuser only).
+
+    Carries the full replacement ``percentiles`` array for the percentile-based tier
+    system. msgspec strict typing rejects non-float inputs at decode; the semantic
+    rules — exactly 6 values, each strictly in ``(0, 1)``, strictly increasing — are
+    enforced server-side in ``SkillService.update_tier_config`` (raising a 400), NOT
+    by msgspec. On any violation nothing is persisted.
+
+    Attributes:
+        percentiles: The 6 replacement percentiles (strictly increasing, all in ``(0, 1)``)
+            that the existing boundary routine re-derives the tier cut-points from.
+    """
+
+    percentiles: list[float]
 
 
 class SkillSummaryResponse(Struct):
