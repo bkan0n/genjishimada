@@ -372,8 +372,13 @@ class TestLeaderboardSkillScore:
 
     async def test_zero_eligible_player_ranked_last(self, test_client, asyncpg_pool, seed):
         """A zero-eligible player shows skill_score 0, ranked last under skill sort (D-07)."""
+        # Scope the leaderboard to a unique nickname token shared by exactly this test's
+        # two users (name filter is a substring ILIKE). Without scoping, parallel tests
+        # add >page_size other users and the zero-score player (ranked last) is paginated
+        # off the global board, making the presence assertion below flaky.
+        token = f"ztel-{uuid4().hex[:12]}"
         map_id = await seed.make_map(difficulty="Hell", raw=9.0)
-        scorer = await seed.make_user()
+        scorer = await seed.make_user(nickname=f"{token}-scorer")
         await seed.make_completion(
             user_id=scorer,
             map_id=map_id,
@@ -381,12 +386,12 @@ class TestLeaderboardSkillScore:
             verified=True,
             message_id=int(uuid4().int % 9_000_000_000),
         )
-        empty = await seed.make_user()  # no completions -> no snapshot row (lean, D-07)
+        empty = await seed.make_user(nickname=f"{token}-empty")  # no completions -> no snapshot row (lean, D-07)
         await _recompute(asyncpg_pool)
 
         resp = await test_client.get(
             f"{COMMUNITY}/leaderboard",
-            params={"sort_column": "skill_score", "sort_direction": "desc", "page_size": 50},
+            params={"name": token, "sort_column": "skill_score", "sort_direction": "desc", "page_size": 50},
         )
         assert resp.status_code == 200
         rows = resp.json()
