@@ -15,11 +15,12 @@ from genjishimada_sdk.skill import (
     SkillBreakdownRow,
     SkillConfigUpdateRequest,
     SkillSummaryResponse,
+    SkillTiersUpdateRequest,
     Weights,
 )
 
 from services import skill_service as svc
-from services.exceptions.skill import InvalidGammaError
+from services.exceptions.skill import InvalidGammaError, InvalidPercentilesError
 from services.skill_service import SkillService
 
 pytestmark = [pytest.mark.domain_skill]
@@ -187,3 +188,54 @@ async def test_update_weights_writes_only_set_fields(mocker):
     repo.update_weights.assert_awaited_once_with({"gamma": 0.9})
     assert isinstance(result, Weights)
     assert result.gamma == 0.9
+
+
+async def test_update_tier_config_rejects_wrong_length(mocker):
+    """update_tier_config rejects an array that is not exactly 6 values, before any write (T-u82-02)."""
+    service, repo = _make_service(mocker)
+
+    for bad in ([0.1, 0.2, 0.3, 0.4, 0.5], [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]):
+        with pytest.raises(InvalidPercentilesError):
+            await service.update_tier_config(bad)
+
+    repo.update_percentiles.assert_not_awaited()
+    repo.compute_tier_boundaries.assert_not_awaited()
+
+
+async def test_update_tier_config_rejects_out_of_range(mocker):
+    """A 6-element array containing a value at/outside (0, 1) is rejected; nothing persisted."""
+    service, repo = _make_service(mocker)
+
+    for bad in (
+        [0.0, 0.2, 0.4, 0.6, 0.8, 0.9],  # 0.0 not strictly > 0
+        [0.2, 0.4, 0.6, 0.8, 0.9, 1.0],  # 1.0 not strictly < 1
+        [0.2, 0.4, 0.6, 0.8, 0.9, 1.5],  # > 1
+    ):
+        with pytest.raises(InvalidPercentilesError):
+            await service.update_tier_config(bad)
+
+    repo.update_percentiles.assert_not_awaited()
+    repo.compute_tier_boundaries.assert_not_awaited()
+
+
+async def test_update_tier_config_rejects_non_increasing(mocker):
+    """A 6-element in-range but non-strictly-increasing array is rejected; nothing persisted."""
+    service, repo = _make_service(mocker)
+
+    for bad in (
+        [0.1, 0.2, 0.2, 0.4, 0.5, 0.6],  # equal neighbours
+        [0.1, 0.3, 0.2, 0.4, 0.5, 0.6],  # decreasing step
+    ):
+        with pytest.raises(InvalidPercentilesError):
+            await service.update_tier_config(bad)
+
+    repo.update_percentiles.assert_not_awaited()
+    repo.compute_tier_boundaries.assert_not_awaited()
+
+
+def test_tier_update_request_round_trips():
+    """SkillTiersUpdateRequest decodes a JSON percentiles array unchanged (SDK shape sanity)."""
+    import msgspec
+
+    decoded = msgspec.json.decode(b'{"percentiles":[0.1,0.2,0.3,0.4,0.5,0.6]}', type=SkillTiersUpdateRequest)
+    assert decoded.percentiles == [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]

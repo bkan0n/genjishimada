@@ -279,6 +279,33 @@ class SkillRepository(BaseRepository):
         )
         return dict(row) if row else {}
 
+    async def update_percentiles(self, percentiles: list[float], *, conn: Connection | None = None) -> dict:
+        """Replace the single tier-config row's ``percentiles`` array and return the row (U82-TIER-PATCH-01).
+
+        Binds the ``float8[]`` array positionally as ``$1`` — asyncpg encodes a Python
+        ``list[float]`` natively, so there is NO string interpolation or array-literal
+        building (T-u82-02). Validation (count/range/monotonicity) is the service's job and
+        happens before this write; this method only persists. ``boundaries`` is NOT touched
+        here — the caller re-derives it via ``compute_tier_boundaries`` on the same connection.
+
+        Args:
+            percentiles: The full replacement percentile array.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The updated tier-config row as a dict (``boundaries``, ``percentiles``, ``computed_at``).
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            UPDATE skill.tier_config
+            SET percentiles = $1
+            RETURNING boundaries, percentiles, computed_at
+            """,
+            percentiles,
+        )
+        return dict(row) if row else {}
+
     async def compute_tier_boundaries(self, *, conn: Connection | None = None) -> None:
         """Recompute and persist the percentile tier boundaries from the live snapshot (PYO-TIER-02).
 

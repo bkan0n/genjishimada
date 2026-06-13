@@ -24,3 +24,16 @@ class InvalidGammaError(SkillError):
             "gamma must be >= 0.5 (lower values make the score farmable).",
             gamma=gamma,
         )
+
+
+class InvalidPercentilesError(SkillError):
+    """The tier ``percentiles`` array fails a server-side validation rule.
+
+    Raised by ``SkillService.update_tier_config`` BEFORE any write when the supplied
+    percentiles are not exactly 6 values, not all strictly within ``(0, 1)``, or not
+    strictly increasing. The controller maps it to HTTP 400; nothing is persisted on a
+    rejected update (T-u82-02).
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)

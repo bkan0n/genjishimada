@@ -688,3 +688,89 @@ class TestSkillTiers:
             assert user_resp.status_code == 200
             assert int(user_resp.json()["tier"]) == 0
             assert float(user_resp.json()["skill_score"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# U82-TIER-PATCH — PATCH /skill/tiers (auth gate, validation-rejection, happy path)
+# ---------------------------------------------------------------------------
+
+
+class TestTiersPatch:
+    """PATCH /skill/tiers: superuser-only percentile retune + boundary re-derivation (U82-TIER-PATCH-01).
+
+    Mirrors ``TestConfigPatchAuthz`` for the scope gate and ``TestSkillTiers`` for the
+    deterministic >=20 non-zero population (so ``compute_tier_boundaries`` mints real
+    cut-points). The single-row ``skill.tier_config`` is shared across the integration
+    DB, so the happy-path test RESTORES the seeded default percentiles afterward.
+    """
+
+    _VALID = [0.40, 0.60, 0.80, 0.90, 0.95, 0.99]
+    _SEEDED_DEFAULT = [0.50, 0.75, 0.90, 0.97, 0.99, 0.995]
+
+    async def test_unauthenticated_rejected(self, unauthenticated_client):
+        """No API key -> 401."""
+        resp = await unauthenticated_client.patch(f"{SKILL}/tiers", json={"percentiles": self._VALID})
+        assert resp.status_code == 401
+
+    async def test_non_superuser_rejected(self, read_only_client):
+        """A scoped non-superuser caller is rejected (401/403) by the skill:admin sentinel."""
+        resp = await read_only_client.patch(f"{SKILL}/tiers", json={"percentiles": self._VALID})
+        assert resp.status_code in (401, 403)
+
+    async def test_superuser_patch_persists_and_rederives(self, test_client, asyncpg_pool, seed):
+        """A superuser PATCH persists new percentiles and re-derives boundaries (U82-TIER-PATCH-01)."""
+        # Seed >= 20 distinct non-zero scores so a qualifying population exists for boundaries.
+        users = [await seed.make_user() for _ in range(24)]
+        scores = {uid: float(10 + i) for i, uid in enumerate(users)}
+        await TestSkillTiers._seed_snapshot(asyncpg_pool, scores)
+
+        before = await test_client.get(f"{SKILL}/tiers")
+        assert before.status_code == 200
+        boundaries_before = [float(b) for b in before.json()["boundaries"]]
+        assert len(boundaries_before) == 6  # population floor met -> real cut-points
+
+        # PATCH a NEW valid strictly-increasing array in (0, 1) as the superuser.
+        patch = await test_client.patch(f"{SKILL}/tiers", json={"percentiles": self._VALID})
+        assert patch.status_code == 200
+        assert [float(p) for p in patch.json()["percentiles"]] == self._VALID
+
+        # GET reflects the new percentiles; boundaries were re-derived (present + monotone).
+        after = await test_client.get(f"{SKILL}/tiers")
+        assert after.status_code == 200
+        after_json = after.json()
+        assert [float(p) for p in after_json["percentiles"]] == self._VALID
+        boundaries_after = [float(b) for b in after_json["boundaries"]]
+        assert len(boundaries_after) == 6
+        assert boundaries_after == sorted(boundaries_after)
+        assert all(b2 > b1 for b1, b2 in zip(boundaries_after[:-1], boundaries_after[1:], strict=True))
+        # New percentiles over the same population produce different cut-points.
+        assert boundaries_after != boundaries_before
+
+        # Restore the seeded default percentiles (shared single-row config).
+        restore = await test_client.patch(f"{SKILL}/tiers", json={"percentiles": self._SEEDED_DEFAULT})
+        assert restore.status_code == 200
+
+    async def test_superuser_invalid_rejected_nothing_persisted(self, test_client, asyncpg_pool, seed):
+        """Invalid percentiles -> 400, and a re-read confirms nothing was persisted."""
+        # Establish a known config first (a valid PATCH), so the unchanged assertion is precise.
+        users = [await seed.make_user() for _ in range(24)]
+        scores = {uid: float(10 + i) for i, uid in enumerate(users)}
+        await TestSkillTiers._seed_snapshot(asyncpg_pool, scores)
+        seeded = await test_client.patch(f"{SKILL}/tiers", json={"percentiles": self._VALID})
+        assert seeded.status_code == 200
+
+        before = await test_client.get(f"{SKILL}/tiers")
+        assert before.status_code == 200
+        percentiles_before = [float(p) for p in before.json()["percentiles"]]
+
+        # Invalid: wrong length AND not strictly increasing AND out of range.
+        bad = await test_client.patch(f"{SKILL}/tiers", json={"percentiles": [0.5, 0.4, 1.2]})
+        assert bad.status_code == 400
+
+        after = await test_client.get(f"{SKILL}/tiers")
+        assert after.status_code == 200
+        assert [float(p) for p in after.json()["percentiles"]] == percentiles_before
+
+        # Restore the seeded default percentiles (shared single-row config).
+        restore = await test_client.patch(f"{SKILL}/tiers", json={"percentiles": self._SEEDED_DEFAULT})
+        assert restore.status_code == 200
