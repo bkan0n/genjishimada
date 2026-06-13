@@ -6,6 +6,7 @@ from genjishimada_sdk.skill import (
     SkillBreakdownRow,
     SkillConfigUpdateRequest,
     SkillSummaryResponse,
+    SkillTiersResponse,
     Weights,
 )
 from litestar import Controller, get, patch
@@ -68,6 +69,25 @@ class SkillController(Controller):
             list[SkillBreakdownRow]: Per-map breakdown rows ([] for a zero-eligible player).
         """
         return await skill_service.get_user_breakdown(user_id)
+
+    @get(
+        path="/tiers",
+        summary="Get Skill Tier Config",
+        description=(
+            "Return the current tier boundaries, configured percentiles, and computed_at "
+            "for rendering a tier legend. Public read; no new scope."
+        ),
+    )
+    async def get_tiers(self, skill_service: SkillService) -> SkillTiersResponse:
+        """Return the current tier legend (PYO-TIER-05).
+
+        Args:
+            skill_service: Skill service dependency.
+
+        Returns:
+            SkillTiersResponse: The current boundaries, percentiles, and computed_at.
+        """
+        return await skill_service.get_tier_config()
 
     @get(
         path="/config",

@@ -112,6 +112,11 @@ _WEIGHT_COLUMNS = frozenset(
     }
 )
 
+# Population floor (PYO-TIER-06): below this many `skill_score > 0` players the sample is
+# too small to mint meaningful percentile boundaries, so tiering is skipped (boundaries are
+# persisted empty -> reads treat everyone as Unranked / tier 0).
+_TIER_POPULATION_FLOOR = 20
+
 
 class SkillRepository(BaseRepository):
     """Repository for the skill-score domain."""
@@ -273,6 +278,94 @@ class SkillRepository(BaseRepository):
             *(updates[col] for col in columns),
         )
         return dict(row) if row else {}
+
+    async def compute_tier_boundaries(self, *, conn: Connection | None = None) -> None:
+        """Recompute and persist the percentile tier boundaries from the live snapshot (PYO-TIER-02).
+
+        Reads the configured ``percentiles`` from the single ``skill.tier_config`` row and,
+        when at least ``_TIER_POPULATION_FLOOR`` players have ``skill_score > 0``, sets
+        ``boundaries`` to the array of ``percentile_cont(p) WITHIN GROUP (ORDER BY skill_score)``
+        over those non-zero rows (one cut-point per configured percentile, ascending). Below
+        the floor the boundaries are persisted EMPTY (``'{}'``) so ``width_bucket`` is never
+        called on a degenerate sample. ``computed_at`` is always refreshed. There are NO
+        hardcoded score cutoffs — the seeded percentile array is the only tunable.
+
+        Args:
+            conn: Optional connection for transaction support.
+        """
+        _conn = self._get_connection(conn)
+        await _conn.execute(
+            """
+            WITH cfg AS (SELECT percentiles FROM skill.tier_config LIMIT 1),
+                 pop AS (SELECT count(*) AS n FROM skill.snapshot WHERE skill_score > 0),
+                 b AS (
+                     SELECT array(
+                         SELECT percentile_cont(u.p) WITHIN GROUP (ORDER BY ss.skill_score)
+                         FROM unnest((SELECT percentiles FROM cfg)) WITH ORDINALITY AS u(p, ord)
+                         CROSS JOIN skill.snapshot ss
+                         WHERE ss.skill_score > 0
+                         GROUP BY u.p, u.ord
+                         ORDER BY u.ord
+                     ) AS boundaries
+                 )
+            UPDATE skill.tier_config SET
+                boundaries = CASE WHEN (SELECT n FROM pop) >= $1
+                                  THEN (SELECT boundaries FROM b)
+                                  ELSE '{}'::float8[] END,
+                computed_at = now()
+            """,
+            _TIER_POPULATION_FLOOR,
+        )
+
+    async def fetch_tier_config(self, *, conn: Connection | None = None) -> dict:
+        """Read the single tier-config row for the tier legend (PYO-TIER-05).
+
+        The ``float8[]`` arrays decode to Python ``list[float]`` natively (no codec needed).
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            A dict with ``boundaries``, ``percentiles``, and ``computed_at``.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow("SELECT boundaries, percentiles, computed_at FROM skill.tier_config LIMIT 1")
+        return dict(row) if row else {}
+
+    async def fetch_snapshot_with_tier(self, user_id: int, *, conn: Connection | None = None) -> dict | None:
+        """Fetch a player's snapshot row plus its tier and population percentile (PYO-TIER-03).
+
+        The tier is ``width_bucket(skill_score, boundaries) + 1`` (1..7) against the cached
+        boundaries, or 0 (Unranked) when the player has no positive score or the boundaries
+        are empty (population floor not met). The percentile is the share of non-zero players
+        with a score at or below this player's score.
+
+        Args:
+            user_id: Discord user ID to fetch the snapshot for.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The snapshot row (with ``tier`` and ``percentile``) as a dict, or None when the
+            player has no eligible runs (D-07).
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT ss.*,
+                CASE WHEN ss.skill_score <= 0 OR cardinality(tc.boundaries) = 0 THEN 0
+                     ELSE width_bucket(ss.skill_score, tc.boundaries) + 1 END AS tier,
+                coalesce(
+                    (SELECT count(*) FROM skill.snapshot s2
+                       WHERE s2.skill_score > 0 AND s2.skill_score <= ss.skill_score)::float8
+                    / NULLIF((SELECT count(*) FROM skill.snapshot s3 WHERE s3.skill_score > 0), 0),
+                    0.0) AS percentile
+            FROM skill.snapshot ss
+            CROSS JOIN skill.tier_config tc
+            WHERE ss.user_id = $1
+            """,
+            user_id,
+        )
+        return dict(row) if row else None
 
 
 async def provide_skill_repository(state: State) -> SkillRepository:

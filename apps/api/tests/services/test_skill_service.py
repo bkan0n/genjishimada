@@ -122,14 +122,15 @@ async def test_recompute_all_collapses_concurrent_bursts(mocker):
 
 
 async def test_get_user_skill_empty_player_returns_zero(mocker):
-    """get_user_skill returns an all-zero summary when no snapshot row exists (D-07)."""
+    """get_user_skill returns an all-zero / Unranked summary when no snapshot row exists (D-07)."""
     service, repo = _make_service(mocker)
-    repo.fetch_snapshot.return_value = None
+    # get_user_skill now reads via fetch_snapshot_with_tier (tier/percentile join, PYO-TIER-03).
+    repo.fetch_snapshot_with_tier.return_value = None
 
     result = await service.get_user_skill(999)
 
     assert result == SkillSummaryResponse(
-        user_id=999, skill_score=0.0, maps_cleared=0, video_clears=0, hardest_raw=0.0
+        user_id=999, skill_score=0.0, maps_cleared=0, video_clears=0, hardest_raw=0.0, tier=0, percentile=0.0
     )
 
 
