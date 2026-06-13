@@ -228,8 +228,9 @@ class CommunityLeaderboardResponse(Struct):
         discord_tag: Discord tag for the user.
         skill_rank: Derived difficulty-tier label (Ninja..God).
         skill_score: Numeric skill score (COALESCE'd to 0 in SQL, never null).
-        tier: Percentile tier 1..7, 0 = Unranked (COALESCE'd in SQL, never null).
-        percentile: 0..1 population percentile of skill_score (COALESCE'd in SQL, never null).
+        skill_tier: Percentile tier 1..8, 0 = Unranked (COALESCE'd in SQL, never null).
+        skill_percentile: 0..1 population percentile of skill_score (COALESCE'd in SQL, never null).
+        skill_tier_name: Mapped tier name, Unranked..Champion, for the integer ``skill_tier``.
         total_results: Total results in a paginated query.
     """
 
@@ -246,6 +247,7 @@ class CommunityLeaderboardResponse(Struct):
     discord_tag: str
     skill_rank: str
     skill_score: float
-    tier: int
-    percentile: float
+    skill_tier: int
+    skill_percentile: float
+    skill_tier_name: str
     total_results: int

@@ -60,8 +60,9 @@ class CommunityRepository(BaseRepository):
         Returns:
             list[dict]: Paged leaderboard rows including XP, tiers, WR count, map count,
             playtest count, Discord tag, derived skill rank, numeric skill score
-            (coalesced to 0), and the percentile tier (1..7, 0 = Unranked) + population
-            percentile derived from the cached ``skill.tier_config`` boundaries.
+            (coalesced to 0), and the percentile tier as ``skill_tier`` (1..8, 0 = Unranked)
+            + ``skill_percentile`` (population percentile) derived from the cached
+            ``skill.tier_config`` boundaries.
         """
         _conn = self._get_connection(conn)
 
@@ -221,12 +222,12 @@ class CommunityRepository(BaseRepository):
             coalesce(rank_name, 'Ninja') AS skill_rank,
             coalesce(ss.skill_score, 0) AS skill_score,
             CASE WHEN coalesce(ss.skill_score, 0) <= 0 OR cardinality(tc.boundaries) = 0 THEN 0
-                 ELSE width_bucket(ss.skill_score, tc.boundaries) + 1 END AS tier,
+                 ELSE width_bucket(ss.skill_score, tc.boundaries) + 1 END AS skill_tier,
             coalesce(
                 (SELECT count(*) FROM skill.snapshot s2
                    WHERE s2.skill_score > 0 AND s2.skill_score <= ss.skill_score)::float8
                 / NULLIF((SELECT count(*) FROM skill.snapshot s3 WHERE s3.skill_score > 0), 0),
-                0.0) AS percentile,
+                0.0) AS skill_percentile,
             count(*) OVER () AS total_results
         FROM xp_tiers u
         LEFT JOIN playtest_counts ptc ON u.id = ptc.user_id
