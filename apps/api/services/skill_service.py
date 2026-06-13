@@ -25,6 +25,7 @@ from genjishimada_sdk.skill import (
     SkillSummaryResponse,
     SkillTiersResponse,
     Weights,
+    skill_tier_name,
 )
 from litestar.datastructures import State
 
@@ -38,8 +39,9 @@ from .base import BaseService
 _GAMMA_FLOOR = 0.5
 
 # The percentile tier system mints exactly this many cut-points (PYO-TIER-02), so a tier
-# update MUST supply exactly this many percentiles — one per boundary.
-_TIER_PERCENTILE_COUNT = 6
+# update MUST supply exactly this many percentiles — one per boundary. 7 boundaries mint
+# integer tiers 1..8 via width_bucket; tier 0 is Unranked.
+_TIER_PERCENTILE_COUNT = 7
 
 
 class _RecomputeGuard:
@@ -247,7 +249,11 @@ class SkillService(BaseService):
                 hardest_raw=0.0,
                 tier=0,
                 percentile=0.0,
+                skill_tier_name=skill_tier_name(0),
             )
+        # Map the integer tier to its display name via the SDK single source of truth; the
+        # snapshot/tier row carries `tier` but not `skill_tier_name`, so inject it before convert.
+        row = {**dict(row), "skill_tier_name": skill_tier_name(int(row["tier"]))}
         return msgspec.convert(row, SkillSummaryResponse)
 
     async def get_user_breakdown(self, user_id: int) -> list[SkillBreakdownRow]:
@@ -316,7 +322,7 @@ class SkillService(BaseService):
             The updated tier configuration (boundaries re-derived, computed_at refreshed).
 
         Raises:
-            InvalidPercentilesError: If the array is not exactly 6 values, any value is not
+            InvalidPercentilesError: If the array is not exactly 7 values, any value is not
                 strictly within (0, 1), or the values are not strictly increasing.
         """
         if len(percentiles) != _TIER_PERCENTILE_COUNT:

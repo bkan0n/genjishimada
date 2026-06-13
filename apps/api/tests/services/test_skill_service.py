@@ -12,11 +12,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 from genjishimada_sdk.skill import (
+    SKILL_TIER_NAMES,
     SkillBreakdownRow,
     SkillConfigUpdateRequest,
     SkillSummaryResponse,
     SkillTiersUpdateRequest,
     Weights,
+    skill_tier_name,
 )
 
 from services import skill_service as svc
@@ -131,8 +133,25 @@ async def test_get_user_skill_empty_player_returns_zero(mocker):
     result = await service.get_user_skill(999)
 
     assert result == SkillSummaryResponse(
-        user_id=999, skill_score=0.0, maps_cleared=0, video_clears=0, hardest_raw=0.0, tier=0, percentile=0.0
+        user_id=999,
+        skill_score=0.0,
+        maps_cleared=0,
+        video_clears=0,
+        hardest_raw=0.0,
+        tier=0,
+        percentile=0.0,
+        skill_tier_name="Unranked",
     )
+
+
+def test_skill_tier_name_map():
+    """The int->name map covers 0..8 and falls back to Unranked for out-of-range tiers."""
+    assert SKILL_TIER_NAMES[0] == "Unranked"
+    assert SKILL_TIER_NAMES[8] == "Champion"
+    assert len(SKILL_TIER_NAMES) == 9
+    assert skill_tier_name(0) == "Unranked"
+    assert skill_tier_name(8) == "Champion"
+    assert skill_tier_name(99) == "Unranked"
 
 
 async def test_get_user_breakdown_empty_player_returns_empty(mocker):
@@ -191,10 +210,13 @@ async def test_update_weights_writes_only_set_fields(mocker):
 
 
 async def test_update_tier_config_rejects_wrong_length(mocker):
-    """update_tier_config rejects an array that is not exactly 6 values, before any write (T-u82-02)."""
+    """update_tier_config rejects an array that is not exactly 7 values, before any write (T-u82-02)."""
     service, repo = _make_service(mocker)
 
-    for bad in ([0.1, 0.2, 0.3, 0.4, 0.5], [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]):
+    for bad in (
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],  # 6 values
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],  # 8 values
+    ):
         with pytest.raises(InvalidPercentilesError):
             await service.update_tier_config(bad)
 
@@ -203,13 +225,13 @@ async def test_update_tier_config_rejects_wrong_length(mocker):
 
 
 async def test_update_tier_config_rejects_out_of_range(mocker):
-    """A 6-element array containing a value at/outside (0, 1) is rejected; nothing persisted."""
+    """A 7-element array containing a value at/outside (0, 1) is rejected; nothing persisted."""
     service, repo = _make_service(mocker)
 
     for bad in (
-        [0.0, 0.2, 0.4, 0.6, 0.8, 0.9],  # 0.0 not strictly > 0
-        [0.2, 0.4, 0.6, 0.8, 0.9, 1.0],  # 1.0 not strictly < 1
-        [0.2, 0.4, 0.6, 0.8, 0.9, 1.5],  # > 1
+        [0.0, 0.2, 0.4, 0.6, 0.8, 0.9, 0.95],  # 0.0 not strictly > 0
+        [0.2, 0.4, 0.6, 0.7, 0.8, 0.9, 1.0],  # 1.0 not strictly < 1
+        [0.2, 0.4, 0.6, 0.7, 0.8, 0.9, 1.5],  # > 1
     ):
         with pytest.raises(InvalidPercentilesError):
             await service.update_tier_config(bad)
@@ -219,12 +241,12 @@ async def test_update_tier_config_rejects_out_of_range(mocker):
 
 
 async def test_update_tier_config_rejects_non_increasing(mocker):
-    """A 6-element in-range but non-strictly-increasing array is rejected; nothing persisted."""
+    """A 7-element in-range but non-strictly-increasing array is rejected; nothing persisted."""
     service, repo = _make_service(mocker)
 
     for bad in (
-        [0.1, 0.2, 0.2, 0.4, 0.5, 0.6],  # equal neighbours
-        [0.1, 0.3, 0.2, 0.4, 0.5, 0.6],  # decreasing step
+        [0.1, 0.2, 0.2, 0.4, 0.5, 0.6, 0.7],  # equal neighbours
+        [0.1, 0.3, 0.2, 0.4, 0.5, 0.6, 0.7],  # decreasing step
     ):
         with pytest.raises(InvalidPercentilesError):
             await service.update_tier_config(bad)
@@ -237,5 +259,7 @@ def test_tier_update_request_round_trips():
     """SkillTiersUpdateRequest decodes a JSON percentiles array unchanged (SDK shape sanity)."""
     import msgspec
 
-    decoded = msgspec.json.decode(b'{"percentiles":[0.1,0.2,0.3,0.4,0.5,0.6]}', type=SkillTiersUpdateRequest)
-    assert decoded.percentiles == [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    decoded = msgspec.json.decode(
+        b'{"percentiles":[0.1,0.2,0.3,0.4,0.5,0.6,0.7]}', type=SkillTiersUpdateRequest
+    )
+    assert decoded.percentiles == [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]

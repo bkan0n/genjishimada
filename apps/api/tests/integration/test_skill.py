@@ -32,6 +32,7 @@ from uuid import uuid4
 
 import asyncpg
 import pytest
+from genjishimada_sdk.skill import SKILL_TIER_NAMES
 from litestar import Litestar
 from litestar.testing import AsyncTestClient
 from pytest_databases.docker.postgres import PostgresService
@@ -602,19 +603,19 @@ class TestSkillTiers:
         await SkillRepository(pool).compute_tier_boundaries()
 
     async def test_tier_assignment_and_legend(self, test_client, asyncpg_pool, seed):
-        """>=20 scored players -> 6 increasing boundaries; per-user tier matches the leaderboard (PYO-TIER-02/03/04/05)."""
+        """>=20 scored players -> 7 increasing boundaries; per-user tier matches the leaderboard (PYO-TIER-02/03/04/05)."""
         # Seed >= 20 distinct non-zero scores (a clean increasing spread) so percentile_cont
         # yields strictly increasing cut-points.
         users = [await seed.make_user() for _ in range(24)]
         scores = {uid: float(10 + i) for i, uid in enumerate(users)}  # 10.0 .. 33.0, all distinct
         await self._seed_snapshot(asyncpg_pool, scores)
 
-        # PYO-TIER-05: the legend exposes 6 percentiles + 6 boundaries.
+        # PYO-TIER-05: the legend exposes 7 percentiles + 7 boundaries.
         tiers_resp = await test_client.get(f"{SKILL}/tiers")
         assert tiers_resp.status_code == 200
         legend = tiers_resp.json()
-        assert len(legend["percentiles"]) == 6
-        assert len(legend["boundaries"]) == 6
+        assert len(legend["percentiles"]) == 7
+        assert len(legend["boundaries"]) == 7
         # PYO-TIER-02: boundaries are strictly increasing (monotone cut-points).
         boundaries = [float(b) for b in legend["boundaries"]]
         assert boundaries == sorted(boundaries)
@@ -623,12 +624,14 @@ class TestSkillTiers:
         # The top-scoring seeded user.
         top_user = max(scores, key=lambda u: scores[u])
 
-        # PYO-TIER-03: the top scorer's per-user read carries a real tier (1..7) + percentile.
+        # PYO-TIER-03: the top scorer's per-user read carries a real tier (1..8) + percentile,
+        # plus a non-empty skill_tier_name consistent with the integer tier.
         user_resp = await test_client.get(f"{SKILL}/users/{top_user}")
         assert user_resp.status_code == 200
         user_json = user_resp.json()
-        assert 1 <= int(user_json["tier"]) <= 7
+        assert 1 <= int(user_json["tier"]) <= 8
         assert 0.0 <= float(user_json["percentile"]) <= 1.0
+        assert user_json["skill_tier_name"] == SKILL_TIER_NAMES[int(user_json["tier"])]
 
         # PYO-TIER-04: the same user's leaderboard row carries the SAME tier, and the
         # skill_rank / skill_score columns are still present/unchanged.
@@ -641,7 +644,14 @@ class TestSkillTiers:
         assert lb_rows
         assert all("skill_rank" in r and isinstance(r["skill_rank"], str) for r in lb_rows)
         assert all("skill_score" in r for r in lb_rows)
-        lb_tier_by_user = {int(r["user_id"]): int(r["tier"]) for r in lb_rows}
+        # Renamed columns: skill_tier / skill_percentile, plus the mapped skill_tier_name.
+        assert all("skill_tier_name" in r for r in lb_rows)
+        assert all(r["skill_tier_name"] == SKILL_TIER_NAMES[int(r["skill_tier"])] for r in lb_rows)
+        # Unranked rows (skill_tier 0) map to "Unranked".
+        for r in lb_rows:
+            if int(r["skill_tier"]) == 0:
+                assert r["skill_tier_name"] == "Unranked"
+        lb_tier_by_user = {int(r["user_id"]): int(r["skill_tier"]) for r in lb_rows}
         assert top_user in lb_tier_by_user
         assert lb_tier_by_user[top_user] == int(user_json["tier"])
 
@@ -659,16 +669,18 @@ class TestSkillTiers:
         user_json = user_resp.json()
         assert int(user_json["tier"]) == 0
         assert float(user_json["skill_score"]) == 0.0
+        assert user_json["skill_tier_name"] == "Unranked"
 
         lb = await test_client.get(
             f"{COMMUNITY}/leaderboard",
             params={"sort_column": "skill_score", "sort_direction": "desc", "page_size": 50},
         )
         assert lb.status_code == 200
-        tier_by_user = {int(r["user_id"]): int(r["tier"]) for r in lb.json()}
-        # If present on this page, the zero-eligible player is Unranked (tier 0).
-        if empty in tier_by_user:
-            assert tier_by_user[empty] == 0
+        rows_by_user = {int(r["user_id"]): r for r in lb.json()}
+        # If present on this page, the zero-eligible player is Unranked (skill_tier 0).
+        if empty in rows_by_user:
+            assert int(rows_by_user[empty]["skill_tier"]) == 0
+            assert rows_by_user[empty]["skill_tier_name"] == "Unranked"
 
     async def test_population_floor_fallback(self, test_client, asyncpg_pool, seed):
         """Fewer than 20 scored players -> empty boundaries -> everyone Unranked, no crash (PYO-TIER-06)."""
@@ -704,8 +716,8 @@ class TestTiersPatch:
     DB, so the happy-path test RESTORES the seeded default percentiles afterward.
     """
 
-    _VALID = [0.40, 0.60, 0.80, 0.90, 0.95, 0.99]
-    _SEEDED_DEFAULT = [0.50, 0.75, 0.90, 0.97, 0.99, 0.995]
+    _VALID = [0.40, 0.55, 0.70, 0.80, 0.90, 0.95, 0.99]
+    _SEEDED_DEFAULT = [0.50, 0.70, 0.85, 0.93, 0.97, 0.99, 0.995]
 
     async def test_unauthenticated_rejected(self, unauthenticated_client):
         """No API key -> 401."""
@@ -727,7 +739,7 @@ class TestTiersPatch:
         before = await test_client.get(f"{SKILL}/tiers")
         assert before.status_code == 200
         boundaries_before = [float(b) for b in before.json()["boundaries"]]
-        assert len(boundaries_before) == 6  # population floor met -> real cut-points
+        assert len(boundaries_before) == 7  # population floor met -> real cut-points
 
         # PATCH a NEW valid strictly-increasing array in (0, 1) as the superuser.
         patch = await test_client.patch(f"{SKILL}/tiers", json={"percentiles": self._VALID})
@@ -740,7 +752,7 @@ class TestTiersPatch:
         after_json = after.json()
         assert [float(p) for p in after_json["percentiles"]] == self._VALID
         boundaries_after = [float(b) for b in after_json["boundaries"]]
-        assert len(boundaries_after) == 6
+        assert len(boundaries_after) == 7
         assert boundaries_after == sorted(boundaries_after)
         assert all(b2 > b1 for b1, b2 in zip(boundaries_after[:-1], boundaries_after[1:], strict=True))
         # New percentiles over the same population produce different cut-points.
