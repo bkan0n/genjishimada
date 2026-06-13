@@ -1,11 +1,15 @@
 """Equivalence tests for the ported skill scorer.
 
 These are pure-Python unit tests (no DB): they load the cached real-data inputs
-(`skill_inputs.json` from spike 001) and the spike's reference scorer
-(`score.py` from spike 002) via importlib, then assert that
+(`skill_inputs.json`) and the spike's reference scorer
+(`spike_reference_score.py`) via importlib, then assert that
 `SkillService`'s ported helpers reproduce the spike's totals within float
 tolerance for every user. They also prove the two headline behaviors:
 partial-vs-video gating and the gamma anti-farm dial.
+
+Both fixtures are frozen copies vendored into `_fixtures/` (duplicated from the
+spike reference material). Tests never reach into the planning or agent-config
+directories — that material is reference-only and absent from CI checkouts.
 """
 
 from __future__ import annotations
@@ -23,17 +27,9 @@ from services import skill_service as svc
 
 pytestmark = [pytest.mark.domain_skill]
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_SKILL_INPUTS = _REPO_ROOT / ".planning" / "spikes" / "001-skill-input-query" / "skill_inputs.json"
-_SPIKE_SCORE = (
-    _REPO_ROOT
-    / ".claude"
-    / "skills"
-    / "spike-findings-genjishimada"
-    / "sources"
-    / "002-scoring-farming-resistance"
-    / "score.py"
-)
+_FIXTURES = Path(__file__).resolve().parent / "_fixtures"
+_SKILL_INPUTS = _FIXTURES / "skill_inputs.json"
+_SPIKE_SCORE = _FIXTURES / "spike_reference_score.py"
 
 # The adopted community-tuned defaults (D-09). The real weights live in the DB seed;
 # the test supplies them explicitly to build a Weights struct for the equivalence proof.
