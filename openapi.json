@@ -26726,15 +26726,21 @@
             ]
           },
           "updated_at": {
-            "type": "string",
-            "format": "date-time"
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
         "required": [
           "current_streak",
           "max_streak",
-          "updated_at",
           "user_id"
         ],
         "title": "TournamentStreakResponse"
