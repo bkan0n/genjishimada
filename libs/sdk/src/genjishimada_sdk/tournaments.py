@@ -503,14 +503,14 @@ class TournamentStreakResponse(Struct):
         current_streak: Consecutive cycles with at least one submission.
         max_streak: Highest streak ever achieved.
         last_cycle_id: Last cycle the user participated in.
-        updated_at: When the streak was last updated.
+        updated_at: When the streak was last updated. None for users with no streak record.
     """
 
     user_id: int
     current_streak: int
     max_streak: int
     last_cycle_id: int | None
-    updated_at: dt.datetime
+    updated_at: dt.datetime | None
 
 
 # ---------------------------------------------------------------------------

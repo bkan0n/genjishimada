@@ -9,7 +9,6 @@ from services.exceptions.tournaments import (
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
-    StreakNotFoundError,
 )
 from services.tournament_service import TournamentService
 
@@ -399,12 +398,17 @@ class TestGetStreak:
         assert result.current_streak == 3
         assert result.max_streak == 5
 
-    async def test_raises_when_absent(self, mock_pool, mock_state, mock_tournament_repo):
-        """Raises StreakNotFoundError when the repo returns None (mirrors get_category)."""
+    async def test_returns_zero_streak_when_absent(self, mock_pool, mock_state, mock_tournament_repo):
+        """Returns a zero-valued streak when the repo returns None (no 404)."""
         service = TournamentService(mock_pool, mock_state, mock_tournament_repo)
 
         mock_tournament_repo.fetch_streak.return_value = None
 
-        with pytest.raises(StreakNotFoundError):
-            await service.get_streak(999)
+        result = await service.get_streak(999)
+
+        assert result.user_id == 999
+        assert result.current_streak == 0
+        assert result.max_streak == 0
+        assert result.last_cycle_id is None
+        assert result.updated_at is None
 

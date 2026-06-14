@@ -48,7 +48,6 @@ from services.exceptions.tournaments import (
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
-    StreakNotFoundError,
     TournamentCompletionNotFoundError,
 )
 from services.tournament_outbox_service import _write_drained_results_row
@@ -186,18 +185,24 @@ class TournamentService(BaseService):
     async def get_streak(self, user_id: int) -> TournamentStreakResponse:
         """Get a single user's participation streak.
 
+        Users who have never participated have no streak row; rather than 404,
+        return a zero-valued streak so callers can render it directly.
+
         Args:
             user_id: User ID.
 
         Returns:
-            User participation streak.
-
-        Raises:
-            StreakNotFoundError: If no streak record exists for the user.
+            User participation streak, or a zero-valued streak if no record exists.
         """
         row = await self._tournament_repo.fetch_streak(user_id)
         if row is None:
-            raise StreakNotFoundError(user_id)
+            return TournamentStreakResponse(
+                user_id=user_id,
+                current_streak=0,
+                max_streak=0,
+                last_cycle_id=None,
+                updated_at=None,
+            )
         return msgspec.convert(row, TournamentStreakResponse)
 
     async def update_category(

@@ -52,7 +52,6 @@ from services.exceptions.tournaments import (
     NoEligibleMapsError,
     PendingCycleAlreadyExistsError,
     PendingCycleNotFoundError,
-    StreakNotFoundError,
     TournamentCompletionNotFoundError,
 )
 from services.tournament_reward_service import provide_tournament_reward_service
@@ -225,23 +224,16 @@ class TournamentsController(litestar.Controller):
     ) -> TournamentStreakResponse:
         """Get a user's tournament participation streak.
 
+        Users with no streak record receive a zero-valued streak rather than a 404.
+
         Args:
             tournament_service: Tournament service.
             user_id: User ID.
 
         Returns:
             User participation streak.
-
-        Raises:
-            CustomHTTPException: 404 if no streak record exists for the user.
         """
-        try:
-            return await tournament_service.get_streak(user_id)
-        except StreakNotFoundError as e:
-            raise CustomHTTPException(
-                status_code=HTTP_404_NOT_FOUND,
-                detail=str(e),
-            ) from e
+        return await tournament_service.get_streak(user_id)
 
     @litestar.patch(
         path="/categories/{category_id:int}",
