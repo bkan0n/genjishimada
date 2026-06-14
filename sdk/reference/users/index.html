@@ -3436,7 +3436,67 @@
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Skill rank label.</p>
+                <p>Derived difficulty-tier label (Ninja..God).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="skill_score: float
+
+  
+      instance-attribute
+   (genjishimada_sdk.users.CommunityLeaderboardResponse.skill_score)" href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_score">skill_score</a></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Numeric skill score (COALESCE'd to 0 in SQL, never null).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="skill_tier: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.users.CommunityLeaderboardResponse.skill_tier)" href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_tier">skill_tier</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Percentile tier 1..8, 0 = Unranked (COALESCE'd in SQL, never null).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="skill_percentile: float
+
+  
+      instance-attribute
+   (genjishimada_sdk.users.CommunityLeaderboardResponse.skill_percentile)" href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_percentile">skill_percentile</a></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>0..1 population percentile of skill_score (COALESCE'd in SQL, never null).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="skill_tier_name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.users.CommunityLeaderboardResponse.skill_tier_name)" href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_tier_name">skill_tier_name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mapped tier name, Unranked..Champion, for the integer <code>skill_tier</code>.</p>
               </div>
             </td>
           </tr>
@@ -3655,6 +3715,31 @@
 
 
 
+<h4 id="genjishimada_sdk.users.CommunityLeaderboardResponse.skill_percentile" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">skill_percentile</span><span class="p">:</span> <span class="nb">float</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_percentile" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h4 id="genjishimada_sdk.users.CommunityLeaderboardResponse.skill_rank" class="doc doc-heading">
             <code class="highlight language-python"><span class="n">skill_rank</span><span class="p">:</span> <span class="nb">str</span></code>
 
@@ -3663,6 +3748,81 @@
   </span>
 
 <a href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_rank" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.users.CommunityLeaderboardResponse.skill_score" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">skill_score</span><span class="p">:</span> <span class="nb">float</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_score" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.users.CommunityLeaderboardResponse.skill_tier" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">skill_tier</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_tier" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.users.CommunityLeaderboardResponse.skill_tier_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">skill_tier_name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.users.CommunityLeaderboardResponse.skill_tier_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
 
 
     <div class="doc doc-contents ">

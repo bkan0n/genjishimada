@@ -4191,6 +4191,88 @@
 
 
 
+        <p>Complete rank card payload for <code>GET /api/v3/users/{user_id}/rank-card/</code>.</p>
+<p>The four <code>skill_*</code> fields mirror <code>CommunityLeaderboardResponse</code> exactly (same
+names, same types) so the frontend can reuse its leaderboard rendering for the rank
+card. They surface a player's skill standing from the cached <code>skill.snapshot</code> +
+<code>skill.tier_config</code> join.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="skill_score: float
+
+  
+      instance-attribute
+   (genjishimada_sdk.rank_card.RankCardResponse.skill_score)" href="#genjishimada_sdk.rank_card.RankCardResponse.skill_score">skill_score</a></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Aggregate numeric skill score (0 when no eligible runs).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="skill_tier: int
+
+  
+      instance-attribute
+   (genjishimada_sdk.rank_card.RankCardResponse.skill_tier)" href="#genjishimada_sdk.rank_card.RankCardResponse.skill_tier">skill_tier</a></code></td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Percentile tier 1..8, 0 = Unranked (no eligible runs / population
+floor not met).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="skill_percentile: float
+
+  
+      instance-attribute
+   (genjishimada_sdk.rank_card.RankCardResponse.skill_percentile)" href="#genjishimada_sdk.rank_card.RankCardResponse.skill_percentile">skill_percentile</a></code></td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>0..1 population percentile of skill_score (0 when no eligible runs).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><a class="autorefs autorefs-internal" title="skill_tier_name: str
+
+  
+      instance-attribute
+   (genjishimada_sdk.rank_card.RankCardResponse.skill_tier_name)" href="#genjishimada_sdk.rank_card.RankCardResponse.skill_tier_name">skill_tier_name</a></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mapped tier name (Unranked..Champion) for the integer <code>skill_tier</code>,
+derived via the SDK single source of truth <code>skill_tier_name</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
 
 
 
@@ -4529,6 +4611,106 @@
   </span>
 
 <a href="#genjishimada_sdk.rank_card.RankCardResponse.rank_url" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.rank_card.RankCardResponse.skill_percentile" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">skill_percentile</span><span class="p">:</span> <span class="nb">float</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.rank_card.RankCardResponse.skill_percentile" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.rank_card.RankCardResponse.skill_score" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">skill_score</span><span class="p">:</span> <span class="nb">float</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.rank_card.RankCardResponse.skill_score" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.rank_card.RankCardResponse.skill_tier" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">skill_tier</span><span class="p">:</span> <span class="nb">int</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.rank_card.RankCardResponse.skill_tier" class="headerlink" title="Anchor link to this section">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+    </div>
+
+</div>
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h4 id="genjishimada_sdk.rank_card.RankCardResponse.skill_tier_name" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">skill_tier_name</span><span class="p">:</span> <span class="nb">str</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#genjishimada_sdk.rank_card.RankCardResponse.skill_tier_name" class="headerlink" title="Anchor link to this section">&para;</a></h4>
 
 
     <div class="doc doc-contents ">
