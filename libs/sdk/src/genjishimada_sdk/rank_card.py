@@ -96,6 +96,22 @@ class RankCardDifficultiesData(Struct):
 
 
 class RankCardResponse(Struct):
+    """Complete rank card payload for ``GET /api/v3/users/{user_id}/rank-card/``.
+
+    The four ``skill_*`` fields mirror ``CommunityLeaderboardResponse`` exactly (same
+    names, same types) so the frontend can reuse its leaderboard rendering for the rank
+    card. They surface a player's skill standing from the cached ``skill.snapshot`` +
+    ``skill.tier_config`` join.
+
+    Attributes:
+        skill_score: Aggregate numeric skill score (0 when no eligible runs).
+        skill_tier: Percentile tier 1..8, 0 = Unranked (no eligible runs / population
+            floor not met).
+        skill_percentile: 0..1 population percentile of skill_score (0 when no eligible runs).
+        skill_tier_name: Mapped tier name (Unranked..Champion) for the integer ``skill_tier``,
+            derived via the SDK single source of truth ``skill_tier_name``.
+    """
+
     rank_name: str
     nickname: str
     background: str
@@ -110,6 +126,11 @@ class RankCardResponse(Struct):
     xp: int
     community_rank: str
     prestige_level: int
+
+    skill_score: float
+    skill_tier: int
+    skill_percentile: float
+    skill_tier_name: str
 
     background_url: str = ""
     rank_url: str = ""

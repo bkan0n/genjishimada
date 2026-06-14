@@ -40,6 +40,11 @@ class TestGetRankCard:
         assert "background_url" in data
         assert "rank_url" in data
         assert "avatar_url" in data
+        # Skill fields mirror the community leaderboard exposure
+        assert "skill_score" in data
+        assert "skill_tier" in data
+        assert "skill_percentile" in data
+        assert "skill_tier_name" in data
         # Validate field types
         assert isinstance(data["rank_name"], str)
         assert isinstance(data["nickname"], str)
@@ -54,6 +59,23 @@ class TestGetRankCard:
         assert isinstance(data["xp"], int)
         assert isinstance(data["community_rank"], str)
         assert isinstance(data["prestige_level"], int)
+        assert isinstance(data["skill_score"], (int, float))
+        assert isinstance(data["skill_tier"], int)
+        assert isinstance(data["skill_percentile"], (int, float))
+        assert isinstance(data["skill_tier_name"], str)
+
+    async def test_skill_fields_default_unranked(self, test_client, create_test_user):
+        """A user with no skill snapshot gets 0/0/0/Unranked (never null/500)."""
+        user_id = await create_test_user()
+
+        response = await test_client.get(f"/api/v3/users/{user_id}/rank-card/")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["skill_score"] == 0
+        assert data["skill_tier"] == 0
+        assert data["skill_percentile"] == 0
+        assert data["skill_tier_name"] == "Unranked"
 
     async def test_requires_auth(self, unauthenticated_client):
         """Get rank card without auth returns 401."""
