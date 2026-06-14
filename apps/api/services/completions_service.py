@@ -45,7 +45,11 @@ from genjishimada_sdk.tournaments import (
 from litestar import Request
 from litestar.datastructures import Headers, State
 
-from events.schemas import OcrVerificationRequestedEvent, TournamentOcrVerificationRequestedEvent
+from events.schemas import (
+    OcrVerificationRequestedEvent,
+    SkillRecomputeRequestedEvent,
+    TournamentOcrVerificationRequestedEvent,
+)
 from repository.completions_repository import CompletionsRepository
 from repository.exceptions import (
     ForeignKeyViolationError,
@@ -75,6 +79,7 @@ from .users_service import UsersService
 
 if TYPE_CHECKING:
     from .notifications_service import NotificationsService
+    from .skill_service import SkillService
 
 log = getLogger(__name__)
 
@@ -975,7 +980,34 @@ class CompletionsService(BaseService):
         rows = await self._completions_repo.fetch_pending_verifications()
         return msgspec.convert(rows, list[PendingVerificationResponse])
 
-    async def verify_completion(
+    @staticmethod
+    def _emit_skill_recompute(
+        request: Request | None,
+        skill_service: SkillService | None,
+        reason: str,
+    ) -> None:
+        """Fire the in-process skill recompute event post-commit (D-01/D-02).
+
+        Fire-and-forget: the verify/reject/flag HTTP response stays fast and never
+        awaits the recompute (D-01). Guarded for the optional-request /
+        event-driven case — when there is no ``request`` (e.g. a queue-driven
+        verify) or no DI-injected ``skill_service``, the emit is skipped and the
+        nightly backstop (D-03) self-heals any missed recompute.
+
+        Args:
+            request: HTTP request carrying the Litestar app to emit on (optional).
+            skill_service: DI-injected skill service the listener consumes.
+            reason: Short log reason (verify/un-verify/reject/flag/unflag).
+        """
+        if request is None or skill_service is None:
+            return
+        request.app.emit(
+            "skill.recompute.requested",
+            SkillRecomputeRequestedEvent(reason=reason),
+            skill_service=skill_service,
+        )
+
+    async def verify_completion(  # noqa: PLR0913
         self,
         request: Request | None,
         record_id: int,
@@ -983,6 +1015,7 @@ class CompletionsService(BaseService):
         *,
         conn: Connection | None = None,
         notifications: NotificationsService | None = None,
+        skill_service: SkillService | None = None,
     ) -> JobStatusResponse:
         """Update verification status for a completion and publish an event.
 
@@ -992,6 +1025,8 @@ class CompletionsService(BaseService):
             data: Verification update data.
             conn: Database connection (optional).
             notifications: Notifications service for quest completion alerts.
+            skill_service: DI-injected skill service for the post-commit recompute
+                emit (D-02); None for event-driven calls (emit skipped).
 
         Returns:
             Job status response.
@@ -1050,6 +1085,14 @@ class CompletionsService(BaseService):
                 conn=conn,
             )
 
+        # D-02 skill recompute: BOTH verify and un-verify/reject change a row's
+        # eligibility, so both must recompute (symmetric add/remove — SPEC req 8/9).
+        # Emitted AFTER update_verification commits; fire-and-forget (D-01).
+        if data.verified:
+            self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:verify")
+        else:
+            self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:un-verify")
+
         message_data = VerificationChangedEvent(
             completion_id=record_id,
             verified=data.verified,
@@ -1071,6 +1114,7 @@ class CompletionsService(BaseService):
         record_id: int,
         data: CompletionVerificationUpdateRequest,
         notifications: NotificationsService | None = None,
+        skill_service: SkillService | None = None,
     ) -> JobStatusResponse:
         """Verify completion using pool connection."""
         async with self._pool.acquire() as conn:
@@ -1080,6 +1124,7 @@ class CompletionsService(BaseService):
                 data,
                 conn=conn,  # type: ignore
                 notifications=notifications,
+                skill_service=skill_service,
             )
 
     async def _propagate_tournament_verification(
@@ -1206,8 +1251,24 @@ class CompletionsService(BaseService):
         rows = await self._completions_repo.fetch_suspicious_flags(user_id)
         return msgspec.convert(rows, list[SuspiciousCompletionResponse])
 
-    async def set_suspicious_flags(self, data: SuspiciousCompletionCreateRequest) -> None:
+    async def set_suspicious_flags(
+        self,
+        data: SuspiciousCompletionCreateRequest,
+        *,
+        request: Request | None = None,
+        skill_service: SkillService | None = None,
+    ) -> None:
         """Insert a suspicious flag for a completion.
+
+        Flagging a user drops their contribution from the skill input query, so a
+        recompute must follow (SPEC req 9). The ``request`` / ``skill_service``
+        emit handle is threaded from the route (D-02); for event-driven calls
+        without a request the emit is skipped and the nightly backstop self-heals.
+
+        Args:
+            data: Suspicious-flag request payload.
+            request: HTTP request carrying the app to emit the recompute on.
+            skill_service: DI-injected skill service for the recompute listener.
 
         Raises:
             DuplicateFlagError: If flag already exists.
@@ -1226,16 +1287,39 @@ class CompletionsService(BaseService):
         except ForeignKeyViolationError:
             raise CompletionNotFoundError(data.verification_id or 0)
 
-    async def remove_suspicious_flags(self, data: SuspiciousCompletionDeleteRequest) -> int:
+        # D-02: flagging drops the user's eligibility -> recompute (req 9). Post-commit.
+        self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:flag")
+
+    async def remove_suspicious_flags(
+        self,
+        data: SuspiciousCompletionDeleteRequest,
+        *,
+        request: Request | None = None,
+        skill_service: SkillService | None = None,
+    ) -> int:
         """Remove a suspicious flag from a completion resolved by message or verification ID.
+
+        Un-flagging restores the user's contribution, so a recompute must follow
+        (symmetric with set_suspicious_flags — SPEC req 9). The ``request`` /
+        ``skill_service`` emit handle is threaded from the route (D-02).
+
+        Args:
+            data: Suspicious-flag delete request payload.
+            request: HTTP request carrying the app to emit the recompute on.
+            skill_service: DI-injected skill service for the recompute listener.
 
         Returns:
             Number of flags removed (0 if no matching flag existed).
         """
-        return await self._completions_repo.delete_suspicious_flag_by_message(
+        removed = await self._completions_repo.delete_suspicious_flag_by_message(
             message_id=data.message_id,
             verification_id=data.verification_id,
         )
+
+        # D-02: un-flagging restores the user's eligibility -> recompute (req 9). Post-commit.
+        self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:unflag")
+
+        return removed
 
     async def get_upvotes_from_message_id(self, message_id: int) -> int:
         """Get the upvotes for a particular completion by message_id."""
@@ -1324,14 +1408,35 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
-    async def moderate_completion(  # noqa: PLR0912
+    async def moderate_completion(  # noqa: PLR0912, PLR0913, PLR0915
         self,
         completion_id: int,
         data: CompletionModerateRequest,
         notification_service: NotificationsService | None = None,
         headers: Headers | None = None,
+        *,
+        request: Request | None = None,
+        skill_service: SkillService | None = None,
     ) -> None:
         """Moderate a completion record.
+
+        Moderation is a fifth verification-state-change path (alongside verify /
+        un-verify / set_suspicious_flags / remove_suspicious_flags): it flips
+        ``verified`` and adds/removes suspicious flags, both of which change a
+        row's skill eligibility. So whenever this method actually changes an
+        eligibility-relevant field, it emits ``skill.recompute.requested`` via the
+        SAME ``_emit_skill_recompute`` helper as the other four paths (SPEC req
+        8/9). The ``request`` / ``skill_service`` emit handle is threaded from the
+        route (D-02); for event-driven calls without a request the emit is skipped
+        and the nightly backstop self-heals.
+
+        Args:
+            completion_id: Completion record ID to moderate.
+            data: Moderation request payload.
+            notification_service: Notifications service for user alerts.
+            headers: Request headers for notification dispatch.
+            request: HTTP request carrying the app to emit the recompute on.
+            skill_service: DI-injected skill service for the recompute listener.
 
         Raises:
             CompletionNotFoundError: If completion not found.
@@ -1347,6 +1452,11 @@ class CompletionsService(BaseService):
         old_verified = completion_info["old_verified"]
 
         notification_messages: list[str] = []
+
+        # D-02 skill recompute: track whether this moderation changed an
+        # eligibility-relevant field (verified flip, flag insert, flag delete).
+        # A single post-commit emit covers any combination (D-04 full rebuild).
+        skill_dirty = False
 
         if data.time is not msgspec.UNSET:
             if data.time_change_reason is msgspec.UNSET:
@@ -1371,6 +1481,9 @@ class CompletionsService(BaseService):
             )
 
             if verified != old_verified:
+                # Verified flag flipped -> changes the verified = TRUE eligibility
+                # filter for the skill input query (req 8/9).
+                skill_dirty = True
                 if verified:
                     await self._update_quest_progress_for_completion(
                         user_id=user_id,
@@ -1410,6 +1523,8 @@ class CompletionsService(BaseService):
                     unique_error=DuplicateFlagError(completion_id),
                     fk_error=CompletionNotFoundError(completion_id),
                 )
+                # New suspicious flag drops the user's eligibility -> recompute (req 9).
+                skill_dirty = True
                 notification_messages.append(
                     f"Your completion on **{map_code}** has been flagged as suspicious ({suspicious_flag_type}).\n"
                     f"Context: {suspicious_context}"
@@ -1418,6 +1533,8 @@ class CompletionsService(BaseService):
         if data.unmark_suspicious:
             deleted_count = await self._completions_repo.delete_suspicious_flag(completion_id)
             if deleted_count > 0:
+                # Removing a suspicious flag restores the user's eligibility -> recompute (req 9).
+                skill_dirty = True
                 notification_messages.append(
                     f"The suspicious flag on your completion for **{map_code}** has been removed."
                 )
@@ -1435,6 +1552,13 @@ class CompletionsService(BaseService):
             )
 
             await notification_service.create_and_dispatch(notification_data, headers)
+
+        # D-02 skill recompute: fire once post-commit if any eligibility-relevant
+        # field changed (verified flip / flag insert / flag delete). One emit
+        # covers multiple changes since the recompute is a full global rebuild (D-04).
+        # Fire-and-forget; guarded for the optional-request / event-driven case.
+        if skill_dirty:
+            self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:moderate")
 
 
 async def provide_completions_service(

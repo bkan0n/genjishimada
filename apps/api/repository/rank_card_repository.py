@@ -450,6 +450,51 @@ class RankCardRepository(BaseRepository):
         assert row, f"User {user_id} not found"
         return dict(row)
 
+    async def fetch_skill_summary(
+        self,
+        user_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> dict:
+        """Fetch a single user's skill score, tier, and percentile.
+
+        Mirrors the community leaderboard's skill projection
+        (``community_repository.fetch_community_leaderboard``) for one user: anchored on
+        ``core.users`` (guaranteeing a row even when the user has no snapshot) with the
+        same ``skill.snapshot`` + ``skill.tier_config`` joins and the same COALESCE/CASE
+        zero handling. Pure read — never recomputes or mutates snapshot/tier_config data.
+
+        Args:
+            user_id: User ID.
+            conn: Optional connection for transaction participation.
+
+        Returns:
+            Dict with ``skill_score`` (float), ``skill_tier`` (int), and
+            ``skill_percentile`` (float). A user with no ``skill.snapshot`` row gets
+            ``{"skill_score": 0.0, "skill_tier": 0, "skill_percentile": 0.0}`` (never None).
+        """
+        _conn = self._get_connection(conn)
+
+        query = """
+            SELECT
+                coalesce(ss.skill_score, 0) AS skill_score,
+                CASE WHEN coalesce(ss.skill_score, 0) <= 0 OR cardinality(tc.boundaries) = 0 THEN 0
+                     ELSE width_bucket(ss.skill_score, tc.boundaries) + 1 END AS skill_tier,
+                coalesce(
+                    (SELECT count(*) FROM skill.snapshot s2
+                       WHERE s2.skill_score > 0 AND s2.skill_score <= ss.skill_score)::float8
+                    / NULLIF((SELECT count(*) FROM skill.snapshot s3 WHERE s3.skill_score > 0), 0),
+                    0.0) AS skill_percentile
+            FROM core.users u
+            LEFT JOIN skill.snapshot ss ON ss.user_id = u.id
+            LEFT JOIN skill.tier_config tc ON TRUE
+            WHERE u.id = $1
+        """
+        row = await _conn.fetchrow(query, user_id)
+        if row is None:
+            return {"skill_score": 0.0, "skill_tier": 0, "skill_percentile": 0.0}
+        return dict(row)
+
 
 async def provide_rank_card_repository(state: State) -> RankCardRepository:
     """Litestar DI provider for repository.

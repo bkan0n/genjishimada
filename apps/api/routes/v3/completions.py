@@ -33,6 +33,7 @@ from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP
 
 from repository.completions_repository import provide_completions_repository
 from repository.lootbox_repository import provide_lootbox_repository
+from repository.skill_repository import provide_skill_repository
 from repository.tournaments_repository import provide_tournament_repository
 from repository.users_repository import provide_users_repository
 from services.completions_service import CompletionsService, provide_completions_service
@@ -46,6 +47,7 @@ from services.exceptions.completions import (
     SlowerThanPendingError,
 )
 from services.notifications_service import NotificationsService, provide_notifications_service
+from services.skill_service import SkillService, provide_skill_service
 from services.tournament_reward_service import provide_tournament_reward_service
 from services.users_service import UsersService, provide_users_service
 from utilities.errors import CustomHTTPException
@@ -69,6 +71,11 @@ class CompletionsController(Controller):
         "tournament_repo": Provide(provide_tournament_repository),
         "tournament_reward_service": Provide(provide_tournament_reward_service),
         "lootbox_repo": Provide(provide_lootbox_repository),
+        # Skill recompute wiring (D-02): verify/reject/flag/unflag handlers emit
+        # skill.recompute.requested; the listener resolves its skill_service arg
+        # from this injected dependency (provide_skill_service nests skill_repo).
+        "skill_repo": Provide(provide_skill_repository),
+        "skill_service": Provide(provide_skill_service),
     }
 
     @get(
@@ -182,17 +189,20 @@ class CompletionsController(Controller):
         summary="Verify Completion",
         description="Update the verification status of a completion and publish an event.",
     )
-    async def verify_completion(
+    async def verify_completion(  # noqa: PLR0913
         self,
         svc: CompletionsService,
         request: Request,
         notifications: NotificationsService,
+        skill_service: SkillService,
         record_id: int,
         data: CompletionVerificationUpdateRequest,
     ) -> JobStatusResponse:
         """Verify or reject a completion."""
         try:
-            return await svc.verify_completion(request, record_id, data, notifications=notifications)
+            return await svc.verify_completion(
+                request, record_id, data, notifications=notifications, skill_service=skill_service
+            )
         except CompletionNotFoundError as e:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         except DuplicateVerificationError as e:
@@ -233,6 +243,8 @@ class CompletionsController(Controller):
     async def set_suspicious_flags(
         self,
         svc: CompletionsService,
+        request: Request,
+        skill_service: SkillService,
         data: SuspiciousCompletionCreateRequest,
     ) -> None:
         """Add a suspicious flag to a completion."""
@@ -240,7 +252,7 @@ class CompletionsController(Controller):
             raise CustomHTTPException(
                 detail="One of message_id or verification_id must be used.", status_code=HTTP_400_BAD_REQUEST
             )
-        return await svc.set_suspicious_flags(data)
+        return await svc.set_suspicious_flags(data, request=request, skill_service=skill_service)
 
     @delete(
         path="/suspicious",
@@ -251,6 +263,8 @@ class CompletionsController(Controller):
     async def delete_suspicious_flags(
         self,
         svc: CompletionsService,
+        request: Request,
+        skill_service: SkillService,
         data: SuspiciousCompletionDeleteRequest,
     ) -> int:
         """Remove a suspicious flag from a completion. Returns the number of flags removed."""
@@ -258,7 +272,7 @@ class CompletionsController(Controller):
             raise CustomHTTPException(
                 detail="One of message_id or verification_id must be used.", status_code=HTTP_400_BAD_REQUEST
             )
-        return await svc.remove_suspicious_flags(data)
+        return await svc.remove_suspicious_flags(data, request=request, skill_service=skill_service)
 
     @post(
         path="/upvoting",
@@ -348,17 +362,25 @@ class CompletionsController(Controller):
         summary="Moderate Completion",
         description="Moderate a completion record (change time, verification status, suspicious flag).",
     )
-    async def moderate_completion(
+    async def moderate_completion(  # noqa: PLR0913
         self,
         svc: CompletionsService,
         notifications: NotificationsService,
         request: Request,
+        skill_service: SkillService,
         record_id: int,
         data: CompletionModerateRequest,
     ) -> None:
         """Moderate a completion record."""
         try:
-            return await svc.moderate_completion(record_id, data, notifications, request.headers)
+            return await svc.moderate_completion(
+                record_id,
+                data,
+                notifications,
+                request.headers,
+                request=request,
+                skill_service=skill_service,
+            )
         except CompletionNotFoundError as e:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         except DuplicateCompletionError as e:

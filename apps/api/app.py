@@ -107,6 +107,81 @@ async def tournament_outbox_poller(_app: Litestar) -> AsyncGenerator[None, None]
             await task
 
 
+@asynccontextmanager
+async def skill_nightly_rebuild_poller(_app: Litestar) -> AsyncGenerator[None, None]:
+    """Populate the skill snapshot on cold start, then rebuild nightly (D-03/D-04).
+
+    On startup, after a short db_pool-warmup sleep, this runs ``recompute_all`` ONCE
+    if ``skill.snapshot`` is empty — the cold-start fix, so a fresh deploy ranks the
+    leaderboard by real non-zero skill scores within seconds instead of waiting for a
+    verification event, a config PATCH, or the nightly backstop. A restart with an
+    already-populated snapshot skips this redundant rebuild.
+
+    The skill scorer lives in Python (``SkillService``), so a SQL pg_cron job cannot
+    reuse the one rebuild routine — this app-side lifespan task is the chosen
+    scheduler instead (PATTERNS flag resolved). After the initial population it sleeps
+    until the next 04:00 UTC slot, then runs the SAME ``recompute_all`` the in-process
+    event uses (D-04), self-healing any snapshot lost to a crash mid-recompute or any
+    drift. The plan-13-04 in-flight collapse guard makes overlap with event-driven
+    recomputes safe. The broad ``except`` keeps the loop alive (captured by Sentry);
+    the task is cancelled and awaited on shutdown for a clean exit.
+    """
+
+    async def _loop() -> None:
+        from datetime import datetime, time, timedelta, timezone  # noqa: PLC0415  # local import keeps top clean
+
+        from repository.skill_repository import (  # noqa: PLC0415  # local import avoids circular import
+            provide_skill_repository,
+        )
+        from services.skill_service import provide_skill_service  # noqa: PLC0415  # local import avoids circular import
+
+        # One-time cold-start population: if the snapshot is empty on boot, build it
+        # ONCE via the SAME recompute path the nightly run uses (D-04, no forked logic)
+        # so the leaderboard ranks by real scores immediately on a fresh deploy.
+        try:
+            # The fixed sleep dodges the cold-start db_pool race (the asyncpg lifespan
+            # is entered after this poller's, so an immediate run would hit a not-ready
+            # pool); it is also the cancellation point shutdown relies on.
+            await asyncio.sleep(5)
+            skill_repo = await provide_skill_repository(_app.state)
+            skill_service = await provide_skill_service(_app.state, skill_repo)
+            # Skip the redundant full rebuild on a normal restart with a populated
+            # snapshot; the plan-13-04 in-flight collapse guard makes overlap with any
+            # concurrent event-driven recompute safe.
+            if await skill_repo.snapshot_is_empty():
+                await skill_service.recompute_all()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("[!] skill initial population failed")
+
+        while True:
+            # Sleep-before-run also dodges the cold-start db_pool race (the asyncpg
+            # lifespan is entered after this poller's), like the outbox poller, and is
+            # the cancellation point the lifespan finally relies on.
+            now = datetime.now(timezone.utc)
+            next_run = datetime.combine(now.date(), time(4, 0, tzinfo=timezone.utc))
+            if next_run <= now:
+                next_run += timedelta(days=1)
+            await asyncio.sleep((next_run - now).total_seconds())
+            try:
+                skill_repo = await provide_skill_repository(_app.state)
+                skill_service = await provide_skill_service(_app.state, skill_repo)
+                await skill_service.recompute_all()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("[!] skill nightly rebuild failed")
+
+    task = asyncio.create_task(_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
 def default_exception_handler(_: Request, exc: Exception) -> Response:
     """Handle errors."""
     status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
@@ -242,7 +317,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
             HTTP_500_INTERNAL_SERVER_ERROR: internal_server_error_handler,
         },
         listeners=listeners,
-        lifespan=[rabbitmq_connection, tournament_outbox_poller],
+        lifespan=[rabbitmq_connection, tournament_outbox_poller, skill_nightly_rebuild_poller],
         logging_config=logging_config,
         middleware=[auth_middleware],
         guards=[scope_guard],

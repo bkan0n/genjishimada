@@ -2,20 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
-status: unknown
-last_updated: "2026-06-08T22:16:27.539Z"
-last_activity: 2026-06-08
+status: milestone_complete
+last_updated: 2026-06-12T22:47:08.232Z
+last_activity: 2026-06-12
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 10
-  completed_plans: 10
+  total_phases: 3
+  completed_phases: 3
+  total_plans: 16
+  completed_plans: 34
   percent: 100
+stopped_at: Milestone complete (Phase 13 was final phase)
 ---
 
 # Tournament System — State
 
-Last activity: 2026-06-08 - Completed quick task 260608-ntz: Add an API route to remove a suspicious flag
+Last activity: 2026-06-14 - Completed quick task 260613-rh2: Add skill score column to get rank card data endpoint
 
 ## Current Status
 
@@ -57,6 +58,12 @@ Controller → Service → Repository pattern:
 | 260605-gjy | Fix start-only rollover announcement: the `elif event.started` branch in `_on_edition_rollover` now leads with `# 🏆 New Tournament!` instead of `Tournament Ended!` — the start-only case (out-of-hiatus or never-started, `has_ended` False) had nothing end, so it no longer announces a non-existent prior tournament. Normal (results+started) and into-hiatus (results-only) branches keep their `Tournament Ended!` framing unchanged. Locked with assertions in the three existing rollover handler tests. | 2026-06-05 | 07f4745 | [260605-gjy-start-only-rollover-title](./quick/260605-gjy-start-only-rollover-title/) |
 | 260607-oqy | Add a pingable tournament announcement role: new `mentionable.tournament_announcements` config field (struct + dev/prod TOML, `0` sentinel placeholder for maintainer-supplied IDs); both public announcement cards (`_on_edition_rollover`, `_on_edition_results`) prepend a `<@&id>` ping via shared `_tournament_ping()` helper with role allow-listed in `AllowedMentions`; self-assignable "Tournament Announcements" 🏆 toggle added to the `#role-react` view (`ServerRoleSelectView`), sourced from the same config field. Every touch point guards the `0` sentinel (no broken `<@&0>`, no crash-on-click button). | 2026-06-07 | 43e0904 | [260607-oqy-add-a-role-ping-to-tournament-announceme](./quick/260607-oqy-add-a-role-ping-to-tournament-announceme/) |
 | 260608-ntz | Add an API route to remove a suspicious flag: symmetric `DELETE /completions/suspicious` mirroring the add route across all four layers (SDK `SuspiciousCompletionDeleteRequest`, repo `delete_suspicious_flag_by_message` reusing the insert's message/verification CTE, service `remove_suspicious_flags`, controller handler with the same 400 identifier guard + `status_code=200`) plus a bot `remove_suspicious_flags` client. Removing a non-existent flag returns 200 count 0. Fixes #50. | 2026-06-08 | 66c0b11 | [260608-ntz-add-an-api-route-to-remove-a-suspicious-](./quick/260608-ntz-add-an-api-route-to-remove-a-suspicious-/) |
+| 260612-oqg | Fix skill-score leaderboard cold-start: `skill.snapshot` (created empty by migration 0027) is now auto-populated on API startup. New `SkillRepository.snapshot_is_empty()` (`NOT EXISTS` probe); `skill_nightly_rebuild_poller` in `app.py` runs `recompute_all()` ONCE after a 5s db_pool-warmup sleep when the snapshot is empty, reusing the exact existing `provide_skill_*`/`recompute_all` path (D-04, no forked logic) before the unchanged nightly 04:00 UTC loop. Broad-except + `log.exception` + clean cancel/await teardown preserved; populated-snapshot restarts skip the redundant rebuild. Verified live: cold boot auto-filled 261 rows in ~7s, leaderboard `sort_column=skill_score&sort_direction=desc` returns descending non-zero scores with `skill_rank` unchanged, restart-with-populated-snapshot is clean. | 2026-06-12 | 07467e1 | [260612-oqg-fix-skill-score-leaderboard-cold-start-p](./quick/260612-oqg-fix-skill-score-leaderboard-cold-start-p/) |
+| 260612-u82 | Add `PATCH /api/v3/skill/tiers` admin endpoint to tune the tier `percentiles` (the only tunable in the `260612-pyo` tier system). Symmetric with `PATCH /skill/config` (weights): same `skill:admin` sentinel scope (no new scope). New SDK `SkillTiersUpdateRequest` (`percentiles: list[float]`), `InvalidPercentilesError` domain exception (→ HTTP 400, mirroring `InvalidGammaError`), `SkillRepository.update_percentiles` (positional `float8[]` bind), and `SkillService.update_tier_config` which validates (**exactly 6**, all strictly in `(0,1)`, **strictly increasing**) before any write, then persists percentiles and re-derives `boundaries` via the existing `compute_tier_boundaries` on a single transaction connection — NOT a full `recompute_all` (scores unchanged). Invalid input → 400, nothing persisted. `compute_tier_boundaries` SQL, scorer math, `skill.weight_config`, and the `skill_rank` CASE byte-for-byte unchanged. `just lint-api` clean; 30 skill tests pass (new PATCH happy-path, validation-rejection, and `skill:admin` auth-gate tests). | 2026-06-12 | 059e983 | [260612-u82-add-a-patch-api-v3-skill-tiers-endpoint-](./quick/260612-u82-add-a-patch-api-v3-skill-tiers-endpoint-/) |
+| 260612-pyo | Add a percentile-based skill TIER system (display-only icon ranks) on top of the Phase-13 `skill_score`, fully separate from the Ninja..God `skill_rank` and the scoring math (both byte-for-byte unchanged). Migration `0028_skill_tier_config.sql` adds single-row `skill.tier_config` (`boundaries float8[]` default `'{}'`, `percentiles float8[]` seeded `[0.50,0.75,0.90,0.97,0.99,0.995]`, `computed_at`). `SkillRepository.compute_tier_boundaries` derives 6 cut-points via `percentile_cont WITHIN GROUP (ORDER BY skill_score)` over `skill_score>0` rows and is called inside the single `_do_recompute`/`recompute_all` path (D-04, not forked) — **flicker decision: boundaries recompute on every snapshot rebuild** (display tier can shift as the field moves; gateable to nightly later without schema change). Tier assigned via `width_bucket(skill_score, boundaries)+1` → 1..7; `skill_score=0`/no row → tier 0 Unranked; population-floor guard (<20 non-zero → empty boundaries → everyone Unranked). `tier`+`percentile` added to `SkillSummaryResponse` and `CommunityLeaderboardResponse` (+ leaderboard query, no `tier` in `sort_column`); new public `GET /api/v3/skill/tiers` returns boundaries+percentiles+computed_at. No hardcoded cutoffs (seeded percentile array is the only tunable), no new auth scope. `just lint-api` clean; 22 skill tests pass (new `TestSkillTiers`: assignment, Unranked/0, monotonicity, population-floor). | 2026-06-12 | b4a3bee | [260612-pyo-add-a-percentile-based-skill-tier-system](./quick/260612-pyo-add-a-percentile-based-skill-tier-system/) |
+| 260612-vvm | Exclude `.planning` from local/editor Ruff + BasedPyright runs: added `".planning"` to `[tool.ruff].extend-exclude` and `[tool.basedpyright].exclude` in `pyproject.toml`. CI `lint.yml` already excluded it via explicit path args, so no workflow change. Config-only. | 2026-06-13 | 11faf57 | [260612-vvm-add-planning-to-ruff-and-basedpyright-ex](./quick/260612-vvm-add-planning-to-ruff-and-basedpyright-ex/) |
+| 260612-vtt | Expand the skill TIER system from 7→8 named tiers plus Unranked, add string tier names, and rename leaderboard columns (percentile derivation + scorer byte-for-byte unchanged). Migration `0028` (edit-in-place) now seeds **7** strictly-increasing percentiles `[0.50,0.70,0.85,0.93,0.97,0.99,0.995]` so `width_bucket+1` mints integer tiers **1..8** (tier 0 = Unranked; zero score / empty boundaries). Single source-of-truth `SKILL_TIER_NAMES` (0=Unranked,1=Bronze,2=Silver,3=Gold,4=Emerald,5=Diamond,6=Ascendant,7=Elite,8=Champion) + `skill_tier_name()` helper added to `libs/sdk/skill.py`, reused by both the community leaderboard service and the skill summary path. New `skill_tier_name` field exposed on `SkillSummaryResponse` and `CommunityLeaderboardResponse`. Leaderboard columns renamed `tier`→`skill_tier`, `percentile`→`skill_percentile` (SQL aliases + struct; `skill_score` unchanged). Validation bumped to **exactly 7** (`_TIER_PERCENTILE_COUNT`, `InvalidPercentilesError`, SDK docstrings). Tests updated for 8 tiers, Unranked-at-0, renamed columns, name mapping. `just lint-sdk`/`lint-api` clean; full `just test-api` green. | 2026-06-13 | b0a0b0e | [260612-vtt-expand-the-skill-score-tier-system-from-](./quick/260612-vtt-expand-the-skill-score-tier-system-from-/) |
+| 260613-rh2 | Mirror the four leaderboard skill fields onto the per-user rank card endpoint (`GET /api/v3/users/{user_id}/rank-card/`): `skill_score`, `skill_tier`, `skill_percentile`, `skill_tier_name` added to `RankCardResponse` (SDK, matching `CommunityLeaderboardResponse` names/types). New `RankCardRepository.fetch_skill_summary` ports the leaderboard's `skill.snapshot` + `skill.tier_config` projection to a single user, anchored on `core.users` so a snapshot-less user yields `0.0/0/0.0`; `rank_card_service` fetches it in the existing acquire block and name-maps the tier via the SDK `skill_tier_name()` single source of truth. Integration tests cover field presence/types + zero-eligible → `Unranked`. `just lint-sdk`/`lint-api` clean; `pytest -k GetRankCard` 4 passed. | 2026-06-14 | e1757cc | [260613-rh2-add-skill-score-column-to-get-rank-card-](./quick/260613-rh2-add-skill-score-column-to-get-rank-card-/) |
 
 ## Blockers/Concerns
 
@@ -64,6 +71,144 @@ Controller → Service → Repository pattern:
 - PROJECT.md originally listed manual cycle transitions as Out of Scope; quick-task work intentionally amends that for bootstrap + test tooling only.
 
 ## Accumulated Context
+
+### Phase 13 Progress
+
+- **13-06 complete (2026-06-12):** Skill freshness contract + leaderboard column —
+  the riskiest integration point, closing the symmetric add/remove acceptance
+  criteria. `completions_service.py` gains a `_emit_skill_recompute` helper
+  (post-commit, fire-and-forget, guarded for the optional-request/event-driven case)
+  that fires `request.app.emit("skill.recompute.requested", SkillRecomputeRequestedEvent(...),
+  skill_service=skill_service)` from **all four D-02 state-change paths**:
+  `verify_completion` emits in BOTH the verify (`data.verified=True`) and un-verify/reject
+  (`False`) branches after `update_verification` commits, and `set_suspicious_flags` /
+  `remove_suspicious_flags` — which previously took neither a `request` nor a
+  `skill_service` — were threaded with both and emit post-commit (flag drops a user's
+  contribution → score 0; un-flag restores it). The route handlers (verify + POST/DELETE
+  suspicious) inject `request: Request` + `skill_service: SkillService`, and
+  `provide_skill_service`/`provide_skill_repository` were added to
+  `CompletionsController.dependencies` so the listener's `skill_service` arg resolves
+  (5 `skill.recompute.requested` occurrences, ≥4 emit sites). The community leaderboard
+  (`community_repository.fetch_community_leaderboard`) gained `LEFT JOIN skill.snapshot ss
+  ON u.id = ss.user_id` + `coalesce(ss.skill_score, 0) AS skill_score` (D-07 zero-eligible
+  ranked last) and `"skill_score"` (D-08) in the `sort_column` Literal — duplicated into
+  the service + route Literals; it sorts via the existing plain-column branch (no CASE
+  added) and `skill_rank` + its CASE are UNTOUCHED (SPEC req 6). New
+  `tests/integration/test_skill.py` (10 tests, all passing) proves the full SPEC matrix:
+  verify→raises / reject→restores within 1e-6 / flag→0 / unflag→restores; field relativity
+  (a second player on the same map shifts after the field changes); `sort=skill_score`
+  descending + paginated with `skill_rank` intact; zero-eligible player score 0 ranked last
+  + `GET /skill/users/{id}` returns 0 / empty breakdown; PATCH 401 unauth / 401-403
+  non-superuser / 200 superuser with scores changing; breakdown contributions sum to total.
+  The test drives the deterministic snapshot via the shared `recompute_all` on its own pool
+  (last writer, after a 0.1s settle yield) while still firing the real background emit via the
+  HTTP endpoints — sidestepping the background-listener app-pool-teardown race (a logged,
+  non-fatal listener error). `just lint-api` clean. No deviations. Commits `8222496` (Task 1)
+  / `affd0ad` (Task 2) / `58df609` (Task 3). **Phase 13 complete (6/6 plans).**
+
+- **13-05 complete (2026-06-12):** Skill HTTP surface + recompute machinery — the
+  service becomes a reachable API. New `apps/api/routes/v3/skill.py` `SkillController`
+  (`path="/skill"`, auto-registered): three typed GET reads (`/users/{id}` →
+  `SkillSummaryResponse` with the D-07 zero-player rule, `/users/{id}/breakdown` → the
+  D-06 per-map JSONB `list[SkillBreakdownRow]`, `/config` → `Weights`) plus a
+  superuser-only `PATCH /config` (`opt={"required_scopes": {"skill:admin"}}` sentinel —
+  superuser bypasses the reused `scope_guard`, everyone else 401/403; NO new scope
+  minted) that runs `update_weights` then an immediate `recompute_all` (D-10), mapping
+  `InvalidGammaError`→422 before any rebuild. New `apps/api/events/skill.py` —
+  `@listener("skill.recompute.requested") handle_skill_recompute` running the single
+  `recompute_all` (D-04), auto-registered by `events/__init__.py` discovery (6 listeners,
+  no `__init__.py` edit); `SkillRecomputeRequestedEvent` (optional `reason` only, no
+  required fields) added to `events/schemas.py`. In `app.py`, a new
+  `skill_nightly_rebuild_poller` lifespan task (mirrors `tournament_outbox_poller`) is the
+  D-03 durability backstop: sleeps to the next 04:00 UTC slot, builds the service via the
+  existing `provide_skill_repository`/`provide_skill_service` DI from `_app.state`, runs the
+  SAME `recompute_all` (D-04), CancelledError-safe, registered in `lifespan=[...]`. **No
+  pg_cron added** — the scorer is Python, so the app-side scheduler is the chosen mechanism
+  (PATTERNS flag resolved). `just lint-api` clean; `import app` succeeds. No deviations.
+  Commits `e6e47af` (Task 1) / `7e8ca94` (Task 2) / `d712a42` (Task 3).
+
+- **13-04 complete (2026-06-12):** SkillService — the scoring engine (heart of the
+  phase). New `apps/api/services/skill_service.py` ports the spike's hybrid scorer
+  (`score.py:44-106`) into module-level helpers over the SDK `Weights` struct:
+  `_diff_weight` (`diff_base**(raw-1.5)` floor), `_map_score` (partial→`floor*partial_factor`
+  only; video→floor × time/medal/WR multipliers with field-size shrink `field/(field+k)`),
+  `_player_score` (`Σ sᵢ/iᵞ` over desc-sorted per-map scores), `_player_breakdown` (the D-06
+  per-map JSONB array, keys mirror `SkillBreakdownRow`). **Proven equivalent to the spike
+  within 1e-6 across all 261 real-data players** (`test_skill_scorer.py` loads
+  `.planning/spikes/001…/skill_inputs.json` + imports the spike `score.py` as the oracle);
+  plus partial<video and the gamma break-even dial. **No weight literal anywhere** in the
+  service (SPEC req 5; grep clean). `recompute_all` is THE single rebuild routine (D-04 —
+  event + nightly + PATCH): `fetch_weights`→`msgspec.convert(Weights)`→`fetch_skill_inputs`→
+  group-by-user→score+breakdown→`replace_snapshot` (lean, D-07), wrapped in a **process-wide
+  in-flight collapse guard** (`_RecomputeGuard`, lazy `asyncio.Lock` + rerun flag — module
+  scope because DI builds a fresh service per request; D-05/T-13-08). Read methods honor the
+  D-07 empty-player rule (`get_user_skill`→all-zero summary, `get_user_breakdown`→`[]`) and
+  decode the D-06 JSONB breakdown; `update_weights` rejects `gamma<0.5` (`InvalidGammaError`,
+  new `services/exceptions/skill.py`) before writing only the non-UNSET fields (PATCH→recompute
+  stays in the route, D-10/13-05). `just lint-api` clean; 10 skill tests pass. Deviations: 2
+  Rule-3 (blocking) test-infra fixes — corrected the equivalence-test inputs path to the
+  `.planning/spikes/` location that exists + registered the `domain_skill` marker; registered
+  the importlib-loaded spike module in `sys.modules` before exec so its `@dataclass` resolves.
+  Commits `10e6586` (Task 1) / `017fafa` (Task 2).
+
+- **13-03 complete (2026-06-12):** Skill repository (data-access layer). New
+  `apps/api/repository/skill_repository.py` — the only place raw SQL for skill lives.
+  `fetch_skill_inputs` ports the spike 4-CTE input query
+  (`best → field → video_ranked → fully`) **verbatim** into a `SKILL_INPUT_QUERY` module
+  constant, with every gotcha preserved: the `best` eligibility WHERE
+  (`verified=TRUE AND legacy=FALSE AND archived=FALSE AND code IS NOT NULL`,
+  `DISTINCT ON (user_id, map_id) ORDER BY time ASC`); a distinct `video_ranked` CTE
+  (ranks only `completion = FALSE`) LEFT JOINed back instead of an invalid
+  `rank() OVER (...) FILTER (...)`; `raw_difficulty::float8` (never the text tier) and
+  `time_pct = percent_rank() ... ORDER BY time DESC` (1.0 = fastest, never raw time
+  across maps); computed `medal`/`has_medal_thresholds`/`suspicious`. Suspicious rows are
+  dropped in Python (`if not row["suspicious"]`, mirroring the spike harness) so the SQL
+  stays a verbatim port. Plus `fetch_snapshot` (single lean row, breakdown rides the
+  jsonb codec), `replace_snapshot` (atomic `TRUNCATE` + `executemany` bulk insert in one
+  transaction via the `tags_repository` acquire-if-`Pool` pattern; empty-list-safe),
+  `fetch_weights` (the single `weight_config` row — SPEC req 5 the only weight source),
+  `update_weights` (allow-listed partial PATCH SET from a `_WEIGHT_COLUMNS` frozenset,
+  T-13-07; empty update returns the current row), and `provide_skill_repository`.
+  `just lint-api` clean (ruff + basedpyright 0 errors). No deviations. Commits `542c810`
+  (Task 1) / `ab6b981` (Task 2).
+
+- **13-02 complete (2026-06-12):** Skill SDK wire contracts (interface-first, no DB
+  dependency). New `libs/sdk/.../skill.py` exports four msgspec structs: `Weights`
+  (1:1 with the D-09 `skill.weight_config` row — `diff_base, gamma, time_bonus,
+  shrink_k, wr_bonus, partial_factor, medal_gold/silver/bronze`, all `float`, all
+  required, **no defaults** so SPEC req 5 "no hardcoded weights" holds — defaults live
+  only in the 0027 seed); `SkillConfigUpdateRequest` (one `float | UnsetType = UNSET`
+  per weight, PATCH partial-update semantics, mirrors the `content.py` UNSET pattern);
+  `SkillSummaryResponse` (`user_id, skill_score, maps_cleared, video_clears,
+  hardest_raw`); and `SkillBreakdownRow` (9 fields `map_name, difficulty, raw,
+  fully_verified, medal: str | None, wr, raw_score, contribution, rank` — names mirror
+  the spike `player_breakdown` keys `score.py:78-88` exactly so the stored D-06 JSONB
+  array decodes straight into `list[SkillBreakdownRow]` via the jsonb<->msgspec codec).
+  Registered the `skill` module in the SDK `__init__.py` re-export convention. Added a
+  single non-optional `skill_score: float` to `CommunityLeaderboardResponse` adjacent to
+  the **untouched** `skill_rank` label (non-optional because the leaderboard SQL
+  `COALESCE(ss.skill_score, 0)` guarantees a value, D-07/D-08); docstring documents both,
+  no existing field renamed/reordered. Plan verifies pass (weights round-trip with
+  `.gamma==0.68`, missing key raises, `SkillConfigUpdateRequest()` round-trips all-UNSET,
+  `SkillBreakdownRow` decodes with `medal=None`, both leaderboard fields present);
+  `just lint-sdk` clean. No deviations. Commits `77985ef` (Task 1) / `1250506` (Task 2).
+
+- **13-01 complete (2026-06-12):** Migration `0027_skill_score.sql` — the data
+  foundation for the skill-score phase. Creates `CREATE SCHEMA IF NOT EXISTS skill`;
+  a **lean** `skill.snapshot` cache (`user_id bigint PRIMARY KEY`, no FK — only
+  players with ≥1 eligible run get a row, D-07; `skill_score`, `maps_cleared`,
+  `video_clears`, `hardest_raw`, `breakdown jsonb DEFAULT '[]'` per-map array D-06,
+  `computed_at`); and a single typed-column `skill.weight_config` row (one column per
+  weight, D-09) with `CHECK (gamma >= 0.5)` (T-13-01 — the farm-enabling gamma=0 is
+  unrepresentable). Seeded idempotently (`INSERT ... SELECT ... WHERE NOT EXISTS`) with
+  the adopted defaults (diff_base=1.44, gamma=0.68, time_bonus=0.55, shrink_k=10.0,
+  wr_bonus=0.10, partial_factor=0.60, medals 1.12/1.07/1.03). **No pg_cron block** —
+  the scorer is Python (`SkillService`), so the nightly rebuild backstop is an app-side
+  lifespan task in plan 13-05, NOT a SQL cron (D-03); omitting cron also keeps "applies
+  cleanly on a fresh test DB" trivially true. Verified on a throwaway DB: both apply
+  exit 0, tables resolve via `to_regclass`, seed count 1 (and stays 1 on re-apply),
+  gamma=0.0 insert rejected, 0 `cron`/`lootbox`/`xp`/`skill_rank` references. No
+  deviations. Commit `de2456d`.
 
 ### Phase 12.1 Progress
 

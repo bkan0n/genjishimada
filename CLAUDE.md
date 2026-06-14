@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Skill Routing
+
+- **Spike findings for genjishimada** (skill-score implementation patterns, scoring formula, input query, constraints, gotchas) → `Skill("spike-findings-genjishimada")`
+
 ## Project Overview
 
 Genji Shimada is a Discord bot and REST API for the Genji Parkour community. The project is a monorepo built with Python

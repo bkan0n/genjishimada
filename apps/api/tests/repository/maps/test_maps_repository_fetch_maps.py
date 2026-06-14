@@ -212,7 +212,11 @@ class TestFetchMapsFilterCategory:
         used_codes.add(other_code)
         await create_test_map(db_pool, other_code, category="Other")
 
-        filters = MapSearchFilters(category=["Other"])
+        # return_all disables the default page_size=10 window; otherwise, under
+        # parallel test execution other "Other"-category maps can fill page 1
+        # (ordered created_at DESC) and push this freshly created row off it,
+        # making the presence assertion below flaky.
+        filters = MapSearchFilters(category=["Other"], return_all=True)
         result = await maps_repo.fetch_maps(filters=filters)
 
         assert all(m["category"] == "Other" for m in result)

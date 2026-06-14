@@ -39,7 +39,7 @@ class CommunityController(Controller):
         description=(
             "Return leaderboard rows with optional filters (name, XP tier, skill rank), "
             "sorting (xp_amount, nickname, prestige_level, wr_count, map_count, playtest_count, "
-            "discord_tag, skill_rank), and pagination."
+            "discord_tag, skill_rank, skill_score), and pagination."
         ),
     )
     async def get_community_leaderboard(  # noqa: PLR0913
@@ -57,6 +57,7 @@ class CommunityController(Controller):
             "playtest_count",
             "discord_tag",
             "skill_rank",
+            "skill_score",
         ] = "xp_amount",
         sort_direction: Literal["asc", "desc"] = "asc",
         page_size: int = 10,

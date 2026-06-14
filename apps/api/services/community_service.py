@@ -15,6 +15,7 @@ from genjishimada_sdk.maps import (
     PopularMapsStatisticsResponse,
     TopCreatorsResponse,
 )
+from genjishimada_sdk.skill import skill_tier_name
 from genjishimada_sdk.users import CommunityLeaderboardResponse
 from genjishimada_sdk.xp import PlayersPerSkillTierResponse, PlayersPerXPTierResponse
 from litestar.datastructures import State
@@ -52,6 +53,7 @@ class CommunityService(BaseService):
             "playtest_count",
             "discord_tag",
             "skill_rank",
+            "skill_score",
         ] = "xp_amount",
         sort_direction: Literal["asc", "desc"] = "asc",
         page_size: int = 10,
@@ -67,6 +69,10 @@ class CommunityService(BaseService):
             page_size=page_size,
             page_number=page_number,
         )
+        # Map each row's integer skill_tier to its display name via the SDK single source of
+        # truth (Unranked at skill_tier 0) before decoding into the response struct.
+        for row in rows:
+            row["skill_tier_name"] = skill_tier_name(int(row["skill_tier"]))
         return msgspec.convert(rows, list[CommunityLeaderboardResponse])
 
     async def get_players_per_xp_tier(self) -> list[PlayersPerXPTierResponse]:

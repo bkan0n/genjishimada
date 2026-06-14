@@ -13,6 +13,7 @@ from genjishimada_sdk.rank_card import (
     RankCardFilter,
     RankCardResponse,
 )
+from genjishimada_sdk.skill import skill_tier_name
 from genjishimada_sdk.users import RankDetailResponse
 from litestar.datastructures import State
 
@@ -249,6 +250,7 @@ class RankCardService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
             xp_data = await self._rank_card_repo.fetch_community_rank_xp(user_id, conn=conn)  # type: ignore[arg-type]
+            skill = await self._rank_card_repo.fetch_skill_summary(user_id, conn=conn)  # type: ignore[arg-type]
 
         badges = await self.get_badges(user_id)
 
@@ -284,6 +286,10 @@ class RankCardService(BaseService):
             xp=xp_data["xp"],
             prestige_level=xp_data["prestige_level"],
             community_rank=xp_data["community_rank"],
+            skill_score=float(skill["skill_score"]),
+            skill_tier=int(skill["skill_tier"]),
+            skill_percentile=float(skill["skill_percentile"]),
+            skill_tier_name=skill_tier_name(int(skill["skill_tier"])),
         )
 
 
