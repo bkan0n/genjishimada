@@ -298,21 +298,29 @@ async def create_test_tournament_completion(asyncpg_pool: asyncpg.Pool):
             "time": 30.0,
             "screenshot": "https://example.com/screenshot.png",
             "video": None,
-            "completion": False,
         }
         legacy_verified = overrides.pop("verified", None)
         status = overrides.pop("status", None)
         if status is None:
             status = "verified" if legacy_verified else "pending"
+        # Migration 0029 made `completion` a STORED generated column derived from
+        # video presence (completion = video IS NOT NULL). Inserting into it raises
+        # GeneratedAlwaysError, so the seed no longer writes it. For backward
+        # compatibility callers may still pass `completion=True/False`; a True with
+        # no explicit video gets a default video URL so the generated column becomes
+        # TRUE. An explicit `video=` override always wins.
+        legacy_completion = overrides.pop("completion", None)
         data.update(overrides)
+        if legacy_completion and data["video"] is None:
+            data["video"] = "https://example.com/video.mp4"
 
         async with asyncpg_pool.acquire() as conn:
             completion_id: int = await conn.fetchval(
                 """
                 INSERT INTO tournaments.completions (
-                    cycle_id, user_id, map_id, time, screenshot, video, status, completion
+                    cycle_id, user_id, map_id, time, screenshot, video, status
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 RETURNING id
                 """,
                 cycle_id,
@@ -322,7 +330,6 @@ async def create_test_tournament_completion(asyncpg_pool: asyncpg.Pool):
                 data["screenshot"],
                 data["video"],
                 status,
-                data["completion"],
             )
         return completion_id
 

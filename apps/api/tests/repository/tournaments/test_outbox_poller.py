@@ -538,8 +538,10 @@ async def _seed_completion(
     async with pool.acquire() as conn:
         return await conn.fetchval(
             """
-            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status, completion)
-            VALUES ($1, $2, $3, $4, 'https://x/s.png', $5, FALSE)
+            -- `completion` is a STORED generated column (migration 0029, video IS NOT NULL);
+            -- it cannot be inserted. No video here -> completion is FALSE, as before.
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status)
+            VALUES ($1, $2, $3, $4, 'https://x/s.png', $5)
             RETURNING id
             """,
             cycle_id,

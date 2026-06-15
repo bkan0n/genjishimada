@@ -406,9 +406,11 @@ class TestTournamentsFreshRestartWipe:
             )
             tc_id = await conn.fetchval(
                 """
+                -- `completion` is a generated column (0029, video IS NOT NULL); a video
+                -- here makes it TRUE (a full-completion PB), which is the intent.
                 INSERT INTO tournaments.completions
-                    (cycle_id, user_id, map_id, time, screenshot, status, completion)
-                VALUES ($1, $2, $3, 12.34, 'https://example.com/s.png', 'verified', TRUE)
+                    (cycle_id, user_id, map_id, time, screenshot, status, video)
+                VALUES ($1, $2, $3, 12.34, 'https://example.com/s.png', 'verified', 'https://example.com/v.mp4')
                 RETURNING id
                 """,
                 cycle_id,

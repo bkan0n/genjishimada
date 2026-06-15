@@ -1259,8 +1259,8 @@ async def _seed_awaiting_results_edition(asyncpg_pool, create_test_map, create_t
         )
         await conn.execute(
             """
-            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status, completion)
-            VALUES ($1, $2, $3, 30.0, 'https://x/s.png', 'verified', FALSE)
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status)
+            VALUES ($1, $2, $3, 30.0, 'https://x/s.png', 'verified')
             """,
             cycle_id,
             user_id,
@@ -1355,8 +1355,8 @@ async def _seed_awaiting_edition_for_service(asyncpg_pool, *, with_pending, crea
         )
         await conn.execute(
             """
-            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status, completion)
-            VALUES ($1, $2, $3, 30.0, 'https://x/s.png', 'verified', FALSE)
+            INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status)
+            VALUES ($1, $2, $3, 30.0, 'https://x/s.png', 'verified')
             """,
             cycle_id,
             user_v,
@@ -1367,8 +1367,8 @@ async def _seed_awaiting_edition_for_service(asyncpg_pool, *, with_pending, crea
             user_p = await create_test_user(nickname=f"SP{uuid4().hex[:6]}")
             pending_id = await conn.fetchval(
                 """
-                INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status, completion)
-                VALUES ($1, $2, $3, 20.0, 'https://x/s.png', 'pending', FALSE)
+                INSERT INTO tournaments.completions (cycle_id, user_id, map_id, time, screenshot, status)
+                VALUES ($1, $2, $3, 20.0, 'https://x/s.png', 'pending')
                 RETURNING id
                 """,
                 cycle_id,

@@ -992,13 +992,13 @@ class TournamentRepository(BaseRepository):
                     bpu.user_id
                 FROM (
                     SELECT DISTINCT ON (tc2.user_id)
-                        tc2.user_id, tc2.verified, tc2.time
+                        tc2.user_id, tc2.verified, tc2.completion, tc2.time
                     FROM tournaments.completions tc2
                     WHERE tc2.cycle_id = cy.id
-                    ORDER BY tc2.user_id, tc2.verified DESC, tc2.time ASC
+                    ORDER BY tc2.user_id, tc2.verified DESC, tc2.completion DESC, tc2.time ASC
                 ) bpu
                 JOIN core.users u ON u.id = bpu.user_id
-                ORDER BY bpu.verified DESC, bpu.time ASC
+                ORDER BY bpu.verified DESC, bpu.completion DESC, bpu.time ASC
                 LIMIT 1
             ) w ON TRUE
             {where_clause}
@@ -1882,8 +1882,11 @@ class TournamentRepository(BaseRepository):
     ) -> list[dict]:
         """Fetch ranked leaderboard for a tournament cycle.
 
-        Returns best-per-user submissions ranked by tier-then-time:
-        verified completions outrank unverified, fastest time wins within tier.
+        Returns best-per-user submissions ranked by tier-then-completion-then-time:
+        verified (mod-approved) completions outrank unverified; within a tier a
+        fully-verified run (video attached -> completion=TRUE) outranks a partial
+        (no-video) run; fastest time wins among equally-verified, equally-complete
+        runs.
 
         Args:
             cycle_id: Cycle to fetch leaderboard for.
@@ -1903,14 +1906,19 @@ class TournamentRepository(BaseRepository):
                     tc.inserted_at
                 FROM tournaments.completions tc
                 WHERE tc.cycle_id = $1
-                ORDER BY tc.user_id, tc.verified DESC, tc.time ASC, tc.inserted_at ASC
+                ORDER BY tc.user_id, tc.verified DESC, tc.completion DESC, tc.time ASC, tc.inserted_at ASC
             )
             SELECT
-                -- Stable tiebreak (earliest submission, then user_id) identical
-                -- to the winner-selection logic in process_edition_transitions()
-                -- so display ranks always agree with the awarded champion.
+                -- Ranking precedence: verified (mod-approved) tier first, then
+                -- fully-verified (video attached -> completion=TRUE) outranks
+                -- partial (no video) within the tier, then fastest time. Stable
+                -- tiebreak (earliest submission, then user_id) identical to the
+                -- outbox poller's winner selection (standings[0],
+                -- tournament_outbox_service.py) so display ranks always agree with
+                -- the awarded champion and placement XP.
                 RANK() OVER (
-                    ORDER BY bpu.verified DESC, bpu.time ASC, bpu.inserted_at ASC, bpu.user_id ASC
+                    ORDER BY bpu.verified DESC, bpu.completion DESC, bpu.time ASC,
+                             bpu.inserted_at ASC, bpu.user_id ASC
                 )::int AS rank,
                 bpu.user_id,
                 COALESCE(u.global_name, u.nickname, 'Unknown') AS name,
@@ -1919,7 +1927,8 @@ class TournamentRepository(BaseRepository):
                 bpu.completion
             FROM best_per_user bpu
             JOIN core.users u ON u.id = bpu.user_id
-            ORDER BY bpu.verified DESC, bpu.time ASC, bpu.inserted_at ASC, bpu.user_id ASC
+            ORDER BY bpu.verified DESC, bpu.completion DESC, bpu.time ASC,
+                     bpu.inserted_at ASC, bpu.user_id ASC
         """
         rows = await _conn.fetch(query, cycle_id)
         return [dict(row) for row in rows]
@@ -1933,7 +1942,8 @@ class TournamentRepository(BaseRepository):
     ) -> dict | None:
         """Fetch a user's best tournament completion for a cycle.
 
-        Returns the best submission ranked by verified status then time.
+        Returns the best submission ranked by verified status, then completion
+        (video attached outranks no-video), then time.
 
         Args:
             cycle_id: Cycle to look up.
@@ -1947,7 +1957,7 @@ class TournamentRepository(BaseRepository):
         query = """
             SELECT * FROM tournaments.completions
             WHERE cycle_id = $1 AND user_id = $2
-            ORDER BY verified DESC, time ASC
+            ORDER BY verified DESC, completion DESC, time ASC
             LIMIT 1
         """
         row = await _conn.fetchrow(query, cycle_id, user_id)
