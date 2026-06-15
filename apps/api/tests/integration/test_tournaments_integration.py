@@ -1474,12 +1474,13 @@ class TestFinalizingCyclePropagation:
         # Drive the production verify-propagation path directly against the real pool.
         # code is no longer used by propagation (cycle resolves via the row's cycle_id),
         # so a placeholder is sufficient.
-        await service._propagate_tournament_verification(  # noqa: SLF001
+        await service._propagate_tournament_verdict(  # noqa: SLF001
             completion_info={
                 "tournament_completion_id": pending_id,
                 "user_id": 0,
                 "code": "UNUSED",
             },
+            verified=True,
             headers=Headers({"X-PYTEST-ENABLED": "1"}),
             conn=None,
         )
@@ -1489,5 +1490,57 @@ class TestFinalizingCyclePropagation:
                 "SELECT status FROM tournaments.completions WHERE id = $1", pending_id
             )
         assert status == "verified"
+        # The drain gate now reads 0 so edition rollover can proceed.
+        assert await tournament_repo.count_inflight_verifications(edition_id) == 0
+
+    async def test_reject_propagation_flips_row_rejected_and_drains_gate(
+        self, asyncpg_pool, create_test_map, create_test_user
+    ):
+        """A core reject propagates status='rejected' to the linked tournament row.
+
+        Regression for the reject-propagation gap: verify_completion only propagated
+        on verify, so rejecting a core completion left its linked tournament row
+        'pending' — wedging the edition drain gate (and, for already-verified rows,
+        leaving a rejected run on the standings). Reject must drive the tournament
+        row to 'rejected' so count_inflight_verifications drains to 0.
+        """
+        from litestar.datastructures import Headers, State
+
+        from repository.completions_repository import CompletionsRepository
+        from repository.tournaments_repository import TournamentRepository
+        from services.completions_service import CompletionsService
+
+        edition_id, _cycle_id, pending_id = await _seed_awaiting_edition_for_service(
+            asyncpg_pool, with_pending=True, create_test_map=create_test_map, create_test_user=create_test_user
+        )
+        assert pending_id is not None
+
+        tournament_repo = TournamentRepository(asyncpg_pool)
+        # Gate is non-zero before the reject (one pending run on the finalizing cycle).
+        assert await tournament_repo.count_inflight_verifications(edition_id) >= 1
+
+        service = CompletionsService(
+            asyncpg_pool,
+            State({}),
+            CompletionsRepository(asyncpg_pool),
+            tournament_repo=tournament_repo,
+        )
+
+        await service._propagate_tournament_verdict(  # noqa: SLF001
+            completion_info={
+                "tournament_completion_id": pending_id,
+                "user_id": 0,
+                "code": "UNUSED",
+            },
+            verified=False,
+            headers=Headers({"X-PYTEST-ENABLED": "1"}),
+            conn=None,
+        )
+
+        async with asyncpg_pool.acquire() as conn:
+            status = await conn.fetchval(
+                "SELECT status FROM tournaments.completions WHERE id = $1", pending_id
+            )
+        assert status == "rejected"
         # The drain gate now reads 0 so edition rollover can proceed.
         assert await tournament_repo.count_inflight_verifications(edition_id) == 0

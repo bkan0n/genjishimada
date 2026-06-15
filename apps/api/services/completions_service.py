@@ -1074,16 +1074,19 @@ class CompletionsService(BaseService):
                 time=completion_info["old_time"],
             )
 
-        # D-04a: when a verified core row links a tournament row on an active
-        # cycle, propagate the verification to the tournament row + award
-        # participation XP, all inside verify_completion (NOT via a bot consumer,
-        # since VerificationChangedEvent carries no map_id — P8).
-        if data.verified:
-            await self._propagate_tournament_verification(
-                completion_info=completion_info,
-                headers=request.headers if request else Headers(),
-                conn=conn,
-            )
+        # D-04a: propagate the core verdict to a linked tournament row. Verify
+        # flips the tournament row to status='verified' and awards participation
+        # XP; reject flips it to status='rejected' — dropping it from standings AND
+        # releasing the edition drain gate (count_inflight_verifications counts only
+        # 'pending' rows) — with no XP and no clawback of a prior grant (rare/niche;
+        # CR-01 keeps participation grants terminal). Done inline (NOT via a bot
+        # consumer) since VerificationChangedEvent carries no map_id — P8.
+        await self._propagate_tournament_verdict(
+            completion_info=completion_info,
+            verified=data.verified,
+            headers=request.headers if request else Headers(),
+            conn=conn,
+        )
 
         # D-02 skill recompute: BOTH verify and un-verify/reject change a row's
         # eligibility, so both must recompute (symmetric add/remove — SPEC req 8/9).
@@ -1127,26 +1130,40 @@ class CompletionsService(BaseService):
                 skill_service=skill_service,
             )
 
-    async def _propagate_tournament_verification(
+    async def _propagate_tournament_verdict(
         self,
         *,
         completion_info: dict,
+        verified: bool,
         headers: Headers,
         conn: Connection | None,
     ) -> None:
-        """Flip the linked tournament row verified + award participation (D-04a).
+        """Propagate a core completion verdict to its linked tournament row (D-04a).
 
-        Runs only when the verified core row links a tournament row whose map is
-        an active cycle. ``set_tournament_verified`` and ``award_participation``
-        are atomic on a single connection: when ``conn`` is None (the common
-        pooled route call), a fresh connection + transaction is acquired (mirrors
+        Runs when the core row links a tournament row.
+
+        * **verify** (``verified=True``): flips the tournament row to
+          ``status='verified'`` and awards participation XP.
+        * **reject** (``verified=False``): flips it to ``status='rejected'`` —
+          removing it from the tournament standings and releasing the edition drain
+          gate (``count_inflight_verifications`` counts only ``'pending'`` rows). It
+          awards NO XP and deliberately does NOT claw back a participation XP from a
+          prior verify (rare/niche; CR-01 keeps grants terminal — product decision).
+
+        ``set_tournament_verified`` (and ``award_participation`` on verify) are
+        atomic on a single connection: when ``conn`` is None (the common pooled
+        route call), a fresh connection + transaction is acquired (mirrors
         ``verify_completion_with_pool``). XP is idempotent (the 08-01 ledger), so
-        this is replay-safe — verifying twice grants once. Deferred XP events are
-        flushed AFTER the transaction commits, then the tournament verification
-        event is published.
+        verify is replay-safe — verifying twice grants once. The cycle is resolved
+        from the completion's OWN cycle_id (status-agnostic), so a reject on a
+        ``finalizing`` child cycle still propagates and unblocks the drain. The
+        tournament verification-changed event is published only on a REAL status
+        transition (``set_tournament_verified`` returns None for a no-op), AFTER the
+        transaction commits.
 
         Args:
             completion_info: Moderation row (user_id, code, tournament_completion_id).
+            verified: The core verdict — True verifies, False rejects.
             headers: Request headers for the publish call.
             conn: Active connection (may be None for pooled route calls).
         """
@@ -1157,13 +1174,6 @@ class CompletionsService(BaseService):
             return
 
         async def _do(active_conn: Connection) -> tuple[dict | None, list[Any], dict | None]:
-            # Resolve the cycle from the completion's OWN cycle_id (status-agnostic),
-            # mirroring TournamentService._set_verified. The active-only map lookup
-            # (_resolve_active_cycle -> get_active_cycle_by_map_id) excludes
-            # 'finalizing' cycles, which would no-op propagation during edition
-            # rollover and hang the drain gate (UI4-FINALIZING-PROPAGATION). The
-            # submit path keeps the active-only resolver — a new run must not join a
-            # finalizing cycle.
             row = await self._tournament_repo.fetch_tournament_completion(  # type: ignore[union-attr]
                 tournament_completion_id, conn=active_conn
             )
@@ -1172,35 +1182,40 @@ class CompletionsService(BaseService):
             cycle = await self._tournament_repo.fetch_cycle(row["cycle_id"], conn=active_conn)  # type: ignore[union-attr]
             if cycle is None:
                 return None, [], None
-            row = await self._tournament_repo.set_tournament_verified(  # type: ignore[union-attr]
-                tournament_completion_id, conn=active_conn
+            updated = await self._tournament_repo.set_tournament_verified(  # type: ignore[union-attr]
+                tournament_completion_id, verified=verified, conn=active_conn
             )
             events: list[Any] = []
-            if self._tournament_reward_service is not None:
+            # Participation XP is granted on verify only; reject grants none and does
+            # not reverse a prior grant (no clawback by design).
+            if verified and self._tournament_reward_service is not None:
                 events = await self._tournament_reward_service.award_participation(
                     cycle, completion_info["user_id"], conn=active_conn
                 )
-            return cycle, events, row
+            return cycle, events, updated
 
         if conn is None:
             async with self._pool.acquire() as fresh_conn, fresh_conn.transaction():
-                active_cycle, pending_events, verified_row = await _do(cast("Connection", fresh_conn))
+                active_cycle, pending_events, updated_row = await _do(cast("Connection", fresh_conn))
         else:
-            active_cycle, pending_events, verified_row = await _do(conn)
+            active_cycle, pending_events, updated_row = await _do(conn)
 
-        if active_cycle is None or verified_row is None:
+        # No real transition (row/cycle missing, or already in the target state) ->
+        # nothing to publish.
+        if active_cycle is None or updated_row is None:
             return
 
-        if self._tournament_reward_service is not None and pending_events:
+        if verified and self._tournament_reward_service is not None and pending_events:
             await self._tournament_reward_service.publish_xp_events(pending_events)
 
         event = TournamentVerificationChangedEvent(
             tournament_completion_id=tournament_completion_id,
             cycle_id=active_cycle["id"],
             user_id=completion_info["user_id"],
-            verified=True,
-            time=float(verified_row["time"]),
+            verified=verified,
+            time=float(updated_row["time"]),
         )
+        verdict = "verify" if verified else "reject"
         # WR-01: DB txn is already committed; a publish failure must be logged at
         # exception level (not silently dropped) so a missing verification-changed
         # event is reconcilable.
@@ -1209,14 +1224,15 @@ class CompletionsService(BaseService):
                 routing_key="api.tournament.verification.changed",
                 data=event,
                 headers=headers,
-                idempotency_key=f"tournament:verify:{tournament_completion_id}",
+                idempotency_key=f"tournament:{verdict}:{tournament_completion_id}",
             )
         except Exception:
             log.exception(
                 "Failed to publish tournament verification-changed event after commit "
-                "(tournament_completion_id=%s) — DB is committed but the bot was not "
-                "notified; reconcile manually.",
+                "(tournament_completion_id=%s, verdict=%s) — DB is committed but the bot "
+                "was not notified; reconcile manually.",
                 tournament_completion_id,
+                verdict,
             )
             raise
 
