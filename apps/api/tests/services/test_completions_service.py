@@ -1749,7 +1749,7 @@ class TestVerifyCompletionTournamentSideEffect:
 
         await service.verify_completion(mock_request, 5001, data, conn=conn)
 
-        tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, conn=conn)
+        tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, verified=True, conn=conn)
         reward_service.award_participation.assert_awaited_once()
         reward_service.publish_xp_events.assert_awaited_once_with(["xp-event"])
         tournament_repo.get_active_cycle_by_map_id.assert_not_awaited()

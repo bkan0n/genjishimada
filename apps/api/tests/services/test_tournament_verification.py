@@ -254,7 +254,7 @@ async def test_pb_path_verify_propagates_to_both_rows() -> None:
         conn=conn,
     )
 
-    tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, conn=conn)
+    tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, verified=True, conn=conn)
     reward_service.award_participation.assert_awaited_once()
     # Propagation no longer depends on the active-only map lookup.
     tournament_repo.get_active_cycle_by_map_id.assert_not_awaited()
