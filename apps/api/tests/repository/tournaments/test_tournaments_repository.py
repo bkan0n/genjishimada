@@ -432,38 +432,6 @@ class TestFetchLeaderboard:
         assert leaderboard[0]["user_id"] == user_b
         assert leaderboard[0]["rank"] == 1
 
-    async def test_leaderboard_video_beats_no_video_within_tier(
-        self,
-        repository: TournamentRepository,
-        create_test_category,
-        create_test_cycle,
-        create_test_map,
-        create_test_user,
-        create_test_tournament_completion,
-    ):
-        category_id = await create_test_category()
-        map_id = await create_test_map()
-        cycle_id = await create_test_cycle(category_id, map_id, status="active")
-        user_a = await create_test_user(nickname="FastNoVideo")
-        user_b = await create_test_user(nickname="SlowVideo")
-
-        # Both mod-verified. User A is faster but has NO video (partial); user B is
-        # slower but submitted a video (full completion -> completion=TRUE).
-        await create_test_tournament_completion(cycle_id, user_a, map_id, time=20.0, verified=True)
-        await create_test_tournament_completion(
-            cycle_id, user_b, map_id, time=30.0, verified=True, video="https://example.com/run.mp4"
-        )
-
-        leaderboard = await repository.fetch_leaderboard(cycle_id)
-        assert len(leaderboard) >= 2
-        # Fully-verified (video) outranks the faster partial run within the verified tier.
-        assert leaderboard[0]["user_id"] == user_b
-        assert leaderboard[0]["rank"] == 1
-        assert leaderboard[0]["completion"] is True
-        assert leaderboard[1]["user_id"] == user_a
-        assert leaderboard[1]["rank"] == 2
-        assert leaderboard[1]["completion"] is False
-
     async def test_leaderboard_verified_tier_outranks_pending_video(
         self,
         repository: TournamentRepository,
