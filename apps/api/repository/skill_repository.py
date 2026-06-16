@@ -7,6 +7,8 @@ and the single-row weight config read/write.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from asyncpg import Connection, Pool
 from asyncpg.pool import PoolConnectionProxy
 from litestar.datastructures import State
@@ -486,6 +488,112 @@ class SkillRepository(BaseRepository):
             CROSS JOIN skill.tier_config tc
             WHERE ss.user_id = $1
             """,
+            user_id,
+        )
+        return dict(row) if row else None
+
+    async def fetch_history(self, user_id: int, since: datetime, *, conn: Connection | None = None) -> list[dict]:
+        """Read a player's windowed score history, oldest-first (SPEC req 3).
+
+        Filters on ``captured_at >= since`` (a timezone-aware datetime the service computes
+        from the window; for ``all`` the service passes a far-past sentinel) and orders
+        ascending so the line graph plots chronologically. The composite PK
+        ``(user_id, captured_at)`` covers this read with no extra index. ``since`` is bound
+        positionally (``$2``) — never string-interpolated (T-14-07).
+
+        Args:
+            user_id: Discord user ID whose history to read.
+            since: Timezone-aware lower bound for ``captured_at`` (inclusive).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            A list of ``{user_id, captured_at, skill_score}`` dicts, oldest-first.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            """
+            SELECT user_id, captured_at, skill_score
+            FROM skill.score_history
+            WHERE user_id = $1 AND captured_at >= $2
+            ORDER BY captured_at ASC
+            """,
+            user_id,
+            since,
+        )
+        return [dict(r) for r in rows]
+
+    async def fetch_changes(
+        self,
+        user_id: int,
+        since: datetime,
+        limit: int,
+        offset: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Read a player's newest-first paginated change feed (SPEC req 4).
+
+        Selects ONLY the columns ``SkillChangeFeedItem`` needs — deliberately OMITTING the
+        heavy ``diff`` jsonb (Warning 4): the feed never renders the per-map impact array, so
+        selecting ``diff`` would force a per-row jsonb deserialization on every paginated page
+        for data the feed never uses. The feed's ``description`` is derived in the service from
+        ``cause_category``/``reason``. Orders ``captured_at DESC`` (uses the
+        ``(user_id, captured_at DESC)`` feed index) and bounds with ``LIMIT``/``OFFSET`` —
+        all positional params (T-14-07/T-14-08; the route caps ``limit``). The drill-down
+        ``fetch_change`` is the only method that SELECTs ``diff``.
+
+        Args:
+            user_id: Discord user ID whose feed to read.
+            since: Timezone-aware lower bound for ``captured_at`` (inclusive).
+            limit: Max rows to return (route-validated bound).
+            offset: Rows to skip for pagination.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            A list of feed-item dicts (no ``diff``), newest-first.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            """
+            SELECT change_id, captured_at, previous_score, new_score, delta, cause_category, reason
+            FROM skill.score_change
+            WHERE user_id = $1 AND captured_at >= $2
+            ORDER BY captured_at DESC
+            LIMIT $3 OFFSET $4
+            """,
+            user_id,
+            since,
+            limit,
+            offset,
+        )
+        return [dict(r) for r in rows]
+
+    async def fetch_change(self, user_id: int, change_id: int, *, conn: Connection | None = None) -> dict | None:
+        """Read a single change with the ownership predicate baked in (SPEC req 5, T-14-06).
+
+        This is the ONLY method that SELECTs ``diff`` (the all-maps impact array, decoded to a
+        Python dict via the jsonb<->msgspec codec). The ``WHERE change_id = $1 AND user_id = $2``
+        ownership predicate is the IDOR mitigation: a ``change_id`` belonging to another user
+        yields no row -> ``None`` -> the route raises 404 (NOT 403 — does not confirm the id's
+        existence to a non-owner).
+
+        Args:
+            user_id: Discord user ID that must own the change.
+            change_id: The change to read.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The full change row (including ``diff``) as a dict, or None if no owned row matches.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT change_id, user_id, captured_at, previous_score, new_score, delta,
+                   cause_category, reason, diff
+            FROM skill.score_change
+            WHERE change_id = $1 AND user_id = $2
+            """,
+            change_id,
             user_id,
         )
         return dict(row) if row else None
