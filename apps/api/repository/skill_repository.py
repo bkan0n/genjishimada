@@ -267,10 +267,16 @@ class SkillRepository(BaseRepository):
             return
 
         async def _do_insert(c: Connection | PoolConnectionProxy) -> None:
+            # ON CONFLICT DO NOTHING (IN-02): score_history's PK is (user_id, captured_at). Two
+            # recomputes that mint the same sub-microsecond captured_at for the same user would
+            # otherwise raise a unique violation and abort the whole capture transaction. Dropping
+            # the colliding point (rather than failing the rebuild) preserves the forward-only
+            # history and keeps the recompute resilient under burst triggers.
             await c.executemany(
                 """
                 INSERT INTO skill.score_history (user_id, captured_at, skill_score)
                 VALUES ($1, $2, $3)
+                ON CONFLICT (user_id, captured_at) DO NOTHING
                 """,
                 [(r["user_id"], r["captured_at"], r["skill_score"]) for r in rows],
             )
