@@ -253,14 +253,17 @@ class SkillHistorySummary(Struct):
 
     Attributes:
         point_change: First-to-last absolute score change over the window.
-        percent_change: First-to-last percent change over the window.
+        percent_change: First-to-last percent change over the window, or ``None`` when it is
+            undefined — i.e. the earliest in-window score is 0, so dividing by it would be a
+            div-by-zero (WR-05). ``None`` means "n/a" (render a dash), NOT 0%; a real 0% only
+            occurs when first and last are equal and non-zero.
         best: Highest score point in the window (and when it occurred).
         lowest: Lowest score point in the window (and when it occurred).
         average: Mean score across the window's points.
     """
 
     point_change: float
-    percent_change: float
+    percent_change: float | None
     best: SkillHistoryExtremum
     lowest: SkillHistoryExtremum
     average: float

@@ -518,8 +518,8 @@ class SkillService(BaseService):
 
         Maps the window to a ``since`` lower bound, reads the oldest-first history points, and
         derives the window summary anchored on the EARLIEST in-window record (SPEC req 3):
-        ``point_change = last - first``; ``percent_change = point_change / first * 100`` (guarded
-        when ``first == 0``); ``best``/``lowest`` are the max/min point with their dates; ``average``
+        ``point_change = last - first``; ``percent_change = point_change / first * 100`` (``None``
+        when ``first == 0`` — undefined, not 0%, WR-05); ``best``/``lowest`` are the max/min point with their dates; ``average``
         is the mean. A player with no history returns ``points=[]`` and an all-zero summary
         (extrema score ``0.0``, date ``None``) — never a 500, never a synthetic row (req 7).
 
@@ -540,7 +540,14 @@ class SkillService(BaseService):
         first = points[0].skill_score
         last = points[-1].skill_score
         point_change = last - first
-        percent_change = (point_change / first * 100.0) if first != 0 else 0.0
+        # WR-05: when the earliest in-window score is 0 the percent change is undefined (division
+        # by zero). Return None ("n/a") rather than a misleading 0.0 that would contradict a large
+        # positive point_change (a new player who climbed from 0). A true 0% only arises when first
+        # and last are equal and non-zero.
+        if first != 0:
+            percent_change: float | None = point_change / first * 100.0
+        else:
+            percent_change = None
         best_point = max(points, key=lambda p: p.skill_score)
         lowest_point = min(points, key=lambda p: p.skill_score)
         average = sum(p.skill_score for p in points) / len(points)

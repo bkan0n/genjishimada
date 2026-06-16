@@ -249,6 +249,25 @@ class TestHistorySummary:
         assert summary["best"]["date"] is not None
         assert summary["lowest"]["date"] is not None
 
+    async def test_history_percent_change_null_when_first_is_zero(self, test_client, seed, asyncpg_pool):
+        """A player who climbs from a 0 first in-window point reports percent_change=null, not 0% (WR-05)."""
+        user_id = await seed.make_user()
+        base = _now()
+        # Earliest in-window score is exactly 0, then climbs — percent change is undefined (div by 0).
+        samples = [
+            (base - timedelta(days=20), 0.0),
+            (base - timedelta(days=5), 40.0),
+        ]
+        await _insert_history(asyncpg_pool, user_id, samples)
+
+        resp = await test_client.get(f"{SKILL}/users/{user_id}/history", params={"window": "30d"})
+        assert resp.status_code == 200
+        summary = resp.json()["summary"]
+        # point_change is a large positive number, but percent_change is null ("n/a") — never a
+        # misleading 0% that would contradict the visible growth.
+        assert math.isclose(summary["point_change"], 40.0, abs_tol=1e-6)
+        assert summary["percent_change"] is None
+
     async def test_invalid_window_rejected(self, test_client, seed):
         """An unknown window value is rejected at decode (4xx), never interpolated into SQL (T-14-13)."""
         user_id = await seed.make_user()
