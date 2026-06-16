@@ -19,10 +19,15 @@ from litestar import Controller, get, patch
 from litestar.di import Provide
 from litestar.exceptions import HTTPException
 from litestar.params import Parameter
-from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_422_UNPROCESSABLE_ENTITY
+from litestar.status_codes import (
+    HTTP_400_BAD_REQUEST,
+    HTTP_404_NOT_FOUND,
+    HTTP_422_UNPROCESSABLE_ENTITY,
+    HTTP_503_SERVICE_UNAVAILABLE,
+)
 
 from repository.skill_repository import provide_skill_repository
-from services.exceptions.skill import InvalidGammaError, InvalidPercentilesError
+from services.exceptions.skill import InvalidGammaError, InvalidPercentilesError, SkillConfigNotSeededError
 from services.skill_service import SkillService, TriggerDescriptor, provide_skill_service
 
 # Time-window literal for the dashboard reads. msgspec rejects any value outside this closed
@@ -198,8 +203,14 @@ class SkillController(Controller):
 
         Returns:
             SkillTiersResponse: The current boundaries, percentiles, and computed_at.
+
+        Raises:
+            HTTPException: 503 if the tier config row is not seeded (WR-03).
         """
-        return await skill_service.get_tier_config()
+        try:
+            return await skill_service.get_tier_config()
+        except SkillConfigNotSeededError as e:
+            raise HTTPException(status_code=HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
 
     @patch(
         path="/tiers",
@@ -252,8 +263,14 @@ class SkillController(Controller):
 
         Returns:
             Weights: The current tuning weights.
+
+        Raises:
+            HTTPException: 503 if the weight config row is not seeded (WR-03).
         """
-        return await skill_service.get_weights()
+        try:
+            return await skill_service.get_weights()
+        except SkillConfigNotSeededError as e:
+            raise HTTPException(status_code=HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
 
     @patch(
         path="/config",

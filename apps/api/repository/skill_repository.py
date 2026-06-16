@@ -14,6 +14,7 @@ from asyncpg.pool import PoolConnectionProxy
 from litestar.datastructures import State
 
 from repository.base import BaseRepository
+from services.exceptions.skill import SkillConfigNotSeededError
 
 # Verbatim port of the spike input query (sources/001-skill-input-query/query.py:24-92).
 # One row per (user, map): the player's fastest verified, non-legacy completion joined to
@@ -334,6 +335,11 @@ class SkillRepository(BaseRepository):
 
         Returns:
             A dict of exactly the nine weight columns.
+
+        Raises:
+            SkillConfigNotSeededError: If the single ``skill.weight_config`` row is missing —
+                fails loudly here rather than letting ``msgspec.convert({}, Weights)`` raise an
+                opaque ValidationError 500 downstream (WR-03).
         """
         _conn = self._get_connection(conn)
         row = await _conn.fetchrow(
@@ -344,7 +350,9 @@ class SkillRepository(BaseRepository):
             LIMIT 1
             """
         )
-        return dict(row) if row else {}
+        if row is None:
+            raise SkillConfigNotSeededError("weight_config")
+        return dict(row)
 
     async def update_weights(self, weights: dict, *, conn: Connection | None = None) -> dict:
         """Partial-update the single weight-config row (D-10) and return the full row.
@@ -452,10 +460,17 @@ class SkillRepository(BaseRepository):
 
         Returns:
             A dict with ``boundaries``, ``percentiles``, and ``computed_at``.
+
+        Raises:
+            SkillConfigNotSeededError: If the single ``skill.tier_config`` row is missing —
+                fails loudly rather than letting ``msgspec.convert({}, SkillTiersResponse)`` raise
+                an opaque ValidationError 500 downstream (WR-03).
         """
         _conn = self._get_connection(conn)
         row = await _conn.fetchrow("SELECT boundaries, percentiles, computed_at FROM skill.tier_config LIMIT 1")
-        return dict(row) if row else {}
+        if row is None:
+            raise SkillConfigNotSeededError("tier_config")
+        return dict(row)
 
     async def fetch_snapshot_with_tier(self, user_id: int, *, conn: Connection | None = None) -> dict | None:
         """Fetch a player's snapshot row plus its tier and population percentile (PYO-TIER-03).
