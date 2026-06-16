@@ -143,3 +143,19 @@ Plans:
 **Wave 5** *(blocked on Wave 4 completion)*
 
 - [x] 13-06-PLAN.md — Emit recompute from all 4 verify paths + leaderboard skill_score column + integration test (req 6, 8, 9) [wave 5]
+
+### Phase 14: Skill Score Dashboard
+
+**Goal:** Provide a per-user skill score dashboard, building on the Phase 13 skill-score engine. Surface a user's skill score over time and the events that move it:
+- Timestamped skill-score snapshots captured for every user that has data
+- Line-graph data for skill score over time, filterable by 7d, 30d, 90d, 1y, or all
+- Summary with "best", "lowest", and "average" score plus percentage gain/loss and exact point change over the current time window
+- A recent-changes list of all events affecting a user's skill score (other users' submissions, the user's own submissions, map changes, etc.)
+- Drill-down into each change to show the specific impact it had on the user's score
+
+**Requirements:** See `14-SPEC.md` (spec-phase) — 7 requirements locked (ambiguity 0.12). API-only vertical; website/bot surfaces are later phases.
+**Depends on:** Phase 13
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 14 to break down)

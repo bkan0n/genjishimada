@@ -449,3 +449,4 @@ Controller → Service → Repository pattern:
 - 2026-06-01: Reconstructed roadmap after v1.0 ship; added post-v1.0 quick-task track for cycle lifecycle control.
 - Phase 12 added: Overhaul of tournaments
 - Phase 12.1 inserted after Phase 12: Verification-aware tournament results: defer edition results until pending verifications drain (URGENT)
+- Phase 14 added: Skill Score Dashboard — per-user skill-score snapshots, time-windowed line graph, summary stats, recent-changes feed with drill-down
