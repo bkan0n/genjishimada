@@ -140,9 +140,7 @@ async def seed(asyncpg_pool: asyncpg.Pool):
     )()
 
 
-async def _insert_history(
-    pool: asyncpg.Pool, user_id: int, samples: list[tuple[datetime, float]]
-) -> None:
+async def _insert_history(pool: asyncpg.Pool, user_id: int, samples: list[tuple[datetime, float]]) -> None:
     """Insert known (captured_at, skill_score) history rows directly (Req 3/6 fixtures)."""
     async with pool.acquire() as conn:
         for captured_at, score in samples:
@@ -182,12 +180,8 @@ class TestHistoryCapture:
             user_id=player_b, map_id=map_id, time=50.0, verified=True, message_id=int(uuid4().int % 9_000_000_000)
         )
         msg_a = int(uuid4().int % 9_000_000_000)
-        await seed.make_completion(
-            user_id=player_a, map_id=map_id, time=20.0, verified=False, message_id=msg_a
-        )
-        completion_a = await asyncpg_pool.fetchval(
-            "SELECT id FROM core.completions WHERE message_id = $1", msg_a
-        )
+        await seed.make_completion(user_id=player_a, map_id=map_id, time=20.0, verified=False, message_id=msg_a)
+        completion_a = await asyncpg_pool.fetchval("SELECT id FROM core.completions WHERE message_id = $1", msg_a)
 
         await _recompute(asyncpg_pool)
         # Change the field: verify A (faster) → B's score moves → second capture differs.
@@ -328,9 +322,7 @@ class TestChangeFeed:
         assert captured == sorted(captured, reverse=True)
 
         # limit bounds the page size.
-        limited = await test_client.get(
-            f"{SKILL}/users/{user_id}/changes", params={"window": "all", "limit": 2}
-        )
+        limited = await test_client.get(f"{SKILL}/users/{user_id}/changes", params={"window": "all", "limit": 2})
         assert limited.status_code == 200
         assert len(limited.json()) == 2
 
@@ -395,9 +387,7 @@ class TestChangeDetailConservation:
 
         change_ids = [
             r["change_id"]
-            for r in await asyncpg_pool.fetch(
-                "SELECT change_id FROM skill.score_change WHERE user_id = $1", user_id
-            )
+            for r in await asyncpg_pool.fetch("SELECT change_id FROM skill.score_change WHERE user_id = $1", user_id)
         ]
         assert change_ids, "expected at least one change row from the recompute"
 
@@ -529,17 +519,34 @@ class TestCauseAttributionEndToEnd:
         service = SkillService(asyncpg_pool, state, SkillRepository(asyncpg_pool))
         await service.recompute_all()  # baseline snapshot
         await asyncio.sleep(0.01)
-        await service.recompute_all(
-            TriggerDescriptor(cause_category="PLAYER_ACTION", actor_user_id=player_a)
-        )
+        # IN-04: score_change is append-only and recompute_all writes a row for EVERY
+        # user-with-data, so a sibling xdist worker's global SYSTEM recompute also appends rows
+        # for player_a/player_b — a plain "latest by captured_at" read can pick up that sibling
+        # row instead of this test's. Bound the read to the [before, after] window of THIS
+        # recompute so the assertion only ever sees the row this test itself produced.
+        marker_before = datetime.now(timezone.utc)
+        await service.recompute_all(TriggerDescriptor(cause_category="PLAYER_ACTION", actor_user_id=player_a))
+        marker_after = datetime.now(timezone.utc)
 
         a_cause = await asyncpg_pool.fetchval(
-            "SELECT cause_category FROM skill.score_change WHERE user_id = $1 ORDER BY captured_at DESC LIMIT 1",
+            """
+            SELECT cause_category FROM skill.score_change
+            WHERE user_id = $1 AND captured_at BETWEEN $2 AND $3
+            ORDER BY captured_at DESC LIMIT 1
+            """,
             player_a,
+            marker_before,
+            marker_after,
         )
         b_cause = await asyncpg_pool.fetchval(
-            "SELECT cause_category FROM skill.score_change WHERE user_id = $1 ORDER BY captured_at DESC LIMIT 1",
+            """
+            SELECT cause_category FROM skill.score_change
+            WHERE user_id = $1 AND captured_at BETWEEN $2 AND $3
+            ORDER BY captured_at DESC LIMIT 1
+            """,
             player_b,
+            marker_before,
+            marker_after,
         )
         # Req 2: actor → PLAYER_ACTION; bystander-with-data → MAP_ENVIRONMENT.
         assert a_cause == "PLAYER_ACTION"
@@ -559,14 +566,22 @@ class TestCauseAttributionEndToEnd:
         service = SkillService(asyncpg_pool, state, SkillRepository(asyncpg_pool))
         await service.recompute_all()  # baseline
         await asyncio.sleep(0.01)
+        # IN-04: bound the read to THIS recompute's [before, after] window so a sibling xdist
+        # worker's concurrent global recompute (which also appends a row for this user) cannot be
+        # mistaken for the row under test.
+        marker_before = datetime.now(timezone.utc)
         await service.recompute_all(TriggerDescriptor(cause_category="SYSTEM"))
+        marker_after = datetime.now(timezone.utc)
 
         row = await asyncpg_pool.fetchrow(
             """
             SELECT cause_category, reason FROM skill.score_change
-            WHERE user_id = $1 ORDER BY captured_at DESC LIMIT 1
+            WHERE user_id = $1 AND captured_at BETWEEN $2 AND $3
+            ORDER BY captured_at DESC LIMIT 1
             """,
             user_id,
+            marker_before,
+            marker_after,
         )
         assert row is not None
         assert row["cause_category"] == "SYSTEM"
