@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-16T17:07:16.717Z"
+last_updated: "2026-06-16T17:10:50.093Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 21
-  completed_plans: 17
-  percent: 75
+  completed_plans: 18
+  percent: 86
 ---
 
 # Tournament System — State
@@ -73,6 +73,29 @@ Controller → Service → Repository pattern:
 
 ### Phase 14 Progress
 
+- **14-02 complete (2026-06-16):** Skill dashboard wire contracts (interface-first,
+  no DB/service dependency). Added seven new msgspec structs + the `CauseCategory`
+  Literal to `libs/sdk/.../skill.py` and enriched `SkillRecomputeRequestedEvent` (D-10)
+  so Waves 2-4 implement against fixed contracts. **SDK:** `CauseCategory =
+  Literal["PLAYER_ACTION","MAP_ENVIRONMENT","SYSTEM"]` — the single SDK source for the
+  closed set (the migration 0031 CHECK is the DB backstop); History (req 3)
+  `SkillHistoryPoint`/`SkillHistoryExtremum` (`date: datetime | None` for the empty
+  shape)/`SkillHistorySummary` (point_change/percent_change/best/lowest/average)/
+  `SkillHistoryResponse` (user_id/points/summary); Feed (req 4) `SkillChangeFeedItem`
+  (change_id/captured_at/delta/cause_category/description); Drill-down (req 5)
+  `SkillChangeCause` (map/reason/impact)/`SkillChangeDetailResponse`
+  (change_id/captured_at/previous_score/new_score/delta/percent_change/cause_category/
+  main_causes/other_factors). All seven + `CauseCategory` in `__all__`; no Phase 13
+  struct touched. **Event** (`apps/api/events/schemas.py`): added `cause_category: str =
+  "SYSTEM"` (plain `str`, NOT the SDK Literal — keeps the API-side event module
+  dependency-light; the service validates the closed set) + `actor_user_id: int | None =
+  None`; `reason` kept first so existing `SkillRecomputeRequestedEvent(reason=...)` calls
+  and the `events/skill.py` listener stay backward-compatible. Verified: structs
+  round-trip (empty-points/zero-summary + main_causes/other_factors shapes), `cause_category="BOGUS"`
+  raises `msgspec.ValidationError` (T-14-04 mitigated at decode), event constructs
+  old-style + enriched; `just lint-sdk` + `just lint-api` clean (0 errors). No deviations.
+  Commits `0501374` (Task 1) / `d3129e5` (Task 2). **Phase 14: 2/5 plans complete.**
+
 - **14-01 complete (2026-06-16):** Migration `0031_skill_history.sql` — the
   forward-only data foundation for the skill dashboard. Two new `skill`-schema
   capture tables (D-01): a **lean** `skill.score_history` (`user_id bigint`,
@@ -94,7 +117,7 @@ Controller → Service → Repository pattern:
   plan-owned):** the plan's `<verify>` one-liner had an unsatisfiable CHECK assertion (it
   strips spaces from the SQL but not from its own search string), so the migration was
   validated against the actual whitespace-insensitive acceptance criterion instead (passes).
-  Commit `5f4e29c`. **Phase 14: 1/5 plans complete.**
+  Commit `5f4e29c`. **Phase 14: 2/5 plans complete.**
 
 ### Phase 13 Progress
 
