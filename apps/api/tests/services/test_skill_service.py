@@ -23,7 +23,7 @@ from genjishimada_sdk.skill import (
 
 from services import skill_service as svc
 from services.exceptions.skill import InvalidGammaError, InvalidPercentilesError
-from services.skill_service import SkillService
+from services.skill_service import SkillService, TriggerDescriptor
 
 pytestmark = [pytest.mark.domain_skill]
 
@@ -160,6 +160,83 @@ async def test_recompute_all_collapses_concurrent_bursts(mocker):
 
     # No overlap: at most one in-flight rebuild + one coalesced rerun (never 5).
     assert started <= 2
+
+
+async def test_recompute_player_action_splits_actor_and_bystander(mocker):
+    """One PLAYER_ACTION descriptor → actor row PLAYER_ACTION, bystander row MAP_ENVIRONMENT (D-08)."""
+    service, repo = _make_service(mocker)
+    repo.fetch_weights.return_value = dict(_WEIGHTS)
+    # Two users with eligible runs: user 1 is the actor, user 2 a bystander.
+    repo.fetch_skill_inputs.return_value = [
+        _input_row(1, 9.6, video=True),
+        _input_row(2, 5.0, video=True),
+    ]
+
+    await service.recompute_all(TriggerDescriptor(cause_category="PLAYER_ACTION", actor_user_id=1))
+
+    repo.bulk_insert_changes.assert_awaited_once()
+    change_rows = repo.bulk_insert_changes.await_args.args[0]
+    by_uid = {r["user_id"]: r for r in change_rows}
+    assert by_uid[1]["cause_category"] == "PLAYER_ACTION"
+    assert by_uid[2]["cause_category"] == "MAP_ENVIRONMENT"
+    assert by_uid[1]["reason"] == "verified completion"
+
+
+async def test_recompute_coalesced_burst_promotes_to_system(mocker):
+    """Two-or-more drained descriptors → every change row SYSTEM 'global recalculation' (D-09)."""
+    service, repo = _make_service(mocker)
+    repo.fetch_weights.return_value = dict(_WEIGHTS)
+    repo.fetch_skill_inputs.return_value = [
+        _input_row(1, 9.6, video=True),
+        _input_row(2, 5.0, video=True),
+    ]
+
+    # Pre-load a second descriptor so the single recompute drains >=2 → SYSTEM promotion.
+    svc._GUARD.pending.append(TriggerDescriptor(cause_category="PLAYER_ACTION", actor_user_id=99))
+    await service.recompute_all(TriggerDescriptor(cause_category="PLAYER_ACTION", actor_user_id=1))
+
+    change_rows = repo.bulk_insert_changes.await_args.args[0]
+    assert all(r["cause_category"] == "SYSTEM" for r in change_rows)
+    assert all(r["reason"] == "global recalculation" for r in change_rows)
+
+
+async def test_recompute_reads_prev_snapshot_before_truncate(mocker):
+    """The 2nd recompute's change rows carry previous_score from the prior snapshot (Pitfall 1)."""
+    service, repo = _make_service(mocker)
+    repo.fetch_weights.return_value = dict(_WEIGHTS)
+    repo.fetch_skill_inputs.return_value = [_input_row(1, 9.6, video=True)]
+    # Non-empty prev snapshot read BEFORE replace_snapshot — a populated prior score + breakdown.
+    repo.fetch_all_snapshots.return_value = {
+        1: {"skill_score": 3.0, "breakdown": [{"map_name": "old-map", "contribution": 3.0}]}
+    }
+
+    await service.recompute_all(TriggerDescriptor(cause_category="SYSTEM"))
+
+    change_rows = repo.bulk_insert_changes.await_args.args[0]
+    row = next(r for r in change_rows if r["user_id"] == 1)
+    assert row["previous_score"] == 3.0
+    assert abs(row["delta"] - (row["new_score"] - 3.0)) <= 1e-9
+
+
+async def test_recompute_change_diff_conserves(mocker):
+    """Σ diff.maps[*].impact ≈ delta within 1e-6 — conservation by construction (D-04)."""
+    service, repo = _make_service(mocker)
+    repo.fetch_weights.return_value = dict(_WEIGHTS)
+    repo.fetch_skill_inputs.return_value = [
+        _input_row(1, 9.6, video=True),
+        _input_row(1, 7.0, video=False),
+    ]
+    # A prev≠new breakdown so the diff has non-trivial per-map impacts on both sides.
+    repo.fetch_all_snapshots.return_value = {
+        1: {"skill_score": 2.0, "breakdown": [{"map_name": "stale-map", "contribution": 2.0}]}
+    }
+
+    await service.recompute_all(TriggerDescriptor(cause_category="SYSTEM"))
+
+    change_rows = repo.bulk_insert_changes.await_args.args[0]
+    row = next(r for r in change_rows if r["user_id"] == 1)
+    impact_sum = sum(m["impact"] for m in row["diff"]["maps"])
+    assert abs(impact_sum - row["delta"]) <= 1e-6
 
 
 async def test_get_user_skill_empty_player_returns_zero(mocker):
