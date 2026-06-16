@@ -31,6 +31,13 @@ __all__ = (
 # (config/tier PATCH, nightly backstop, cold-start, or any coalesced burst). msgspec
 # strict decode rejects any value outside this set (T-14-04); the DB CHECK in migration
 # 0031 is the persistence-side backstop.
+#
+# KNOWN LIMITATION (WR-04 / D-09): cause attribution is best-effort, not authoritative. When
+# two recompute triggers coalesce (concurrent verifies, or a verify overlapping a nightly/PATCH
+# rebuild) the whole batch is promoted to `SYSTEM`, so a genuine player-triggered change can be
+# recorded as `SYSTEM` rather than `PLAYER_ACTION`. Consumers MUST treat `PLAYER_ACTION` as a
+# hint only — never as proof a specific user personally caused the change — and must not assume a
+# `SYSTEM` row had no player trigger.
 CauseCategory = Literal["PLAYER_ACTION", "MAP_ENVIRONMENT", "SYSTEM"]
 
 

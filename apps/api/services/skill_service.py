@@ -350,6 +350,15 @@ class SkillService(BaseService):
         descriptors, any SYSTEM descriptor, or a lone descriptor with no actor — promotes the
         whole recompute to ``(SYSTEM, None)`` "global recalculation".
 
+        KNOWN LIMITATION (WR-04 / D-09): because every coalesced caller appends to the shared
+        ``_GUARD.pending`` and the holder drains ALL pending descriptors per loop iteration, two
+        near-simultaneous PLAYER_ACTION verifies (or a verify overlapping the nightly/PATCH SYSTEM
+        trigger) collapse to ``(SYSTEM, None)`` — the actor loses PLAYER_ACTION attribution. Under
+        production bursts this demotion is expected and frequent. Consumers MUST NOT treat
+        ``PLAYER_ACTION`` as a reliable signal that a given user personally triggered the change;
+        a ``SYSTEM`` row may still have been caused by a player action that was coalesced. This is
+        a deliberate trade-off (the in-flight collapse guard is intentionally not redesigned).
+
         Args:
             drained: The descriptors accumulated for this recompute.
 
