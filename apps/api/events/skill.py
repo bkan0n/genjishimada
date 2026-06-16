@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+import sentry_sdk
 from litestar.events import listener
 
 from events.schemas import SkillRecomputeRequestedEvent
@@ -45,7 +46,11 @@ async def handle_skill_recompute(event: SkillRecomputeRequestedEvent, skill_serv
     descriptor = TriggerDescriptor(cause_category=event.cause_category, actor_user_id=event.actor_user_id)
     try:
         await skill_service.recompute_all(descriptor)
-    except Exception:
+    except Exception as e:
         # Log and continue: the nightly backstop + the next event self-heal the
         # snapshot, so a single dropped recompute must not crash the event loop.
+        # Still report to Sentry (WR-02): a persistently failing recompute (missing
+        # weight row, schema drift) would otherwise leave the snapshot stale with no
+        # monitoring signal until the nightly backstop runs.
         log.exception("[!] skill recompute (reason=%s) failed", event.reason)
+        sentry_sdk.capture_exception(e)
