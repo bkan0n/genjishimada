@@ -174,6 +174,7 @@ OverwatchMap = Literal[
     "Gogadoro",
     "Powder Keg Mine",
     "Place Lacroix",
+    "Neon Junction",
 ]
 
 Mechanics = Literal[
