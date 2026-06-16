@@ -228,6 +228,102 @@ class SkillRepository(BaseRepository):
         else:
             await _do_replace(_conn)
 
+    async def fetch_all_snapshots(self, *, conn: Connection | None = None) -> dict[int, dict]:
+        """Read every player's prev snapshot score + breakdown in ONE query (D-05).
+
+        Must be callable BEFORE ``replace_snapshot`` TRUNCATEs so the capture wiring
+        (Wave 3) has each user's ``previous_score`` and per-map ``contribution`` from the
+        OLD snapshot in hand to build the ``score_history`` + ``score_change`` rows (Pitfall 1).
+        Single round-trip over ``skill.snapshot`` — never a per-user loop (Pitfall 3). The
+        ``breakdown`` jsonb decodes to a Python list automatically via the jsonb<->msgspec
+        codec (D-06).
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            A dict keyed by ``user_id`` -> ``{"skill_score": float, "breakdown": list}``.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch("SELECT user_id, skill_score, breakdown FROM skill.snapshot")
+        return {row["user_id"]: {"skill_score": row["skill_score"], "breakdown": row["breakdown"]} for row in rows}
+
+    async def bulk_insert_history(self, rows: list[dict], *, conn: Connection | None = None) -> None:
+        """Append-only bulk insert into ``skill.score_history`` (D-02; NO TRUNCATE).
+
+        Mirrors ``replace_snapshot``'s ``executemany`` + Pool-vs-Connection fork but the
+        history table is forward-only — it is NEVER truncated. An empty ``rows`` list is a
+        no-op (returns early, same as ``replace_snapshot``). Each dict supplies
+        ``user_id, captured_at, skill_score``.
+
+        Args:
+            rows: One dict per user-with-data for this recompute.
+            conn: Optional connection for transaction support.
+        """
+        if not rows:
+            return
+
+        async def _do_insert(c: Connection | PoolConnectionProxy) -> None:
+            await c.executemany(
+                """
+                INSERT INTO skill.score_history (user_id, captured_at, skill_score)
+                VALUES ($1, $2, $3)
+                """,
+                [(r["user_id"], r["captured_at"], r["skill_score"]) for r in rows],
+            )
+
+        _conn = self._get_connection(conn)
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                await _do_insert(acquired)
+        else:
+            await _do_insert(_conn)
+
+    async def bulk_insert_changes(self, rows: list[dict], *, conn: Connection | None = None) -> None:
+        """Append-only bulk insert into ``skill.score_change`` (D-02; NO TRUNCATE).
+
+        Same forward-only pattern as ``bulk_insert_history``. ``r["diff"]`` is a Python dict
+        — the jsonb<->msgspec codec serializes it (same as ``breakdown`` in
+        ``replace_snapshot``); do NOT ``json.dumps`` it. Empty ``rows`` is a no-op. Each dict
+        supplies ``user_id, captured_at, previous_score, new_score, delta, cause_category,
+        reason, diff``.
+
+        Args:
+            rows: One dict per user-with-data for this recompute.
+            conn: Optional connection for transaction support.
+        """
+        if not rows:
+            return
+
+        async def _do_insert(c: Connection | PoolConnectionProxy) -> None:
+            await c.executemany(
+                """
+                INSERT INTO skill.score_change
+                    (user_id, captured_at, previous_score, new_score, delta, cause_category, reason, diff)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                [
+                    (
+                        r["user_id"],
+                        r["captured_at"],
+                        r["previous_score"],
+                        r["new_score"],
+                        r["delta"],
+                        r["cause_category"],
+                        r["reason"],
+                        r["diff"],
+                    )
+                    for r in rows
+                ],
+            )
+
+        _conn = self._get_connection(conn)
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                await _do_insert(acquired)
+        else:
+            await _do_insert(_conn)
+
     async def fetch_weights(self, *, conn: Connection | None = None) -> dict:
         """Read the single weight-config row (SPEC req 5: the only source of weights).
 
