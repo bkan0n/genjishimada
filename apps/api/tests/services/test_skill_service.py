@@ -40,22 +40,60 @@ _WEIGHTS = {
 }
 
 
+class _FakeAcquire:
+    """Async-context-manager stand-in for ``pool.acquire()`` yielding a fake connection."""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+
+    async def __aenter__(self):
+        return self._conn
+
+    async def __aexit__(self, *_exc) -> None:
+        return None
+
+
+class _FakeTransaction:
+    """Async-context-manager stand-in for ``conn.transaction()`` (a no-op)."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc) -> None:
+        return None
+
+
 def _make_service(mocker) -> tuple[SkillService, AsyncMock]:
     repo = mocker.AsyncMock()
     state = mocker.Mock()
-    state.db_pool = mocker.Mock()
-    service = SkillService(state.db_pool, state, repo)
+    # _do_recompute runs inside `async with self._pool.acquire() as conn, conn.transaction():`
+    # (Pitfall 6 atomic capture), so the mocked pool/conn must support those async CMs.
+    conn = mocker.Mock()
+    conn.transaction = lambda: _FakeTransaction()
+    pool = mocker.Mock()
+    pool.acquire = lambda: _FakeAcquire(conn)
+    state.db_pool = pool
+    # Default: no previous snapshot (first recompute). Tests that exercise prev-before-truncate
+    # override this with a populated {user_id: {"skill_score", "breakdown"}} dict.
+    repo.fetch_all_snapshots.return_value = {}
+    service = SkillService(pool, state, repo)
     return service, repo
 
 
 @pytest.fixture(autouse=True)
 def _reset_guard():
-    """Reset the process-wide recompute guard between tests."""
+    """Reset the process-wide recompute guard between tests.
+
+    Clears the descriptor accumulator (D-10) in BOTH halves so a test's burst descriptors
+    never leak into the next test's cause-policy resolution.
+    """
     svc._GUARD._lock = None
     svc._GUARD.rerun_requested = False
+    svc._GUARD.pending.clear()
     yield
     svc._GUARD._lock = None
     svc._GUARD.rerun_requested = False
+    svc._GUARD.pending.clear()
 
 
 def _input_row(user_id: int, raw: float, *, video: bool) -> dict:
@@ -107,7 +145,7 @@ async def test_recompute_all_collapses_concurrent_bursts(mocker):
     started = 0
     release = asyncio.Event()
 
-    async def slow_replace(_rows):
+    async def slow_replace(_rows, *, conn=None):
         nonlocal started
         started += 1
         await release.wait()

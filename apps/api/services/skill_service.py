@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from itertools import pairwise
+from typing import Literal
 
 import msgspec
 from asyncpg import Pool
@@ -43,6 +45,58 @@ _GAMMA_FLOOR = 0.5
 # integer tiers 1..8 via width_bucket; tier 0 is Unranked.
 _TIER_PERCENTILE_COUNT = 7
 
+# Read-time top-N cut for the change drill-down (D-06/D-07): the largest-|impact| per-map
+# contributors are listed individually as `main_causes`; the remaining tail is rolled into a
+# single `other_factors` scalar. N is a TUNABLE CODE CONSTANT, never stored — so the cutoff can
+# change forever with no migration (forward-only history cannot be re-cut). Per-user map counts
+# are small (<~50), so storing ALL impacts and cutting at read time is cheap.
+_TOP_N = 5
+
+# Window -> lookback duration for the history/changes reads. `all` has no bound (a far-past
+# sentinel is used). Mirrors the SDK/route Literal; the route's msgspec-decoded `window` is the
+# only validated source.
+_WINDOW_DELTAS: dict[str, timedelta] = {
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+    "90d": timedelta(days=90),
+    "1y": timedelta(days=365),
+}
+
+# Far-past sentinel for the `all` window (timezone-aware so it compares against captured_at).
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+SkillWindow = Literal["7d", "30d", "90d", "1y", "all"]
+
+# Per-recompute cause policy categories (D-08/D-09). PLAYER_ACTION resolves the actor; every
+# other user-with-data is MAP_ENVIRONMENT. SYSTEM tags everyone "global recalculation".
+_PLAYER_ACTION = "PLAYER_ACTION"
+_MAP_ENVIRONMENT = "MAP_ENVIRONMENT"
+_SYSTEM = "SYSTEM"
+
+# Short human-readable reason strings stored on each change row (D-08/D-09). The per-recompute
+# reason is shared by all of that recompute's change rows; the per-user cause_category is what
+# distinguishes actor / bystander.
+_SYSTEM_REASON = "global recalculation"
+_PLAYER_ACTION_REASON = "verified completion"
+
+
+@dataclass
+class TriggerDescriptor:
+    """A single recompute trigger's cause + actor (D-10).
+
+    Accumulated on the module-scope ``_RecomputeGuard.pending`` so a burst's descriptors are
+    evaluated together: exactly one clean completion descriptor (an actor set, cause
+    PLAYER_ACTION) yields the actor/bystander split (D-08); two-or-more descriptors OR any
+    SYSTEM descriptor promotes the whole recompute to SYSTEM "global recalculation" (D-09).
+
+    Attributes:
+        cause_category: The trigger's cause (``PLAYER_ACTION`` / ``MAP_ENVIRONMENT`` / ``SYSTEM``).
+        actor_user_id: The completion owner for a PLAYER_ACTION trigger; ``None`` for SYSTEM.
+    """
+
+    cause_category: str = _SYSTEM
+    actor_user_id: int | None = None
+
 
 class _RecomputeGuard:
     """Process-wide in-flight collapse guard for recompute_all (D-05).
@@ -50,11 +104,16 @@ class _RecomputeGuard:
     Litestar constructs a fresh SkillService per request via DI, so a per-instance lock would
     never coalesce a burst across requests — the guard MUST live at module scope to be
     one-per-process. The lock is created lazily on first use so it binds to the running loop.
+
+    The ``pending`` descriptor accumulator (D-10) ALSO lives here (module scope) for the same
+    reason: a coalesced burst arriving across separate requests must aggregate its descriptors
+    into one place so the cause policy can promote it to SYSTEM.
     """
 
     def __init__(self) -> None:
         self._lock: asyncio.Lock | None = None
         self.rerun_requested = False
+        self.pending: list[TriggerDescriptor] = []
 
     @property
     def lock(self) -> asyncio.Lock:
@@ -161,6 +220,33 @@ def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
     return out
 
 
+def _build_diff(prev_breakdown: list[dict], new_breakdown: list[dict]) -> dict:
+    """Build the all-maps impact array for a change row (D-04).
+
+    Joins the previous and new per-map breakdowns on ``map_name`` (A2 — the breakdown's stable
+    display key; the breakdown carries no ``map_id``) and emits one entry per map in the union:
+    ``{"map", "prev", "new", "impact"}`` where ``prev``/``new`` are the decayed ``contribution``
+    on each side (0.0 when the map is absent on that side) and ``impact = new - prev``. Because
+    ``skill_score == Σ contribution`` (the scorer's own decomposition), ``Σ impact == delta``
+    EXACTLY at write time — conservation is by construction, never read-time rebalancing.
+
+    Args:
+        prev_breakdown: The user's per-map breakdown from the PREVIOUS snapshot (may be empty).
+        new_breakdown: The user's per-map breakdown from the NEW snapshot (may be empty).
+
+    Returns:
+        ``{"maps": [{"map": str, "prev": float, "new": float, "impact": float}, ...]}``.
+    """
+    prev_by_map = {row["map_name"]: float(row.get("contribution") or 0.0) for row in prev_breakdown}
+    new_by_map = {row["map_name"]: float(row.get("contribution") or 0.0) for row in new_breakdown}
+    maps: list[dict] = []
+    for map_name in {*prev_by_map, *new_by_map}:
+        prev_c = prev_by_map.get(map_name, 0.0)
+        new_c = new_by_map.get(map_name, 0.0)
+        maps.append({"map": map_name, "prev": prev_c, "new": new_c, "impact": new_c - prev_c})
+    return {"maps": maps}
+
+
 class SkillService(BaseService):
     """Service for the skill-score domain: scorer, rebuild routine, and read methods."""
 
@@ -175,31 +261,83 @@ class SkillService(BaseService):
         super().__init__(pool, state)
         self._skill_repo = skill_repo
 
-    async def recompute_all(self) -> None:
+    async def recompute_all(self, descriptor: TriggerDescriptor | None = None) -> None:
         """Rebuild the entire skill snapshot from scratch — THE single rebuild routine (D-04).
 
         Called by the in-process verification-change event (13-05), the nightly backstop
         (13-05), and PATCH config (13-05). Reads the weights from the DB config (req 5 — never
         literals), re-runs the input query, scores every player, captures the per-map
         breakdown (D-06), and atomically replaces the lean snapshot (only players with >=1
-        eligible run get a row, D-07).
+        eligible run get a row, D-07). On every recompute it ALSO captures one history point +
+        one change record per user-with-data (D-02), riding this single routine (no forked
+        compute path).
 
         A per-process in-flight collapse guard (D-05) ensures a burst of triggers does not
         launch N overlapping full rebuilds: while one rebuild runs, additional calls set a
         "rerun requested" flag instead of starting their own; the holder loops once more so
         the final snapshot is consistent with the latest inputs.
+
+        Each trigger's cause descriptor (D-10) is appended to the module-scope accumulator
+        BEFORE the in-flight early return — so a coalesced trigger still records its descriptor
+        — and the accumulator is DRAINED inside the rerun loop (Pitfall 2): descriptors that
+        arrived mid-rebuild belong to the rerun, so the cause policy is resolved per
+        ``_do_recompute`` call.
+
+        Args:
+            descriptor: The trigger's cause + actor. ``None`` defaults to a SYSTEM descriptor
+                (nightly backstop / cold-start / PATCH callers that pass nothing).
         """
+        _GUARD.pending.append(descriptor if descriptor is not None else TriggerDescriptor())
         _GUARD.rerun_requested = True
         if _GUARD.lock.locked():
-            # A rebuild is already running; it will pick up the rerun_requested flag.
+            # A rebuild is already running; it will pick up the rerun_requested flag and drain
+            # the descriptor we just appended on its next loop iteration.
             return
         async with _GUARD.lock:
             while _GUARD.rerun_requested:
                 _GUARD.rerun_requested = False
-                await self._do_recompute()
+                # Drain INSIDE the loop (Pitfall 2): descriptors that arrived during the prior
+                # _do_recompute belong to THIS rerun, so resolve the policy per iteration.
+                drained = _GUARD.pending[:]
+                _GUARD.pending.clear()
+                policy = self._resolve_cause_policy(drained)
+                await self._do_recompute(policy)
 
-    async def _do_recompute(self) -> None:
-        """Run one full snapshot rebuild (no locking; callers hold the in-flight guard)."""
+    @staticmethod
+    def _resolve_cause_policy(drained: list[TriggerDescriptor]) -> tuple[str, int | None]:
+        """Resolve the per-recompute cause policy from the drained descriptors (D-08/D-09).
+
+        A single clean completion descriptor (cause PLAYER_ACTION with an actor) yields the
+        actor/bystander split: ``(PLAYER_ACTION, actor_id)``. Anything else — two or more
+        descriptors, any SYSTEM descriptor, or a lone descriptor with no actor — promotes the
+        whole recompute to ``(SYSTEM, None)`` "global recalculation".
+
+        Args:
+            drained: The descriptors accumulated for this recompute.
+
+        Returns:
+            A ``(cause_category, actor_user_id)`` tuple. ``PLAYER_ACTION`` carries the actor;
+            ``SYSTEM`` carries ``None``.
+        """
+        if len(drained) == 1 and drained[0].cause_category == _PLAYER_ACTION and drained[0].actor_user_id is not None:
+            return (_PLAYER_ACTION, drained[0].actor_user_id)
+        return (_SYSTEM, None)
+
+    async def _do_recompute(self, policy: tuple[str, int | None]) -> None:
+        """Run one full snapshot rebuild + capture (no locking; callers hold the guard).
+
+        Reads the previous snapshot BEFORE ``replace_snapshot`` TRUNCATEs (Pitfall 1 / D-05),
+        scores every player, then — for each user-with-data — builds one ``score_history`` row
+        and one ``score_change`` row whose per-map ``diff`` conserves exactly (``Σ impact ==
+        delta`` by construction, D-04). Snapshot replace, both bulk inserts, and the tier
+        recompute run in ONE transaction (Pitfall 6) mirroring ``update_tier_config``.
+
+        Args:
+            policy: The resolved ``(cause_category, actor_user_id)`` cause policy (D-08/D-09).
+        """
+        cause_category, actor_id = policy
+        reason = _SYSTEM_REASON if cause_category == _SYSTEM else _PLAYER_ACTION_REASON
+
         w = msgspec.convert(await self._skill_repo.fetch_weights(), Weights)
         rows = await self._skill_repo.fetch_skill_inputs()
 
@@ -207,27 +345,66 @@ class SkillService(BaseService):
         for r in rows:
             by_user[r["user_id"]].append(r)
 
+        # The SINGLE captured_at reused for every history + change row of this recompute (D-02);
+        # do NOT mint a second timestamp.
         computed_at = datetime.now(timezone.utc)
-        snapshot_rows: list[dict] = []
-        for user_id, urows in by_user.items():
-            snapshot_rows.append(
-                {
-                    "user_id": user_id,
-                    "skill_score": _player_score(urows, w),
-                    "maps_cleared": len(urows),
-                    "video_clears": sum(1 for r in urows if r["fully_verified"]),
-                    "hardest_raw": max(r["raw_difficulty"] for r in urows),
-                    "breakdown": _player_breakdown(urows, w),
-                    "computed_at": computed_at,
-                }
-            )
-        await self._skill_repo.replace_snapshot(snapshot_rows)
-        # Flicker decision: recompute the tier boundaries on EVERY snapshot rebuild, riding
-        # the single D-04 routine (no fork) so verify/reject/flag events, the nightly
-        # backstop, and PATCH config all keep skill.tier_config consistent with the snapshot
-        # that produced it. Tradeoff: a player's tier can shift when the field around them
-        # moves even if their own score is unchanged — acceptable for a display-only badge.
-        await self._skill_repo.compute_tier_boundaries()
+
+        async with self._pool.acquire() as conn, conn.transaction():
+            # Read prev snapshot BEFORE replace_snapshot truncates (Pitfall 1 / D-05).
+            prev = await self._skill_repo.fetch_all_snapshots(conn=conn)  # type: ignore[arg-type]
+
+            snapshot_rows: list[dict] = []
+            history_rows: list[dict] = []
+            change_rows: list[dict] = []
+            for user_id, urows in by_user.items():
+                breakdown = _player_breakdown(urows, w)
+                new_score = _player_score(urows, w)
+                snapshot_rows.append(
+                    {
+                        "user_id": user_id,
+                        "skill_score": new_score,
+                        "maps_cleared": len(urows),
+                        "video_clears": sum(1 for r in urows if r["fully_verified"]),
+                        "hardest_raw": max(r["raw_difficulty"] for r in urows),
+                        "breakdown": breakdown,
+                        "computed_at": computed_at,
+                    }
+                )
+
+                previous_score = float(prev.get(user_id, {}).get("skill_score") or 0.0)
+                delta = new_score - previous_score
+                diff = _build_diff(prev.get(user_id, {}).get("breakdown") or [], breakdown)
+
+                if cause_category == _SYSTEM:
+                    user_cause = _SYSTEM
+                elif user_id == actor_id:
+                    user_cause = _PLAYER_ACTION
+                else:
+                    user_cause = _MAP_ENVIRONMENT
+
+                history_rows.append({"user_id": user_id, "captured_at": computed_at, "skill_score": new_score})
+                change_rows.append(
+                    {
+                        "user_id": user_id,
+                        "captured_at": computed_at,
+                        "previous_score": previous_score,
+                        "new_score": new_score,
+                        "delta": delta,
+                        "cause_category": user_cause,
+                        "reason": reason,
+                        "diff": diff,
+                    }
+                )
+
+            await self._skill_repo.replace_snapshot(snapshot_rows, conn=conn)  # type: ignore[arg-type]
+            await self._skill_repo.bulk_insert_history(history_rows, conn=conn)  # type: ignore[arg-type]
+            await self._skill_repo.bulk_insert_changes(change_rows, conn=conn)  # type: ignore[arg-type]
+            # Flicker decision: recompute the tier boundaries on EVERY snapshot rebuild, riding
+            # the single D-04 routine (no fork) so verify/reject/flag events, the nightly
+            # backstop, and PATCH config all keep skill.tier_config consistent with the snapshot
+            # that produced it. Tradeoff: a player's tier can shift when the field around them
+            # moves even if their own score is unchanged — acceptable for a display-only badge.
+            await self._skill_repo.compute_tier_boundaries(conn=conn)  # type: ignore[arg-type]
 
     async def get_user_skill(self, user_id: int) -> SkillSummaryResponse:
         """Fetch a player's skill summary, honoring the D-07 empty-player rule.
