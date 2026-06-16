@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-16T17:10:50.093Z"
+last_updated: "2026-06-16T17:17:12.347Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 21
-  completed_plans: 18
-  percent: 86
+  completed_plans: 19
+  percent: 90
 ---
 
 # Tournament System — State
@@ -72,6 +72,37 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 14 Progress
+
+- **14-03 complete (2026-06-16):** Skill dashboard repository methods (Wave 2,
+  additive — Phase 13 scorer/snapshot methods byte-for-byte untouched). Added six
+  methods to `SkillRepository` (`apps/api/repository/skill_repository.py`) and one
+  owner lookup to `CompletionsRepository`, all `*, conn: Connection | None = None`,
+  positional-param-only, `just lint-api` clean. **Capture layer (D-05):**
+  `fetch_all_snapshots` is ONE `SELECT user_id, skill_score, breakdown FROM
+  skill.snapshot` returning `{user_id: {skill_score, breakdown}}` — callable BEFORE
+  `replace_snapshot` TRUNCATEs (Pitfall 1) and single-round-trip (Pitfall 3);
+  `bulk_insert_history` / `bulk_insert_changes` mirror `replace_snapshot`'s
+  `executemany` + Pool-vs-Connection fork but are **append-only (NO TRUNCATE,
+  empty-list-safe)**, and `diff` rides the jsonb codec as a raw Python dict (no
+  `json.dumps`). **Read layer:** `fetch_history` (`captured_at >= $2 ORDER BY ASC`),
+  `fetch_changes` (newest-first `ORDER BY captured_at DESC LIMIT $3 OFFSET $4`,
+  **SELECT deliberately omits the heavy `diff` jsonb** — Warning 4; feed never renders
+  the per-map array), and `fetch_change` — the ONLY method that SELECTs `diff` — with
+  the IDOR ownership predicate `WHERE change_id=$1 AND user_id=$2` baked into the SQL
+  (T-14-06: foreign id → None → route 404, not 403). **A4 resolution:**
+  `CompletionsRepository.fetch_completion_owner_by_message` SELECTs `user_id FROM
+  core.completions` using the identical message_id/verification_id model as the
+  suspicious-flag methods in the same file — lives on the repo that owns
+  `core.completions` so 14-04's completions service calls it via `self._completions_repo`
+  (no cross-service private access). Verified: both `<verify>` one-liners pass
+  (Task 2's checked SQL-scoped after a docstring false-positive — see deviation);
+  `git diff` shows additions only (`replace_snapshot`/scorer/tier methods unchanged);
+  `pytest tests/integration/test_skill.py` 15 passed (additive, no regression).
+  **Deviation (Rule 1, plan-owned):** Task 2's verify one-liner `'diff' not in fc`
+  false-positives on the `fetch_changes` docstring (which legitimately documents the
+  Warning-4 omission); validated the real acceptance criterion via an AST docstring-strip
+  showing the SQL omits `diff`, kept the load-bearing docstring. Commits `e32fb1a`
+  (Task 1) / `58cb910` (Task 2). **Phase 14: 3/5 plans complete.**
 
 - **14-02 complete (2026-06-16):** Skill dashboard wire contracts (interface-first,
   no DB/service dependency). Added seven new msgspec structs + the `CauseCategory`

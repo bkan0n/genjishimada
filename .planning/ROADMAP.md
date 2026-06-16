@@ -150,7 +150,7 @@ Plans:
 
 **Requirements:** See `14-SPEC.md` (spec-phase) — 7 requirements locked (ambiguity 0.12). API-only vertical; website/bot surfaces are later phases.
 **Depends on:** Phase 13
-**Plans:** 2/5 plans executed
+**Plans:** 3/5 plans executed
 
 Plans:
 **Wave 1** *(parallel — disjoint files)*
@@ -160,7 +160,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 14-03-PLAN.md — skill_repository: prev-snapshot bulk read + append-only bulk inserts + windowed history/paginated feed/IDOR-checked change lookup + completion-owner lookup (A4) [wave 2]
+- [x] 14-03-PLAN.md — skill_repository: prev-snapshot bulk read + append-only bulk inserts + windowed history/paginated feed/IDOR-checked change lookup + completion-owner lookup (A4) [wave 2]
 
 **Wave 3** *(blocked on Wave 2)*
 
