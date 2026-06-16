@@ -85,7 +85,7 @@ They do not change any SPEC requirement.
   enforced at capture, no read-time recompute). Chosen over storing full prev+new breakdowns (~2× the
   breakdown JSONB per user per recompute) and over store-new-only-diff-at-read (fragile, breaks if a
   prior row is pruned).
-- **D-05 (capture wiring):** `_do_recompute` MUST read the **previous snapshot's per-user score +
+- **D-05:** (capture wiring) `_do_recompute` MUST read the **previous snapshot's per-user score +
   breakdown before `replace_snapshot` TRUNCATEs**, so each user's `previous_score` and per-map `prev`
   contributions are available to build `score_history` + `score_change` rows. The diff is computed in
   the service (where the new breakdown is already in hand from `_player_breakdown`); the repository gets
