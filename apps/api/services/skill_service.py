@@ -180,7 +180,10 @@ def _player_score(rows: list[dict], w: Weights) -> float:
     """Aggregate one player's per-map scores with diminishing returns (port of score.py:64-67).
 
     Per-map scores are sorted descending and summed as ``sᵢ / iᵞ`` (1-based ``i``), so the
-    best map counts fully and each subsequent map contributes less — the anti-farm dial.
+    best map counts fully and each subsequent map contributes less — the anti-farm dial. The
+    aggregate is exactly ``Σ contribution`` over ``_player_breakdown``, so this delegates to the
+    breakdown rather than re-scoring rows independently (IN-01): the recompute path scores each
+    row exactly once, and this helper stays available as the canonical scalar entry point.
 
     Args:
         rows: All of one player's eligible (user, map) rows.
@@ -189,8 +192,7 @@ def _player_score(rows: list[dict], w: Weights) -> float:
     Returns:
         The player's aggregate skill score.
     """
-    scores = sorted((_map_score(r, w) for r in rows), reverse=True)
-    return sum(s / (i**w.gamma) for i, s in enumerate(scores, start=1))
+    return _breakdown_score(_player_breakdown(rows, w))
 
 
 def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
@@ -198,7 +200,9 @@ def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
 
     The returned dict keys mirror ``SkillBreakdownRow`` exactly so the stored JSONB array
     decodes straight into ``list[SkillBreakdownRow]`` via the app's jsonb<->msgspec codec
-    (D-06).
+    (D-06). The player's aggregate skill score is exactly ``Σ contribution`` over the returned
+    rows (the scorer's own decomposition), so ``_breakdown_score`` derives the scalar from this
+    list instead of re-scoring every row a second time (IN-01).
 
     Args:
         rows: All of one player's eligible (user, map) rows.
@@ -230,6 +234,24 @@ def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
             }
         )
     return out
+
+
+def _breakdown_score(breakdown: list[dict]) -> float:
+    """Aggregate one player's skill score from an already-computed breakdown (IN-01).
+
+    The scorer decomposes the aggregate exactly as ``Σ sᵢ / iᵞ`` (port of score.py:64-67), which
+    is precisely the sum of the per-map ``contribution`` values ``_player_breakdown`` already
+    emits. Deriving the scalar here — rather than re-running ``_map_score`` over every row a
+    second time in a separate ``_player_score`` pass — keeps the total byte-identical while
+    computing each per-map score exactly once per recompute.
+
+    Args:
+        breakdown: The per-map breakdown dicts produced by ``_player_breakdown``.
+
+    Returns:
+        The player's aggregate skill score.
+    """
+    return sum(row["contribution"] for row in breakdown)
 
 
 def _diff_key(row: dict) -> object:
@@ -404,8 +426,12 @@ class SkillService(BaseService):
             history_rows: list[dict] = []
             change_rows: list[dict] = []
             for user_id, urows in by_user.items():
+                # Score each per-map row exactly once: build the breakdown, then derive the
+                # aggregate from its contributions (IN-01). `new_score == Σ contribution` by the
+                # scorer's own decomposition, so this is byte-identical to a second `_player_score`
+                # pass while avoiding the redundant `_map_score` recomputation.
                 breakdown = _player_breakdown(urows, w)
-                new_score = _player_score(urows, w)
+                new_score = _breakdown_score(breakdown)
                 snapshot_rows.append(
                     {
                         "user_id": user_id,
