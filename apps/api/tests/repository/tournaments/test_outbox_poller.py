@@ -9,7 +9,7 @@ outbox rollover row is a bootstrap START; the edition END is published directly 
 ``process_awaiting_results_editions`` under the un-suffixed key), and marks it
 published in the same transaction (publish-then-mark = at-least-once, D-11).
 
-The reward side-effects (``award_cycle_end`` + the non-participant streak reset)
+The reward side-effects (``award_cycle_placements`` per cycle + ``award_edition_streaks`` per edition)
 run ONCE PER CHILD CYCLE — i.e. once per ``event.results`` entry, keyed on
 ``entry.cycle_id`` (Pattern 4) — not once per edition.
 
@@ -170,13 +170,13 @@ class TestRolloverPublish:
         await _clear_other_unpublished(asyncpg_pool, edition_id)
 
         calls = _stub_publish(monkeypatch)
-        # award_cycle_end touches xp ledger; stub it out for the publish-shape test.
+        # award_cycle_placements touches xp ledger; stub it out for the publish-shape test.
         import services.tournament_reward_service as reward_module
 
         async def _noop_award(self, event, *, conn):  # noqa: ANN001
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _noop_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -225,7 +225,7 @@ class TestRolloverIdempotentRepoll:
         async def _noop_award(self, event, *, conn):  # noqa: ANN001
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _noop_award)
         state = State({"db_pool": asyncpg_pool})
         key = f"tournament:rollover:{edition_id}:start"
 
@@ -259,7 +259,7 @@ class TestRolloverIdempotentRepoll:
 
 
 class TestRolloverRewardPerChildCycle:
-    """award_cycle_end runs once PER results entry (per child cycle), not once per edition."""
+    """award_cycle_placements runs once PER results entry (per child cycle), not once per edition."""
 
     async def test_award_called_once_per_results_entry(
         self,
@@ -270,7 +270,7 @@ class TestRolloverRewardPerChildCycle:
         create_test_child_cycle,
         create_test_map,
     ):
-        """A rollover with N results entries drives award_cycle_end N times, keyed on cycle_id."""
+        """A rollover with N results entries drives award_cycle_placements N times, keyed on cycle_id."""
         edition_id, children = await _make_edition_with_cycles(
             asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=3
         )
@@ -289,7 +289,7 @@ class TestRolloverRewardPerChildCycle:
             captured.append(event.cycle_id)
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _fake_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -325,7 +325,7 @@ class TestRolloverHiatusSections:
         async def _noop_award(self, event, *, conn):  # noqa: ANN001
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _noop_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -364,7 +364,7 @@ class TestRolloverHiatusSections:
             captured.append(event.cycle_id)
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _fake_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -600,7 +600,7 @@ class TestPollerFirstTickNoPending:
             awarded.append(event.cycle_id)
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _fake_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -649,7 +649,7 @@ class TestPollerFirstTickPending:
             awarded.append(event.cycle_id)
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _fake_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -705,7 +705,7 @@ class TestPollerLaterTickDrained:
             awarded.append(event.cycle_id)
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _fake_award)
         state = State({"db_pool": asyncpg_pool})
 
         # Tick 1: detects drain, writes an edition_results outbox row, flips completed.
@@ -742,7 +742,7 @@ class TestPollerRerunNoDuplicateGrants:
         create_test_map,
         create_test_user,
     ):
-        """A second poll finds no awaiting_results edition -> award_cycle_end is not called again."""
+        """A second poll finds no awaiting_results edition -> award_cycle_placements is not called again."""
         edition_id, children = await _make_awaiting_edition(
             asyncpg_pool, create_test_category, create_test_edition, create_test_child_cycle, create_test_map, n=1
         )
@@ -760,7 +760,7 @@ class TestPollerRerunNoDuplicateGrants:
             awarded.append(event.cycle_id)
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _fake_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _fake_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -819,7 +819,7 @@ class TestPollerStackedEditions:
         async def _noop_award(self, event, *, conn):  # noqa: ANN001
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _noop_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -856,7 +856,7 @@ class TestPollerEmptyEdition:
         async def _noop_award(self, event, *, conn):  # noqa: ANN001
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _noop_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -952,7 +952,7 @@ class TestPollerStartedPopulatedCombined:
         async def _noop_award(self, event, *, conn):  # noqa: ANN001
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _noop_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -1008,7 +1008,7 @@ class TestPollerStartedPopulatedStartOnly:
         async def _noop_award(self, event, *, conn):  # noqa: ANN001
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _noop_award)
         state = State({"db_pool": asyncpg_pool})
 
         await publish_pending_transitions(state)
@@ -1058,7 +1058,7 @@ class TestPollerStartedEmptyWhenPaused:
         async def _noop_award(self, event, *, conn):  # noqa: ANN001
             return []
 
-        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_end", _noop_award)
+        monkeypatch.setattr(reward_module.TournamentRewardService, "award_cycle_placements", _noop_award)
         state = State({"db_pool": asyncpg_pool})
 
         # Must NOT raise.
