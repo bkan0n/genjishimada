@@ -150,7 +150,7 @@ Plans:
 
 **Requirements:** See `14-SPEC.md` (spec-phase) — 7 requirements locked (ambiguity 0.12). API-only vertical; website/bot surfaces are later phases.
 **Depends on:** Phase 13
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1** *(parallel — disjoint files)*
@@ -168,4 +168,4 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 14-05-PLAN.md — Three public GET dashboard routes (history/changes/drill-down) + SYSTEM-tag PATCH /config recompute + integration test (Req 1,3,4,5,6,7) [wave 4]
+- [x] 14-05-PLAN.md — Three public GET dashboard routes (history/changes/drill-down) + SYSTEM-tag PATCH /config recompute + integration test (Req 1,3,4,5,6,7) [wave 4]

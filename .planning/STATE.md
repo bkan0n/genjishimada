@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-16T18:30:00.000Z"
+last_updated: "2026-06-16T17:56:55.470Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 21
   completed_plans: 21
-  percent: 80
+  percent: 100
 ---
 
 # Tournament System — State
@@ -72,6 +72,35 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 14 Progress
+
+- **14-05 complete (2026-06-16):** Dashboard routes + end-to-end tests (Wave 4, the
+  reachable-API surface + the phase's e2e proof). **Phase 14 complete (5/5 plans).**
+  Added three PUBLIC GET routes to `SkillController` (`routes/v3/skill.py`, no `opt` —
+  matching the existing `/skill` reads): `users/{id}/history?window=` (windowed
+  points+summary), `users/{id}/changes?window=&limit=&offset=` (newest-first feed,
+  `limit` ge=1 le=100, `offset` ge=0 mirrored from tournaments), and
+  `users/{id}/changes/{change_id}` (drill-down → service `None` → `HTTPException(404)`,
+  T-14-06 IDOR — 404 not 403). `window` is a module-level `Window =
+  Literal["7d","30d","90d","1y","all"]` Parameter (msgspec auto-4xx on unknown,
+  T-14-13; never interpolated into SQL). `PATCH /config` recompute now tagged
+  `TriggerDescriptor(cause_category="SYSTEM")` (D-09); `PATCH /tiers` untouched (A1).
+  New `tests/integration/test_skill_dashboard.py` (14 tests, Req 1-7): ≥2
+  distinct-`captured_at` history rows after two recomputes (Req 1); known-series
+  best/lowest/average + point/percent change, invalid window 4xx, empty user 200
+  empty/zero (Req 3); descending feed + `limit` bound + window respected + empty `[]`
+  (Req 4); per-row `Σ impact + other_factors == delta` within 1e-6 + foreign/unknown
+  change_id 404 (Req 5); five-window in-range filtering + `all` full + unknown 4xx
+  (Req 6); empty user 200/[]/404 across all three endpoints, never 500 (Req 7); actor
+  PLAYER_ACTION vs bystander MAP_ENVIRONMENT + SYSTEM coalesced (Req 2 e2e). Verified:
+  `pytest test_skill_dashboard.py` → 14 passed; `test_skill.py` → 12 passed;
+  `test_skill_scorer.py test_skill_service.py -m domain_skill` → 19 passed (no
+  regression); `just lint-api` + `just lint-sdk` clean. **Deviations (2, both Rule-1
+  self-introduced test bugs fixed pre-commit):** the conservation test read a race-prone
+  `feed[0]` (sibling tests' global recompute appends rows on the shared DB) — rewritten
+  to assert the per-row invariant on ALL of a user's change rows + single map (the seed
+  factory's `map_name='Hanamura'` collapses multi-map diffs); and a wrong hand-computed
+  average literal (`25` → `(10+30+40)/3`). Commits `6d4b41b` (Task 1) / `acc138d`
+  (Task 2).
 
 - **14-04 complete (2026-06-16):** Capture wiring + cause policy + read methods — the
   core of Phase 14 (Wave 3). **Task 1 was pre-committed (`251b276`)** before this
