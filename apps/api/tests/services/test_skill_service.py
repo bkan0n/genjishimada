@@ -96,12 +96,12 @@ def _reset_guard():
     svc._GUARD.pending.clear()
 
 
-def _input_row(user_id: int, raw: float, *, video: bool) -> dict:
+def _input_row(user_id: int, raw: float, *, video: bool, map_id: int = 1, map_name: str | None = None) -> dict:
     return {
         "user_id": user_id,
-        "map_name": f"map-{raw}",
+        "map_name": map_name if map_name is not None else f"map-{raw}",
         "code": "ABCDE",
-        "map_id": 1,
+        "map_id": map_id,
         "difficulty": "Hell",
         "raw_difficulty": raw,
         "fully_verified": video,
@@ -222,13 +222,15 @@ async def test_recompute_change_diff_conserves(mocker):
     """Σ diff.maps[*].impact ≈ delta within 1e-6 — conservation by construction (D-04)."""
     service, repo = _make_service(mocker)
     repo.fetch_weights.return_value = dict(_WEIGHTS)
+    # Distinct map_ids: the input query emits one row per (user, map), so each breakdown entry
+    # has a unique map_id — the stable key `_build_diff` joins on (CR-01).
     repo.fetch_skill_inputs.return_value = [
-        _input_row(1, 9.6, video=True),
-        _input_row(1, 7.0, video=False),
+        _input_row(1, 9.6, video=True, map_id=1),
+        _input_row(1, 7.0, video=False, map_id=2),
     ]
     # A prev≠new breakdown so the diff has non-trivial per-map impacts on both sides.
     repo.fetch_all_snapshots.return_value = {
-        1: {"skill_score": 2.0, "breakdown": [{"map_name": "stale-map", "contribution": 2.0}]}
+        1: {"skill_score": 2.0, "breakdown": [{"map_id": 9, "map_name": "stale-map", "contribution": 2.0}]}
     }
 
     await service.recompute_all(TriggerDescriptor(cause_category="SYSTEM"))
@@ -237,6 +239,36 @@ async def test_recompute_change_diff_conserves(mocker):
     row = next(r for r in change_rows if r["user_id"] == 1)
     impact_sum = sum(m["impact"] for m in row["diff"]["maps"])
     assert abs(impact_sum - row["delta"]) <= 1e-6
+
+
+async def test_recompute_diff_conserves_with_duplicate_map_names(mocker):
+    """Two DISTINCT maps sharing a display name must NOT collapse — conservation holds (CR-01).
+
+    Regression for the conservation-breaking bug where ``_build_diff`` keyed on the non-unique
+    display ``map_name`` and dropped one of two maps named the same. Keying on the stable
+    ``map_id`` keeps both contributions, so ``Σ impact == delta`` and every distinct map appears
+    in the diff.
+    """
+    service, repo = _make_service(mocker)
+    repo.fetch_weights.return_value = dict(_WEIGHTS)
+    # Two genuinely different maps (distinct map_id) that share the SAME display name "Hanamura".
+    repo.fetch_skill_inputs.return_value = [
+        _input_row(1, 9.6, video=True, map_id=101, map_name="Hanamura"),
+        _input_row(1, 7.0, video=True, map_id=202, map_name="Hanamura"),
+    ]
+
+    await service.recompute_all(TriggerDescriptor(cause_category="SYSTEM"))
+
+    change_rows = repo.bulk_insert_changes.await_args.args[0]
+    row = next(r for r in change_rows if r["user_id"] == 1)
+    maps = row["diff"]["maps"]
+    # Both distinct maps survive the diff (no collapse onto the shared display name)...
+    assert len(maps) == 2
+    # ...and conservation holds: Σ impact == delta (would fail if a contribution were dropped).
+    impact_sum = sum(m["impact"] for m in maps)
+    assert abs(impact_sum - row["delta"]) <= 1e-9
+    # The full new score is conserved across the per-map impacts (prev snapshot empty => delta == new).
+    assert abs(impact_sum - row["new_score"]) <= 1e-9
 
 
 async def test_get_user_skill_empty_player_returns_zero(mocker):

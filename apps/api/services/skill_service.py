@@ -213,6 +213,11 @@ def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
         decay = i**w.gamma
         out.append(
             {
+                # Stable join key for `_build_diff` (CR-01): `map_name` is a non-unique display
+                # string, so the diff MUST key on `map_id` to avoid collapsing two distinct maps
+                # that share a name. Persisted into the breakdown JSONB; `SkillBreakdownRow` does
+                # not declare it, but msgspec.convert ignores the extra field on decode.
+                "map_id": r.get("map_id"),
                 "map_name": r.get("map_name") or r.get("code") or f"map {r.get('map_id')}",
                 "difficulty": r.get("difficulty", ""),
                 "raw": r["raw_difficulty"],
@@ -227,15 +232,38 @@ def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
     return out
 
 
+def _diff_key(row: dict) -> object:
+    """Stable join key for a breakdown row (CR-01).
+
+    Prefers ``map_id`` — the unique map identifier carried through ``_player_breakdown`` — so two
+    genuinely different maps that share a display ``map_name`` never collapse onto one another and
+    silently drop a contribution (which would break the ``Σ impact == delta`` invariant). Falls
+    back to ``("name", map_name)`` only for legacy stored breakdowns persisted before ``map_id``
+    was carried; the tuple namespace keeps a missing-id fallback from colliding with a real id.
+
+    Args:
+        row: One per-map breakdown dict.
+
+    Returns:
+        A hashable key uniquely identifying the map across the prev/new breakdowns.
+    """
+    map_id = row.get("map_id")
+    if map_id is not None:
+        return map_id
+    return ("name", row.get("map_name"))
+
+
 def _build_diff(prev_breakdown: list[dict], new_breakdown: list[dict]) -> dict:
     """Build the all-maps impact array for a change row (D-04).
 
-    Joins the previous and new per-map breakdowns on ``map_name`` (A2 — the breakdown's stable
-    display key; the breakdown carries no ``map_id``) and emits one entry per map in the union:
-    ``{"map", "prev", "new", "impact"}`` where ``prev``/``new`` are the decayed ``contribution``
-    on each side (0.0 when the map is absent on that side) and ``impact = new - prev``. Because
-    ``skill_score == Σ contribution`` (the scorer's own decomposition), ``Σ impact == delta``
-    EXACTLY at write time — conservation is by construction, never read-time rebalancing.
+    Joins the previous and new per-map breakdowns on the stable ``map_id`` key (CR-01 — NOT the
+    non-unique display ``map_name``, which would collapse distinct maps sharing a name and drop
+    contributions) and emits one entry per map in the union: ``{"map", "prev", "new", "impact"}``
+    where ``prev``/``new`` are the decayed ``contribution`` on each side (0.0 when the map is
+    absent on that side) and ``impact = new - prev``. ``map`` carries the display name for
+    rendering only. Because ``skill_score == Σ contribution`` (the scorer's own decomposition) and
+    every map is keyed uniquely, ``Σ impact == delta`` EXACTLY at write time — conservation is by
+    construction, never read-time rebalancing.
 
     Args:
         prev_breakdown: The user's per-map breakdown from the PREVIOUS snapshot (may be empty).
@@ -244,13 +272,16 @@ def _build_diff(prev_breakdown: list[dict], new_breakdown: list[dict]) -> dict:
     Returns:
         ``{"maps": [{"map": str, "prev": float, "new": float, "impact": float}, ...]}``.
     """
-    prev_by_map = {row["map_name"]: float(row.get("contribution") or 0.0) for row in prev_breakdown}
-    new_by_map = {row["map_name"]: float(row.get("contribution") or 0.0) for row in new_breakdown}
+    prev_by_key = {_diff_key(row): row for row in prev_breakdown}
+    new_by_key = {_diff_key(row): row for row in new_breakdown}
     maps: list[dict] = []
-    for map_name in {*prev_by_map, *new_by_map}:
-        prev_c = prev_by_map.get(map_name, 0.0)
-        new_c = new_by_map.get(map_name, 0.0)
-        maps.append({"map": map_name, "prev": prev_c, "new": new_c, "impact": new_c - prev_c})
+    for key in {*prev_by_key, *new_by_key}:
+        p = prev_by_key.get(key)
+        n = new_by_key.get(key)
+        prev_c = float((p or {}).get("contribution") or 0.0)
+        new_c = float((n or {}).get("contribution") or 0.0)
+        display = (n or p or {}).get("map_name") or "unknown"
+        maps.append({"map": display, "prev": prev_c, "new": new_c, "impact": new_c - prev_c})
     return {"maps": maps}
 
 
