@@ -985,6 +985,9 @@ class CompletionsService(BaseService):
         request: Request | None,
         skill_service: SkillService | None,
         reason: str,
+        *,
+        cause_category: str = "SYSTEM",
+        actor_user_id: int | None = None,
     ) -> None:
         """Fire the in-process skill recompute event post-commit (D-01/D-02).
 
@@ -994,16 +997,31 @@ class CompletionsService(BaseService):
         verify) or no DI-injected ``skill_service``, the emit is skipped and the
         nightly backstop (D-03) self-heals any missed recompute.
 
+        The typed cause descriptor (D-10) is threaded onto the event so the skill
+        service resolves the per-user cause policy from the accumulator rather than
+        parsing the ``reason`` string: ``PLAYER_ACTION`` with the completion owner's
+        ``actor_user_id`` for a single clean verify/reject/flag/moderate trigger;
+        ``SYSTEM`` with ``None`` for config/nightly/cold-start callers.
+
         Args:
             request: HTTP request carrying the Litestar app to emit on (optional).
             skill_service: DI-injected skill service the listener consumes.
             reason: Short log reason (verify/un-verify/reject/flag/unflag).
+            cause_category: The trigger's cause (``PLAYER_ACTION`` for the five
+                completion-driven sites; ``SYSTEM`` for config/nightly callers).
+            actor_user_id: The completion owner for a ``PLAYER_ACTION`` trigger; may
+                be ``None`` if the completion could not be resolved (recompute then
+                falls back to SYSTEM via the policy's lone-no-actor branch).
         """
         if request is None or skill_service is None:
             return
         request.app.emit(
             "skill.recompute.requested",
-            SkillRecomputeRequestedEvent(reason=reason),
+            SkillRecomputeRequestedEvent(
+                reason=reason,
+                cause_category=cause_category,
+                actor_user_id=actor_user_id,
+            ),
             skill_service=skill_service,
         )
 
@@ -1092,9 +1110,21 @@ class CompletionsService(BaseService):
         # eligibility, so both must recompute (symmetric add/remove — SPEC req 8/9).
         # Emitted AFTER update_verification commits; fire-and-forget (D-01).
         if data.verified:
-            self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:verify")
+            self._emit_skill_recompute(
+                request,
+                skill_service,
+                reason="skill.recompute.requested:verify",
+                cause_category="PLAYER_ACTION",
+                actor_user_id=completion_info["user_id"],
+            )
         else:
-            self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:un-verify")
+            self._emit_skill_recompute(
+                request,
+                skill_service,
+                reason="skill.recompute.requested:un-verify",
+                cause_category="PLAYER_ACTION",
+                actor_user_id=completion_info["user_id"],
+            )
 
         message_data = VerificationChangedEvent(
             completion_id=record_id,
@@ -1304,7 +1334,20 @@ class CompletionsService(BaseService):
             raise CompletionNotFoundError(data.verification_id or 0)
 
         # D-02: flagging drops the user's eligibility -> recompute (req 9). Post-commit.
-        self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:flag")
+        # A4: the owner id is not in scope here (resolved by message/verification id), so
+        # look it up via THIS service's OWN repo to supply actor_user_id for cause
+        # attribution. None (completion vanished) falls back to SYSTEM via the policy.
+        owner_id = await self._completions_repo.fetch_completion_owner_by_message(
+            data.message_id,
+            data.verification_id,
+        )
+        self._emit_skill_recompute(
+            request,
+            skill_service,
+            reason="skill.recompute.requested:flag",
+            cause_category="PLAYER_ACTION",
+            actor_user_id=owner_id,
+        )
 
     async def remove_suspicious_flags(
         self,
@@ -1333,7 +1376,18 @@ class CompletionsService(BaseService):
         )
 
         # D-02: un-flagging restores the user's eligibility -> recompute (req 9). Post-commit.
-        self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:unflag")
+        # A4: owner id not in scope; resolve via THIS service's OWN repo for actor_user_id.
+        owner_id = await self._completions_repo.fetch_completion_owner_by_message(
+            data.message_id,
+            data.verification_id,
+        )
+        self._emit_skill_recompute(
+            request,
+            skill_service,
+            reason="skill.recompute.requested:unflag",
+            cause_category="PLAYER_ACTION",
+            actor_user_id=owner_id,
+        )
 
         return removed
 
@@ -1574,7 +1628,13 @@ class CompletionsService(BaseService):
         # covers multiple changes since the recompute is a full global rebuild (D-04).
         # Fire-and-forget; guarded for the optional-request / event-driven case.
         if skill_dirty:
-            self._emit_skill_recompute(request, skill_service, reason="skill.recompute.requested:moderate")
+            self._emit_skill_recompute(
+                request,
+                skill_service,
+                reason="skill.recompute.requested:moderate",
+                cause_category="PLAYER_ACTION",
+                actor_user_id=user_id,
+            )
 
 
 async def provide_completions_service(

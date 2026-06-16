@@ -23,7 +23,14 @@ import msgspec
 from asyncpg import Pool
 from genjishimada_sdk.skill import (
     SkillBreakdownRow,
+    SkillChangeCause,
+    SkillChangeDetailResponse,
+    SkillChangeFeedItem,
     SkillConfigUpdateRequest,
+    SkillHistoryExtremum,
+    SkillHistoryPoint,
+    SkillHistoryResponse,
+    SkillHistorySummary,
     SkillSummaryResponse,
     SkillTiersResponse,
     Weights,
@@ -446,6 +453,140 @@ class SkillService(BaseService):
         if row is None:
             return []
         return msgspec.convert(row["breakdown"], list[SkillBreakdownRow])
+
+    @staticmethod
+    def _window_since(window: SkillWindow) -> datetime:
+        """Map a window literal to its inclusive ``captured_at`` lower bound.
+
+        ``all`` has no bound, so a far-past epoch sentinel is returned (timezone-aware so it
+        compares against ``captured_at``). The route's msgspec-decoded ``window`` is the only
+        validated source, so an unknown value defaults to the ``all`` sentinel rather than raising.
+
+        Args:
+            window: One of ``7d``/``30d``/``90d``/``1y``/``all``.
+
+        Returns:
+            The inclusive lower bound for ``captured_at``.
+        """
+        delta = _WINDOW_DELTAS.get(window)
+        if delta is None:
+            return _EPOCH
+        return datetime.now(timezone.utc) - delta
+
+    async def get_user_history(self, user_id: int, window: SkillWindow) -> SkillHistoryResponse:
+        """Read a player's windowed score history + summary (SPEC req 3, empty rule req 7).
+
+        Maps the window to a ``since`` lower bound, reads the oldest-first history points, and
+        derives the window summary anchored on the EARLIEST in-window record (SPEC req 3):
+        ``point_change = last - first``; ``percent_change = point_change / first * 100`` (guarded
+        when ``first == 0``); ``best``/``lowest`` are the max/min point with their dates; ``average``
+        is the mean. A player with no history returns ``points=[]`` and an all-zero summary
+        (extrema score ``0.0``, date ``None``) — never a 500, never a synthetic row (req 7).
+
+        Args:
+            user_id: Discord user ID whose history to read.
+            window: The lookback window (``7d``/``30d``/``90d``/``1y``/``all``).
+
+        Returns:
+            The windowed history points + summary.
+        """
+        rows = await self._skill_repo.fetch_history(user_id, self._window_since(window))
+        points = [SkillHistoryPoint(captured_at=r["captured_at"], skill_score=r["skill_score"]) for r in rows]
+        if not points:
+            zero = SkillHistoryExtremum(score=0.0, date=None)
+            summary = SkillHistorySummary(point_change=0.0, percent_change=0.0, best=zero, lowest=zero, average=0.0)
+            return SkillHistoryResponse(user_id=user_id, points=[], summary=summary)
+
+        first = points[0].skill_score
+        last = points[-1].skill_score
+        point_change = last - first
+        percent_change = (point_change / first * 100.0) if first != 0 else 0.0
+        best_point = max(points, key=lambda p: p.skill_score)
+        lowest_point = min(points, key=lambda p: p.skill_score)
+        average = sum(p.skill_score for p in points) / len(points)
+        summary = SkillHistorySummary(
+            point_change=point_change,
+            percent_change=percent_change,
+            best=SkillHistoryExtremum(score=best_point.skill_score, date=best_point.captured_at),
+            lowest=SkillHistoryExtremum(score=lowest_point.skill_score, date=lowest_point.captured_at),
+            average=average,
+        )
+        return SkillHistoryResponse(user_id=user_id, points=points, summary=summary)
+
+    async def get_user_changes(
+        self, user_id: int, window: SkillWindow, limit: int, offset: int
+    ) -> list[SkillChangeFeedItem]:
+        """Read a player's newest-first paginated change feed (SPEC req 4, empty rule req 7).
+
+        Each row maps to a ``SkillChangeFeedItem`` whose ``description`` is derived from the
+        stored ``reason`` (falling back to a cause-category label). An empty feed returns ``[]``.
+
+        Args:
+            user_id: Discord user ID whose feed to read.
+            window: The lookback window (``7d``/``30d``/``90d``/``1y``/``all``).
+            limit: Max rows to return (route-validated bound).
+            offset: Rows to skip for pagination.
+
+        Returns:
+            The newest-first feed items (empty list when none).
+        """
+        rows = await self._skill_repo.fetch_changes(user_id, self._window_since(window), limit, offset)
+        return [
+            SkillChangeFeedItem(
+                change_id=r["change_id"],
+                captured_at=r["captured_at"],
+                delta=r["delta"],
+                cause_category=r["cause_category"],
+                description=r["reason"] or r["cause_category"],
+            )
+            for r in rows
+        ]
+
+    async def get_user_change_detail(self, user_id: int, change_id: int) -> SkillChangeDetailResponse | None:
+        """Read a single change drill-down with the read-time top-N cut (SPEC req 5, D-06/D-07).
+
+        The ownership predicate lives in the repo SQL (``change_id = $1 AND user_id = $2``), so a
+        foreign/unknown id yields ``None`` here -> the route raises 404 (T-14-06). The stored
+        ``diff.maps`` array is sorted by ``abs(impact)`` DESC; the top ``_TOP_N`` are listed
+        individually as ``main_causes`` and the remaining tail is summed into ``other_factors``.
+        Conservation is exact (``sum(main_causes.impact) + other_factors == delta``) because the
+        residual IS the untruncated tail — never read-time rebalancing.
+
+        Args:
+            user_id: Discord user ID that must own the change.
+            change_id: The change to read.
+
+        Returns:
+            The change drill-down, or ``None`` if no owned row matches (route -> 404).
+        """
+        row = await self._skill_repo.fetch_change(user_id, change_id)
+        if row is None:
+            return None
+
+        maps = list((row["diff"] or {}).get("maps", []))
+        maps.sort(key=lambda m: abs(float(m.get("impact") or 0.0)), reverse=True)
+        top = maps[:_TOP_N]
+        tail = maps[_TOP_N:]
+        main_causes = [
+            SkillChangeCause(map=m["map"], reason=row["reason"] or row["cause_category"], impact=float(m["impact"]))
+            for m in top
+        ]
+        other_factors = sum(float(m.get("impact") or 0.0) for m in tail)
+
+        previous_score = float(row["previous_score"] or 0.0)
+        delta = float(row["delta"] or 0.0)
+        percent_change = (delta / previous_score * 100.0) if previous_score != 0 else 0.0
+        return SkillChangeDetailResponse(
+            change_id=row["change_id"],
+            captured_at=row["captured_at"],
+            previous_score=previous_score,
+            new_score=float(row["new_score"] or 0.0),
+            delta=delta,
+            percent_change=percent_change,
+            cause_category=row["cause_category"],
+            main_causes=main_causes,
+            other_factors=other_factors,
+        )
 
     async def get_tier_config(self) -> SkillTiersResponse:
         """Read the current tier legend: boundaries, percentiles, and computed_at (PYO-TIER-05).
