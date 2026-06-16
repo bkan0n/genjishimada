@@ -422,16 +422,18 @@ async def get_history(
 | A4 | Owner `user_id` is readily available at the flag/unflag emit sites (1307/1336) for `actor_user_id` | Event threading | Medium — verify; flag/unflag resolve by `message_id`/`verification_id`, owner id may need a fetch. Planner should confirm the lookup. |
 | A5 | `bigserial` for `change_id` is house-acceptable (existing skill tables use `integer GENERATED ALWAYS AS IDENTITY`) | Migration | Low — both idiomatic; `bigserial` fits unbounded growth |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `PATCH /skill/tiers` need to capture history/change rows?** (A1)
    - What we know: D-09 lists it as a SYSTEM trigger; it runs `update_tier_config` → `compute_tier_boundaries` only, never `_do_recompute`, and changes no `skill_score`.
    - What's unclear: whether SYSTEM "global recalculation" rows should be written for a tier-percentile retune that moves no score.
    - Recommendation: Do NOT write rows for it (no score moved → no history). Flag at plan/discuss for a one-line confirm.
+   - **RESOLVED: PATCH /skill/tiers runs `compute_tier_boundaries` only, moves no score → no capture path; leave `update_tier_config` untouched (no history/change rows written). Enforced in 14-04 Task 2.**
 
 2. **Owner `user_id` availability at flag/unflag emit sites for `actor_user_id`.** (A4)
    - What we know: verify/moderate sites already have `completion_info["user_id"]` in scope; flag/unflag resolve by `message_id`/`verification_id`.
    - Recommendation: Planner verifies the owner id is fetchable at 1307/1336; if a lookup is needed, add it to `set_suspicious_flags`/`remove_suspicious_flags` before the emit.
+   - **RESOLVED: flag/unflag lack the owner `user_id`; a completion-owner lookup (`fetch_completion_owner_by_message`) is added to `CompletionsRepository` in 14-03 (the completions domain owns `core.completions`) and called via `self._completions_repo` at the flag/unflag emit sites in 14-04 — no cross-service private-attribute access. Wired before the emit.**
 
 ## Project Constraints (from CLAUDE.md)
 - Litestar DI module pattern; three-layer Controller → Service → Repository with `provide_*` DI.
