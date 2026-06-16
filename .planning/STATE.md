@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-16T17:03:22.875Z"
+last_updated: "2026-06-16T17:07:16.717Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 21
-  completed_plans: 16
+  completed_plans: 17
   percent: 75
 ---
 
@@ -70,6 +70,31 @@ Controller → Service → Repository pattern:
 - PROJECT.md originally listed manual cycle transitions as Out of Scope; quick-task work intentionally amends that for bootstrap + test tooling only.
 
 ## Accumulated Context
+
+### Phase 14 Progress
+
+- **14-01 complete (2026-06-16):** Migration `0031_skill_history.sql` — the
+  forward-only data foundation for the skill dashboard. Two new `skill`-schema
+  capture tables (D-01): a **lean** `skill.score_history` (`user_id bigint`,
+  `captured_at timestamptz`, `skill_score double precision`; composite
+  `PRIMARY KEY (user_id, captured_at)` covering every `/history` window read — no
+  extra index) and a **rich** `skill.score_change` (`change_id bigserial PK`,
+  `user_id`, `captured_at`, `previous_score`, `new_score`, `delta`,
+  `cause_category text`, `reason text`, `diff jsonb DEFAULT '{}'`). `cause_category`
+  is **text + CHECK** (`PLAYER_ACTION`/`MAP_ENVIRONMENT`/`SYSTEM`, T-14-01) — no
+  Postgres enum, consistent with the skill-migration idiom. `diff` (D-04) stores the
+  all-maps impact array round-tripped by the existing jsonb<->msgspec codec. Feed
+  index `skill_score_change_user_captured_idx (user_id, captured_at DESC)` backs the
+  newest-first `/changes` read. Forward-only: **no backfill INSERT, no pg_cron** (D-03;
+  the nightly recompute is an app-side lifespan task); idempotent
+  `CREATE SCHEMA/TABLE/INDEX IF NOT EXISTS` wrapped in `BEGIN;`/`COMMIT;`. Scorer/tier
+  tables (`skill.snapshot`, `skill.weight_config`, `skill.tier_config`) untouched.
+  Verified by the existing 4 `test_skill.py` integration tests passing — the migration
+  applies cleanly at session start via `conftest.py:_apply_sql_dir`. **Deviation (Rule 1,
+  plan-owned):** the plan's `<verify>` one-liner had an unsatisfiable CHECK assertion (it
+  strips spaces from the SQL but not from its own search string), so the migration was
+  validated against the actual whitespace-insensitive acceptance criterion instead (passes).
+  Commit `5f4e29c`. **Phase 14: 1/5 plans complete.**
 
 ### Phase 13 Progress
 

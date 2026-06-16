@@ -150,12 +150,12 @@ Plans:
 
 **Requirements:** See `14-SPEC.md` (spec-phase) — 7 requirements locked (ambiguity 0.12). API-only vertical; website/bot surfaces are later phases.
 **Depends on:** Phase 13
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1** *(parallel — disjoint files)*
 
-- [ ] 14-01-PLAN.md — Migration 0031: skill.score_history + skill.score_change tables (cause CHECK, feed index, forward-only) [wave 1]
+- [x] 14-01-PLAN.md — Migration 0031: skill.score_history + skill.score_change tables (cause CHECK, feed index, forward-only) [wave 1]
 - [ ] 14-02-PLAN.md — SDK dashboard response structs + CauseCategory Literal; enrich SkillRecomputeRequestedEvent (cause_category + actor_user_id, D-10) [wave 1]
 
 **Wave 2** *(blocked on Wave 1)*
