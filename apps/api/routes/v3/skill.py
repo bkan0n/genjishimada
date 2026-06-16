@@ -259,8 +259,11 @@ class SkillController(Controller):
         path="/config",
         summary="Update Skill Weights",
         description=(
-            "Update the skill-score tuning weights (superuser only) and immediately trigger "
-            "a full recompute so scores reflect the new weights right away (D-10)."
+            "Update the skill-score tuning weights (superuser only) and SCHEDULE a full "
+            "recompute so scores pick up the new weights (D-10). The recompute is coalesced "
+            "with any rebuild already in flight: if one is running, this call enqueues a rerun "
+            "rather than blocking on it, so a read immediately after the 200 may briefly still "
+            "show the previous scores until the rerun (which reloads the new weights) completes."
         ),
         opt={"required_scopes": {"skill:admin"}},
     )
@@ -269,11 +272,17 @@ class SkillController(Controller):
         skill_service: SkillService,
         data: SkillConfigUpdateRequest,
     ) -> Weights:
-        """Update the weight config then immediately recompute (superuser only, D-10).
+        """Update the weight config then schedule a recompute (superuser only, D-10).
 
         The ``required_scopes`` sentinel no normal token holds means a superuser bypasses
         the guard while any non-superuser is rejected 401/403 (SPEC req 7; no new scope
         is minted — ``skill:admin`` is a guard sentinel, not a granted scope).
+
+        The trailing ``recompute_all`` call is coalesced by the process-wide in-flight guard
+        (D-05): when a rebuild is already running it only enqueues a rerun and returns without
+        awaiting it, so the new weights are applied by the next (coalesced) rebuild rather than
+        synchronously before this response. Callers needing strict read-after-write freshness
+        must poll ``GET /skill/users/{id}`` rather than assume the 200 means scores are updated.
 
         Args:
             skill_service: Skill service dependency.
