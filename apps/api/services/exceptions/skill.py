@@ -39,8 +39,7 @@ class SkillConfigNotSeededError(SkillError):
 
     def __init__(self, config_name: str) -> None:
         super().__init__(
-            f"skill {config_name} is not seeded — the single config row is missing "
-            f"(run/repair migration 0027/0028).",
+            f"skill {config_name} is not seeded — the single config row is missing (run/repair migration 0027/0028).",
             config_name=config_name,
         )
 
