@@ -519,7 +519,8 @@ class SkillService(BaseService):
         Maps the window to a ``since`` lower bound, reads the oldest-first history points, and
         derives the window summary anchored on the EARLIEST in-window record (SPEC req 3):
         ``point_change = last - first``; ``percent_change = point_change / first * 100`` (``None``
-        when ``first == 0`` — undefined, not 0%, WR-05); ``best``/``lowest`` are the max/min point with their dates; ``average``
+        when ``first == 0`` — undefined, not 0%, WR-05); ``best``/``lowest`` are the max/min point
+        with their dates; ``average``
         is the mean. A player with no history returns ``points=[]`` and an all-zero summary
         (extrema score ``0.0``, date ``None``) — never a 500, never a synthetic row (req 7).
 
