@@ -42,7 +42,9 @@ class SkillRecomputeRequestedEvent(msgspec.Struct):
     ``MAP_ENVIRONMENT``, while SYSTEM triggers (config/tier PATCH, nightly backstop,
     cold-start, or any coalesced burst) mark everyone ``SYSTEM``. ``cause_category`` is a
     plain ``str`` (not the SDK ``CauseCategory`` Literal) to keep this API-side event
-    module dependency-light; the service validates it against the closed set.
+    module dependency-light; the service normalizes any unrecognized category to
+    ``SYSTEM`` (it is not rejected) so only the three closed-set constants are ever
+    persisted.
 
     Attributes:
         reason: Optional human-readable trigger reason for logs (verify/reject/flag).
