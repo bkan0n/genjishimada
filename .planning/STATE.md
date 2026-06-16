@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-16T17:17:12.347Z"
+last_updated: "2026-06-16T18:30:00.000Z"
 last_activity: 2026-06-16
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 21
-  completed_plans: 19
-  percent: 90
+  completed_plans: 21
+  percent: 80
 ---
 
 # Tournament System — State
@@ -72,6 +72,33 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 14 Progress
+
+- **14-04 complete (2026-06-16):** Capture wiring + cause policy + read methods — the
+  core of Phase 14 (Wave 3). **Task 1 was pre-committed (`251b276`)** before this
+  executor ran: the capture wiring in `_do_recompute` (reads `fetch_all_snapshots`
+  BEFORE `replace_snapshot` truncates — Pitfall 1), the `TriggerDescriptor` dataclass,
+  the module-scope `_RecomputeGuard.pending` accumulator (drained INSIDE the rerun
+  loop — Pitfall 2), `_resolve_cause_policy`, and the `_build_diff` conservation join.
+  This executor verified Task 1 then did **Task 2 + Task 3**. **Task 2 (`8b147c3`):**
+  `events/skill.py` builds a `TriggerDescriptor(cause_category, actor_user_id)` and
+  threads it into `recompute_all` (cause from the typed accumulator, never `reason`-string
+  parsing — T-14-10); `_emit_skill_recompute` gains `cause_category` + `actor_user_id`;
+  the five emit sites pass the completion owner as `PLAYER_ACTION` (verify/un-verify →
+  `completion_info["user_id"]`, moderate → `user_id`, flag/unflag → A4 owner lookup via
+  `self._completions_repo.fetch_completion_owner_by_message`, NO cross-service private
+  access); `update_tier_config` (PATCH /skill/tiers) left untouched per A1. Three read
+  methods added: `get_user_history` (window→since, summary anchored on earliest record,
+  empty→`points=[]`+zero summary), `get_user_changes` (paginated feed, empty→`[]`),
+  `get_user_change_detail` (ownership→None→404, sort `diff.maps` by `abs(impact)` desc,
+  top `_TOP_N=5`→`main_causes`, residual tail→`other_factors`, conservation exact).
+  **Task 3 (`9fdfbed`):** four service tests lock the actor/bystander cause split,
+  coalesced-burst→SYSTEM promotion, prev-before-truncate `previous_score`, and
+  `Σ impact ≈ delta` within 1e-6; `_reset_guard` already cleared `pending` (Task 1).
+  Verified: `pytest tests/services/test_skill_service.py tests/services/test_skill_scorer.py`
+  → 19 passed; `tests/integration/test_skill.py` → 15 passed (no Phase 13 regression);
+  scorer byte-for-byte unchanged (git diff); `just lint-api` clean. One self-introduced
+  Rule-1 fix pre-commit (an undefined `points_src` helper, corrected to direct iteration).
+  Commits `8b147c3` (Task 2) / `9fdfbed` (Task 3). **Phase 14: 4/5 plans complete.**
 
 - **14-03 complete (2026-06-16):** Skill dashboard repository methods (Wave 2,
   additive — Phase 13 scorer/snapshot methods byte-for-byte untouched). Added six

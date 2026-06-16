@@ -150,7 +150,7 @@ Plans:
 
 **Requirements:** See `14-SPEC.md` (spec-phase) — 7 requirements locked (ambiguity 0.12). API-only vertical; website/bot surfaces are later phases.
 **Depends on:** Phase 13
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 **Wave 1** *(parallel — disjoint files)*
@@ -164,7 +164,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 14-04-PLAN.md — SkillService capture wiring in _do_recompute (D-05) + _RecomputeGuard descriptor accumulator + cause policy (D-08/D-09) + read methods; thread cause+owner through listener + 5 emit sites; extend service tests [wave 3]
+- [x] 14-04-PLAN.md — SkillService capture wiring in _do_recompute (D-05) + _RecomputeGuard descriptor accumulator + cause policy (D-08/D-09) + read methods; thread cause+owner through listener + 5 emit sites; extend service tests [wave 3]
 
 **Wave 4** *(blocked on Wave 3)*
 
