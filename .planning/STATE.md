@@ -3,15 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: 2026-06-12T22:47:08.232Z
-last_activity: 2026-06-12
+last_updated: "2026-06-16T16:14:09.567Z"
+last_activity: "2026-06-14 - Completed quick task 260613-rh2: Add skill score column to get rank card data endpoint"
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 3
   total_plans: 16
-  completed_plans: 34
-  percent: 100
-stopped_at: Milestone complete (Phase 13 was final phase)
+  completed_plans: 16
+  percent: 75
 ---
 
 # Tournament System — State
@@ -98,6 +97,7 @@ Controller → Service → Repository pattern:
   verify→raises / reject→restores within 1e-6 / flag→0 / unflag→restores; field relativity
   (a second player on the same map shifts after the field changes); `sort=skill_score`
   descending + paginated with `skill_rank` intact; zero-eligible player score 0 ranked last
+
   + `GET /skill/users/{id}` returns 0 / empty breakdown; PATCH 401 unauth / 401-403
   non-superuser / 200 superuser with scores changing; breakdown contributions sum to total.
   The test drives the deterministic snapshot via the shared `recompute_all` on its own pool
