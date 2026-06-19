@@ -1662,7 +1662,8 @@
                       "Thames District",
                       "Gogadoro",
                       "Powder Keg Mine",
-                      "Place Lacroix"
+                      "Place Lacroix",
+                      "Neon Junction"
                     ]
                   },
                   "type": "array"
@@ -2659,6 +2660,7 @@
                 "Gogadoro",
                 "Powder Keg Mine",
                 "Place Lacroix",
+                "Neon Junction",
                 null
               ]
             },
@@ -8008,6 +8010,216 @@
         "deprecated": false
       }
     },
+    "/api/v3/skill/users/{user_id}/changes/{change_id}": {
+      "get": {
+        "tags": [
+          "Skill"
+        ],
+        "summary": "Get Skill Change Detail",
+        "description": "Return the drill-down for a single change: previous/new/delta, the top-5 per-map contributors (main_causes), and the summed remaining tail (other_factors), with sum(main_causes.impact) + other_factors == delta within 1e-6 (D-06/D-07). A change_id that does not belong to the user (or does not exist) returns 404.",
+        "operationId": "ApiV3SkillUsersUserIdChangesChangeIdGetChangeDetail",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          },
+          {
+            "name": "change_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillChangeDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/skill/users/{user_id}/changes": {
+      "get": {
+        "tags": [
+          "Skill"
+        ],
+        "summary": "Get User Skill Change Feed",
+        "description": "Return the player's newest-first paginated change feed (delta + cause_category + description per recompute that touched them). A player with no changes returns an empty list. An unknown window value is rejected at decode (4xx).",
+        "operationId": "ApiV3SkillUsersUserIdChangesGetChanges",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d",
+                "1y",
+                "all"
+              ],
+              "description": "Time window (7d/30d/90d/1y/all)",
+              "default": "all"
+            },
+            "description": "Time window (7d/30d/90d/1y/all)",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 100.0,
+              "minimum": 1.0,
+              "description": "Max results",
+              "default": 20
+            },
+            "description": "Max results",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0.0,
+              "description": "Result offset",
+              "default": 0
+            },
+            "description": "Result offset",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SkillChangeFeedItem"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
     "/api/v3/skill/config": {
       "get": {
         "tags": [
@@ -8036,7 +8248,7 @@
           "Skill"
         ],
         "summary": "Update Skill Weights",
-        "description": "Update the skill-score tuning weights (superuser only) and immediately trigger a full recompute so scores reflect the new weights right away (D-10).",
+        "description": "Update the skill-score tuning weights (superuser only) and SCHEDULE a full recompute so scores pick up the new weights (D-10). The recompute is coalesced with any rebuild already in flight: if one is running, this call enqueues a rerun rather than blocking on it, so a read immediately after the 200 may briefly still show the previous scores until the rerun (which reloads the new weights) completes.",
         "operationId": "ApiV3SkillConfigUpdateConfig",
         "requestBody": {
           "content": {
@@ -8056,6 +8268,100 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Weights"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/skill/users/{user_id}/history": {
+      "get": {
+        "tags": [
+          "Skill"
+        ],
+        "summary": "Get User Skill History",
+        "description": "Return the player's time-windowed score history (oldest-first points) plus a summary (best/lowest/average, first-vs-last point and percent change). A player with no history returns an empty points list and a zeroed summary (never 500). An unknown window value is rejected at decode (4xx).",
+        "operationId": "ApiV3SkillUsersUserIdHistoryGetHistory",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "schema": {
+              "type": "integer"
+            },
+            "required": true,
+            "deprecated": false
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "7d",
+                "30d",
+                "90d",
+                "1y",
+                "all"
+              ],
+              "description": "Time window (7d/30d/90d/1y/all)",
+              "default": "all"
+            },
+            "description": "Time window (7d/30d/90d/1y/all)",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillHistoryResponse"
                 }
               }
             }
@@ -8733,7 +9039,8 @@
                           "Thames District",
                           "Gogadoro",
                           "Powder Keg Mine",
-                          "Place Lacroix"
+                          "Place Lacroix",
+                          "Neon Junction"
                         ]
                       },
                       "type": "array"
@@ -9464,6 +9771,7 @@
                     "Gogadoro",
                     "Powder Keg Mine",
                     "Place Lacroix",
+                    "Neon Junction",
                     null
                   ]
                 }
@@ -9615,6 +9923,7 @@
                     "Gogadoro",
                     "Powder Keg Mine",
                     "Place Lacroix",
+                    "Neon Junction",
                     null
                   ]
                 }
@@ -18057,7 +18366,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "difficulty": {
@@ -18298,7 +18608,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "hypothetical_rank": {
@@ -18721,7 +19032,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "difficulty": {
@@ -19494,7 +19806,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "amount": {
@@ -19587,7 +19900,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "category": {
@@ -19889,7 +20203,8 @@
                   "Thames District",
                   "Gogadoro",
                   "Powder Keg Mine",
-                  "Place Lacroix"
+                  "Place Lacroix",
+                  "Neon Junction"
                 ]
               }
             ]
@@ -20333,7 +20648,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "difficulty": {
@@ -20477,7 +20793,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "level": {
@@ -20565,7 +20882,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "medal": {
@@ -20660,7 +20978,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "amount": {
@@ -20800,7 +21119,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "checkpoints": {
@@ -20903,7 +21223,8 @@
                   "Thames District",
                   "Gogadoro",
                   "Powder Keg Mine",
-                  "Place Lacroix"
+                  "Place Lacroix",
+                  "Neon Junction"
                 ]
               }
             ]
@@ -21305,7 +21626,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "category": {
@@ -21718,7 +22040,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "creators": {
@@ -22169,7 +22492,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "difficulty": {
@@ -22317,7 +22641,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "time": {
@@ -22492,7 +22817,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "creators": {
@@ -25196,6 +25522,113 @@
         ],
         "title": "SkillBreakdownRow"
       },
+      "SkillChangeCause": {
+        "properties": {
+          "map": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "impact",
+          "map",
+          "reason"
+        ],
+        "title": "SkillChangeCause"
+      },
+      "SkillChangeDetailResponse": {
+        "properties": {
+          "change_id": {
+            "type": "integer"
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "previous_score": {
+            "type": "number"
+          },
+          "new_score": {
+            "type": "number"
+          },
+          "delta": {
+            "type": "number"
+          },
+          "percent_change": {
+            "type": "number"
+          },
+          "cause_category": {
+            "type": "string",
+            "enum": [
+              "PLAYER_ACTION",
+              "MAP_ENVIRONMENT",
+              "SYSTEM"
+            ]
+          },
+          "main_causes": {
+            "items": {
+              "$ref": "#/components/schemas/SkillChangeCause"
+            },
+            "type": "array"
+          },
+          "other_factors": {
+            "type": "number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "captured_at",
+          "cause_category",
+          "change_id",
+          "delta",
+          "main_causes",
+          "new_score",
+          "other_factors",
+          "percent_change",
+          "previous_score"
+        ],
+        "title": "SkillChangeDetailResponse"
+      },
+      "SkillChangeFeedItem": {
+        "properties": {
+          "change_id": {
+            "type": "integer"
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "delta": {
+            "type": "number"
+          },
+          "cause_category": {
+            "type": "string",
+            "enum": [
+              "PLAYER_ACTION",
+              "MAP_ENVIRONMENT",
+              "SYSTEM"
+            ]
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "captured_at",
+          "cause_category",
+          "change_id",
+          "delta",
+          "description"
+        ],
+        "title": "SkillChangeFeedItem"
+      },
       "SkillConfigUpdateRequest": {
         "properties": {
           "diff_base": {
@@ -25265,6 +25698,103 @@
         "type": "object",
         "required": [],
         "title": "SkillConfigUpdateRequest"
+      },
+      "SkillHistoryExtremum": {
+        "properties": {
+          "score": {
+            "type": "number"
+          },
+          "date": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "score"
+        ],
+        "title": "SkillHistoryExtremum"
+      },
+      "SkillHistoryPoint": {
+        "properties": {
+          "captured_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "skill_score": {
+            "type": "number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "captured_at",
+          "skill_score"
+        ],
+        "title": "SkillHistoryPoint"
+      },
+      "SkillHistoryResponse": {
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/SkillHistoryPoint"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/SkillHistorySummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "points",
+          "summary",
+          "user_id"
+        ],
+        "title": "SkillHistoryResponse"
+      },
+      "SkillHistorySummary": {
+        "properties": {
+          "point_change": {
+            "type": "number"
+          },
+          "percent_change": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "best": {
+            "$ref": "#/components/schemas/SkillHistoryExtremum"
+          },
+          "lowest": {
+            "$ref": "#/components/schemas/SkillHistoryExtremum"
+          },
+          "average": {
+            "type": "number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "average",
+          "best",
+          "lowest",
+          "point_change"
+        ],
+        "title": "SkillHistorySummary"
       },
       "SkillSummaryResponse": {
         "properties": {
@@ -26824,7 +27354,8 @@
               "Thames District",
               "Gogadoro",
               "Powder Keg Mine",
-              "Place Lacroix"
+              "Place Lacroix",
+              "Neon Junction"
             ]
           },
           "clicks": {
