@@ -143,3 +143,29 @@ Plans:
 **Wave 5** *(blocked on Wave 4 completion)*
 
 - [x] 13-06-PLAN.md — Emit recompute from all 4 verify paths + leaderboard skill_score column + integration test (req 6, 8, 9) [wave 5]
+
+### Phase 14: Skill Score Dashboard
+
+**Goal:** Provide a per-user skill score dashboard, building on the Phase 13 skill-score engine. Surface a user's skill score over time and the events that move it: timestamped per-user score-history capture + per-change attribution (cause + delta + before/after breakdown diff) riding the single Phase 13 `recompute_all` routine, plus three public GET endpoints under `/api/v3/skill/users/{id}/...` — windowed history (7d/30d/90d/1y/all) + summary, a newest-first paginated changes feed, and a per-change drill-down (top-N map impacts + other_factors). API-only vertical; website/bot surfaces are later phases.
+
+**Requirements:** See `14-SPEC.md` (spec-phase) — 7 requirements locked (ambiguity 0.12). API-only vertical; website/bot surfaces are later phases.
+**Depends on:** Phase 13
+**Plans:** 5/5 plans complete
+
+Plans:
+**Wave 1** *(parallel — disjoint files)*
+
+- [x] 14-01-PLAN.md — Migration 0031: skill.score_history + skill.score_change tables (cause CHECK, feed index, forward-only) [wave 1]
+- [x] 14-02-PLAN.md — SDK dashboard response structs + CauseCategory Literal; enrich SkillRecomputeRequestedEvent (cause_category + actor_user_id, D-10) [wave 1]
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [x] 14-03-PLAN.md — skill_repository: prev-snapshot bulk read + append-only bulk inserts + windowed history/paginated feed/IDOR-checked change lookup + completion-owner lookup (A4) [wave 2]
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [x] 14-04-PLAN.md — SkillService capture wiring in _do_recompute (D-05) + _RecomputeGuard descriptor accumulator + cause policy (D-08/D-09) + read methods; thread cause+owner through listener + 5 emit sites; extend service tests [wave 3]
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [x] 14-05-PLAN.md — Three public GET dashboard routes (history/changes/drill-down) + SYSTEM-tag PATCH /config recompute + integration test (Req 1,3,4,5,6,7) [wave 4]

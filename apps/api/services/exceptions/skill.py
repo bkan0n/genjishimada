@@ -26,6 +26,24 @@ class InvalidGammaError(SkillError):
         )
 
 
+class SkillConfigNotSeededError(SkillError):
+    """The skill ``weight_config`` / ``tier_config`` singleton row is missing.
+
+    Migration 0027/0028 seed these single-row config tables. A partial/failed migration, a
+    manual ``TRUNCATE``, or an environment that skipped the seed leaves the table empty, and
+    every recompute/read then fails. Without this guard the failure surfaces as an opaque
+    msgspec ``ValidationError`` 500 (``msgspec.convert({}, Weights)`` — all fields required);
+    raising this at the repository boundary fails loudly with a descriptive message instead
+    (WR-03).
+    """
+
+    def __init__(self, config_name: str) -> None:
+        super().__init__(
+            f"skill {config_name} is not seeded — the single config row is missing (run/repair migration 0027/0028).",
+            config_name=config_name,
+        )
+
+
 class InvalidPercentilesError(SkillError):
     """The tier ``percentiles`` array fails a server-side validation rule.
 

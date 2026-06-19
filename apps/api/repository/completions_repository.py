@@ -2054,6 +2054,46 @@ class CompletionsRepository(BaseRepository):
         result = await _conn.execute(query, message_id, verification_id)
         return int(result.split()[-1])
 
+    async def fetch_completion_owner_by_message(
+        self,
+        message_id: int | None,
+        verification_id: int | None,
+        *,
+        conn: Connection | None = None,
+    ) -> int | None:
+        """Resolve the OWNER's user_id for a completion identified by message or verification ID.
+
+        Uses the SAME identifier model as ``insert_suspicious_flag`` /
+        ``delete_suspicious_flag_by_message`` (message_id OR verification_id), but SELECTs the
+        owner's ``user_id`` rather than the completion id (the suspicious-flag CTE yields
+        ``core.completions.id`` but NOT ``user_id``). This is the A4 resolution: the flag/unflag
+        emit sites (14-04) have only message_id/verification_id in scope, so the completions
+        service calls THIS method on its own repo (``self._completions_repo``) — no cross-service
+        private-attribute access into the skill domain — to supply ``actor_user_id`` for cause
+        attribution.
+
+        Args:
+            message_id: Discord message ID (if the completion has been posted).
+            verification_id: Discord verification message ID (if pending).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The completion owner's user_id, or None if no completion matched.
+        """
+        _conn = self._get_connection(conn)
+        return await _conn.fetchval(
+            """
+            SELECT user_id
+            FROM core.completions
+            WHERE
+                ($1::bigint IS NOT NULL AND message_id = $1::bigint) OR
+                ($1::bigint IS NULL     AND verification_id = $2::bigint)
+            LIMIT 1
+            """,
+            message_id,
+            verification_id,
+        )
+
 
 async def provide_completions_repository(state: State) -> CompletionsRepository:
     """Litestar DI provider for CompletionsRepository."""

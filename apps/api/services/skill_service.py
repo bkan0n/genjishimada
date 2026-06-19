@@ -14,14 +14,23 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from itertools import pairwise
+from typing import Literal
 
 import msgspec
 from asyncpg import Pool
 from genjishimada_sdk.skill import (
     SkillBreakdownRow,
+    SkillChangeCause,
+    SkillChangeDetailResponse,
+    SkillChangeFeedItem,
     SkillConfigUpdateRequest,
+    SkillHistoryExtremum,
+    SkillHistoryPoint,
+    SkillHistoryResponse,
+    SkillHistorySummary,
     SkillSummaryResponse,
     SkillTiersResponse,
     Weights,
@@ -43,6 +52,58 @@ _GAMMA_FLOOR = 0.5
 # integer tiers 1..8 via width_bucket; tier 0 is Unranked.
 _TIER_PERCENTILE_COUNT = 7
 
+# Read-time top-N cut for the change drill-down (D-06/D-07): the largest-|impact| per-map
+# contributors are listed individually as `main_causes`; the remaining tail is rolled into a
+# single `other_factors` scalar. N is a TUNABLE CODE CONSTANT, never stored — so the cutoff can
+# change forever with no migration (forward-only history cannot be re-cut). Per-user map counts
+# are small (<~50), so storing ALL impacts and cutting at read time is cheap.
+_TOP_N = 5
+
+# Window -> lookback duration for the history/changes reads. `all` has no bound (a far-past
+# sentinel is used). Mirrors the SDK/route Literal; the route's msgspec-decoded `window` is the
+# only validated source.
+_WINDOW_DELTAS: dict[str, timedelta] = {
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+    "90d": timedelta(days=90),
+    "1y": timedelta(days=365),
+}
+
+# Far-past sentinel for the `all` window (timezone-aware so it compares against captured_at).
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+SkillWindow = Literal["7d", "30d", "90d", "1y", "all"]
+
+# Per-recompute cause policy categories (D-08/D-09). PLAYER_ACTION resolves the actor; every
+# other user-with-data is MAP_ENVIRONMENT. SYSTEM tags everyone "global recalculation".
+_PLAYER_ACTION = "PLAYER_ACTION"
+_MAP_ENVIRONMENT = "MAP_ENVIRONMENT"
+_SYSTEM = "SYSTEM"
+
+# Short human-readable reason strings stored on each change row (D-08/D-09). The per-recompute
+# reason is shared by all of that recompute's change rows; the per-user cause_category is what
+# distinguishes actor / bystander.
+_SYSTEM_REASON = "global recalculation"
+_PLAYER_ACTION_REASON = "verified completion"
+
+
+@dataclass
+class TriggerDescriptor:
+    """A single recompute trigger's cause + actor (D-10).
+
+    Accumulated on the module-scope ``_RecomputeGuard.pending`` so a burst's descriptors are
+    evaluated together: exactly one clean completion descriptor (an actor set, cause
+    PLAYER_ACTION) yields the actor/bystander split (D-08); two-or-more descriptors OR any
+    SYSTEM descriptor promotes the whole recompute to SYSTEM "global recalculation" (D-09).
+
+    Attributes:
+        cause_category: The trigger's cause (``PLAYER_ACTION`` / ``MAP_ENVIRONMENT`` / ``SYSTEM``).
+        actor_user_id: The completion owner for a PLAYER_ACTION trigger; ``None`` for SYSTEM.
+    """
+
+    cause_category: str = _SYSTEM
+    actor_user_id: int | None = None
+
 
 class _RecomputeGuard:
     """Process-wide in-flight collapse guard for recompute_all (D-05).
@@ -50,11 +111,16 @@ class _RecomputeGuard:
     Litestar constructs a fresh SkillService per request via DI, so a per-instance lock would
     never coalesce a burst across requests — the guard MUST live at module scope to be
     one-per-process. The lock is created lazily on first use so it binds to the running loop.
+
+    The ``pending`` descriptor accumulator (D-10) ALSO lives here (module scope) for the same
+    reason: a coalesced burst arriving across separate requests must aggregate its descriptors
+    into one place so the cause policy can promote it to SYSTEM.
     """
 
     def __init__(self) -> None:
         self._lock: asyncio.Lock | None = None
         self.rerun_requested = False
+        self.pending: list[TriggerDescriptor] = []
 
     @property
     def lock(self) -> asyncio.Lock:
@@ -114,7 +180,10 @@ def _player_score(rows: list[dict], w: Weights) -> float:
     """Aggregate one player's per-map scores with diminishing returns (port of score.py:64-67).
 
     Per-map scores are sorted descending and summed as ``sᵢ / iᵞ`` (1-based ``i``), so the
-    best map counts fully and each subsequent map contributes less — the anti-farm dial.
+    best map counts fully and each subsequent map contributes less — the anti-farm dial. The
+    aggregate is exactly ``Σ contribution`` over ``_player_breakdown``, so this delegates to the
+    breakdown rather than re-scoring rows independently (IN-01): the recompute path scores each
+    row exactly once, and this helper stays available as the canonical scalar entry point.
 
     Args:
         rows: All of one player's eligible (user, map) rows.
@@ -123,8 +192,7 @@ def _player_score(rows: list[dict], w: Weights) -> float:
     Returns:
         The player's aggregate skill score.
     """
-    scores = sorted((_map_score(r, w) for r in rows), reverse=True)
-    return sum(s / (i**w.gamma) for i, s in enumerate(scores, start=1))
+    return _breakdown_score(_player_breakdown(rows, w))
 
 
 def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
@@ -132,7 +200,9 @@ def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
 
     The returned dict keys mirror ``SkillBreakdownRow`` exactly so the stored JSONB array
     decodes straight into ``list[SkillBreakdownRow]`` via the app's jsonb<->msgspec codec
-    (D-06).
+    (D-06). The player's aggregate skill score is exactly ``Σ contribution`` over the returned
+    rows (the scorer's own decomposition), so ``_breakdown_score`` derives the scalar from this
+    list instead of re-scoring every row a second time (IN-01).
 
     Args:
         rows: All of one player's eligible (user, map) rows.
@@ -147,6 +217,11 @@ def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
         decay = i**w.gamma
         out.append(
             {
+                # Stable join key for `_build_diff` (CR-01): `map_name` is a non-unique display
+                # string, so the diff MUST key on `map_id` to avoid collapsing two distinct maps
+                # that share a name. Persisted into the breakdown JSONB; `SkillBreakdownRow` does
+                # not declare it, but msgspec.convert ignores the extra field on decode.
+                "map_id": r.get("map_id"),
                 "map_name": r.get("map_name") or r.get("code") or f"map {r.get('map_id')}",
                 "difficulty": r.get("difficulty", ""),
                 "raw": r["raw_difficulty"],
@@ -159,6 +234,77 @@ def _player_breakdown(rows: list[dict], w: Weights) -> list[dict]:
             }
         )
     return out
+
+
+def _breakdown_score(breakdown: list[dict]) -> float:
+    """Aggregate one player's skill score from an already-computed breakdown (IN-01).
+
+    The scorer decomposes the aggregate exactly as ``Σ sᵢ / iᵞ`` (port of score.py:64-67), which
+    is precisely the sum of the per-map ``contribution`` values ``_player_breakdown`` already
+    emits. Deriving the scalar here — rather than re-running ``_map_score`` over every row a
+    second time in a separate ``_player_score`` pass — keeps the total byte-identical while
+    computing each per-map score exactly once per recompute.
+
+    Args:
+        breakdown: The per-map breakdown dicts produced by ``_player_breakdown``.
+
+    Returns:
+        The player's aggregate skill score.
+    """
+    return sum(row["contribution"] for row in breakdown)
+
+
+def _diff_key(row: dict) -> object:
+    """Stable join key for a breakdown row (CR-01).
+
+    Prefers ``map_id`` — the unique map identifier carried through ``_player_breakdown`` — so two
+    genuinely different maps that share a display ``map_name`` never collapse onto one another and
+    silently drop a contribution (which would break the ``Σ impact == delta`` invariant). Falls
+    back to ``("name", map_name)`` only for legacy stored breakdowns persisted before ``map_id``
+    was carried; the tuple namespace keeps a missing-id fallback from colliding with a real id.
+
+    Args:
+        row: One per-map breakdown dict.
+
+    Returns:
+        A hashable key uniquely identifying the map across the prev/new breakdowns.
+    """
+    map_id = row.get("map_id")
+    if map_id is not None:
+        return map_id
+    return ("name", row.get("map_name"))
+
+
+def _build_diff(prev_breakdown: list[dict], new_breakdown: list[dict]) -> dict:
+    """Build the all-maps impact array for a change row (D-04).
+
+    Joins the previous and new per-map breakdowns on the stable ``map_id`` key (CR-01 — NOT the
+    non-unique display ``map_name``, which would collapse distinct maps sharing a name and drop
+    contributions) and emits one entry per map in the union: ``{"map", "prev", "new", "impact"}``
+    where ``prev``/``new`` are the decayed ``contribution`` on each side (0.0 when the map is
+    absent on that side) and ``impact = new - prev``. ``map`` carries the display name for
+    rendering only. Because ``skill_score == Σ contribution`` (the scorer's own decomposition) and
+    every map is keyed uniquely, ``Σ impact == delta`` EXACTLY at write time — conservation is by
+    construction, never read-time rebalancing.
+
+    Args:
+        prev_breakdown: The user's per-map breakdown from the PREVIOUS snapshot (may be empty).
+        new_breakdown: The user's per-map breakdown from the NEW snapshot (may be empty).
+
+    Returns:
+        ``{"maps": [{"map": str, "prev": float, "new": float, "impact": float}, ...]}``.
+    """
+    prev_by_key = {_diff_key(row): row for row in prev_breakdown}
+    new_by_key = {_diff_key(row): row for row in new_breakdown}
+    maps: list[dict] = []
+    for key in {*prev_by_key, *new_by_key}:
+        p = prev_by_key.get(key)
+        n = new_by_key.get(key)
+        prev_c = float((p or {}).get("contribution") or 0.0)
+        new_c = float((n or {}).get("contribution") or 0.0)
+        display = (n or p or {}).get("map_name") or "unknown"
+        maps.append({"map": display, "prev": prev_c, "new": new_c, "impact": new_c - prev_c})
+    return {"maps": maps}
 
 
 class SkillService(BaseService):
@@ -175,31 +321,92 @@ class SkillService(BaseService):
         super().__init__(pool, state)
         self._skill_repo = skill_repo
 
-    async def recompute_all(self) -> None:
+    async def recompute_all(self, descriptor: TriggerDescriptor | None = None) -> None:
         """Rebuild the entire skill snapshot from scratch — THE single rebuild routine (D-04).
 
         Called by the in-process verification-change event (13-05), the nightly backstop
         (13-05), and PATCH config (13-05). Reads the weights from the DB config (req 5 — never
         literals), re-runs the input query, scores every player, captures the per-map
         breakdown (D-06), and atomically replaces the lean snapshot (only players with >=1
-        eligible run get a row, D-07).
+        eligible run get a row, D-07). On every recompute it ALSO captures one history point +
+        one change record per user-with-data (D-02), riding this single routine (no forked
+        compute path).
 
         A per-process in-flight collapse guard (D-05) ensures a burst of triggers does not
         launch N overlapping full rebuilds: while one rebuild runs, additional calls set a
         "rerun requested" flag instead of starting their own; the holder loops once more so
         the final snapshot is consistent with the latest inputs.
+
+        Each trigger's cause descriptor (D-10) is appended to the module-scope accumulator
+        BEFORE the in-flight early return — so a coalesced trigger still records its descriptor
+        — and the accumulator is DRAINED inside the rerun loop (Pitfall 2): descriptors that
+        arrived mid-rebuild belong to the rerun, so the cause policy is resolved per
+        ``_do_recompute`` call.
+
+        Args:
+            descriptor: The trigger's cause + actor. ``None`` defaults to a SYSTEM descriptor
+                (nightly backstop / cold-start / PATCH callers that pass nothing).
         """
+        _GUARD.pending.append(descriptor if descriptor is not None else TriggerDescriptor())
         _GUARD.rerun_requested = True
         if _GUARD.lock.locked():
-            # A rebuild is already running; it will pick up the rerun_requested flag.
+            # A rebuild is already running; it will pick up the rerun_requested flag and drain
+            # the descriptor we just appended on its next loop iteration.
             return
         async with _GUARD.lock:
             while _GUARD.rerun_requested:
                 _GUARD.rerun_requested = False
-                await self._do_recompute()
+                # Drain INSIDE the loop (Pitfall 2): descriptors that arrived during the prior
+                # _do_recompute belong to THIS rerun, so resolve the policy per iteration.
+                drained = _GUARD.pending[:]
+                _GUARD.pending.clear()
+                policy = self._resolve_cause_policy(drained)
+                await self._do_recompute(policy)
 
-    async def _do_recompute(self) -> None:
-        """Run one full snapshot rebuild (no locking; callers hold the in-flight guard)."""
+    @staticmethod
+    def _resolve_cause_policy(drained: list[TriggerDescriptor]) -> tuple[str, int | None]:
+        """Resolve the per-recompute cause policy from the drained descriptors (D-08/D-09).
+
+        A single clean completion descriptor (cause PLAYER_ACTION with an actor) yields the
+        actor/bystander split: ``(PLAYER_ACTION, actor_id)``. Anything else — two or more
+        descriptors, any SYSTEM descriptor, or a lone descriptor with no actor — promotes the
+        whole recompute to ``(SYSTEM, None)`` "global recalculation".
+
+        KNOWN LIMITATION (WR-04 / D-09): because every coalesced caller appends to the shared
+        ``_GUARD.pending`` and the holder drains ALL pending descriptors per loop iteration, two
+        near-simultaneous PLAYER_ACTION verifies (or a verify overlapping the nightly/PATCH SYSTEM
+        trigger) collapse to ``(SYSTEM, None)`` — the actor loses PLAYER_ACTION attribution. Under
+        production bursts this demotion is expected and frequent. Consumers MUST NOT treat
+        ``PLAYER_ACTION`` as a reliable signal that a given user personally triggered the change;
+        a ``SYSTEM`` row may still have been caused by a player action that was coalesced. This is
+        a deliberate trade-off (the in-flight collapse guard is intentionally not redesigned).
+
+        Args:
+            drained: The descriptors accumulated for this recompute.
+
+        Returns:
+            A ``(cause_category, actor_user_id)`` tuple. ``PLAYER_ACTION`` carries the actor;
+            ``SYSTEM`` carries ``None``.
+        """
+        if len(drained) == 1 and drained[0].cause_category == _PLAYER_ACTION and drained[0].actor_user_id is not None:
+            return (_PLAYER_ACTION, drained[0].actor_user_id)
+        return (_SYSTEM, None)
+
+    async def _do_recompute(self, policy: tuple[str, int | None]) -> None:
+        """Run one full snapshot rebuild + capture (no locking; callers hold the guard).
+
+        Reads the previous snapshot BEFORE ``replace_snapshot`` TRUNCATEs (Pitfall 1 / D-05),
+        scores every player, then — for each user-with-data — builds one ``score_history`` row
+        and one ``score_change`` row whose per-map ``diff`` conserves exactly (``Σ impact ==
+        delta`` by construction, D-04). Snapshot replace, both bulk inserts, and the tier
+        recompute run in ONE transaction (Pitfall 6) mirroring ``update_tier_config``.
+
+        Args:
+            policy: The resolved ``(cause_category, actor_user_id)`` cause policy (D-08/D-09).
+        """
+        cause_category, actor_id = policy
+        reason = _SYSTEM_REASON if cause_category == _SYSTEM else _PLAYER_ACTION_REASON
+
         w = msgspec.convert(await self._skill_repo.fetch_weights(), Weights)
         rows = await self._skill_repo.fetch_skill_inputs()
 
@@ -207,27 +414,70 @@ class SkillService(BaseService):
         for r in rows:
             by_user[r["user_id"]].append(r)
 
+        # The SINGLE captured_at reused for every history + change row of this recompute (D-02);
+        # do NOT mint a second timestamp.
         computed_at = datetime.now(timezone.utc)
-        snapshot_rows: list[dict] = []
-        for user_id, urows in by_user.items():
-            snapshot_rows.append(
-                {
-                    "user_id": user_id,
-                    "skill_score": _player_score(urows, w),
-                    "maps_cleared": len(urows),
-                    "video_clears": sum(1 for r in urows if r["fully_verified"]),
-                    "hardest_raw": max(r["raw_difficulty"] for r in urows),
-                    "breakdown": _player_breakdown(urows, w),
-                    "computed_at": computed_at,
-                }
-            )
-        await self._skill_repo.replace_snapshot(snapshot_rows)
-        # Flicker decision: recompute the tier boundaries on EVERY snapshot rebuild, riding
-        # the single D-04 routine (no fork) so verify/reject/flag events, the nightly
-        # backstop, and PATCH config all keep skill.tier_config consistent with the snapshot
-        # that produced it. Tradeoff: a player's tier can shift when the field around them
-        # moves even if their own score is unchanged — acceptable for a display-only badge.
-        await self._skill_repo.compute_tier_boundaries()
+
+        async with self._pool.acquire() as conn, conn.transaction():
+            # Read prev snapshot BEFORE replace_snapshot truncates (Pitfall 1 / D-05).
+            prev = await self._skill_repo.fetch_all_snapshots(conn=conn)  # type: ignore[arg-type]
+
+            snapshot_rows: list[dict] = []
+            history_rows: list[dict] = []
+            change_rows: list[dict] = []
+            for user_id, urows in by_user.items():
+                # Score each per-map row exactly once: build the breakdown, then derive the
+                # aggregate from its contributions (IN-01). `new_score == Σ contribution` by the
+                # scorer's own decomposition, so this is byte-identical to a second `_player_score`
+                # pass while avoiding the redundant `_map_score` recomputation.
+                breakdown = _player_breakdown(urows, w)
+                new_score = _breakdown_score(breakdown)
+                snapshot_rows.append(
+                    {
+                        "user_id": user_id,
+                        "skill_score": new_score,
+                        "maps_cleared": len(urows),
+                        "video_clears": sum(1 for r in urows if r["fully_verified"]),
+                        "hardest_raw": max(r["raw_difficulty"] for r in urows),
+                        "breakdown": breakdown,
+                        "computed_at": computed_at,
+                    }
+                )
+
+                previous_score = float(prev.get(user_id, {}).get("skill_score") or 0.0)
+                delta = new_score - previous_score
+                diff = _build_diff(prev.get(user_id, {}).get("breakdown") or [], breakdown)
+
+                if cause_category == _SYSTEM:
+                    user_cause = _SYSTEM
+                elif user_id == actor_id:
+                    user_cause = _PLAYER_ACTION
+                else:
+                    user_cause = _MAP_ENVIRONMENT
+
+                history_rows.append({"user_id": user_id, "captured_at": computed_at, "skill_score": new_score})
+                change_rows.append(
+                    {
+                        "user_id": user_id,
+                        "captured_at": computed_at,
+                        "previous_score": previous_score,
+                        "new_score": new_score,
+                        "delta": delta,
+                        "cause_category": user_cause,
+                        "reason": reason,
+                        "diff": diff,
+                    }
+                )
+
+            await self._skill_repo.replace_snapshot(snapshot_rows, conn=conn)  # type: ignore[arg-type]
+            await self._skill_repo.bulk_insert_history(history_rows, conn=conn)  # type: ignore[arg-type]
+            await self._skill_repo.bulk_insert_changes(change_rows, conn=conn)  # type: ignore[arg-type]
+            # Flicker decision: recompute the tier boundaries on EVERY snapshot rebuild, riding
+            # the single D-04 routine (no fork) so verify/reject/flag events, the nightly
+            # backstop, and PATCH config all keep skill.tier_config consistent with the snapshot
+            # that produced it. Tradeoff: a player's tier can shift when the field around them
+            # moves even if their own score is unchanged — acceptable for a display-only badge.
+            await self._skill_repo.compute_tier_boundaries(conn=conn)  # type: ignore[arg-type]
 
     async def get_user_skill(self, user_id: int) -> SkillSummaryResponse:
         """Fetch a player's skill summary, honoring the D-07 empty-player rule.
@@ -269,6 +519,148 @@ class SkillService(BaseService):
         if row is None:
             return []
         return msgspec.convert(row["breakdown"], list[SkillBreakdownRow])
+
+    @staticmethod
+    def _window_since(window: SkillWindow) -> datetime:
+        """Map a window literal to its inclusive ``captured_at`` lower bound.
+
+        ``all`` has no bound, so a far-past epoch sentinel is returned (timezone-aware so it
+        compares against ``captured_at``). The route's msgspec-decoded ``window`` is the only
+        validated source, so an unknown value defaults to the ``all`` sentinel rather than raising.
+
+        Args:
+            window: One of ``7d``/``30d``/``90d``/``1y``/``all``.
+
+        Returns:
+            The inclusive lower bound for ``captured_at``.
+        """
+        delta = _WINDOW_DELTAS.get(window)
+        if delta is None:
+            return _EPOCH
+        return datetime.now(timezone.utc) - delta
+
+    async def get_user_history(self, user_id: int, window: SkillWindow) -> SkillHistoryResponse:
+        """Read a player's windowed score history + summary (SPEC req 3, empty rule req 7).
+
+        Maps the window to a ``since`` lower bound, reads the oldest-first history points, and
+        derives the window summary anchored on the EARLIEST in-window record (SPEC req 3):
+        ``point_change = last - first``; ``percent_change = point_change / first * 100`` (``None``
+        when ``first == 0`` — undefined, not 0%, WR-05); ``best``/``lowest`` are the max/min point
+        with their dates; ``average``
+        is the mean. A player with no history returns ``points=[]`` and an all-zero summary
+        (extrema score ``0.0``, date ``None``) — never a 500, never a synthetic row (req 7).
+
+        Args:
+            user_id: Discord user ID whose history to read.
+            window: The lookback window (``7d``/``30d``/``90d``/``1y``/``all``).
+
+        Returns:
+            The windowed history points + summary.
+        """
+        rows = await self._skill_repo.fetch_history(user_id, self._window_since(window))
+        points = [SkillHistoryPoint(captured_at=r["captured_at"], skill_score=r["skill_score"]) for r in rows]
+        if not points:
+            zero = SkillHistoryExtremum(score=0.0, date=None)
+            summary = SkillHistorySummary(point_change=0.0, percent_change=0.0, best=zero, lowest=zero, average=0.0)
+            return SkillHistoryResponse(user_id=user_id, points=[], summary=summary)
+
+        first = points[0].skill_score
+        last = points[-1].skill_score
+        point_change = last - first
+        # WR-05: when the earliest in-window score is 0 the percent change is undefined (division
+        # by zero). Return None ("n/a") rather than a misleading 0.0 that would contradict a large
+        # positive point_change (a new player who climbed from 0). A true 0% only arises when first
+        # and last are equal and non-zero.
+        if first != 0:
+            percent_change: float | None = point_change / first * 100.0
+        else:
+            percent_change = None
+        best_point = max(points, key=lambda p: p.skill_score)
+        lowest_point = min(points, key=lambda p: p.skill_score)
+        average = sum(p.skill_score for p in points) / len(points)
+        summary = SkillHistorySummary(
+            point_change=point_change,
+            percent_change=percent_change,
+            best=SkillHistoryExtremum(score=best_point.skill_score, date=best_point.captured_at),
+            lowest=SkillHistoryExtremum(score=lowest_point.skill_score, date=lowest_point.captured_at),
+            average=average,
+        )
+        return SkillHistoryResponse(user_id=user_id, points=points, summary=summary)
+
+    async def get_user_changes(
+        self, user_id: int, window: SkillWindow, limit: int, offset: int
+    ) -> list[SkillChangeFeedItem]:
+        """Read a player's newest-first paginated change feed (SPEC req 4, empty rule req 7).
+
+        Each row maps to a ``SkillChangeFeedItem`` whose ``description`` is derived from the
+        stored ``reason`` (falling back to a cause-category label). An empty feed returns ``[]``.
+
+        Args:
+            user_id: Discord user ID whose feed to read.
+            window: The lookback window (``7d``/``30d``/``90d``/``1y``/``all``).
+            limit: Max rows to return (route-validated bound).
+            offset: Rows to skip for pagination.
+
+        Returns:
+            The newest-first feed items (empty list when none).
+        """
+        rows = await self._skill_repo.fetch_changes(user_id, self._window_since(window), limit, offset)
+        return [
+            SkillChangeFeedItem(
+                change_id=r["change_id"],
+                captured_at=r["captured_at"],
+                delta=r["delta"],
+                cause_category=r["cause_category"],
+                description=r["reason"] or r["cause_category"],
+            )
+            for r in rows
+        ]
+
+    async def get_user_change_detail(self, user_id: int, change_id: int) -> SkillChangeDetailResponse | None:
+        """Read a single change drill-down with the read-time top-N cut (SPEC req 5, D-06/D-07).
+
+        The ownership predicate lives in the repo SQL (``change_id = $1 AND user_id = $2``), so a
+        foreign/unknown id yields ``None`` here -> the route raises 404 (T-14-06). The stored
+        ``diff.maps`` array is sorted by ``abs(impact)`` DESC; the top ``_TOP_N`` are listed
+        individually as ``main_causes`` and the remaining tail is summed into ``other_factors``.
+        Conservation is exact (``sum(main_causes.impact) + other_factors == delta``) because the
+        residual IS the untruncated tail — never read-time rebalancing.
+
+        Args:
+            user_id: Discord user ID that must own the change.
+            change_id: The change to read.
+
+        Returns:
+            The change drill-down, or ``None`` if no owned row matches (route -> 404).
+        """
+        row = await self._skill_repo.fetch_change(user_id, change_id)
+        if row is None:
+            return None
+
+        maps = list((row["diff"] or {}).get("maps", []))
+        maps.sort(key=lambda m: abs(float(m.get("impact") or 0.0)), reverse=True)
+        top = maps[:_TOP_N]
+        tail = maps[_TOP_N:]
+        main_causes = [
+            SkillChangeCause(map=m["map"], reason=row["reason"] or row["cause_category"], impact=float(m["impact"]))
+            for m in top
+        ]
+        other_factors = sum(float(m.get("impact") or 0.0) for m in tail)
+
+        previous_score = float(row["previous_score"] or 0.0)
+        delta = float(row["delta"] or 0.0)
+        percent_change = (delta / previous_score * 100.0) if previous_score != 0 else 0.0
+        return SkillChangeDetailResponse(
+            change_id=row["change_id"],
+            captured_at=row["captured_at"],
+            previous_score=previous_score,
+            new_score=float(row["new_score"] or 0.0),
+            delta=delta,
+            percent_change=percent_change,
+            cause_category=row["cause_category"],
+            main_causes=main_causes,
+            other_factors=other_factors,
+        )
 
     async def get_tier_config(self) -> SkillTiersResponse:
         """Read the current tier legend: boundaries, percentiles, and computed_at (PYO-TIER-05).

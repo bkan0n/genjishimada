@@ -7,11 +7,14 @@ and the single-row weight config read/write.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from asyncpg import Connection, Pool
 from asyncpg.pool import PoolConnectionProxy
 from litestar.datastructures import State
 
 from repository.base import BaseRepository
+from services.exceptions.skill import SkillConfigNotSeededError
 
 # Verbatim port of the spike input query (sources/001-skill-input-query/query.py:24-92).
 # One row per (user, map): the player's fastest verified, non-legacy completion joined to
@@ -228,6 +231,108 @@ class SkillRepository(BaseRepository):
         else:
             await _do_replace(_conn)
 
+    async def fetch_all_snapshots(self, *, conn: Connection | None = None) -> dict[int, dict]:
+        """Read every player's prev snapshot score + breakdown in ONE query (D-05).
+
+        Must be callable BEFORE ``replace_snapshot`` TRUNCATEs so the capture wiring
+        (Wave 3) has each user's ``previous_score`` and per-map ``contribution`` from the
+        OLD snapshot in hand to build the ``score_history`` + ``score_change`` rows (Pitfall 1).
+        Single round-trip over ``skill.snapshot`` — never a per-user loop (Pitfall 3). The
+        ``breakdown`` jsonb decodes to a Python list automatically via the jsonb<->msgspec
+        codec (D-06).
+
+        Args:
+            conn: Optional connection for transaction support.
+
+        Returns:
+            A dict keyed by ``user_id`` -> ``{"skill_score": float, "breakdown": list}``.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch("SELECT user_id, skill_score, breakdown FROM skill.snapshot")
+        return {row["user_id"]: {"skill_score": row["skill_score"], "breakdown": row["breakdown"]} for row in rows}
+
+    async def bulk_insert_history(self, rows: list[dict], *, conn: Connection | None = None) -> None:
+        """Append-only bulk insert into ``skill.score_history`` (D-02; NO TRUNCATE).
+
+        Mirrors ``replace_snapshot``'s ``executemany`` + Pool-vs-Connection fork but the
+        history table is forward-only — it is NEVER truncated. An empty ``rows`` list is a
+        no-op (returns early, same as ``replace_snapshot``). Each dict supplies
+        ``user_id, captured_at, skill_score``.
+
+        Args:
+            rows: One dict per user-with-data for this recompute.
+            conn: Optional connection for transaction support.
+        """
+        if not rows:
+            return
+
+        async def _do_insert(c: Connection | PoolConnectionProxy) -> None:
+            # ON CONFLICT DO NOTHING (IN-02): score_history's PK is (user_id, captured_at). Two
+            # recomputes that mint the same sub-microsecond captured_at for the same user would
+            # otherwise raise a unique violation and abort the whole capture transaction. Dropping
+            # the colliding point (rather than failing the rebuild) preserves the forward-only
+            # history and keeps the recompute resilient under burst triggers.
+            await c.executemany(
+                """
+                INSERT INTO skill.score_history (user_id, captured_at, skill_score)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (user_id, captured_at) DO NOTHING
+                """,
+                [(r["user_id"], r["captured_at"], r["skill_score"]) for r in rows],
+            )
+
+        _conn = self._get_connection(conn)
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                await _do_insert(acquired)
+        else:
+            await _do_insert(_conn)
+
+    async def bulk_insert_changes(self, rows: list[dict], *, conn: Connection | None = None) -> None:
+        """Append-only bulk insert into ``skill.score_change`` (D-02; NO TRUNCATE).
+
+        Same forward-only pattern as ``bulk_insert_history``. ``r["diff"]`` is a Python dict
+        — the jsonb<->msgspec codec serializes it (same as ``breakdown`` in
+        ``replace_snapshot``); do NOT ``json.dumps`` it. Empty ``rows`` is a no-op. Each dict
+        supplies ``user_id, captured_at, previous_score, new_score, delta, cause_category,
+        reason, diff``.
+
+        Args:
+            rows: One dict per user-with-data for this recompute.
+            conn: Optional connection for transaction support.
+        """
+        if not rows:
+            return
+
+        async def _do_insert(c: Connection | PoolConnectionProxy) -> None:
+            await c.executemany(
+                """
+                INSERT INTO skill.score_change
+                    (user_id, captured_at, previous_score, new_score, delta, cause_category, reason, diff)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                [
+                    (
+                        r["user_id"],
+                        r["captured_at"],
+                        r["previous_score"],
+                        r["new_score"],
+                        r["delta"],
+                        r["cause_category"],
+                        r["reason"],
+                        r["diff"],
+                    )
+                    for r in rows
+                ],
+            )
+
+        _conn = self._get_connection(conn)
+        if isinstance(_conn, Pool):
+            async with _conn.acquire() as acquired:
+                await _do_insert(acquired)
+        else:
+            await _do_insert(_conn)
+
     async def fetch_weights(self, *, conn: Connection | None = None) -> dict:
         """Read the single weight-config row (SPEC req 5: the only source of weights).
 
@@ -236,6 +341,11 @@ class SkillRepository(BaseRepository):
 
         Returns:
             A dict of exactly the nine weight columns.
+
+        Raises:
+            SkillConfigNotSeededError: If the single ``skill.weight_config`` row is missing —
+                fails loudly here rather than letting ``msgspec.convert({}, Weights)`` raise an
+                opaque ValidationError 500 downstream (WR-03).
         """
         _conn = self._get_connection(conn)
         row = await _conn.fetchrow(
@@ -246,7 +356,9 @@ class SkillRepository(BaseRepository):
             LIMIT 1
             """
         )
-        return dict(row) if row else {}
+        if row is None:
+            raise SkillConfigNotSeededError("weight_config")
+        return dict(row)
 
     async def update_weights(self, weights: dict, *, conn: Connection | None = None) -> dict:
         """Partial-update the single weight-config row (D-10) and return the full row.
@@ -354,10 +466,17 @@ class SkillRepository(BaseRepository):
 
         Returns:
             A dict with ``boundaries``, ``percentiles``, and ``computed_at``.
+
+        Raises:
+            SkillConfigNotSeededError: If the single ``skill.tier_config`` row is missing —
+                fails loudly rather than letting ``msgspec.convert({}, SkillTiersResponse)`` raise
+                an opaque ValidationError 500 downstream (WR-03).
         """
         _conn = self._get_connection(conn)
         row = await _conn.fetchrow("SELECT boundaries, percentiles, computed_at FROM skill.tier_config LIMIT 1")
-        return dict(row) if row else {}
+        if row is None:
+            raise SkillConfigNotSeededError("tier_config")
+        return dict(row)
 
     async def fetch_snapshot_with_tier(self, user_id: int, *, conn: Connection | None = None) -> dict | None:
         """Fetch a player's snapshot row plus its tier and population percentile (PYO-TIER-03).
@@ -390,6 +509,112 @@ class SkillRepository(BaseRepository):
             CROSS JOIN skill.tier_config tc
             WHERE ss.user_id = $1
             """,
+            user_id,
+        )
+        return dict(row) if row else None
+
+    async def fetch_history(self, user_id: int, since: datetime, *, conn: Connection | None = None) -> list[dict]:
+        """Read a player's windowed score history, oldest-first (SPEC req 3).
+
+        Filters on ``captured_at >= since`` (a timezone-aware datetime the service computes
+        from the window; for ``all`` the service passes a far-past sentinel) and orders
+        ascending so the line graph plots chronologically. The composite PK
+        ``(user_id, captured_at)`` covers this read with no extra index. ``since`` is bound
+        positionally (``$2``) — never string-interpolated (T-14-07).
+
+        Args:
+            user_id: Discord user ID whose history to read.
+            since: Timezone-aware lower bound for ``captured_at`` (inclusive).
+            conn: Optional connection for transaction support.
+
+        Returns:
+            A list of ``{user_id, captured_at, skill_score}`` dicts, oldest-first.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            """
+            SELECT user_id, captured_at, skill_score
+            FROM skill.score_history
+            WHERE user_id = $1 AND captured_at >= $2
+            ORDER BY captured_at ASC
+            """,
+            user_id,
+            since,
+        )
+        return [dict(r) for r in rows]
+
+    async def fetch_changes(
+        self,
+        user_id: int,
+        since: datetime,
+        limit: int,
+        offset: int,
+        *,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Read a player's newest-first paginated change feed (SPEC req 4).
+
+        Selects ONLY the columns ``SkillChangeFeedItem`` needs — deliberately OMITTING the
+        heavy ``diff`` jsonb (Warning 4): the feed never renders the per-map impact array, so
+        selecting ``diff`` would force a per-row jsonb deserialization on every paginated page
+        for data the feed never uses. The feed's ``description`` is derived in the service from
+        ``cause_category``/``reason``. Orders ``captured_at DESC`` (uses the
+        ``(user_id, captured_at DESC)`` feed index) and bounds with ``LIMIT``/``OFFSET`` —
+        all positional params (T-14-07/T-14-08; the route caps ``limit``). The drill-down
+        ``fetch_change`` is the only method that SELECTs ``diff``.
+
+        Args:
+            user_id: Discord user ID whose feed to read.
+            since: Timezone-aware lower bound for ``captured_at`` (inclusive).
+            limit: Max rows to return (route-validated bound).
+            offset: Rows to skip for pagination.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            A list of feed-item dicts (no ``diff``), newest-first.
+        """
+        _conn = self._get_connection(conn)
+        rows = await _conn.fetch(
+            """
+            SELECT change_id, captured_at, previous_score, new_score, delta, cause_category, reason
+            FROM skill.score_change
+            WHERE user_id = $1 AND captured_at >= $2
+            ORDER BY captured_at DESC
+            LIMIT $3 OFFSET $4
+            """,
+            user_id,
+            since,
+            limit,
+            offset,
+        )
+        return [dict(r) for r in rows]
+
+    async def fetch_change(self, user_id: int, change_id: int, *, conn: Connection | None = None) -> dict | None:
+        """Read a single change with the ownership predicate baked in (SPEC req 5, T-14-06).
+
+        This is the ONLY method that SELECTs ``diff`` (the all-maps impact array, decoded to a
+        Python dict via the jsonb<->msgspec codec). The ``WHERE change_id = $1 AND user_id = $2``
+        ownership predicate is the IDOR mitigation: a ``change_id`` belonging to another user
+        yields no row -> ``None`` -> the route raises 404 (NOT 403 — does not confirm the id's
+        existence to a non-owner).
+
+        Args:
+            user_id: Discord user ID that must own the change.
+            change_id: The change to read.
+            conn: Optional connection for transaction support.
+
+        Returns:
+            The full change row (including ``diff``) as a dict, or None if no owned row matches.
+        """
+        _conn = self._get_connection(conn)
+        row = await _conn.fetchrow(
+            """
+            SELECT change_id, user_id, captured_at, previous_score, new_score, delta,
+                   cause_category, reason, diff
+            FROM skill.score_change
+            WHERE change_id = $1 AND user_id = $2
+            """,
+            change_id,
             user_id,
         )
         return dict(row) if row else None

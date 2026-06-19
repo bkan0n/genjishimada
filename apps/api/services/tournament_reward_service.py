@@ -33,10 +33,11 @@ class TournamentRewardService(BaseService):
     tournament-specific grant event variant has zero consumers and is never
     published — only the generic XpGrantEvent the bot already decodes is emitted.
 
-    Scope boundary: award_cycle_end advances streaks only for the finalizing
-    cycle's participants. The non-participant streak RESET sweep (which needs the
-    full tracked-user set via fetch_all_streak_user_ids, broader than one event's
-    category scope) is owned by 08-03's outbox hook, not this service.
+    Scope boundary: placement is per-cycle (award_cycle_placements); streaks are
+    per-EDITION (award_edition_streaks) — a user who submits in ANY category of an
+    edition advances exactly +1, and every tracked user who submits in none resets
+    to 0, both computed once over the union of the edition's child-cycle
+    participants. Reset needs the full tracked-user set via fetch_all_streak_user_ids.
     """
 
     def __init__(
@@ -128,7 +129,7 @@ class TournamentRewardService(BaseService):
 
         Args:
             events: Deferred XpGrantEvents returned by award_participation /
-                award_cycle_end.
+                award_cycle_placements / award_edition_streaks.
         """
         if events:
             await self._lootbox_service.publish_xp_events(events)
@@ -176,13 +177,13 @@ class TournamentRewardService(BaseService):
         )
         return pending_events
 
-    async def award_cycle_end(
+    async def award_cycle_placements(
         self,
         event: TournamentCycleCompletedEvent,
         *,
         conn: Connection,
     ) -> list[XpGrantEvent]:
-        """Grant placement rewards and advance/bonus streaks at cycle finalization.
+        """Grant placement rewards for one finalized cycle.
 
         Placement: builds ``{place: xp}`` from the category's placement_xp tiers
         and grants ``map.get(rank)`` to each standing. The admin-configured
@@ -194,10 +195,9 @@ class TournamentRewardService(BaseService):
         tiers are configured but match no standing (likely a misconfigured
         ``place`` set), a warning is logged rather than silently paying nothing.
 
-        Streak: every distinct cycle participant gets advance_streak(participated=
-        True); a bonus is granted only when the returned current_streak exactly
-        matches a configured streak threshold. The non-participant reset sweep is
-        owned by 08-03 (it needs the full tracked-user set).
+        Streaks are NOT advanced here — they are per-EDITION (a user who submits in
+        any category of an edition advances exactly +1), handled once per edition by
+        :meth:`award_edition_streaks`.
 
         Args:
             event: Cycle-completed event with snapshotted standings.
@@ -242,32 +242,97 @@ class TournamentRewardService(BaseService):
                 len(event.standings),
             )
 
-        # STREAK: advance every participant; bonus only at an exact threshold.
-        streak_tiers = msgspec.convert(category["streak_xp"], list[StreakXpTier])
-        streak_by_threshold = {tier.threshold: tier.xp for tier in streak_tiers}
-        participants = set(await self._tournament_repo.fetch_cycle_participants(event.cycle_id, conn=conn))
-        for participant_id in participants:
-            streak = await self._tournament_repo.advance_streak(
-                participant_id,
-                event.cycle_id,
-                True,
-                conn=conn,
-            )
+        return pending_events
+
+    async def award_edition_streaks(
+        self,
+        results: list[TournamentCycleCompletedEvent],
+        *,
+        conn: Connection,
+    ) -> list[XpGrantEvent]:
+        """Advance, bonus, and reset participation streaks ONCE per edition.
+
+        Streaks are per-EDITION, not per-category (decision: +1 per tournament). A
+        user who submitted in ANY child cycle of the edition advances exactly +1;
+        every tracked user who submitted in NO child cycle resets to 0. Both run
+        once over the union of the edition's child-cycle participants, so a user who
+        plays one category of a multi-category edition is never zeroed by a sibling
+        category's reset sweep (the bug this fixes) and a user who plays several
+        categories never advances more than +1.
+
+        Idempotency: every advance/reset and the streak-bonus ledger claim is keyed
+        on a single stable marker cycle (the edition's highest child cycle id). A
+        re-delivered rollover neither double-increments (advance_streak's
+        ``last_cycle_id IS DISTINCT FROM`` guard short-circuits) nor double-grants
+        (the ledger claim returns False), while the next edition — a strictly higher
+        marker — still advances.
+
+        Bonus: granted only when the new current_streak exactly matches a configured
+        threshold, taking the most generous matching tier among the categories the
+        user actually played (streak_xp is configured per category).
+
+        Args:
+            results: Every child-cycle completed event for the finalizing edition.
+            conn: Active connection for transactional participation.
+
+        Returns:
+            Deferred XpGrantEvents to publish AFTER the caller commits (empty when
+            nothing was granted). Publish via :meth:`publish_xp_events`.
+        """
+        pending_events: list[XpGrantEvent] = []
+        if not results:
+            return pending_events
+
+        # Stable marker cycle keys the advance dedupe guard and the streak-bonus
+        # ledger claim, so a replay is a no-op and the next edition still advances.
+        marker_cycle = max(entry.cycle_id for entry in results)
+
+        # Union of participants across all child cycles, plus the categories each
+        # user played (streak_xp thresholds are per category).
+        participants_union: set[int] = set()
+        categories_played: dict[int, set[int]] = {}
+        streak_tiers_by_category: dict[int, dict[int, int]] = {}
+        for entry in results:
+            if entry.category_id not in streak_tiers_by_category:
+                category = await self._tournament_repo.fetch_category(entry.category_id, conn=conn)
+                tiers = msgspec.convert(category["streak_xp"], list[StreakXpTier]) if category else []
+                streak_tiers_by_category[entry.category_id] = {tier.threshold: tier.xp for tier in tiers}
+            for user_id in await self._tournament_repo.fetch_cycle_participants(entry.cycle_id, conn=conn):
+                participants_union.add(user_id)
+                categories_played.setdefault(user_id, set()).add(entry.category_id)
+
+        # Advance every edition participant exactly once; bonus only at an exact
+        # threshold among the categories the user actually played.
+        for user_id in participants_union:
+            streak = await self._tournament_repo.advance_streak(user_id, marker_cycle, True, conn=conn)
             current_streak = streak.get("current_streak")
             if current_streak is None:
                 continue
-            bonus = streak_by_threshold.get(current_streak)
+            bonus = max(
+                (
+                    streak_tiers_by_category.get(category_id, {}).get(current_streak, 0)
+                    for category_id in categories_played.get(user_id, ())
+                ),
+                default=0,
+            )
             if not bonus:
                 continue
             await self._grant_xp(
-                user_id=participant_id,
+                user_id=user_id,
                 amount=bonus,
                 reason=f"Tournament Streak x{current_streak}",
-                cycle_id=event.cycle_id,
+                cycle_id=marker_cycle,
                 grant_reason_key="streak",
                 pending_events=pending_events,
                 conn=conn,
             )
+
+        # Reset every tracked user who submitted in NO child cycle of this edition.
+        all_tracked = set(await self._tournament_repo.fetch_all_streak_user_ids(conn=conn))
+        for user_id in all_tracked - participants_union:
+            await self._tournament_repo.advance_streak(user_id, marker_cycle, False, conn=conn)
+            log.debug("[!] streak reset to 0 for edition non-participant %s (marker cycle %s)", user_id, marker_cycle)
+
         return pending_events
 
 

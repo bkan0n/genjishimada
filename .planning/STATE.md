@@ -3,20 +3,20 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: 2026-06-12T22:47:08.232Z
-last_activity: 2026-06-12
+last_updated: 2026-06-16T18:12:26.778Z
+last_activity: 2026-06-16
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 16
-  completed_plans: 34
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 21
+  completed_plans: 39
   percent: 100
-stopped_at: Milestone complete (Phase 13 was final phase)
+stopped_at: Milestone complete (Phase 14 was final phase)
 ---
 
 # Tournament System — State
 
-Last activity: 2026-06-14 - Completed quick task 260613-rh2: Add skill score column to get rank card data endpoint
+Last activity: 2026-06-16
 
 ## Current Status
 
@@ -72,6 +72,141 @@ Controller → Service → Repository pattern:
 
 ## Accumulated Context
 
+### Phase 14 Progress
+
+- **14-05 complete (2026-06-16):** Dashboard routes + end-to-end tests (Wave 4, the
+  reachable-API surface + the phase's e2e proof). **Phase 14 complete (5/5 plans).**
+  Added three PUBLIC GET routes to `SkillController` (`routes/v3/skill.py`, no `opt` —
+  matching the existing `/skill` reads): `users/{id}/history?window=` (windowed
+  points+summary), `users/{id}/changes?window=&limit=&offset=` (newest-first feed,
+  `limit` ge=1 le=100, `offset` ge=0 mirrored from tournaments), and
+  `users/{id}/changes/{change_id}` (drill-down → service `None` → `HTTPException(404)`,
+  T-14-06 IDOR — 404 not 403). `window` is a module-level `Window =
+  Literal["7d","30d","90d","1y","all"]` Parameter (msgspec auto-4xx on unknown,
+  T-14-13; never interpolated into SQL). `PATCH /config` recompute now tagged
+  `TriggerDescriptor(cause_category="SYSTEM")` (D-09); `PATCH /tiers` untouched (A1).
+  New `tests/integration/test_skill_dashboard.py` (14 tests, Req 1-7): ≥2
+  distinct-`captured_at` history rows after two recomputes (Req 1); known-series
+  best/lowest/average + point/percent change, invalid window 4xx, empty user 200
+  empty/zero (Req 3); descending feed + `limit` bound + window respected + empty `[]`
+  (Req 4); per-row `Σ impact + other_factors == delta` within 1e-6 + foreign/unknown
+  change_id 404 (Req 5); five-window in-range filtering + `all` full + unknown 4xx
+  (Req 6); empty user 200/[]/404 across all three endpoints, never 500 (Req 7); actor
+  PLAYER_ACTION vs bystander MAP_ENVIRONMENT + SYSTEM coalesced (Req 2 e2e). Verified:
+  `pytest test_skill_dashboard.py` → 14 passed; `test_skill.py` → 12 passed;
+  `test_skill_scorer.py test_skill_service.py -m domain_skill` → 19 passed (no
+  regression); `just lint-api` + `just lint-sdk` clean. **Deviations (2, both Rule-1
+  self-introduced test bugs fixed pre-commit):** the conservation test read a race-prone
+  `feed[0]` (sibling tests' global recompute appends rows on the shared DB) — rewritten
+  to assert the per-row invariant on ALL of a user's change rows + single map (the seed
+  factory's `map_name='Hanamura'` collapses multi-map diffs); and a wrong hand-computed
+  average literal (`25` → `(10+30+40)/3`). Commits `6d4b41b` (Task 1) / `acc138d`
+  (Task 2).
+
+- **14-04 complete (2026-06-16):** Capture wiring + cause policy + read methods — the
+  core of Phase 14 (Wave 3). **Task 1 was pre-committed (`251b276`)** before this
+  executor ran: the capture wiring in `_do_recompute` (reads `fetch_all_snapshots`
+  BEFORE `replace_snapshot` truncates — Pitfall 1), the `TriggerDescriptor` dataclass,
+  the module-scope `_RecomputeGuard.pending` accumulator (drained INSIDE the rerun
+  loop — Pitfall 2), `_resolve_cause_policy`, and the `_build_diff` conservation join.
+  This executor verified Task 1 then did **Task 2 + Task 3**. **Task 2 (`8b147c3`):**
+  `events/skill.py` builds a `TriggerDescriptor(cause_category, actor_user_id)` and
+  threads it into `recompute_all` (cause from the typed accumulator, never `reason`-string
+  parsing — T-14-10); `_emit_skill_recompute` gains `cause_category` + `actor_user_id`;
+  the five emit sites pass the completion owner as `PLAYER_ACTION` (verify/un-verify →
+  `completion_info["user_id"]`, moderate → `user_id`, flag/unflag → A4 owner lookup via
+  `self._completions_repo.fetch_completion_owner_by_message`, NO cross-service private
+  access); `update_tier_config` (PATCH /skill/tiers) left untouched per A1. Three read
+  methods added: `get_user_history` (window→since, summary anchored on earliest record,
+  empty→`points=[]`+zero summary), `get_user_changes` (paginated feed, empty→`[]`),
+  `get_user_change_detail` (ownership→None→404, sort `diff.maps` by `abs(impact)` desc,
+  top `_TOP_N=5`→`main_causes`, residual tail→`other_factors`, conservation exact).
+  **Task 3 (`9fdfbed`):** four service tests lock the actor/bystander cause split,
+  coalesced-burst→SYSTEM promotion, prev-before-truncate `previous_score`, and
+  `Σ impact ≈ delta` within 1e-6; `_reset_guard` already cleared `pending` (Task 1).
+  Verified: `pytest tests/services/test_skill_service.py tests/services/test_skill_scorer.py`
+  → 19 passed; `tests/integration/test_skill.py` → 15 passed (no Phase 13 regression);
+  scorer byte-for-byte unchanged (git diff); `just lint-api` clean. One self-introduced
+  Rule-1 fix pre-commit (an undefined `points_src` helper, corrected to direct iteration).
+  Commits `8b147c3` (Task 2) / `9fdfbed` (Task 3). **Phase 14: 4/5 plans complete.**
+
+- **14-03 complete (2026-06-16):** Skill dashboard repository methods (Wave 2,
+  additive — Phase 13 scorer/snapshot methods byte-for-byte untouched). Added six
+  methods to `SkillRepository` (`apps/api/repository/skill_repository.py`) and one
+  owner lookup to `CompletionsRepository`, all `*, conn: Connection | None = None`,
+  positional-param-only, `just lint-api` clean. **Capture layer (D-05):**
+  `fetch_all_snapshots` is ONE `SELECT user_id, skill_score, breakdown FROM
+  skill.snapshot` returning `{user_id: {skill_score, breakdown}}` — callable BEFORE
+  `replace_snapshot` TRUNCATEs (Pitfall 1) and single-round-trip (Pitfall 3);
+  `bulk_insert_history` / `bulk_insert_changes` mirror `replace_snapshot`'s
+  `executemany` + Pool-vs-Connection fork but are **append-only (NO TRUNCATE,
+  empty-list-safe)**, and `diff` rides the jsonb codec as a raw Python dict (no
+  `json.dumps`). **Read layer:** `fetch_history` (`captured_at >= $2 ORDER BY ASC`),
+  `fetch_changes` (newest-first `ORDER BY captured_at DESC LIMIT $3 OFFSET $4`,
+  **SELECT deliberately omits the heavy `diff` jsonb** — Warning 4; feed never renders
+  the per-map array), and `fetch_change` — the ONLY method that SELECTs `diff` — with
+  the IDOR ownership predicate `WHERE change_id=$1 AND user_id=$2` baked into the SQL
+  (T-14-06: foreign id → None → route 404, not 403). **A4 resolution:**
+  `CompletionsRepository.fetch_completion_owner_by_message` SELECTs `user_id FROM
+  core.completions` using the identical message_id/verification_id model as the
+  suspicious-flag methods in the same file — lives on the repo that owns
+  `core.completions` so 14-04's completions service calls it via `self._completions_repo`
+  (no cross-service private access). Verified: both `<verify>` one-liners pass
+  (Task 2's checked SQL-scoped after a docstring false-positive — see deviation);
+  `git diff` shows additions only (`replace_snapshot`/scorer/tier methods unchanged);
+  `pytest tests/integration/test_skill.py` 15 passed (additive, no regression).
+  **Deviation (Rule 1, plan-owned):** Task 2's verify one-liner `'diff' not in fc`
+  false-positives on the `fetch_changes` docstring (which legitimately documents the
+  Warning-4 omission); validated the real acceptance criterion via an AST docstring-strip
+  showing the SQL omits `diff`, kept the load-bearing docstring. Commits `e32fb1a`
+  (Task 1) / `58cb910` (Task 2). **Phase 14: 3/5 plans complete.**
+
+- **14-02 complete (2026-06-16):** Skill dashboard wire contracts (interface-first,
+  no DB/service dependency). Added seven new msgspec structs + the `CauseCategory`
+  Literal to `libs/sdk/.../skill.py` and enriched `SkillRecomputeRequestedEvent` (D-10)
+  so Waves 2-4 implement against fixed contracts. **SDK:** `CauseCategory =
+  Literal["PLAYER_ACTION","MAP_ENVIRONMENT","SYSTEM"]` — the single SDK source for the
+  closed set (the migration 0031 CHECK is the DB backstop); History (req 3)
+  `SkillHistoryPoint`/`SkillHistoryExtremum` (`date: datetime | None` for the empty
+  shape)/`SkillHistorySummary` (point_change/percent_change/best/lowest/average)/
+  `SkillHistoryResponse` (user_id/points/summary); Feed (req 4) `SkillChangeFeedItem`
+  (change_id/captured_at/delta/cause_category/description); Drill-down (req 5)
+  `SkillChangeCause` (map/reason/impact)/`SkillChangeDetailResponse`
+  (change_id/captured_at/previous_score/new_score/delta/percent_change/cause_category/
+  main_causes/other_factors). All seven + `CauseCategory` in `__all__`; no Phase 13
+  struct touched. **Event** (`apps/api/events/schemas.py`): added `cause_category: str =
+  "SYSTEM"` (plain `str`, NOT the SDK Literal — keeps the API-side event module
+  dependency-light; the service validates the closed set) + `actor_user_id: int | None =
+  None`; `reason` kept first so existing `SkillRecomputeRequestedEvent(reason=...)` calls
+  and the `events/skill.py` listener stay backward-compatible. Verified: structs
+  round-trip (empty-points/zero-summary + main_causes/other_factors shapes), `cause_category="BOGUS"`
+  raises `msgspec.ValidationError` (T-14-04 mitigated at decode), event constructs
+  old-style + enriched; `just lint-sdk` + `just lint-api` clean (0 errors). No deviations.
+  Commits `0501374` (Task 1) / `d3129e5` (Task 2). **Phase 14: 2/5 plans complete.**
+
+- **14-01 complete (2026-06-16):** Migration `0031_skill_history.sql` — the
+  forward-only data foundation for the skill dashboard. Two new `skill`-schema
+  capture tables (D-01): a **lean** `skill.score_history` (`user_id bigint`,
+  `captured_at timestamptz`, `skill_score double precision`; composite
+  `PRIMARY KEY (user_id, captured_at)` covering every `/history` window read — no
+  extra index) and a **rich** `skill.score_change` (`change_id bigserial PK`,
+  `user_id`, `captured_at`, `previous_score`, `new_score`, `delta`,
+  `cause_category text`, `reason text`, `diff jsonb DEFAULT '{}'`). `cause_category`
+  is **text + CHECK** (`PLAYER_ACTION`/`MAP_ENVIRONMENT`/`SYSTEM`, T-14-01) — no
+  Postgres enum, consistent with the skill-migration idiom. `diff` (D-04) stores the
+  all-maps impact array round-tripped by the existing jsonb<->msgspec codec. Feed
+  index `skill_score_change_user_captured_idx (user_id, captured_at DESC)` backs the
+  newest-first `/changes` read. Forward-only: **no backfill INSERT, no pg_cron** (D-03;
+  the nightly recompute is an app-side lifespan task); idempotent
+  `CREATE SCHEMA/TABLE/INDEX IF NOT EXISTS` wrapped in `BEGIN;`/`COMMIT;`. Scorer/tier
+  tables (`skill.snapshot`, `skill.weight_config`, `skill.tier_config`) untouched.
+  Verified by the existing 4 `test_skill.py` integration tests passing — the migration
+  applies cleanly at session start via `conftest.py:_apply_sql_dir`. **Deviation (Rule 1,
+  plan-owned):** the plan's `<verify>` one-liner had an unsatisfiable CHECK assertion (it
+  strips spaces from the SQL but not from its own search string), so the migration was
+  validated against the actual whitespace-insensitive acceptance criterion instead (passes).
+  Commit `5f4e29c`. **Phase 14: 2/5 plans complete.**
+
 ### Phase 13 Progress
 
 - **13-06 complete (2026-06-12):** Skill freshness contract + leaderboard column —
@@ -98,6 +233,7 @@ Controller → Service → Repository pattern:
   verify→raises / reject→restores within 1e-6 / flag→0 / unflag→restores; field relativity
   (a second player on the same map shifts after the field changes); `sort=skill_score`
   descending + paginated with `skill_rank` intact; zero-eligible player score 0 ranked last
+
   + `GET /skill/users/{id}` returns 0 / empty breakdown; PATCH 401 unauth / 401-403
   non-superuser / 200 superuser with scores changing; breakdown contributions sum to total.
   The test drives the deterministic snapshot via the shared `recompute_all` on its own pool
@@ -449,3 +585,4 @@ Controller → Service → Repository pattern:
 - 2026-06-01: Reconstructed roadmap after v1.0 ship; added post-v1.0 quick-task track for cycle lifecycle control.
 - Phase 12 added: Overhaul of tournaments
 - Phase 12.1 inserted after Phase 12: Verification-aware tournament results: defer edition results until pending verifications drain (URGENT)
+- Phase 14 added: Skill Score Dashboard — per-user skill-score snapshots, time-windowed line graph, summary stats, recent-changes feed with drill-down

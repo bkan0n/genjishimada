@@ -1,19 +1,44 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from msgspec import UNSET, Struct, UnsetType
 
 __all__ = (
     "SKILL_TIER_NAMES",
+    "CauseCategory",
     "SkillBreakdownRow",
+    "SkillChangeCause",
+    "SkillChangeDetailResponse",
+    "SkillChangeFeedItem",
     "SkillConfigUpdateRequest",
+    "SkillHistoryExtremum",
+    "SkillHistoryPoint",
+    "SkillHistoryResponse",
+    "SkillHistorySummary",
     "SkillSummaryResponse",
     "SkillTiersResponse",
     "SkillTiersUpdateRequest",
     "Weights",
     "skill_tier_name",
 )
+
+# The single SDK source of truth for the closed set of skill-change cause categories.
+# `PLAYER_ACTION` — the actor (completion owner) whose own verify/reject/flag triggered
+# the recompute; `MAP_ENVIRONMENT` — a bystander whose score moved because the
+# competitive field around them changed; `SYSTEM` — a global recalculation
+# (config/tier PATCH, nightly backstop, cold-start, or any coalesced burst). msgspec
+# strict decode rejects any value outside this set (T-14-04); the DB CHECK in migration
+# 0031 is the persistence-side backstop.
+#
+# KNOWN LIMITATION (WR-04 / D-09): cause attribution is best-effort, not authoritative. When
+# two recompute triggers coalesce (concurrent verifies, or a verify overlapping a nightly/PATCH
+# rebuild) the whole batch is promoted to `SYSTEM`, so a genuine player-triggered change can be
+# recorded as `SYSTEM` rather than `PLAYER_ACTION`. Consumers MUST treat `PLAYER_ACTION` as a
+# hint only — never as proof a specific user personally caused the change — and must not assume a
+# `SYSTEM` row had no player trigger.
+CauseCategory = Literal["PLAYER_ACTION", "MAP_ENVIRONMENT", "SYSTEM"]
 
 
 # The SINGLE source of truth mapping an integer percentile tier (0..8) to its display
@@ -193,3 +218,128 @@ class SkillBreakdownRow(Struct):
     raw_score: float
     contribution: float
     rank: int
+
+
+class SkillHistoryPoint(Struct):
+    """One timestamped skill-score sample for `GET /skill/users/{id}/history`.
+
+    Attributes:
+        captured_at: When this score was recorded (the recompute's `captured_at`).
+        skill_score: The user's aggregate skill score at that instant.
+    """
+
+    captured_at: datetime
+    skill_score: float
+
+
+class SkillHistoryExtremum(Struct):
+    """A best- or lowest-score extremum within a history window.
+
+    Attributes:
+        score: The extremum score value (0 when the window has no points).
+        date: When the extremum occurred, or None when there are no points
+            (the empty / zero-summary shape, SPEC req 7).
+    """
+
+    score: float
+    date: datetime | None
+
+
+class SkillHistorySummary(Struct):
+    """Window summary stats for `GET /skill/users/{id}/history`.
+
+    Anchored on the earliest available record when the window predates it
+    (SPEC req 3).
+
+    Attributes:
+        point_change: First-to-last absolute score change over the window.
+        percent_change: First-to-last percent change over the window, or ``None`` when it is
+            undefined — i.e. the earliest in-window score is 0, so dividing by it would be a
+            div-by-zero (WR-05). ``None`` means "n/a" (render a dash), NOT 0%; a real 0% only
+            occurs when first and last are equal and non-zero.
+        best: Highest score point in the window (and when it occurred).
+        lowest: Lowest score point in the window (and when it occurred).
+        average: Mean score across the window's points.
+    """
+
+    point_change: float
+    percent_change: float | None
+    best: SkillHistoryExtremum
+    lowest: SkillHistoryExtremum
+    average: float
+
+
+class SkillHistoryResponse(Struct):
+    """Time-windowed score history for `GET /skill/users/{id}/history`.
+
+    Attributes:
+        user_id: Identifier of the user.
+        points: Ordered score samples within the requested window (empty when none).
+        summary: Window summary stats (zeroed when there are no points).
+    """
+
+    user_id: int
+    points: list[SkillHistoryPoint]
+    summary: SkillHistorySummary
+
+
+class SkillChangeFeedItem(Struct):
+    """One newest-first change-feed entry for `GET /skill/users/{id}/changes`.
+
+    Attributes:
+        change_id: Identifier of the change record (drill-down lookup key).
+        captured_at: When the change was recorded.
+        delta: Signed score change for this recompute (`new - previous`).
+        cause_category: The closed-set cause of this change.
+        description: Human-readable summary of the change cause.
+    """
+
+    change_id: int
+    captured_at: datetime
+    delta: float
+    cause_category: CauseCategory
+    description: str
+
+
+class SkillChangeCause(Struct):
+    """One per-map contributor in a change drill-down's `main_causes`.
+
+    Attributes:
+        map: Display name (or code) of the map whose contribution shifted.
+        reason: Human-readable reason for this map's impact.
+        impact: Signed decayed-contribution change for this map (`new - prev`).
+    """
+
+    map: str
+    reason: str
+    impact: float
+
+
+class SkillChangeDetailResponse(Struct):
+    """Change drill-down for `GET /skill/users/{id}/changes/{change_id}`.
+
+    The top-N (code-tunable, N=5) per-map contributors are listed individually in
+    `main_causes`; the remaining tail is rolled into `other_factors` so
+    `sum(main_causes.impact) + other_factors == delta` within 1e-6 (D-07).
+
+    Attributes:
+        change_id: Identifier of the change record.
+        captured_at: When the change was recorded.
+        previous_score: The user's score before this recompute.
+        new_score: The user's score after this recompute.
+        delta: Signed score change (`new_score - previous_score`).
+        percent_change: Percent change from `previous_score` to `new_score`.
+        cause_category: The closed-set cause of this change.
+        main_causes: Top-N per-map contributors by absolute impact.
+        other_factors: Summed impact of the remaining (untruncated) tail of maps.
+    """
+
+    change_id: int
+    captured_at: datetime
+    previous_score: float
+    new_score: float
+    delta: float
+    percent_change: float
+    cause_category: CauseCategory
+    main_causes: list[SkillChangeCause]
+    other_factors: float

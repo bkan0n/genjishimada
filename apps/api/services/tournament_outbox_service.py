@@ -16,11 +16,13 @@ harmless downstream. The edition END rollover is published separately and direct
 ``tournament:rollover:{edition_id}`` — the ``:start`` qualifier keeps the START claim
 from shadowing that same edition's END card (see :func:`_idempotency_key`).
 
-The reward/streak side effects (``award_cycle_end`` +
-``_reset_non_participant_streaks``) run once PER CHILD CYCLE — i.e. once per
-``event.results`` entry, keyed on ``entry.cycle_id`` (Pattern 4) — NOT once per
-edition. The XP grant ledger (``UNIQUE(cycle_id, user_id, reason)``) is the real
-double-grant guard, so a re-delivered rollover grants no duplicate XP.
+The reward side effects split by scope: placement (``award_cycle_placements``)
+runs once PER CHILD CYCLE, keyed on ``entry.cycle_id`` (Pattern 4); streaks
+(``award_edition_streaks``: advance, bonus, AND reset) run once PER EDITION over
+the union of every child cycle's participants, keyed on the edition's marker
+cycle. The XP grant ledger (``UNIQUE(cycle_id, user_id, reason)``) plus
+advance_streak's ``last_cycle_id IS DISTINCT FROM`` guard are the real double-grant
+guards, so a re-delivered rollover grants no duplicate XP and never re-advances.
 
 WHY THE GRANTS STAY INSIDE THE OUTBOX TRANSACTION (deliberate, not an oversight):
 the XP grant, the ``publish_message``, and ``mark_transition_published`` are
@@ -163,9 +165,10 @@ async def publish_pending_transitions(state: State) -> None:
     transaction. Publish precedes mark so a crash between them re-publishes on the
     next poll (at-least-once).
 
-    The reward side effects (``award_cycle_end`` + the non-participant streak
-    reset) run ONCE PER CHILD CYCLE — once per ``event.results`` entry, keyed on
-    ``entry.cycle_id`` (Pattern 4) — NOT once per edition.
+    The reward side effects split by scope: placement (``award_cycle_placements``)
+    runs ONCE PER CHILD CYCLE, keyed on ``entry.cycle_id`` (Pattern 4); streak
+    advance/bonus/reset (``award_edition_streaks``) runs ONCE PER EDITION over the
+    union of every child cycle's participants.
 
     Each ``publish_message`` writes a ``public.jobs`` row; a re-publish creates a
     new one (acceptable for an outbox/at-least-once design). Failures propagate:
@@ -214,20 +217,20 @@ async def publish_pending_transitions(state: State) -> None:
             routing_key, event = _build_event(row)
             edition_id = event.edition_id
 
-            # RWD-02/04/05: grant placement + streak rewards and reset
-            # non-participant streaks INSIDE this outbox transaction (Option A)
-            # before the publish/mark. These run ONCE PER CHILD CYCLE — once per
-            # results entry, keyed on entry.cycle_id (Pattern 4 — NOT re-keyed to
-            # the edition). award_cycle_end is replay-safe via the 08-01 ledger, so
-            # a re-delivered edition_rollover grants no duplicate XP. The
-            # non-idempotent xp.grant NOTIFICATIONS are collected and published only
-            # AFTER this transaction commits (CR-02): a rollback (e.g. a
-            # mark_transition_published failure) must not notify the bot about XP
-            # that rolled back and will be re-granted on the next poll.
+            # RWD-02/04/05: grant placement (per child cycle) + advance/reset
+            # streaks (ONCE per edition over the union of child-cycle participants)
+            # INSIDE this outbox transaction (Option A) before the publish/mark.
+            # Placement is keyed on entry.cycle_id; streaks on the edition's marker
+            # cycle. Both are replay-safe via the 08-01 ledger / advance_streak guard,
+            # so a re-delivered edition_rollover grants no duplicate XP and never
+            # double-advances. The non-idempotent xp.grant NOTIFICATIONS are
+            # collected and published only AFTER this transaction commits (CR-02): a
+            # rollback (e.g. a mark_transition_published failure) must not notify the
+            # bot about XP that rolled back and will be re-granted on the next poll.
             for entry in event.results:
-                pending_xp_events += await reward_service.award_cycle_end(entry, conn=conn)  # type: ignore[arg-type]
-                await _reset_non_participant_streaks(repository, entry, conn=conn)  # type: ignore[arg-type]
+                pending_xp_events += await reward_service.award_cycle_placements(entry, conn=conn)  # type: ignore[arg-type]
                 log.info("[✓] cycle-end rewards processed for cycle %s (edition %s)", entry.cycle_id, edition_id)
+            pending_xp_events += await reward_service.award_edition_streaks(list(event.results), conn=conn)  # type: ignore[arg-type]
 
             # ONE combined publish per row, then mark it published — all inside this
             # transaction (publish-before-mark = at-least-once). The edition-scoped
@@ -305,9 +308,9 @@ async def _write_drained_results_row(
     ``completed``.
 
     The XP grants are NOT run here: the deferred results ride an outbox row, and
-    the SAME poll loop runs the grant loop (``award_cycle_end`` +
-    ``_reset_non_participant_streaks``) when it drains that row (exactly like an
-    ``edition_rollover`` row). Granting here too would double-grant within one
+    the SAME poll loop runs the grant loop (``award_cycle_placements`` per cycle +
+    ``award_edition_streaks`` once per edition) when it drains that row (exactly like
+    an ``edition_rollover`` row). Granting here too would double-grant within one
     tick. Keeping the grant on the row-drain path preserves the load-bearing
     invariant (module docstring 21-38): grant + publish + mark are one transaction
     and re-poll re-attempts the whole unit, ledger-idempotent.
@@ -364,7 +367,7 @@ async def process_awaiting_results_editions(
       ``completed``.
 
     A re-poll after completion finds no ``awaiting_results`` edition, so nothing
-    re-grants; ``award_cycle_end`` is itself ledger-idempotent as a second guard.
+    re-grants; the grant loop is itself ledger-idempotent as a second guard.
 
     Args:
         conn: Active outbox connection inside an open transaction.
@@ -435,8 +438,8 @@ async def process_awaiting_results_editions(
             for child in children:
                 entry = await _build_cycle_completed_event(repository, child["id"], child["category_id"], conn=conn)
                 results.append(entry)
-                pending_xp_events += await reward_service.award_cycle_end(entry, conn=conn)  # type: ignore[arg-type]
-                await _reset_non_participant_streaks(repository, entry, conn=conn)  # type: ignore[arg-type]
+                pending_xp_events += await reward_service.award_cycle_placements(entry, conn=conn)  # type: ignore[arg-type]
+            pending_xp_events += await reward_service.award_edition_streaks(results, conn=conn)
             rollover = TournamentRolloverEvent(
                 edition_id=edition_id,
                 results=results,
@@ -464,33 +467,3 @@ async def process_awaiting_results_editions(
         log.debug("[!] edition %s still draining (%d pending)", edition_id, inflight)
 
     return pending_xp_events
-
-
-async def _reset_non_participant_streaks(
-    repository: TournamentRepository,
-    event: TournamentCycleCompletedEvent,
-    *,
-    conn: object,
-) -> None:
-    """Reset streaks to 0 for every tracked user who did not participate this cycle.
-
-    award_cycle_end advances streaks only for the finalizing cycle's participants
-    (it cannot see the full tracked-user set). This sweep — owned by 08-03 — closes
-    that gap: it reads the full streak roster via fetch_all_streak_user_ids (08-01)
-    and calls advance_streak(participated=False) for every tracked user NOT in
-    fetch_cycle_participants, resetting current_streak to 0 and stamping
-    last_cycle_id. The advance_streak ``last_cycle_id IS DISTINCT FROM`` guard keeps
-    the multi-category dedupe intact (a participant already stamped with this cycle
-    is never reset here because they are excluded as a participant).
-
-    Args:
-        repository: Tournament repository (streak roster + participants + advance).
-        event: Cycle-completed event carrying the finalizing cycle_id.
-        conn: Active outbox connection for transactional participation.
-    """
-    all_tracked = set(await repository.fetch_all_streak_user_ids(conn=conn))  # type: ignore[arg-type]
-    participants = set(await repository.fetch_cycle_participants(event.cycle_id, conn=conn))  # type: ignore[arg-type]
-    non_participants = all_tracked - participants
-    for user_id in non_participants:
-        await repository.advance_streak(user_id, event.cycle_id, False, conn=conn)  # type: ignore[arg-type]
-        log.debug("[!] streak reset to 0 for non-participant %s (cycle %s)", user_id, event.cycle_id)

@@ -144,7 +144,7 @@ class TestAwardCycleEndPlacement:
         mock_tournament_repo.fetch_cycle_participants.return_value = []
         event = _completed_event(standings=[_leaderboard_entry(1, 11), _leaderboard_entry(2, 22)])
 
-        await reward_service.award_cycle_end(event, conn=object())
+        await reward_service.award_cycle_placements(event, conn=object())
 
         amounts = {c.kwargs["user_id"]: c.kwargs["amount"] for c in mock_lootbox_service.grant_xp.call_args_list}
         assert amounts == {11: 100, 22: 50}
@@ -155,7 +155,7 @@ class TestAwardCycleEndPlacement:
         mock_tournament_repo.fetch_cycle_participants.return_value = []
         event = _completed_event(standings=[_leaderboard_entry(1, 11), _leaderboard_entry(1, 22)])
 
-        await reward_service.award_cycle_end(event, conn=object())
+        await reward_service.award_cycle_placements(event, conn=object())
 
         assert mock_lootbox_service.grant_xp.await_count == 2
         for call in mock_lootbox_service.grant_xp.call_args_list:
@@ -169,7 +169,7 @@ class TestAwardCycleEndPlacement:
         mock_tournament_repo.fetch_cycle_participants.return_value = []
         event = _completed_event(standings=[_leaderboard_entry(1, 11), _leaderboard_entry(5, 55)])
 
-        await reward_service.award_cycle_end(event, conn=object())
+        await reward_service.award_cycle_placements(event, conn=object())
 
         granted_users = [c.kwargs["user_id"] for c in mock_lootbox_service.grant_xp.call_args_list]
         assert granted_users == [11]
@@ -182,7 +182,7 @@ class TestAwardCycleEndPlacement:
         mock_tournament_repo.fetch_cycle_participants.return_value = []
         event = _completed_event(standings=[])
 
-        await reward_service.award_cycle_end(event, conn=object())
+        await reward_service.award_cycle_placements(event, conn=object())
 
         mock_lootbox_service.grant_xp.assert_not_awaited()
 
@@ -192,8 +192,8 @@ class TestAwardCycleEndPlacement:
 # ---------------------------------------------------------------------------
 
 
-class TestAwardCycleEndStreak:
-    """RWD-05: streak bonus granted exactly when new streak == configured threshold."""
+class TestAwardEditionStreak:
+    """RWD-05: per-edition streak — +1 per tournament; bonus at exact threshold."""
 
     async def test_streak_bonus_at_threshold(self, reward_service, mock_tournament_repo, mock_lootbox_service):
         """Bonus granted when advance_streak returns current_streak == threshold."""
@@ -201,10 +201,11 @@ class TestAwardCycleEndStreak:
             placement_xp=[], streak_xp=[{"threshold": 3, "xp": 50}]
         )
         mock_tournament_repo.fetch_cycle_participants.return_value = [77]
+        mock_tournament_repo.fetch_all_streak_user_ids.return_value = [77]
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 3}
         event = _completed_event(standings=[])
 
-        await reward_service.award_cycle_end(event, conn=object())
+        await reward_service.award_edition_streaks([event], conn=object())
 
         mock_lootbox_service.grant_xp.assert_awaited_once()
         kwargs = mock_lootbox_service.grant_xp.call_args.kwargs
@@ -219,10 +220,11 @@ class TestAwardCycleEndStreak:
             placement_xp=[], streak_xp=[{"threshold": 3, "xp": 50}]
         )
         mock_tournament_repo.fetch_cycle_participants.return_value = [77]
+        mock_tournament_repo.fetch_all_streak_user_ids.return_value = [77]
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 2}
         event = _completed_event(standings=[])
 
-        await reward_service.award_cycle_end(event, conn=object())
+        await reward_service.award_edition_streaks([event], conn=object())
 
         mock_lootbox_service.grant_xp.assert_not_awaited()
 
@@ -234,25 +236,62 @@ class TestAwardCycleEndStreak:
             placement_xp=[], streak_xp=[{"threshold": 3, "xp": 50}]
         )
         mock_tournament_repo.fetch_cycle_participants.return_value = [77]
+        mock_tournament_repo.fetch_all_streak_user_ids.return_value = [77]
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 4}
         event = _completed_event(standings=[])
 
-        await reward_service.award_cycle_end(event, conn=object())
+        await reward_service.award_edition_streaks([event], conn=object())
 
         mock_lootbox_service.grant_xp.assert_not_awaited()
 
-    async def test_streak_advances_all_participants(
+    async def test_streak_advances_union_once_per_user(
         self, reward_service, mock_tournament_repo, mock_lootbox_service
     ):
-        """advance_streak(participated=True) is called once per distinct participant."""
+        """Each distinct edition participant advances exactly once (participated=True)."""
         mock_tournament_repo.fetch_category.return_value = _category(placement_xp=[], streak_xp=[])
         mock_tournament_repo.fetch_cycle_participants.return_value = [1, 2, 3]
+        mock_tournament_repo.fetch_all_streak_user_ids.return_value = [1, 2, 3]
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 1}
         event = _completed_event(standings=[])
 
-        await reward_service.award_cycle_end(event, conn=object())
+        await reward_service.award_edition_streaks([event], conn=object())
 
         assert mock_tournament_repo.advance_streak.await_count == 3
         for call in mock_tournament_repo.advance_streak.call_args_list:
             # participated flag is True for every participant
             assert call.args[2] is True or call.kwargs.get("participated") is True
+
+    async def test_streak_union_dedupes_across_categories(
+        self, reward_service, mock_tournament_repo, mock_lootbox_service
+    ):
+        """A user who plays two categories of one edition advances ONCE, not per cycle."""
+        mock_tournament_repo.fetch_category.return_value = _category(placement_xp=[], streak_xp=[])
+        # Cycle 7 participants {1, 2}; cycle 8 participants {2, 3}. Union = {1, 2, 3}.
+        mock_tournament_repo.fetch_cycle_participants.side_effect = [[1, 2], [2, 3]]
+        mock_tournament_repo.fetch_all_streak_user_ids.return_value = [1, 2, 3]
+        mock_tournament_repo.advance_streak.return_value = {"current_streak": 1}
+        results = [_completed_event(cycle_id=7, category_id=1), _completed_event(cycle_id=8, category_id=2)]
+
+        await reward_service.award_edition_streaks(results, conn=object())
+
+        advanced = [c for c in mock_tournament_repo.advance_streak.call_args_list if c.args[2] is True]
+        assert len(advanced) == 3  # one advance per distinct user, not 4
+        # All advances key on the marker cycle (max child cycle id), never per-cycle.
+        assert {c.args[1] for c in advanced} == {8}
+
+    async def test_streak_resets_edition_non_participants_only(
+        self, reward_service, mock_tournament_repo, mock_lootbox_service
+    ):
+        """Tracked users who played NO child cycle reset to 0; sibling-category players do not."""
+        mock_tournament_repo.fetch_category.return_value = _category(placement_xp=[], streak_xp=[])
+        # Edition participants are {1, 2}; user 9 is tracked but didn't play -> reset.
+        mock_tournament_repo.fetch_cycle_participants.side_effect = [[1], [2]]
+        mock_tournament_repo.fetch_all_streak_user_ids.return_value = [1, 2, 9]
+        mock_tournament_repo.advance_streak.return_value = {"current_streak": 1}
+        results = [_completed_event(cycle_id=7, category_id=1), _completed_event(cycle_id=8, category_id=2)]
+
+        await reward_service.award_edition_streaks(results, conn=object())
+
+        resets = [c for c in mock_tournament_repo.advance_streak.call_args_list if c.args[2] is False]
+        assert [c.args[0] for c in resets] == [9]  # only the true non-participant
+        assert resets[0].args[1] == 8  # reset keyed on the marker cycle too
