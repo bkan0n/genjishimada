@@ -82,6 +82,19 @@ Design decisions that emerged while spiking. Non-negotiable for the real build.
   hardcoded `INSERT`s in `0001_init.sql`; a rebuild-from-migrations would silently drop every
   dynamically-added map (and its `maps.mastery` FK rows). The durable record cannot live only in the
   running DB. (Strategy validated in Spike 006.)
+- **Banner upload is one mixed multipart request; do NOT key the banner by lossy name-sanitization.**
+  Litestar decodes `Struct{name: str, banner: UploadFile}` from one `multipart/form-data` body and
+  keeps msgspec boundary validation (Spike 007). But the existing `get_map_banner()`-style
+  `re.sub(r"[^a-zA-Z0-9]","",name).lower()` key is lossy (drops accents — `Château Guillard` →
+  `chteauguillard`) and **collides** on punctuation-only-different names (`King's Row` and `Kings Row`
+  → same key, one overwrites the other). Real OW maps carry apostrophes/accents, so the dynamic-add
+  path must store the upload's URL in a new **`maps.names.banner_url` column** (key the object
+  uniquely — content digest / surrogate id / URL-encoded name), not rely on the derived stable key.
+- **A full-list map-names endpoint must be added.** No endpoint returns all map names today —
+  `/utilities/autocomplete/names` is search-required, `limit=5`, similarity-ordered. The moderator
+  `MapNameSelect` (the one bot spot still on `get_args(OverwatchMap)`) needs a new
+  `GET /utilities/map-names → list[str]` (`SELECT name FROM maps.names ORDER BY name`); its existing
+  25/page pagination is correct and stays unchanged (Spike 008).
 
 ---
 
@@ -96,4 +109,4 @@ Design decisions that emerged while spiking. Non-negotiable for the real build.
 | 006 | map-durability | standard | Maps added only to the live DB vanish on rebuild-from-migrations; prove a durable strategy (idempotent re-seed vs. auto-append migration vs. backup-as-truth) | ✓ VALIDATED | maps, migrations, durability |
 | 005 | upload-map-live | standard | Running server, no restart: POST name + banner → banner→MinIO, name→`maps.names`, all three surfaces (read / submission / bot autocomplete) update live | ✓ VALIDATED | maps, ui, s3, upload |
 | 007 | multipart-banner-upload | standard | Real Litestar endpoint decodes a **mixed** multipart body (map-name text field + banner `UploadFile`) together; banner stored under a stable `assets/map_banners/<sanitized>.png` key that `get_map_banner()` resolves; name `INSERT`ed — one request, no restart | ✓ VALIDATED | maps, litestar, multipart, s3 |
-| 008 | moderator-mapname-dropdown | standard | Moderator `MapNameSelect` sourced from the live DB (full sorted list, 25/page) instead of `get_args(OverwatchMap)`; picks up dynamically-added maps with no bot restart; confirms a full-list names endpoint must be added (autocomplete is search-only/limited) | PENDING | maps, bot, ui, pagination |
+| 008 | moderator-mapname-dropdown | standard | Moderator `MapNameSelect` sourced from the live DB (full sorted list, 25/page) instead of `get_args(OverwatchMap)`; picks up dynamically-added maps with no bot restart; confirms a full-list names endpoint must be added (autocomplete is search-only/limited) | ✓ VALIDATED | maps, bot, ui, pagination |
