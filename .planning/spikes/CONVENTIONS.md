@@ -51,6 +51,19 @@ unless the question requires otherwise.
   policies and CORS. (Spike 005.)
 - **Sync HTTP handler + asyncpg:** wrap each DB call in a `run_db(fn)` helper that does
   `asyncio.run(connect → fn → close)`. Fine for a low-traffic spike; no pool needed.
+- **Use the REAL framework when the question is about the framework's own behaviour.** The stdlib
+  `http.server` default is for spikes about *our* logic. When the spike asks "how does Litestar/X
+  decode/behave?" (Spike 007: mixed multipart `Struct + UploadFile`), run real Litestar
+  (`uv run --with 'litestar[standard]'` — ships uvicorn) and POST to it; empirical framework behaviour
+  beats reading docs. Document the deviation in the README. Everything else still follows conventions
+  (real PG/MinIO, throwaway schema, forensic log).
+- **Port the real code verbatim, swap only the variable under test.** Spike 008 copied
+  `MapNameSelect`'s pagination math line-for-line and changed only the *source* of `all_maps`
+  (Literal → DB). The spike then proves the swap is behaviour-preserving, and the diff for the real
+  build is unmistakable (one line).
+- **Probe real-shaped inputs, not toy ones.** The decisive Spike 007 finding (banner-key collision)
+  only surfaced by feeding *actual* map-name shapes — apostrophes (`King's Row`) and accents
+  (`Château Guillard`) — through the derivation. Always test with values that look like production data.
 
 ## Tools & Libraries
 
