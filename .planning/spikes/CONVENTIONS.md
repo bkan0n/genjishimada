@@ -12,6 +12,9 @@ unless the question requires otherwise.
 - **No ORM, raw SQL** — mirrors the real codebase. CTE + window-function style.
 - **UI spikes:** stdlib `http.server` (`ThreadingHTTPServer`) + a single vanilla-JS `index.html`.
   No framework, no build step, no npm. Port 8077.
+- **Object storage spikes:** real local MinIO from `docker-compose.local.yml` via `boto3`
+  (`endpoint_url=http://localhost:9000`, key/secret `genji` / `local_dev_password`, bucket
+  `genji-parkour-images`). Pulled transiently via `uv run --with boto3`.
 
 ## Structure
 
@@ -38,11 +41,25 @@ unless the question requires otherwise.
   by a live slider that lets a human watch farm profiles climb at gamma=0 and sink as it rises (003).
 - **Validate "feel" with a real domain expert**, not just self-assertion — ship a standalone bundle,
   collect their tuned weights, adopt as defaults.
+- **Throwaway-schema isolation for spikes that WRITE.** When a spike must mutate the DB (inserts,
+  ALTERs), never touch the real tables. Either (a) wrap everything in a transaction that is
+  rolled back (read-only-ish probes, FK tests), or (b) `CREATE SCHEMA spikeNNN`, seed it from the
+  real table (`INSERT ... SELECT FROM maps.names`), work there, and `DROP SCHEMA ... CASCADE` at the
+  end. Established in 004 (rollback) and 005/006 (throwaway schema).
+- **Proxy object storage through the spike server.** To render MinIO objects in the browser, add a
+  `GET /api/banner?...` endpoint that fetches via boto3 and streams the bytes — avoids public-bucket
+  policies and CORS. (Spike 005.)
+- **Sync HTTP handler + asyncpg:** wrap each DB call in a `run_db(fn)` helper that does
+  `asyncio.run(connect → fn → close)`. Fine for a low-traffic spike; no pool needed.
 
 ## Tools & Libraries
 
-- `asyncpg` (already a project dep) — DB reads. Pulled transiently via `uv run --with asyncpg`.
-- stdlib only for everything else (`http.server`, `json`, `dataclasses`, `webbrowser`, `zipfile`/`zip`).
+- `asyncpg` (already a project dep) — DB reads/writes. Pulled transiently via `uv run --with asyncpg`.
+- `msgspec` (project dep) — when a spike needs to reproduce request decode/validation behaviour.
+- `boto3` (project dep) — S3/MinIO object storage. `uv run --with boto3`.
+- stdlib only for everything else (`http.server`, `json`, `base64`, `difflib`, `dataclasses`,
+  `webbrowser`, `zipfile`/`zip`).
+- Compose multiple: `uv run --env-file .env.local --with asyncpg --with boto3 --with msgspec python …`
 - **Avoid:** ORMs, web frameworks, JS build tooling, Docker-for-spikes. None were needed.
 
 ## Gotchas
@@ -53,3 +70,11 @@ unless the question requires otherwise.
   prefer Python helpers or `uv run` scripts over shell command-substitution for DB work.
 - Map `time` values are not comparable across maps (different units/lengths). Always score on
   *relative* time (percentile vs the map's field), never raw seconds.
+- **A caught constraint error aborts the whole Postgres transaction** (`InFailedSQLTransactionError`
+  on the next statement). To catch-and-continue, wrap the fallible statement in a SAVEPOINT
+  (`async with conn.transaction():` nested). (Spike 004.)
+- **`asyncio.run()` cannot run inside an `atexit` handler** (`cannot schedule new futures after
+  interpreter shutdown`). Do spike DB teardown in `main()`'s `finally`, not `atexit`. (Spike 005.)
+- **`uv run python …` parent PID ≠ the python child.** To stop a backgrounded spike server
+  gracefully, SIGINT the listener PID (`lsof -ti tcp:8077`), not the `uv` wrapper PID — otherwise the
+  `finally`/cleanup never runs. Run with `python -u` so logs flush before exit.
