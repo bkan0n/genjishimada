@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Skill Routing
 
-- **Spike findings for genjishimada** (skill-score implementation patterns, scoring formula, input query, constraints, gotchas) → `Skill("spike-findings-genjishimada")`
+- **Spike findings for genjishimada** (skill-score: scoring formula, input query; dynamic map management: drop the OverwatchMap Literal for runtime validation, upload endpoint, durable seed; constraints, gotchas) → `Skill("spike-findings-genjishimada")`
 
 ## Project Overview
 
