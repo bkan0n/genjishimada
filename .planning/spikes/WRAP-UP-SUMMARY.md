@@ -4,6 +4,54 @@ Cumulative record of spike wrap-up sessions. Latest session at top.
 
 ---
 
+## Session 3 — Dynamic Map Management (banner upload + moderator dropdown)
+
+**Date:** 2026-06-25
+**Spikes processed:** 2 (007–008)
+**Feature areas:** Dynamic map management (appended to the existing reference)
+**Skill output:** `./.claude/skills/spike-findings-genjishimada/` (appended)
+
+### Processed Spikes
+
+| # | Name | Type | Verdict | Feature Area |
+|---|------|------|---------|--------------|
+| 007 | multipart-banner-upload | standard | VALIDATED | Dynamic map management |
+| 008 | moderator-mapname-dropdown | standard | VALIDATED | Dynamic map management |
+
+### Key Findings
+
+- **The mixed-multipart upload shape works on real Litestar.** A `msgspec.Struct` with `name: str` +
+  `banner: UploadFile`, taken as `Annotated[..., Body(media_type=RequestEncodingType.MULTI_PART)]`,
+  decodes both parts in one request — mirroring the existing `upload_image` route and native browser
+  `FormData`. **msgspec boundary validation survives the switch:** a missing `name` part still returns
+  a clean 400, so multipart complements (does not replace) the runtime `maps.names` check. (Spike 007)
+- **Decisive finding — the derived banner key is unsafe for arbitrary new maps.** The
+  `get_map_banner()`-style `re.sub(r"[^a-zA-Z0-9]","",name).lower()` is **lossy** (`Château Guillard`
+  → `chteauguillard`, the accent dropped) and **collides** (`King's Row` and `Kings Row` → `kingsrow`,
+  one overwrites the other). Real OW maps carry apostrophes/accents, so the dynamic-add path must store
+  the upload URL in a new **`maps.names.banner_url` column** and key the object uniquely (content
+  digest / surrogate id / URL-encoded name) — not reuse `upload_screenshot` (date+digest key, never
+  `get_map_banner()`-resolvable). Add a dedicated `upload_map_banner` method. Empty/blank name → 422.
+  (Spike 007)
+- **A full-list names endpoint must be added — it does not exist today.**
+  `/utilities/autocomplete/names` is search-required, `limit=5`, similarity-ordered, typed
+  `list[OverwatchMap]` — type-ahead only. Add `GET /utilities/map-names → list[str]`
+  (`SELECT name FROM maps.names ORDER BY name`) for the moderator dropdown. (Spike 008)
+- **The moderator `MapNameSelect` is the one bot spot the Literal removal silently breaks.** It builds
+  options from `get_args(OverwatchMap)`; after the Literal becomes `str` that returns nothing. Spike
+  008 ported the 25/page pagination math **verbatim**, swapping only the source of `all_maps`
+  (Literal → DB), and proved it behaviour-preserving: correct `total_pages`, live pickup of inserts
+  with no restart, a new page materialising past a 25-boundary. The only real work is sourcing the list
+  from the new endpoint and fetching it **once** at async view-build time (the `__init__` is sync and
+  can't `await`). `get_args(MapCategory)` in the same file is a different, legitimately-static Literal
+  and stays. (Spike 008)
+- **Conventions reinforced:** use the real framework when the question *is* the framework's behaviour
+  (Spike 007 ran real Litestar despite the stdlib-`http.server` default); port real code verbatim and
+  swap only the variable under test (Spike 008); probe real-shaped inputs — the banner-key collision
+  only surfaced by feeding actual apostrophe/accent map names. All captured in CONVENTIONS.md.
+
+---
+
 ## Session 2 — Dynamic Overwatch Map Management
 
 **Date:** 2026-06-25
