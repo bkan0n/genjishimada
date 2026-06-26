@@ -194,7 +194,7 @@ ROADMAP/Spike `banner_url`-column + backup-wired-export text.
 **Depends on:** None in the tournament chain — standalone post-v1.0 feature.
 Builds on existing `maps.names`, the movement-tech content CMS pattern
 (Controller → Service → Repository), and `ImageStorageService`.
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1** *(parallel — disjoint files)*
@@ -212,4 +212,4 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 15-05-PLAN.md — Bot: `api_service.get_all_map_names()` + DB-fed `MapNameSelect` swap (both construction sites) + pagination unit test + human-verify (REQ-09/10, D-02) [wave 4]
+- [x] 15-05-PLAN.md — Bot: `api_service.get_all_map_names()` + DB-fed `MapNameSelect` swap (both construction sites) + pagination unit test + human-verify (REQ-09/10, D-02) [wave 4]
