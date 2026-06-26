@@ -35,6 +35,24 @@ class AutocompleteRepository(BaseRepository):
             return None
         return [r["name"] for r in res]
 
+    async def fetch_all_map_names(self, *, conn: Connection | None = None) -> list[str]:
+        """Fetch ALL map names, sorted ascending (full list, no search/limit).
+
+        Backs `GET /utilities/map-names` (D-02). Distinct from
+        `get_similar_map_names`, which is similarity-ordered and limited for
+        type-ahead.
+
+        Args:
+            conn: Database connection.
+
+        Returns:
+            list[str]: Every `maps.names` row, alphabetically ordered.
+        """
+        _conn = self._get_connection(conn)
+        query = "SELECT name FROM maps.names ORDER BY name"
+        rows = await _conn.fetch(query)
+        return [r["name"] for r in rows]
+
     async def transform_map_names(self, search: str, *, conn: Connection | None = None) -> OverwatchMap | None:
         """Transform a map name into an OverwatchMap.
 
