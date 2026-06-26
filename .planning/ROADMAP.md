@@ -194,7 +194,7 @@ ROADMAP/Spike `banner_url`-column + backup-wired-export text.
 **Depends on:** None in the tournament chain — standalone post-v1.0 feature.
 Builds on existing `maps.names`, the movement-tech content CMS pattern
 (Controller → Service → Repository), and `ImageStorageService`.
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 **Wave 1** *(parallel — disjoint files)*
@@ -208,7 +208,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 15-04-PLAN.md — `POST /api/v3/content/maps` multipart create/replace-banner (content:admin) + `GET /utilities/map-names` full-list + integration tests (REQ-03/04/08/15, D-01/D-02/D-03) [wave 3]
+- [x] 15-04-PLAN.md — `POST /api/v3/content/maps` multipart create/replace-banner (content:admin) + `GET /utilities/map-names` full-list + integration tests (REQ-03/04/08/15, D-01/D-02/D-03) [wave 3]
 
 **Wave 4** *(blocked on Wave 3)*
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-25T00:00:00.000Z"
-last_activity: 2026-06-25
+last_updated: "2026-06-26T03:10:00.000Z"
+last_activity: 2026-06-26
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 26
-  completed_plans: 25
-  percent: 83
+  total_plans: 27
+  completed_plans: 26
+  percent: 81
 ---
 
 # Tournament System — State
@@ -73,6 +73,40 @@ Controller → Service → Repository pattern:
 
 ### Phase 15 Progress
 
+- **15-04 complete (2026-06-25):** Dynamic map management HTTP surface (Wave 3,
+  `depends_on: [15-03]`) — the reachable API. **Task 1 (`2457922`):** new sibling
+  `MapContentController(path=/content)` in `routes/v3/content.py` (NOT an extension of
+  `MovementTechController` at `/content/movement-tech`, which would resolve the wrong
+  URL) so `@post("/maps")` lands at EXACTLY `POST /api/v3/content/maps` (D-01),
+  auto-discovered by `routes/v3/__init__.py`. `create_map` decodes a mixed-multipart
+  `MapCreateMultipart{name: str, banner: UploadFile}` via `Body(MULTI_PART)`, is gated by
+  `opt={"required_scopes": {"content:admin"}}` (T-15-10), caps the body at
+  `request_max_body_size=1024*1024*25` (T-15-11), reads `await data.banner.read()`, calls
+  `MapContentService.create_map`, and returns `MapCreateResponse{name, inserted}` (201).
+  Re-post of an existing name → 201 `inserted: false` + banner overwrite at the same
+  stripped key (D-03 replace-banner, REQ-04). DI wires `provide_map_content_service` +
+  `provide_map_content_repository` + `provide_image_storage_service`; `from app import app`
+  route introspection confirms registration (the DI-graph assertion deferred from 15-03).
+  **Task 2 (`4a7f2a9`):** `AutocompleteController.list_all_map_names`
+  (`GET /api/v3/utilities/map-names` → `list[str]`, full list, no search/limit, D-02/REQ-08)
+  + `AutocompleteRepository.fetch_all_map_names` (`SELECT name FROM maps.names ORDER BY
+  name`); the search-required `/autocomplete/names` route is byte-unchanged. **Task 3
+  (`22eebd4`):** `test_map_content_integration.py` (create_map REQ-03, replace_banner REQ-04
+  same-stripped-key overwrite, appears_everywhere REQ-15 = full-list + `core.maps` FK
+  acceptance, empty-name 422, auth gate) + `test_autocomplete_integration.py::TestListAllMapNames`
+  (map_names full-list REQ-08, no-search contrast, auth); the image service is stubbed
+  (monkeypatch `__init__` + `upload_map_banner`) so the suite needs no MinIO/S3. **Deviations
+  (2 auto-fixed, both Rule 3 blocking):** (1) promoted `ImageStorageService` out of
+  `TYPE_CHECKING` in `map_content_service.py` — Litestar evaluates the 15-03 provider's
+  `image_svc: ImageStorageService` hint at registration, so the name had to be runtime-resolvable
+  or the whole app failed to construct (`NameError`); (2) stubbed `ImageStorageService.__init__`
+  in tests, not just `upload_map_banner`, because `__init__` builds a boto3 client that raises
+  `Invalid endpoint` without an S3 config. Verified: `just lint-api` clean (0 pyright errors),
+  targeted `-k "create_map or replace_banner or map_names or appears_everywhere"` 5 passed,
+  full `just test-api` green (49 passed, testmon-selected). **15-05 (bot DB-fed `MapNameSelect`
+  + `api_service.get_all_map_names()`) consumes the `GET /utilities/map-names` endpoint this
+  plan shipped.** **Phase 15: 4/5 plans complete.**
+
 - **15-03 complete (2026-06-25):** Map content service + storage layer (Wave 2,
   `depends_on: [15-01, 15-02]`). The service-layer runtime gate replacing the lost
   `OverwatchMap` Literal. **Task 1 (`b397311`→`63b7da3`):** `ImageStorageService.upload_map_banner`
@@ -82,6 +116,7 @@ Controller → Service → Repository pattern:
   must-revalidate` (replaceable, Open Q1) (D-05/REQ-07). **Task 2 (`5b1c13b`→`6856b7a`):**
   `MapContentRepository` — `insert_map_name` (`INSERT ... ON CONFLICT DO NOTHING RETURNING name`
   → `{name, inserted}`, idempotent re-insert returns `inserted=False`, 201+flag not 409, Open Q2)
+
   + `fetch_all_map_names` (sorted); `provide_map_content_repository`. **Task 3 (`0e7eb57`→`90d94e3`):**
   `MapContentService.create_map` — empty guard 422 (REQ-05) → stripped-key collision guard 422
   naming the existing map (REQ-06/D-07) → banner upload (REQ-07) → single-statement idempotent
@@ -98,6 +133,7 @@ Controller → Service → Repository pattern:
   Verified: `just lint-api` clean (0 pyright errors), `pytest -k "validate_map_name or empty_name
   or collision or upload_map_banner or insert or fetch_all"` **48 passed**, full suite (no testmon)
   **1942 passed / 2 skipped / 2 xfailed / 0 failures**. **15-04 must wire `Provide(provide_image_storage_service)`
+
   + `Provide(provide_map_content_repository)` in `MapContentController.dependencies`; the
   `from app import app` DI-graph resolution is asserted there.** **Phase 15: 3/5 plans complete.**
 
