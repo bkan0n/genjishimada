@@ -799,6 +799,22 @@ class APIService:
         params = {"search": search, "limit": limit}
         return self._request(r, params=params, response_model=list[OverwatchMap])
 
+    def get_all_map_names(self) -> Response[list[str]]:
+        """Fetch the full list of map names from the API.
+
+        Returns the complete, sorted set of map names (no search/limit), sourced
+        from the live ``maps.names`` table via ``GET /utilities/map-names``. Used to
+        DB-feed the moderator map-edit dropdown so newly-added maps appear with no
+        bot restart. Like the other client methods, this is a plain ``def`` that
+        returns the coroutine produced by the ``async def _request``; callers
+        ``await`` the result.
+
+        Returns:
+            Response[list[str]]: The full list of map names.
+        """
+        r = Route("GET", "/utilities/map-names")
+        return self._request(r, response_model=list[str])
+
     def transform_map_name(self, search: str) -> Response[OverwatchMap]:
         """Convert a string into a valid OverwatchMap.
 
