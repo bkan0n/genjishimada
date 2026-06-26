@@ -11,7 +11,7 @@ from typing import Any, get_args
 from uuid import uuid4
 
 import asyncpg
-from genjishimada_sdk.maps import MapCategory, OverwatchMap, PlaytestStatus
+from genjishimada_sdk.maps import MapCategory, PlaytestStatus
 import pytest
 from faker import Faker
 from pytest_databases.docker.postgres import PostgresService
@@ -19,6 +19,10 @@ from pytest_databases.docker.postgres import PostgresService
 from repository.maps_repository import MapsRepository
 from genjishimada_sdk import difficulties
 fake = Faker()
+
+# Phase 15 (REQ-01): OverwatchMap is now `str`; map names come from this seed subset
+# (real `maps.names` FK targets) instead of calling get_args on the old OverwatchMap Literal, which now returns ().
+_SEED_MAP_NAMES = ["Hanamura", "Busan", "Ilios", "Nepal", "Oasis"]
 
 pytestmark = [
     pytest.mark.domain_maps,
@@ -64,7 +68,7 @@ async def minimal_map_data(valid_map_code: str) -> dict[str, Any]:
     raw_min, raw_max = difficulties.DIFFICULTY_RANGES_ALL[diff]  # type: ignore
     return {
         "code": valid_map_code,
-        "map_name": fake.random_element(elements=get_args(OverwatchMap)),
+        "map_name": fake.random_element(elements=_SEED_MAP_NAMES),
         "category": fake.random_element(elements=get_args(MapCategory)),
         "checkpoints": fake.random_int(min=1, max=50),
         "official": fake.boolean(),

@@ -21,6 +21,12 @@ pytest_plugins = [
 
 fake = Faker()
 
+# Phase 15 (REQ-01): OverwatchMap is now `str`, so calling get_args on it returns `()`
+# and `fake.random_element([])` would raise. Map factories pick a name from this constant
+# instead — a subset of real `maps.names` seed rows (each a valid `core.maps.map_name` FK
+# target from migration 0001). MapCategory and the other Literals still use get_args().
+_SEED_MAP_NAMES = ["Hanamura", "Busan", "Ilios", "Nepal", "Oasis"]
+
 
 # ==============================================================================
 # PYTEST CONFIGURATION
@@ -341,10 +347,6 @@ async def create_test_map(
         medals: dict[str, float] | None = None,
         **overrides: Any,
     ) -> int:
-        from typing import get_args
-
-        from genjishimada_sdk.maps import MapCategory, OverwatchMap
-
         # Generate code if not provided
         if code is None:
             code = f"T{uuid4().hex[:5].upper()}"
