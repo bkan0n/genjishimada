@@ -58,7 +58,8 @@ class MapEditorCog(BaseCog):
         if not map_data:
             raise UserFacingError(f"Map `{code}` not found.")
 
-        view = MapEditWizardView(map_data, is_mod=False)
+        all_maps = await itx.client.api.get_all_map_names()
+        view = MapEditWizardView(map_data, is_mod=False, all_maps=all_maps)
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
