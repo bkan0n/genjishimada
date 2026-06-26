@@ -3,15 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: 2026-06-16T18:12:26.778Z
+last_updated: "2026-06-26T01:12:49.441Z"
 last_activity: 2026-06-16
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
   total_plans: 21
-  completed_plans: 39
-  percent: 100
-stopped_at: Milestone complete (Phase 14 was final phase)
+  completed_plans: 21
+  percent: 80
 ---
 
 # Tournament System — State
@@ -586,3 +585,4 @@ Controller → Service → Repository pattern:
 - Phase 12 added: Overhaul of tournaments
 - Phase 12.1 inserted after Phase 12: Verification-aware tournament results: defer edition results until pending verifications drain (URGENT)
 - Phase 14 added: Skill Score Dashboard — per-user skill-score snapshots, time-windowed line graph, summary stats, recent-changes feed with drill-down
+- 2026-06-25: Phase 15 added: Dynamic Overwatch map management — drop the OverwatchMap Literal for runtime validation against maps.names (+ FK backstop), mixed-multipart upload endpoint (banner_url column), full-list /utilities/map-names endpoint + DB-fed moderator dropdown, idempotent regenerated seed for durability. Standalone post-v1.0 feature grounded in spikes 004–008.
