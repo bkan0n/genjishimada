@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-26T02:32:53.164Z"
-last_activity: 2026-06-26
+last_updated: "2026-06-25T00:00:00.000Z"
+last_activity: 2026-06-25
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 26
-  completed_plans: 23
-  percent: 88
+  completed_plans: 25
+  percent: 83
 ---
 
 # Tournament System — State
@@ -72,6 +72,34 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 15 Progress
+
+- **15-03 complete (2026-06-25):** Map content service + storage layer (Wave 2,
+  `depends_on: [15-01, 15-02]`). The service-layer runtime gate replacing the lost
+  `OverwatchMap` Literal. **Task 1 (`b397311`→`63b7da3`):** `ImageStorageService.upload_map_banner`
+  keys the object at `assets/map_banners/{stripped}.png`, **byte-matching `get_map_banner()`**
+  (`re.sub(r"[^a-zA-Z0-9]","",name).lower().strip().replace(" ","")`), extension ALWAYS `.png`
+  regardless of source content-type (read path hardcodes it); CacheControl `max-age=3600,
+  must-revalidate` (replaceable, Open Q1) (D-05/REQ-07). **Task 2 (`5b1c13b`→`6856b7a`):**
+  `MapContentRepository` — `insert_map_name` (`INSERT ... ON CONFLICT DO NOTHING RETURNING name`
+  → `{name, inserted}`, idempotent re-insert returns `inserted=False`, 201+flag not 409, Open Q2)
+  + `fetch_all_map_names` (sorted); `provide_map_content_repository`. **Task 3 (`0e7eb57`→`90d94e3`):**
+  `MapContentService.create_map` — empty guard 422 (REQ-05) → stripped-key collision guard 422
+  naming the existing map (REQ-06/D-07) → banner upload (REQ-07) → single-statement idempotent
+  insert, **all fallible non-DB work before the insert, no txn wrap (RESEARCH Pitfall 1)**;
+  `validate_map_name` (REQ-02, consumer-side) returns known or 422s unknown with a
+  `difflib.get_close_matches` "did you mean"; `provide_map_content_service` **declares**
+  `image_svc` dep (controller wires it in 15-04). **Deviations (2 auto-fixed):** (Rule 3) real-DB
+  repository tests relocated to `tests/repository/maps/test_map_content_repository.py` —
+  `tests/services/conftest.py` no-ops `setup_test_db` so real-DB tests can't run there; service
+  tests use a mocked repo + mocked image svc. (Rule 1) plan's accent-collision premise corrected:
+  `get_map_banner` **removes** accents (`â`→∅), not folds, so `Château Guillard`→`chteauguillard`
+  ≠ `Chateau Guillard`→`chateauguillard` — NOT a collision; real collisions are punctuation/
+  whitespace that strip identically (`King's Row`/`Kings Row`, `Lijiang Tower`/`Lijiang  Tower`).
+  Verified: `just lint-api` clean (0 pyright errors), `pytest -k "validate_map_name or empty_name
+  or collision or upload_map_banner or insert or fetch_all"` **48 passed**, full suite (no testmon)
+  **1942 passed / 2 skipped / 2 xfailed / 0 failures**. **15-04 must wire `Provide(provide_image_storage_service)`
+  + `Provide(provide_map_content_repository)` in `MapContentController.dependencies`; the
+  `from app import app` DI-graph resolution is asserted there.** **Phase 15: 3/5 plans complete.**
 
 - **15-02 complete (2026-06-26):** Map-names durability & integrity (Wave 1).
   **Task 1 (`f84d193`):** rewrote the `maps.names` seed in `0001_init.sql` from 63
