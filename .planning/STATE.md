@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-26T02:18:03.608Z"
+last_updated: "2026-06-26T02:32:53.164Z"
 last_activity: 2026-06-26
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 26
-  completed_plans: 22
-  percent: 80
+  completed_plans: 23
+  percent: 88
 ---
 
 # Tournament System — State
@@ -72,6 +72,32 @@ Controller → Service → Repository pattern:
 ## Accumulated Context
 
 ### Phase 15 Progress
+
+- **15-02 complete (2026-06-26):** Map-names durability & integrity (Wave 1).
+  **Task 1 (`f84d193`):** rewrote the `maps.names` seed in `0001_init.sql` from 63
+  plain `INSERT`s into ONE `INSERT ... VALUES (...) ON CONFLICT DO NOTHING;` block of
+  all **70** reconciled names (63 live + 7 phantom); machine-verified the 70 equal
+  `(old 63) ∪ (7 phantom)` — exact, no drift. Fixes the latent duplicate-PK replay bug
+  and gives fresh-bootstrap parity (REQ-12/D-09/D-08). No `banner_url` column (D-06).
+  **Task 2 (`d040e2e`):** `0032_dynamic_map_management.sql` — load-bearing sequence:
+  reconcile 7 phantoms `ON CONFLICT` → `DO $$ ... RAISE EXCEPTION` orphan pre-flight
+  (fails LOUD, never silently) → `ALTER TABLE core.maps ADD CONSTRAINT
+  maps_map_name_names_fk FOREIGN KEY (map_name) REFERENCES maps.names (name) ON UPDATE
+  CASCADE`, mirroring `maps.mastery` (REQ-11/D-11). Plus `scripts/export_map_names_seed.py`
+  — standalone on-demand `asyncpg` seed export, unreferenced by `apps/`, off the request
+  path, not in the nightly backup (REQ-14/D-10). **Task 3 (`46ca360`):** 5 schema tests
+  (`test_map_management_schema.py`): `phantom_maps`, `seed_idempotent`, and three
+  `map_name_fk` (FK exists + orphan→`ForeignKeyViolationError` + known-name succeeds);
+  the 15-VALIDATION `-k` filters resolve. **Deviations (3 auto-fixed):** (Rule 3) made
+  `0003_stadium_maps_1.sql` idempotent — it pre-seeded 6 phantoms with plain INSERTs and
+  the new 0001 seed made a fresh apply raise duplicate-PK at 0003, blocking all migrations;
+  (Rule 1) seeded the fictional `map_name`s into `maps.names` before the two `core.maps`
+  inserts in `test_tournaments_schema.py` that the new FK correctly rejected (4 tests);
+  (Rule 1) `confupdtype == b'c'` (asyncpg returns Postgres `"char"` as a byte). Verified:
+  `just lint-api` clean, full API suite `pytest -n 4 --no-testmon` **1921 passed / 2
+  skipped / 2 xfailed / 0 failures**; `grep -c banner_url 0001_init.sql` == 0. **The FK
+  backstops the runtime `maps.names` validation 15-03 adds to replace the lost enum gate.**
+  **Phase 15: 2/5 plans complete.**
 
 - **15-01 complete (2026-06-26):** Dropped the `OverwatchMap` Literal (Wave 1 root,
   `depends_on: []`). **Task 1 (`f8e7b24`):** replaced the closed 70-entry
