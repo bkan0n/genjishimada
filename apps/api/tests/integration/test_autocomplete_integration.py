@@ -49,6 +49,39 @@ class TestAutocompleteMapNames:
         assert response.status_code == 400
 
 
+class TestListAllMapNames:
+    """GET /api/v3/utilities/map-names (full list, no search/limit)"""
+
+    async def test_map_names(self, test_client):
+        """REQ-08/D-02: returns 200 with a sorted list[str] of all maps.names, no search required."""
+        response = await test_client.get("/api/v3/utilities/map-names")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        # Seed migration 0001 populates maps.names, so the full list is non-empty.
+        assert len(data) > 0
+        for item in data:
+            assert isinstance(item, str)
+        # Returned alphabetically sorted (ORDER BY name), no search/limit applied.
+        assert data == sorted(data)
+
+    async def test_no_search_param_required(self, test_client):
+        """Contrast with /autocomplete/names: the full-list route needs NO search param."""
+        full_list = await test_client.get("/api/v3/utilities/map-names")
+        assert full_list.status_code == 200
+
+        # The search autocomplete route still REQUIRES search (400 without it) — unchanged.
+        search_route = await test_client.get("/api/v3/utilities/autocomplete/names")
+        assert search_route.status_code == 400
+
+    async def test_requires_auth(self, unauthenticated_client):
+        """Full-list map names without auth returns 401 (inherits global auth)."""
+        response = await unauthenticated_client.get("/api/v3/utilities/map-names")
+
+        assert response.status_code == 401
+
+
 class TestTransformMapName:
     """GET /api/v3/utilities/transformers/names"""
 
