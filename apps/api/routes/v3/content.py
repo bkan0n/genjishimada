@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 import msgspec
 from litestar import Controller, delete, get, post, put
+from litestar.datastructures import UploadFile
 from litestar.di import Provide
+from litestar.enums import RequestEncodingType
 from litestar.exceptions import HTTPException
+from litestar.params import Body
 from litestar.status_codes import (
     HTTP_201_CREATED,
     HTTP_204_NO_CONTENT,
@@ -18,6 +21,7 @@ from litestar.status_codes import (
 
 from repository.content_repository import provide_content_repository
 from repository.exceptions import ForeignKeyViolationError
+from repository.map_content_repository import provide_map_content_repository
 from services.content_service import ContentService, provide_content_service
 from services.exceptions.content import (
     CategoryNotFoundError,
@@ -25,6 +29,8 @@ from services.exceptions.content import (
     DuplicateNameError,
     TechniqueNotFoundError,
 )
+from services.image_storage_service import provide_image_storage_service
+from services.map_content_service import MapContentService, provide_map_content_service
 
 # ---------------------------------------------------------------------------
 # Request structs
@@ -170,6 +176,36 @@ class TechniqueListResponse(msgspec.Struct, frozen=True):
     """Response envelope for the techniques list endpoint."""
 
     techniques: list[TechniqueOut]
+
+
+# ---------------------------------------------------------------------------
+# Map content (dynamic Overwatch map management) structs
+# ---------------------------------------------------------------------------
+
+
+class MapCreateMultipart(msgspec.Struct):
+    """Mixed-multipart body for creating an Overwatch map (name + required banner).
+
+    Decoded from a single ``multipart/form-data`` request (D-04): ``name`` is a
+    text field and ``banner`` is the uploaded image file. msgspec still enforces
+    field presence/type at the request boundary even though the map-name Literal
+    was removed (value validation now lives in the service).
+    """
+
+    name: str
+    banner: UploadFile
+
+
+class MapCreateResponse(msgspec.Struct, frozen=True):
+    """Response body for the create-map endpoint.
+
+    ``inserted`` reflects the idempotent ``ON CONFLICT DO NOTHING`` insert: it is
+    ``True`` when a brand-new name was added and ``False`` when the name already
+    existed (re-create / replace-banner path, D-03). Both cases return 201.
+    """
+
+    name: str
+    inserted: bool
 
 
 # ---------------------------------------------------------------------------
@@ -677,3 +713,58 @@ class MovementTechController(Controller):
         except TechniqueNotFoundError as e:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         return TechniqueListResponse(techniques=msgspec.convert(rows, list[TechniqueOut]))
+
+
+class MapContentController(Controller):
+    """Endpoints for dynamic Overwatch map management (create + replace-banner).
+
+    A SIBLING of ``MovementTechController`` under the same content CMS namespace.
+    Its ``path`` is ``/content`` (NOT ``/content/movement-tech``), so ``@post("/maps")``
+    resolves to EXACTLY ``POST /api/v3/content/maps`` (D-01). Auto-discovered by
+    ``routes/v3/__init__.py`` because it is a ``Controller`` subclass defined here.
+    """
+
+    path = "/content"
+    tags = ["Content"]
+    dependencies = {
+        "map_content_repo": Provide(provide_map_content_repository),
+        "image_svc": Provide(provide_image_storage_service),
+        "map_content_service": Provide(provide_map_content_service),
+    }
+
+    @post(
+        path="/maps",
+        status_code=HTTP_201_CREATED,
+        summary="Create Overwatch Map",
+        description=(
+            "Create a new Overwatch map from a mixed-multipart request (name + required "
+            "banner). Idempotent: re-posting an existing name returns 201 with "
+            "`inserted: false` and overwrites the banner at the same stripped key "
+            "(replace-banner). Requires the `content:admin` scope."
+        ),
+        opt={"required_scopes": {"content:admin"}},
+        request_max_body_size=1024 * 1024 * 25,  # 25 MB — matches upload_image
+    )
+    async def create_map(
+        self,
+        data: Annotated[MapCreateMultipart, Body(media_type=RequestEncodingType.MULTI_PART)],
+        map_content_service: MapContentService,
+    ) -> MapCreateResponse:
+        """Create (or replace-banner for) an Overwatch map.
+
+        Args:
+            data: Mixed-multipart body with the map name and banner file.
+            map_content_service: Map content service dependency (resolves its own
+                ``image_svc`` and ``map_content_repo``).
+
+        Returns:
+            MapCreateResponse: The map name and whether a new row was inserted.
+
+        Raises:
+            CustomHTTPException: 422 if the name is empty/blank or its stripped key
+                collides with a different existing map (raised inside the service).
+        """
+        content = await data.banner.read()
+        content_type = data.banner.content_type or "image/png"
+        row = await map_content_service.create_map(data.name, content, content_type)
+        return msgspec.convert(row, MapCreateResponse)

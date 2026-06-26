@@ -17,14 +17,13 @@ from litestar.datastructures import State
 from litestar.status_codes import HTTP_422_UNPROCESSABLE_ENTITY
 
 from repository.map_content_repository import MapContentRepository
+from services.image_storage_service import ImageStorageService
 from utilities.errors import CustomHTTPException
 
 from .base import BaseService
 
 if TYPE_CHECKING:
     from asyncpg import Pool
-
-    from services.image_storage_service import ImageStorageService
 
 
 def _strip_key(name: str) -> str:
