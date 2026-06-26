@@ -75,16 +75,37 @@ class TestCreateMapCollision:
         repo.insert_map_name.assert_not_called()
         image_svc.upload_map_banner.assert_not_called()
 
-    async def test_accent_collision_raises_422(self, service):
+    async def test_whitespace_collision_raises_422(self, service):
+        """Extra internal whitespace strips to the same key -> 422.
+
+        NB: the plan's example (accented 'Château' vs ASCII 'Chateau') is NOT a
+        collision — get_map_banner's `[^a-zA-Z0-9]` REMOVES the accented 'â'
+        entirely (it is not ASCII-folded to 'a'), so 'Château Guillard' ->
+        'chteauguillard' while 'Chateau Guillard' -> 'chateauguillard' (different
+        keys, no overwrite risk). A real collision needs punctuation/whitespace
+        that strips identically, e.g. 'Lijiang Tower' vs 'Lijiang  Tower'.
+        """
         svc, repo, image_svc = service
-        repo.fetch_all_map_names.return_value = ["Château Guillard", "Hanamura"]
+        repo.fetch_all_map_names.return_value = ["Lijiang Tower", "Hanamura"]
 
         with pytest.raises(CustomHTTPException) as exc:
-            await svc.create_map("Chateau Guillard", b"banner", "image/png")
+            await svc.create_map("Lijiang  Tower", b"banner", "image/png")
 
         assert exc.value.status_code == HTTP_422_UNPROCESSABLE_ENTITY
-        assert "Château Guillard" in exc.value.detail
+        assert "Lijiang Tower" in exc.value.detail
         repo.insert_map_name.assert_not_called()
+
+    async def test_accented_vs_ascii_is_not_a_collision(self, service):
+        """Accent stripping (not folding) means accented + ASCII names do NOT collide."""
+        svc, repo, image_svc = service
+        repo.fetch_all_map_names.return_value = ["Château Guillard", "Hanamura"]
+        repo.insert_map_name.return_value = {"name": "Chateau Guillard", "inserted": True}
+
+        # Different stripped keys (chteauguillard vs chateauguillard) -> allowed.
+        result = await svc.create_map("Chateau Guillard", b"banner", "image/png")
+
+        assert result == {"name": "Chateau Guillard", "inserted": True}
+        image_svc.upload_map_banner.assert_called_once()
 
     async def test_same_name_is_not_a_collision(self, service):
         """An exact-match existing name is idempotent insert, NOT a 422 collision."""
