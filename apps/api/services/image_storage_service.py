@@ -3,6 +3,7 @@ import hashlib
 import io
 import logging
 import os
+import re
 
 import boto3
 from botocore.config import Config
@@ -61,6 +62,42 @@ class ImageStorageService:
             ExtraArgs={
                 "ContentType": content_type,
                 "CacheControl": "public, max-age=31536000, immutable",
+            },
+        )
+        return f"{S3_PUBLIC_URL}/{key}"
+
+    def upload_map_banner(self, content: bytes, content_type: str, map_name: str) -> str:
+        """Upload a map banner keyed by the stripped map name.
+
+        The object key MUST match ``get_map_banner()``'s read path byte-for-byte
+        (``libs/sdk/.../maps.py``): ``assets/map_banners/{stripped}.png`` where
+        ``stripped = re.sub(r"[^a-zA-Z0-9]", "", map_name).lower().strip().replace(" ", "")``.
+        The extension is ALWAYS ``.png`` regardless of the source content-type because
+        the read path hardcodes ``.png`` — uploading a webp/jpeg under a different
+        extension would produce an unresolvable banner URL.
+
+        Args:
+            content (bytes): The banner image bytes.
+            content_type (str): The source content type (passed through as ``ContentType``).
+            map_name (str): The map name; reduced to the stripped key for the object path.
+
+        Returns:
+            str: The public CDN URL of the stored banner.
+        """
+        stripped = re.sub(r"[^a-zA-Z0-9]", "", map_name).lower().strip().replace(" ", "")
+        key = f"assets/map_banners/{stripped}.png"
+
+        fileobj = io.BytesIO(content)
+        self.client.upload_fileobj(
+            fileobj,
+            S3_BUCKET_NAME,
+            key,
+            ExtraArgs={
+                "ContentType": content_type,
+                # Banners are replaceable (unlike immutable screenshots), so use a
+                # shorter max-age and allow revalidation. Replace-banner CDN
+                # staleness is accepted as eventual (Open Q1).
+                "CacheControl": "public, max-age=3600, must-revalidate",
             },
         )
         return f"{S3_PUBLIC_URL}/{key}"

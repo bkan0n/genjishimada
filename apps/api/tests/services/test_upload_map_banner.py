@@ -71,8 +71,10 @@ class TestUploadMapBanner:
         call_args = mock_s3.upload_fileobj.call_args
         key = call_args[0][2]
 
-        # NB: accents are stripped by [^a-zA-Z0-9] -> "chateauguillard"
-        assert key == "assets/map_banners/chateauguillard.png"
+        # NB: the accented "â" is REMOVED entirely by [^a-zA-Z0-9] (it is not
+        # ASCII-folded to "a"), so "Château Guillard" -> "chteauguillard". This is
+        # exactly what get_map_banner() produces, so banner reads still resolve.
+        assert key == "assets/map_banners/chteauguillard.png"
         # And it MUST equal get_map_banner's path component byte-for-byte.
         assert key == f"assets/{_banner_path_component(name)}"
 
