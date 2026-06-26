@@ -194,12 +194,12 @@ ROADMAP/Spike `banner_url`-column + backup-wired-export text.
 **Depends on:** None in the tournament chain — standalone post-v1.0 feature.
 Builds on existing `maps.names`, the movement-tech content CMS pattern
 (Controller → Service → Repository), and `ImageStorageService`.
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1** *(parallel — disjoint files)*
 
-- [ ] 15-01-PLAN.md — Flip OverwatchMap Literal → str (SDK) + repair all 9 `get_args(OverwatchMap)` test fixtures co-wave (REQ-01, D-04) [wave 1]
+- [x] 15-01-PLAN.md — Flip OverwatchMap Literal → str (SDK) + repair all 9 `get_args(OverwatchMap)` test fixtures co-wave (REQ-01, D-04) [wave 1]
 - [ ] 15-02-PLAN.md — Migration 0032 (phantom reconcile + orphan pre-flight + FK) + idempotent 0001 seed rewrite + standalone export script + schema tests (REQ-11/12/13/14, D-08/09/10/11) [wave 1]
 
 **Wave 2** *(blocked on Wave 1)*

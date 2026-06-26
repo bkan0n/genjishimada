@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-06-26T02:07:45.426Z"
+last_updated: "2026-06-26T02:18:03.608Z"
 last_activity: 2026-06-26
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 26
-  completed_plans: 21
+  completed_plans: 22
   percent: 80
 ---
 
@@ -70,6 +70,34 @@ Controller → Service → Repository pattern:
 - PROJECT.md originally listed manual cycle transitions as Out of Scope; quick-task work intentionally amends that for bootstrap + test tooling only.
 
 ## Accumulated Context
+
+### Phase 15 Progress
+
+- **15-01 complete (2026-06-26):** Dropped the `OverwatchMap` Literal (Wave 1 root,
+  `depends_on: []`). **Task 1 (`f8e7b24`):** replaced the closed 70-entry
+  `OverwatchMap = Literal[...]` in `libs/sdk/.../maps.py` with a single
+  `OverwatchMap = str` (REQ-01 / D-04 request-side) — the map-name validation gate is
+  off the msgspec decode boundary; msgspec still enforces presence/type (missing/non-string
+  name → 400). `OverwatchMap` is kept defined + in `__all__`, so the ~27 consumers compile
+  untouched (Assumption A1). `MapCategory`/`Mechanics`/`Restrictions`/`Tags`/`DifficultyAll`
+  stay strict Literals (`get_args(MapCategory)` still len 3). **Task 2 (`56e5ce5`):** repaired
+  all **9** `get_args(OverwatchMap)` fixture sites (`conftest.py` + 8 test files) — after the
+  flip `get_args(str)` returns `()` and `fake.random_element([])` raises, blocking the whole
+  suite, so the two changes are inseparable. Each site now draws from a module-level
+  `_SEED_MAP_NAMES = ["Hanamura","Busan","Ilios","Nepal","Oasis"]` (real `maps.names`
+  FK targets confirmed in `0001_init.sql`); dropped the now-unused `OverwatchMap` imports,
+  kept `get_args` for `MapCategory`/`PlaytestStatus`; removed the dead factory imports in
+  `conftest.py` (it already used string literals). The RESEARCH "14 files" was an overcount —
+  live grep confirmed 8 test files + conftest = 9 sites, zero under `apps/bot/tests/`.
+  **The 70 verbatim map names are captured in `15-01-SUMMARY.md` for plan 15-02's seed rewrite**
+  (incl. the 7 phantom maps). Verified: `just lint-sdk` clean, `just lint-api` clean, full
+  `just test-api` **1722 passed / 2 skipped / 2 xfailed / 0 failures**; zero
+  `get_args(OverwatchMap)` references remain (backstop grep returns 0 files — the explanatory
+  comments were reworded to avoid the literal pattern). No deviations.
+  **Dependency note (T-15-01):** this plan ONLY relaxes the type — the lost enum gate MUST be
+  replaced by a service-layer runtime check against `maps.names` (15-03, REQ-02) + the
+  `core.maps.map_name` FK backstop (15-02, REQ-11) before the surface ships. **Phase 15: 1/5
+  plans complete.**
 
 ### Phase 14 Progress
 
