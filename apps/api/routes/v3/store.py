@@ -22,6 +22,7 @@ from genjishimada_sdk.store import (
     PurchaseHistoryResponse,
     QuestConfigResponse,
     QuestHistoryResponse,
+    QuestPoolResponse,
     RotationResponse,
     StoreConfigResponse,
     UpdateConfigRequest,
@@ -381,6 +382,22 @@ class StoreController(litestar.Controller):
                 status_code=HTTP_404_NOT_FOUND,
                 detail=str(e),
             ) from e
+
+    @litestar.get(
+        path="/admin/quests",
+        summary="List All Quests (Admin)",
+        description="List all global quest-pool entries for the admin pool browser.",
+        opt={"required_scopes": {"store:admin"}},
+    )
+    async def list_quests(
+        self,
+        store_service: StoreService,
+        is_active: bool | None = None,
+        difficulty: str | None = None,
+        q: str | None = None,
+    ) -> list[QuestPoolResponse]:
+        """List all global quest-pool entries, optionally filtered."""
+        return await store_service.get_all_quests(is_active=is_active, difficulty=difficulty, name_query=q)
 
     @litestar.get(
         path="/admin/quests/config",
