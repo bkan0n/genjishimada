@@ -26,6 +26,7 @@ from genjishimada_sdk.store import (
     QuestConfigResponse,
     QuestHistoryItem,
     QuestHistoryResponse,
+    QuestPoolResponse,
     QuestProgress,
     QuestResponse,
     QuestSummary,
@@ -435,6 +436,30 @@ class StoreService(BaseService):
         """
         total, purchases = await self._store_repo.fetch_user_purchases(user_id, limit, offset)
         return msgspec.convert({"total": total, "purchases": purchases}, PurchaseHistoryResponse)
+
+    async def get_all_quests(
+        self,
+        *,
+        is_active: bool | None = None,
+        difficulty: str | None = None,
+        name_query: str | None = None,
+    ) -> list[QuestPoolResponse]:
+        """List all global quest-pool entries, optionally filtered.
+
+        Args:
+            is_active: When set, filter by active state.
+            difficulty: When set, filter by difficulty.
+            name_query: When truthy, case-insensitive partial name match.
+
+        Returns:
+            All matching global quest-pool entries.
+        """
+        rows = await self._store_repo.get_all_quests(
+            is_active=is_active,
+            difficulty=difficulty,
+            name_query=name_query,
+        )
+        return msgspec.convert(rows, list[QuestPoolResponse])
 
     async def get_user_quests(self, user_id: int) -> UserQuestsResponse:
         """Get active quests for a user with progress and summary."""

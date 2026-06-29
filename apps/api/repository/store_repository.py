@@ -1060,6 +1060,51 @@ class StoreRepository(BaseRepository):
         await _conn.execute(query, *values)
         return list(updates.keys())
 
+    async def get_all_quests(
+        self,
+        *,
+        is_active: bool | None = None,
+        difficulty: str | None = None,
+        name_query: str | None = None,
+        conn: Connection | None = None,
+    ) -> list[dict]:
+        """Fetch all global quest-pool entries, optionally filtered.
+
+        Args:
+            is_active: When set, filter rows by ``is_active``.
+            difficulty: When set, filter rows by ``difficulty``.
+            name_query: When truthy, case-insensitive partial match on ``name``.
+            conn: Optional connection to participate in an existing transaction.
+
+        Returns:
+            All matching global quest rows as dicts, ordered by ``id``.
+        """
+        _conn = self._get_connection(conn)
+        where_clauses = ["quest_type = 'global'"]
+        values: list[object] = []
+        idx = 1
+        if is_active is not None:
+            where_clauses.append(f"is_active = ${idx}")
+            values.append(is_active)
+            idx += 1
+        if difficulty is not None:
+            where_clauses.append(f"difficulty = ${idx}")
+            values.append(difficulty)
+            idx += 1
+        if name_query:
+            where_clauses.append(f"name ILIKE ${idx}")
+            values.append(f"%{name_query}%")
+            idx += 1
+        query = f"""
+            SELECT id, name, description, quest_type, difficulty,
+                   coin_reward, xp_reward, requirements, is_active, created_at
+            FROM store.quests
+            WHERE {" AND ".join(where_clauses)}
+            ORDER BY id
+        """
+        rows = await _conn.fetch(query, *values)
+        return [dict(row) for row in rows]
+
 
 async def provide_store_repository(state: State) -> StoreRepository:
     """Provide StoreRepository DI.
