@@ -102,3 +102,44 @@ class TestMapSearchSQLSpecBuilder:
         assert "DESC" in query_result.query
         assert "code" in query_result.query.lower() or "m.code" in query_result.query
         assert "ASC" in query_result.query
+
+    def test_build_query_with_map_id(self):
+        """Test that map_id filter produces an m.id equality clause and bypasses CTE filters."""
+        filters = MapSearchFilters(
+            map_id=123,
+            page_size=10,
+            page_number=1,
+        )
+        builder = MapSearchSQLSpecBuilder(filters)
+        query_result = builder.build()
+
+        # The m.id equality clause is emitted (SQLSpec quotes identifiers as
+        # "m"."id") and 123 is bound as a positional arg.
+        assert "m.id" in query_result.query or '"m"."id"' in query_result.query
+        assert 123 in query_result.args
+
+        # map_id set + a CTE-triggering filter (tags) with force_filters left false
+        # must skip CTE-based filters, exactly like code-search.
+        filters_with_tags = MapSearchFilters(
+            map_id=123,
+            tags=["Other Heroes"],
+            page_size=10,
+            page_number=1,
+        )
+        # tag_match_0 is the tag-FILTER CTE marker (the maps.tag_links base JOIN is
+        # always present, so it is not a reliable CTE-filter discriminator).
+        builder_with_tags = MapSearchSQLSpecBuilder(filters_with_tags)
+        result_with_tags = builder_with_tags.build()
+        assert "tag_match_0" not in result_with_tags.query
+
+        # force_filters=True overrides the bypass: the tag CTE marker reappears.
+        filters_forced = MapSearchFilters(
+            map_id=123,
+            tags=["Other Heroes"],
+            force_filters=True,
+            page_size=10,
+            page_number=1,
+        )
+        builder_forced = MapSearchSQLSpecBuilder(filters_forced)
+        result_forced = builder_forced.build()
+        assert "tag_match_0" in result_forced.query
