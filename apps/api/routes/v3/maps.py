@@ -101,6 +101,7 @@ class MapsController(Controller):
         self,
         maps_service: MapsService,
         code: Annotated[OverwatchCode | None, Parameter(description="Filter by map code")] = None,
+        map_id: Annotated[int | None, Parameter(description="Filter by map ID")] = None,
         playtest_status: Annotated[PlaytestStatus | None, Parameter(description="Filter by playtest status")] = None,
         archived: Annotated[bool | None, Parameter(description="Filter by archived status")] = None,
         hidden: Annotated[bool | None, Parameter(description="Filter by hidden status")] = None,
@@ -151,6 +152,7 @@ class MapsController(Controller):
         try:
             filters = MapSearchFilters(
                 code=code,
+                map_id=map_id,
                 playtesting=playtest_status,
                 archived=archived,
                 hidden=hidden,

@@ -412,6 +412,7 @@ class APIService:
         official: bool | None = None,
         playtest_thread_id: int | None = None,
         code: OverwatchCode | None = None,
+        map_id: int | None = None,
         category: list[MapCategory] | None = None,
         map_name: list[OverwatchMap] | None = None,
         creator_ids: list[int] | None = None,
@@ -440,6 +441,7 @@ class APIService:
             official (bool | None): Filter by official tag.
             playtest_thread_id (int | None): Match by playtest thread ID.
             code (OverwatchCode | None): Filter by map code.
+            map_id (int | None): Filter by map ID.
             category (list[MapCategory] | None): Filter by map categories.
             map_name (list[OverwatchMap] | None): Filter by map names.
             creator_ids (list[int] | None): Filter by creator user IDs.
@@ -470,6 +472,7 @@ class APIService:
             "official": official,
             "playtest_thread_id": playtest_thread_id,
             "code": code,
+            "map_id": map_id,
             "category": category,
             "map_name": map_name,
             "creator_ids": creator_ids,
