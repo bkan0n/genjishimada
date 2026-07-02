@@ -55,15 +55,17 @@ class HousekeepingCog(BaseCog):
     ) -> None:
         """Set up Honeypot command."""
         view = ui.LayoutView()
-        view.add_item(ui.TextDisplay("# DO NOT SEND MESSAGES IN THIS CHANNEL"))
-        view.add_item(ui.Separator())
-        view.add_item(
+        container = ui.Container()
+        container.add_item(ui.TextDisplay("# DO NOT SEND MESSAGES IN THIS CHANNEL"))
+        container.add_item(ui.Separator())
+        container.add_item(
             ui.TextDisplay(
                 "This channel is used to catch spam bots. "
                 "Any messages sent here will result in a ban and the messages from the last 7 days will be deleted."
                 "\nThis is not a joke. Do not try it."
             )
         )
+        view.add_item(container)
         await ctx.send(view=view)
         await ctx.message.delete()
 
