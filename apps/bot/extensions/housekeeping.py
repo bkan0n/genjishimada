@@ -61,8 +61,9 @@ class HousekeepingCog(BaseCog):
         container.add_item(
             ui.TextDisplay(
                 "This channel is used to catch spam bots. "
-                "Any messages sent here will result in a ban and the messages from the last 7 days will be deleted."
-                "\nThis is not a joke. Do not try it."
+                "Any messages sent here will result in a **ban**"
+                " and your messages from the last 7 days will be deleted."
+                "\n\nThis is not a joke. Do not try it."
             )
         )
         view.add_item(container)
