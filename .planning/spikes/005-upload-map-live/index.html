@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spike 005 — upload-map-live</title>
+<style>
+  :root { --bg:#0e0f1a; --panel:#181a2b; --panel2:#1f2238; --line:#2c2f4a;
+          --txt:#e7e9f5; --mut:#9aa0c4; --acc:#8b5cf6; --ok:#34d399; --bad:#f87171; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto;
+         background:var(--bg); color:var(--txt); padding:22px; }
+  h1 { font-size:18px; margin:0 0 2px; }
+  .sub { color:var(--mut); font-size:12.5px; margin-bottom:18px; }
+  .grid { display:grid; gap:14px; grid-template-columns:1fr 1fr 1fr; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card h2 { font-size:13px; margin:0 0 10px; letter-spacing:.04em; text-transform:uppercase; color:var(--mut); }
+  .full { grid-column:1 / -1; }
+  input, button { font:inherit; }
+  input[type=text] { width:100%; padding:9px 11px; background:var(--panel2); border:1px solid var(--line);
+                     border-radius:8px; color:var(--txt); }
+  input[type=file] { color:var(--mut); font-size:12px; margin-top:8px; width:100%; }
+  button { margin-top:10px; padding:9px 14px; background:var(--acc); border:none; border-radius:8px;
+           color:#fff; cursor:pointer; font-weight:600; }
+  button:hover { filter:brightness(1.1); }
+  .msg { margin-top:10px; font-size:13px; min-height:18px; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  .maps { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; max-height:300px; overflow:auto; }
+  .map { border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--panel2); position:relative; }
+  .map.new { outline:2px solid var(--acc); animation:pop 1.4s ease; }
+  @keyframes pop { 0%{transform:scale(.9);opacity:.4} 100%{transform:scale(1);opacity:1} }
+  .map .ph, .map img { width:100%; height:62px; object-fit:cover; display:block; background:#0a0b14; }
+  .map .ph { display:flex; align-items:center; justify-content:center; color:#41466e; font-size:11px; }
+  .map .nm { padding:6px 8px; font-size:11.5px; }
+  .badge { position:absolute; top:5px; right:5px; font-size:9px; padding:2px 5px; border-radius:6px;
+           background:rgba(0,0,0,.6); color:var(--ok); }
+  .ac { margin-top:8px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); max-height:170px; overflow:auto; }
+  .ac div { padding:6px 10px; border-bottom:1px solid var(--line); font-size:12.5px; }
+  .ac div:last-child { border-bottom:none; }
+  .ac mark { background:var(--acc); color:#fff; border-radius:3px; padding:0 1px; }
+  #log { font-family:ui-monospace,Menlo,monospace; font-size:11.5px; max-height:170px; overflow:auto;
+         background:#0a0b14; border:1px solid var(--line); border-radius:8px; padding:10px; }
+  #log .t { color:var(--mut); } #log .c { color:var(--acc); }
+  .count { color:var(--mut); font-size:11.5px; font-weight:400; }
+</style>
+</head>
+<body>
+  <h1>Spike 005 — upload a map, watch it appear everywhere</h1>
+  <div class="sub">One endpoint writes name→DB + banner→MinIO. All three surfaces read live from <code>maps.names</code> — no restart. (Throwaway <code>spike005</code> schema; real data untouched.)</div>
+
+  <div class="grid">
+    <div class="card full">
+      <h2>① Admin — add a map (the endpoint)</h2>
+      <input id="name" type="text" placeholder="New map name, e.g. Throne of Anubis" />
+      <input id="banner" type="file" accept="image/*" />
+      <button onclick="addMap()">Upload map</button>
+      <div id="addMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>② Website read — browse <span id="cnt" class="count"></span></h2>
+      <input id="filter" type="text" placeholder="filter…" oninput="renderMaps()" />
+      <div id="maps" class="maps" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>③ Map submission (runtime validate)</h2>
+      <input id="sub" type="text" placeholder="map_name to submit" />
+      <button onclick="submitMap()">Submit</button>
+      <div id="subMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>④ Bot slash-command autocomplete</h2>
+      <input id="acq" type="text" placeholder="type to autocomplete…" oninput="ac()" />
+      <div id="acList" class="ac"></div>
+    </div>
+
+    <div class="card full">
+      <h2>Forensic event log</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+
+<script>
+let MAPS = [], lastNew = null;
+const $ = id => document.getElementById(id);
+
+async function loadMaps() {
+  MAPS = await (await fetch('/api/maps')).json();
+  $('cnt').textContent = `(${MAPS.length})`;
+  renderMaps();
+}
+function renderMaps() {
+  const f = $('filter').value.toLowerCase();
+  const list = MAPS.filter(m => m.name.toLowerCase().includes(f));
+  $('maps').innerHTML = list.map(m => {
+    const isNew = m.name === lastNew ? ' new' : '';
+    const img = m.has_banner
+      ? `<img src="/api/banner?name=${encodeURIComponent(m.name)}&t=${Date.now()}" />`
+      : `<div class="ph">default banner</div>`;
+    const badge = m.has_banner ? `<span class="badge">uploaded ✓</span>` : '';
+    return `<div class="map${isNew}">${img}${badge}<div class="nm">${m.name}</div></div>`;
+  }).join('');
+}
+async function addMap() {
+  const name = $('name').value.trim();
+  if (!name) { $('addMsg').innerHTML = '<span class="bad">enter a name</span>'; return; }
+  const file = $('banner').files[0];
+  let banner = null, ct = null;
+  if (file) { banner = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); }); ct = file.type; }
+  $('addMsg').textContent = 'uploading…';
+  const res = await (await fetch('/api/maps', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name, banner, content_type: ct})})).json();
+  if (res.ok) {
+    lastNew = res.name;
+    $('addMsg').innerHTML = `<span class="ok">✓ '${res.name}' added`
+      + `${res.was_new ? '' : ' (already existed)'}`
+      + `${res.banner_uploaded ? ' + banner stored in MinIO' : ''}. It now appears in ②③④ live.</span>`;
+    $('name').value = ''; $('banner').value = '';
+    await loadMaps(); refreshLog();
+  } else { $('addMsg').innerHTML = `<span class="bad">${res.error}</span>`; }
+}
+async function submitMap() {
+  const map_name = $('sub').value.trim();
+  const res = await (await fetch('/api/submit', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({map_name})})).json();
+  $('subMsg').innerHTML = `<span class="${res.ok?'ok':'bad'}">${res.ok?'✓':'✗'} ${res.message}</span>`;
+  refreshLog();
+}
+let acTimer;
+function ac() {
+  clearTimeout(acTimer);
+  acTimer = setTimeout(async () => {
+    const q = $('acq').value;
+    const res = await (await fetch('/api/autocomplete?q=' + encodeURIComponent(q))).json();
+    const re = q ? new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','ig') : null;
+    $('acList').innerHTML = res.map(n => `<div>${re ? n.replace(re,'<mark>$1</mark>') : n}</div>`).join('')
+      || '<div style="color:var(--mut)">no matches</div>';
+    refreshLog();
+  }, 120);
+}
+async function refreshLog() {
+  const ev = await (await fetch('/api/log')).json();
+  $('log').innerHTML = ev.slice().reverse().map(e =>
+    `<div><span class="t">${e.ts.slice(11,23)}</span> <span class="c">[${e.category}]</span> ${e.message}</div>`).join('');
+}
+loadMaps(); refreshLog(); setInterval(refreshLog, 2500);
+</script>
+</body>
+</html>

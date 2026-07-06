@@ -132,6 +132,10 @@ class TestTournamentsSchema:
                     ON CONFLICT (id) DO NOTHING
                     """
                 )
+                # Seed the map name so the core.maps.map_name FK (migration 0032) is satisfied.
+                await conn.execute(
+                    "INSERT INTO maps.names (name) VALUES ('Tournament Test Map') ON CONFLICT DO NOTHING"
+                )
                 # Create a test map for the cycles FK
                 map_id = await conn.fetchval(
                     """
@@ -768,6 +772,10 @@ class TestTournamentsVerificationAwareResults:
     async def _seed_cycle(cls, conn, label: str) -> tuple[int, int, int]:
         """Seed a user, map, category, edition, and cycle. Returns (cycle_id, user_id, map_id)."""
         user_id = await cls._make_user(conn, 0)
+        # Seed the map name so the core.maps.map_name FK (migration 0032) is satisfied.
+        await conn.execute(
+            "INSERT INTO maps.names (name) VALUES ('Verification Aware Test Map') ON CONFLICT DO NOTHING"
+        )
         map_id = await conn.fetchval(
             """
             INSERT INTO core.maps (code, map_name, category, checkpoints, difficulty, raw_difficulty)

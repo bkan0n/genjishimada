@@ -633,3 +633,18 @@ class QuestResponse(Struct):
     completed: bool
     claimed: bool
     bounty_type: str | None = None
+
+
+class QuestPoolResponse(Struct):
+    """A global quest pool entry (admin pool browser)."""
+
+    id: int
+    name: str
+    description: str
+    quest_type: str
+    difficulty: str
+    coin_reward: int
+    xp_reward: int
+    requirements: dict
+    is_active: bool
+    created_at: dt.datetime

@@ -139,19 +139,28 @@ class TestSearchMaps:
     async def test_map_name_filter(self, test_client, create_test_map, unique_map_code):
         """Filter by Overwatch map name."""
         code = unique_map_code
-        await create_test_map(code=code, map_name="Nepal")
+        # Use map names that no other fixture produces: "Hanamura" is the
+        # create_test_map default and the random factories draw from a small
+        # _SEED_MAP_NAMES pool (Hanamura/Busan/Ilios/Nepal/Oasis). Filtering on a
+        # name those factories never emit keeps the result set to just this map,
+        # so the assertion is deterministic no matter how many maps accumulate in
+        # the shared session DB (page_size can't paginate the target away). Both
+        # names are valid maps.names FK targets.
+        await create_test_map(code=code, map_name="Circuit Royal")
 
         response = await test_client.get(
             "/api/v3/maps/",
-            params={"map_name": ["Nepal", "Hanamura"], "page_size": 100},
+            params={"map_name": ["Circuit Royal", "Antarctic Peninsula"], "page_size": 100},
         )
 
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
-        # Verify Nepal map is in results
+        # The created map filters back deterministically (unique name → no pagination risk).
         codes = [m["code"] for m in data]
         assert code in codes
+        # Every returned row honours the filter (filter-correctness, not just presence).
+        assert all(m["map_name"] in {"Circuit Royal", "Antarctic Peninsula"} for m in data)
 
     async def test_difficulty_exact_filter(self, test_client, create_test_map, unique_map_code):
         """Filter by exact difficulty."""

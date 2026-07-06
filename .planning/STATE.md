@@ -3,20 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: 2026-06-16T18:12:26.778Z
-last_activity: 2026-06-16
+last_updated: "2026-06-26T03:01:08.149Z"
+last_activity: 2026-06-26
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 21
-  completed_plans: 39
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 26
+  completed_plans: 26
   percent: 100
-stopped_at: Milestone complete (Phase 14 was final phase)
 ---
 
 # Tournament System — State
 
-Last activity: 2026-06-16
+Last activity: 2026-06-29 - Completed quick task 260629-caz: Add GET /store/admin/quests list-all endpoint
 
 ## Current Status
 
@@ -64,6 +63,8 @@ Controller → Service → Repository pattern:
 | 260612-vvm | Exclude `.planning` from local/editor Ruff + BasedPyright runs: added `".planning"` to `[tool.ruff].extend-exclude` and `[tool.basedpyright].exclude` in `pyproject.toml`. CI `lint.yml` already excluded it via explicit path args, so no workflow change. Config-only. | 2026-06-13 | 11faf57 | [260612-vvm-add-planning-to-ruff-and-basedpyright-ex](./quick/260612-vvm-add-planning-to-ruff-and-basedpyright-ex/) |
 | 260612-vtt | Expand the skill TIER system from 7→8 named tiers plus Unranked, add string tier names, and rename leaderboard columns (percentile derivation + scorer byte-for-byte unchanged). Migration `0028` (edit-in-place) now seeds **7** strictly-increasing percentiles `[0.50,0.70,0.85,0.93,0.97,0.99,0.995]` so `width_bucket+1` mints integer tiers **1..8** (tier 0 = Unranked; zero score / empty boundaries). Single source-of-truth `SKILL_TIER_NAMES` (0=Unranked,1=Bronze,2=Silver,3=Gold,4=Emerald,5=Diamond,6=Ascendant,7=Elite,8=Champion) + `skill_tier_name()` helper added to `libs/sdk/skill.py`, reused by both the community leaderboard service and the skill summary path. New `skill_tier_name` field exposed on `SkillSummaryResponse` and `CommunityLeaderboardResponse`. Leaderboard columns renamed `tier`→`skill_tier`, `percentile`→`skill_percentile` (SQL aliases + struct; `skill_score` unchanged). Validation bumped to **exactly 7** (`_TIER_PERCENTILE_COUNT`, `InvalidPercentilesError`, SDK docstrings). Tests updated for 8 tiers, Unranked-at-0, renamed columns, name mapping. `just lint-sdk`/`lint-api` clean; full `just test-api` green. | 2026-06-13 | b0a0b0e | [260612-vtt-expand-the-skill-score-tier-system-from-](./quick/260612-vtt-expand-the-skill-score-tier-system-from-/) |
 | 260613-rh2 | Mirror the four leaderboard skill fields onto the per-user rank card endpoint (`GET /api/v3/users/{user_id}/rank-card/`): `skill_score`, `skill_tier`, `skill_percentile`, `skill_tier_name` added to `RankCardResponse` (SDK, matching `CommunityLeaderboardResponse` names/types). New `RankCardRepository.fetch_skill_summary` ports the leaderboard's `skill.snapshot` + `skill.tier_config` projection to a single user, anchored on `core.users` so a snapshot-less user yields `0.0/0/0.0`; `rank_card_service` fetches it in the existing acquire block and name-maps the tier via the SDK `skill_tier_name()` single source of truth. Integration tests cover field presence/types + zero-eligible → `Unranked`. `just lint-sdk`/`lint-api` clean; `pytest -k GetRankCard` 4 passed. | 2026-06-14 | e1757cc | [260613-rh2-add-skill-score-column-to-get-rank-card-](./quick/260613-rh2-add-skill-score-column-to-get-rank-card-/) |
+| 260629-btl | Add a `map_id` filter to the maps search endpoint (`GET /api/v3/maps`), mirroring the existing `code` filter exactly: locks to one map by integer primary key and bypasses CTE-based filters (mechanics/restrictions/tags/creators/quality/medals/completions) unless `force_filters` is set. `map_id: int \| None` field on `MapSearchFilters`; `_build_ctes` guard extended to `(code or map_id) and not force_filters`; `query.where_eq("m.id", ...)` clause; `map_id` query param threaded through the API route and the bot `get_maps` client. TDD: new `test_build_query_with_map_id` pins the m.id clause, arg binding, CTE bypass, and `force_filters` override. `just lint-api`/`just lint-bot` clean; full `just test-api` green (1951 passed). | 2026-06-29 | da3e7c2 | [260629-btl-add-map-id-filter-to-maps-search-endpoin](./quick/260629-btl-add-map-id-filter-to-maps-search-endpoin/) |
+| 260629-caz | Add `GET /api/v3/store/admin/quests` (scope `store:admin`) — a list-all endpoint for the global quest pool, turning the Global-quests sub-tab into a real pool browser/editor (previously globals were only reachable by inspecting a user's rotation). Bare JSON array, no pagination (~19 seeded rows); optional filters `is_active`, `difficulty`, `q` (case-insensitive name `ILIKE`); locked to `quest_type = 'global'` (bounties have no pool row and stay reachable via the user-progress flow). Four layers: `QuestPoolResponse` SDK struct (id/name/description/quest_type/difficulty/coin_reward/xp_reward/requirements/is_active/created_at), `StoreRepository.get_all_quests` (dynamic WHERE over bound `$N` params), `StoreService.get_all_quests` (`msgspec.convert`), `list_quests` route handler. TDD: new `TestGetAllQuests` repository tests (global-only count, difficulty filter, is_active filter, case-insensitive name search). No bot client (store admin endpoints are web-dashboard-only). `just lint-api`/`just lint-sdk` clean; `pytest -m domain_store` 81 passed. | 2026-06-29 | b0054b3 | [260629-caz-add-get-store-admin-quests-list-all-endp](./quick/260629-caz-add-get-store-admin-quests-list-all-endp/) |
 
 ## Blockers/Concerns
 
@@ -71,6 +72,155 @@ Controller → Service → Repository pattern:
 - PROJECT.md originally listed manual cycle transitions as Out of Scope; quick-task work intentionally amends that for bootstrap + test tooling only.
 
 ## Accumulated Context
+
+### Phase 15 Progress
+
+- **15-05 autonomous tasks complete — human-verify pending (2026-06-25):** Bot DB-fed
+  `MapNameSelect` (Wave 4, `depends_on: [15-04]`) — the bot consumer of the
+  `GET /utilities/map-names` endpoint. **Task 1 (`63092a9`):** added
+  `api_service.get_all_map_names() -> Response[list[str]]` — a PLAIN `def` returning
+  `self._request(Route("GET", "/utilities/map-names"), response_model=list[str])`,
+  mirroring the sync-def-returns-coroutine shape of `get_autocomplete_map_names` (callers
+  `await`); REQ-09 unit test pins the Route + `response_model` (mocks `_request`, no live
+  HTTP). **Task 2 (`7790327`):** DB-fed `MapNameSelect.__init__(current, all_maps, page=0)`
+  — `list(get_args(OverwatchMap))` (now `()` post-15-01) replaced by an injected
+  `all_maps: list[str]` = `sorted(all_maps)`; slice/`total_pages`/`SelectOption` math
+  **byte-for-byte** (Spike 008). The full list is fetched ONCE in the async callback and
+  threaded `MapEditWizardView.__init__ -> self._all_maps -> rebuild() -> MapNameSelect`
+  at BOTH sites: `moderator.py` `/map edit` (`is_mod=True`) + `map_editor.py`
+  `/map edit-request` (`is_mod=False`), each `await get_all_map_names()`; never awaited
+  inside the sync `ui.Select.__init__`. `get_args(MapCategory)`/`Mechanics`/`Restrictions`/
+  `Tags` untouched; `OverwatchMap` import KEPT (still the `current` annotation/`cast`,
+  `=str`). **Task 3 (`8371bdd`):** REQ-10 pagination unit test (63-name DB-fed list:
+  page-0 first 25 sorted, last-page remainder 13, `total_pages == ceil(n/25)`, `current`
+  default, empty-list -> 0/0 no crash). **Bot test harness note:** bot has NO
+  conftest/harness; both tests are SELF-CONTAINED (mocks/synthetic + in-file `sys.path`
+  bootstrap of the bot root) and are NOT run by `just test-api` — verify via
+  `cd apps/bot && uv run pytest tests/test_api_service.py tests/test_map_name_select.py -x`
+  (8 passed). `just lint-bot` clean (0 pyright). No deviations. **Task 4 is a
+  `checkpoint:human-verify` — NOT auto-passed:** the live discord.py UI has no test
+  harness, so "a new map added via `POST /api/v3/content/maps` appears in the `/map edit`
+  Map-Name dropdown with no bot restart, paginating 25/page" must be verified manually
+  (steps in `15-05-SUMMARY.md`). **Phase 15: code/tests done across all 5 plans; awaiting
+  the 15-05 human-verify approval.**
+
+- **15-04 complete (2026-06-25):** Dynamic map management HTTP surface (Wave 3,
+  `depends_on: [15-03]`) — the reachable API. **Task 1 (`2457922`):** new sibling
+  `MapContentController(path=/content)` in `routes/v3/content.py` (NOT an extension of
+  `MovementTechController` at `/content/movement-tech`, which would resolve the wrong
+  URL) so `@post("/maps")` lands at EXACTLY `POST /api/v3/content/maps` (D-01),
+  auto-discovered by `routes/v3/__init__.py`. `create_map` decodes a mixed-multipart
+  `MapCreateMultipart{name: str, banner: UploadFile}` via `Body(MULTI_PART)`, is gated by
+  `opt={"required_scopes": {"content:admin"}}` (T-15-10), caps the body at
+  `request_max_body_size=1024*1024*25` (T-15-11), reads `await data.banner.read()`, calls
+  `MapContentService.create_map`, and returns `MapCreateResponse{name, inserted}` (201).
+  Re-post of an existing name → 201 `inserted: false` + banner overwrite at the same
+  stripped key (D-03 replace-banner, REQ-04). DI wires `provide_map_content_service` +
+  `provide_map_content_repository` + `provide_image_storage_service`; `from app import app`
+  route introspection confirms registration (the DI-graph assertion deferred from 15-03).
+  **Task 2 (`4a7f2a9`):** `AutocompleteController.list_all_map_names`
+  (`GET /api/v3/utilities/map-names` → `list[str]`, full list, no search/limit, D-02/REQ-08)
+
+  + `AutocompleteRepository.fetch_all_map_names` (`SELECT name FROM maps.names ORDER BY
+  name`); the search-required `/autocomplete/names` route is byte-unchanged. **Task 3
+  (`22eebd4`):** `test_map_content_integration.py` (create_map REQ-03, replace_banner REQ-04
+  same-stripped-key overwrite, appears_everywhere REQ-15 = full-list + `core.maps` FK
+  acceptance, empty-name 422, auth gate) + `test_autocomplete_integration.py::TestListAllMapNames`
+  (map_names full-list REQ-08, no-search contrast, auth); the image service is stubbed
+  (monkeypatch `__init__` + `upload_map_banner`) so the suite needs no MinIO/S3. **Deviations
+  (2 auto-fixed, both Rule 3 blocking):** (1) promoted `ImageStorageService` out of
+  `TYPE_CHECKING` in `map_content_service.py` — Litestar evaluates the 15-03 provider's
+  `image_svc: ImageStorageService` hint at registration, so the name had to be runtime-resolvable
+  or the whole app failed to construct (`NameError`); (2) stubbed `ImageStorageService.__init__`
+  in tests, not just `upload_map_banner`, because `__init__` builds a boto3 client that raises
+  `Invalid endpoint` without an S3 config. Verified: `just lint-api` clean (0 pyright errors),
+  targeted `-k "create_map or replace_banner or map_names or appears_everywhere"` 5 passed,
+  full `just test-api` green (49 passed, testmon-selected). **15-05 (bot DB-fed `MapNameSelect`
+
+  + `api_service.get_all_map_names()`) consumes the `GET /utilities/map-names` endpoint this
+  plan shipped.** **Phase 15: 4/5 plans complete.**
+
+- **15-03 complete (2026-06-25):** Map content service + storage layer (Wave 2,
+  `depends_on: [15-01, 15-02]`). The service-layer runtime gate replacing the lost
+  `OverwatchMap` Literal. **Task 1 (`b397311`→`63b7da3`):** `ImageStorageService.upload_map_banner`
+  keys the object at `assets/map_banners/{stripped}.png`, **byte-matching `get_map_banner()`**
+  (`re.sub(r"[^a-zA-Z0-9]","",name).lower().strip().replace(" ","")`), extension ALWAYS `.png`
+  regardless of source content-type (read path hardcodes it); CacheControl `max-age=3600,
+  must-revalidate` (replaceable, Open Q1) (D-05/REQ-07). **Task 2 (`5b1c13b`→`6856b7a`):**
+  `MapContentRepository` — `insert_map_name` (`INSERT ... ON CONFLICT DO NOTHING RETURNING name`
+  → `{name, inserted}`, idempotent re-insert returns `inserted=False`, 201+flag not 409, Open Q2)
+
+  + `fetch_all_map_names` (sorted); `provide_map_content_repository`. **Task 3 (`0e7eb57`→`90d94e3`):**
+  `MapContentService.create_map` — empty guard 422 (REQ-05) → stripped-key collision guard 422
+  naming the existing map (REQ-06/D-07) → banner upload (REQ-07) → single-statement idempotent
+  insert, **all fallible non-DB work before the insert, no txn wrap (RESEARCH Pitfall 1)**;
+  `validate_map_name` (REQ-02, consumer-side) returns known or 422s unknown with a
+  `difflib.get_close_matches` "did you mean"; `provide_map_content_service` **declares**
+  `image_svc` dep (controller wires it in 15-04). **Deviations (2 auto-fixed):** (Rule 3) real-DB
+  repository tests relocated to `tests/repository/maps/test_map_content_repository.py` —
+  `tests/services/conftest.py` no-ops `setup_test_db` so real-DB tests can't run there; service
+  tests use a mocked repo + mocked image svc. (Rule 1) plan's accent-collision premise corrected:
+  `get_map_banner` **removes** accents (`â`→∅), not folds, so `Château Guillard`→`chteauguillard`
+  ≠ `Chateau Guillard`→`chateauguillard` — NOT a collision; real collisions are punctuation/
+  whitespace that strip identically (`King's Row`/`Kings Row`, `Lijiang Tower`/`Lijiang  Tower`).
+  Verified: `just lint-api` clean (0 pyright errors), `pytest -k "validate_map_name or empty_name
+  or collision or upload_map_banner or insert or fetch_all"` **48 passed**, full suite (no testmon)
+  **1942 passed / 2 skipped / 2 xfailed / 0 failures**. **15-04 must wire `Provide(provide_image_storage_service)`
+
+  + `Provide(provide_map_content_repository)` in `MapContentController.dependencies`; the
+  `from app import app` DI-graph resolution is asserted there.** **Phase 15: 3/5 plans complete.**
+
+- **15-02 complete (2026-06-26):** Map-names durability & integrity (Wave 1).
+  **Task 1 (`f84d193`):** rewrote the `maps.names` seed in `0001_init.sql` from 63
+  plain `INSERT`s into ONE `INSERT ... VALUES (...) ON CONFLICT DO NOTHING;` block of
+  all **70** reconciled names (63 live + 7 phantom); machine-verified the 70 equal
+  `(old 63) ∪ (7 phantom)` — exact, no drift. Fixes the latent duplicate-PK replay bug
+  and gives fresh-bootstrap parity (REQ-12/D-09/D-08). No `banner_url` column (D-06).
+  **Task 2 (`d040e2e`):** `0032_dynamic_map_management.sql` — load-bearing sequence:
+  reconcile 7 phantoms `ON CONFLICT` → `DO $$ ... RAISE EXCEPTION` orphan pre-flight
+  (fails LOUD, never silently) → `ALTER TABLE core.maps ADD CONSTRAINT
+  maps_map_name_names_fk FOREIGN KEY (map_name) REFERENCES maps.names (name) ON UPDATE
+  CASCADE`, mirroring `maps.mastery` (REQ-11/D-11). Plus `scripts/export_map_names_seed.py`
+  — standalone on-demand `asyncpg` seed export, unreferenced by `apps/`, off the request
+  path, not in the nightly backup (REQ-14/D-10). **Task 3 (`46ca360`):** 5 schema tests
+  (`test_map_management_schema.py`): `phantom_maps`, `seed_idempotent`, and three
+  `map_name_fk` (FK exists + orphan→`ForeignKeyViolationError` + known-name succeeds);
+  the 15-VALIDATION `-k` filters resolve. **Deviations (3 auto-fixed):** (Rule 3) made
+  `0003_stadium_maps_1.sql` idempotent — it pre-seeded 6 phantoms with plain INSERTs and
+  the new 0001 seed made a fresh apply raise duplicate-PK at 0003, blocking all migrations;
+  (Rule 1) seeded the fictional `map_name`s into `maps.names` before the two `core.maps`
+  inserts in `test_tournaments_schema.py` that the new FK correctly rejected (4 tests);
+  (Rule 1) `confupdtype == b'c'` (asyncpg returns Postgres `"char"` as a byte). Verified:
+  `just lint-api` clean, full API suite `pytest -n 4 --no-testmon` **1921 passed / 2
+  skipped / 2 xfailed / 0 failures**; `grep -c banner_url 0001_init.sql` == 0. **The FK
+  backstops the runtime `maps.names` validation 15-03 adds to replace the lost enum gate.**
+  **Phase 15: 2/5 plans complete.**
+
+- **15-01 complete (2026-06-26):** Dropped the `OverwatchMap` Literal (Wave 1 root,
+  `depends_on: []`). **Task 1 (`f8e7b24`):** replaced the closed 70-entry
+  `OverwatchMap = Literal[...]` in `libs/sdk/.../maps.py` with a single
+  `OverwatchMap = str` (REQ-01 / D-04 request-side) — the map-name validation gate is
+  off the msgspec decode boundary; msgspec still enforces presence/type (missing/non-string
+  name → 400). `OverwatchMap` is kept defined + in `__all__`, so the ~27 consumers compile
+  untouched (Assumption A1). `MapCategory`/`Mechanics`/`Restrictions`/`Tags`/`DifficultyAll`
+  stay strict Literals (`get_args(MapCategory)` still len 3). **Task 2 (`56e5ce5`):** repaired
+  all **9** `get_args(OverwatchMap)` fixture sites (`conftest.py` + 8 test files) — after the
+  flip `get_args(str)` returns `()` and `fake.random_element([])` raises, blocking the whole
+  suite, so the two changes are inseparable. Each site now draws from a module-level
+  `_SEED_MAP_NAMES = ["Hanamura","Busan","Ilios","Nepal","Oasis"]` (real `maps.names`
+  FK targets confirmed in `0001_init.sql`); dropped the now-unused `OverwatchMap` imports,
+  kept `get_args` for `MapCategory`/`PlaytestStatus`; removed the dead factory imports in
+  `conftest.py` (it already used string literals). The RESEARCH "14 files" was an overcount —
+  live grep confirmed 8 test files + conftest = 9 sites, zero under `apps/bot/tests/`.
+  **The 70 verbatim map names are captured in `15-01-SUMMARY.md` for plan 15-02's seed rewrite**
+  (incl. the 7 phantom maps). Verified: `just lint-sdk` clean, `just lint-api` clean, full
+  `just test-api` **1722 passed / 2 skipped / 2 xfailed / 0 failures**; zero
+  `get_args(OverwatchMap)` references remain (backstop grep returns 0 files — the explanatory
+  comments were reworded to avoid the literal pattern). No deviations.
+  **Dependency note (T-15-01):** this plan ONLY relaxes the type — the lost enum gate MUST be
+  replaced by a service-layer runtime check against `maps.names` (15-03, REQ-02) + the
+  `core.maps.map_name` FK backstop (15-02, REQ-11) before the surface ships. **Phase 15: 1/5
+  plans complete.**
 
 ### Phase 14 Progress
 
@@ -586,3 +736,4 @@ Controller → Service → Repository pattern:
 - Phase 12 added: Overhaul of tournaments
 - Phase 12.1 inserted after Phase 12: Verification-aware tournament results: defer edition results until pending verifications drain (URGENT)
 - Phase 14 added: Skill Score Dashboard — per-user skill-score snapshots, time-windowed line graph, summary stats, recent-changes feed with drill-down
+- 2026-06-25: Phase 15 added: Dynamic Overwatch map management — drop the OverwatchMap Literal for runtime validation against maps.names (+ FK backstop), mixed-multipart upload endpoint (banner_url column), full-list /utilities/map-names endpoint + DB-fed moderator dropdown, idempotent regenerated seed for durability. Standalone post-v1.0 feature grounded in spikes 004–008.

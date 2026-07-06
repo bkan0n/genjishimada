@@ -19,12 +19,16 @@ from uuid import uuid4
 import asyncpg
 import pytest
 from faker import Faker
-from genjishimada_sdk.maps import MapCategory, OverwatchMap
+from genjishimada_sdk.maps import MapCategory
 from pytest_databases.docker.postgres import PostgresService
 
 from repository.maps_repository import MapsRepository
 
 fake = Faker()
+
+# Phase 15 (REQ-01): OverwatchMap is now `str`; map names come from this seed subset
+# (real `maps.names` FK targets) instead of calling get_args on the old OverwatchMap Literal, which now returns ().
+_SEED_MAP_NAMES = ["Hanamura", "Busan", "Ilios", "Nepal", "Oasis"]
 
 pytestmark = [
     pytest.mark.domain_maps,
@@ -83,7 +87,7 @@ async def create_test_map(db_pool: asyncpg.Pool, code: str) -> int:
             RETURNING id
             """,
             code,
-            fake.random_element(elements=get_args(OverwatchMap)),
+            fake.random_element(elements=_SEED_MAP_NAMES),
             fake.random_element(elements=get_args(MapCategory)),
             fake.random_int(min=1, max=50),
             True,

@@ -412,6 +412,7 @@ class APIService:
         official: bool | None = None,
         playtest_thread_id: int | None = None,
         code: OverwatchCode | None = None,
+        map_id: int | None = None,
         category: list[MapCategory] | None = None,
         map_name: list[OverwatchMap] | None = None,
         creator_ids: list[int] | None = None,
@@ -440,6 +441,7 @@ class APIService:
             official (bool | None): Filter by official tag.
             playtest_thread_id (int | None): Match by playtest thread ID.
             code (OverwatchCode | None): Filter by map code.
+            map_id (int | None): Filter by map ID.
             category (list[MapCategory] | None): Filter by map categories.
             map_name (list[OverwatchMap] | None): Filter by map names.
             creator_ids (list[int] | None): Filter by creator user IDs.
@@ -470,6 +472,7 @@ class APIService:
             "official": official,
             "playtest_thread_id": playtest_thread_id,
             "code": code,
+            "map_id": map_id,
             "category": category,
             "map_name": map_name,
             "creator_ids": creator_ids,
@@ -798,6 +801,22 @@ class APIService:
         r = Route("GET", "/utilities/autocomplete/names")
         params = {"search": search, "limit": limit}
         return self._request(r, params=params, response_model=list[OverwatchMap])
+
+    def get_all_map_names(self) -> Response[list[str]]:
+        """Fetch the full list of map names from the API.
+
+        Returns the complete, sorted set of map names (no search/limit), sourced
+        from the live ``maps.names`` table via ``GET /utilities/map-names``. Used to
+        DB-feed the moderator map-edit dropdown so newly-added maps appear with no
+        bot restart. Like the other client methods, this is a plain ``def`` that
+        returns the coroutine produced by the ``async def _request``; callers
+        ``await`` the result.
+
+        Returns:
+            Response[list[str]]: The full list of map names.
+        """
+        r = Route("GET", "/utilities/map-names")
+        return self._request(r, response_model=list[str])
 
     def transform_map_name(self, search: str) -> Response[OverwatchMap]:
         """Convert a string into a valid OverwatchMap.

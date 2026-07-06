@@ -312,3 +312,50 @@ class TestBountyDataSources:
 
         assert archived_map_id not in {row["map_id"] for row in uncompleted}
 
+
+class TestGetAllQuests:
+    async def test_returns_all_global_quests(self, repository: StoreRepository):
+        rows = await repository.get_all_quests()
+
+        assert len(rows) >= 19
+        assert all(row["quest_type"] == "global" for row in rows)
+
+    async def test_difficulty_filter_narrows_results(self, repository: StoreRepository):
+        unfiltered = await repository.get_all_quests()
+        easy = await repository.get_all_quests(difficulty="easy")
+
+        assert all(row["difficulty"] == "easy" for row in easy)
+        assert len(easy) < len(unfiltered)
+
+    async def test_is_active_filter(self, repository: StoreRepository, asyncpg_conn):
+        await asyncpg_conn.execute(
+            """
+            INSERT INTO store.quests
+                (name, description, quest_type, difficulty, coin_reward, xp_reward, requirements, is_active)
+            VALUES ('Inactive Pool Quest', 'Test', 'global', 'easy', 1, 1, '{}'::jsonb, false)
+            """
+        )
+
+        all_rows = await repository.get_all_quests()
+        active_rows = await repository.get_all_quests(is_active=True)
+        inactive_rows = await repository.get_all_quests(is_active=False)
+
+        all_names = {row["name"] for row in all_rows}
+        active_names = {row["name"] for row in active_rows}
+        inactive_names = {row["name"] for row in inactive_rows}
+
+        assert "Inactive Pool Quest" in all_names
+        assert "Inactive Pool Quest" in inactive_names
+        assert "Inactive Pool Quest" not in active_names
+
+    async def test_name_query_case_insensitive_partial(self, repository: StoreRepository, asyncpg_conn):
+        seeded_name = await asyncpg_conn.fetchval(
+            "SELECT name FROM store.quests WHERE quest_type = 'global' ORDER BY id LIMIT 1"
+        )
+        substr = seeded_name[1 : max(2, len(seeded_name) - 1)].lower()
+
+        rows = await repository.get_all_quests(name_query=substr)
+
+        assert any(row["name"] == seeded_name for row in rows)
+        assert all(substr in row["name"].lower() for row in rows)
+

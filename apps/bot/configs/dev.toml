@@ -60,6 +60,7 @@ change_requests = 1409695994215403610
 [channels.admin]
 development = 1377808370429329594
 round_table = 1377808370429329591
+anti_spam = 1522383109973086248
 
 [channels.tournament]
 announcements = 1513314536130609192

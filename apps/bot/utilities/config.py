@@ -85,6 +85,7 @@ class Help(Base):
 class AdminChannel(Base):
     development: int
     round_table: int
+    anti_spam: int
 
 
 class Tournament(Base):

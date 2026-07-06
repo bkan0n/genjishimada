@@ -41,6 +41,27 @@ class AutocompleteController(Controller):
         return await autocomplete.get_similar_map_names(search, limit)
 
     @get(
+        path="/map-names",
+        tags=["Autocomplete"],
+        summary="List All Map Names",
+        description="Return all Overwatch map names alphabetically. Full list, no search/limit.",
+    )
+    async def list_all_map_names(self, autocomplete: AutocompleteRepository) -> list[str]:
+        """List all Overwatch map names (full list, sorted, no search/limit).
+
+        Distinct from `/autocomplete/names`, which requires a `search` string and
+        returns at most `limit` similarity-ordered matches (D-02).
+
+        Args:
+            autocomplete (AutocompleteRepository): Autocomplete and transform service.
+
+        Returns:
+            list[str]: Every map name in `maps.names`, alphabetically ordered.
+
+        """
+        return await autocomplete.fetch_all_map_names()
+
+    @get(
         path="/transformers/names",
         tags=["Transformer"],
         media_type=MediaType.JSON,

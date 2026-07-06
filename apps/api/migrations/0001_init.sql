@@ -820,384 +820,79 @@ CREATE TABLE IF NOT EXISTS maps.names
 );
 
 
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Circuit Royal'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Runasapi'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Practice Range'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Route 66'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Midtown'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Junkertown'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Colosseo'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Lijiang Tower (Lunar New Year)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Dorado'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Throne of Anubis'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Castillo'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Blizzard World (Winter)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Hollywood (Halloween)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Black Forest (Winter)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Petra'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Eichenwalde'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Workshop Island'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Chateau Guillard (Halloween)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'New Junk City'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Necropolis'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Kanezaka'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Havana'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Oasis'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Ayutthaya'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Volskaya Industries'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Hanamura'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Workshop Expanse'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Hanaoka'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Lijiang Tower'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Busan (Lunar New Year)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Suravasa'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'King''s Row'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'King''s Row (Winter)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Ecopoint: Antarctica'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Hanamura (Winter)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Blizzard World'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Chateau Guillard'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Paraiso'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Workshop Green Screen'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Watchpoint: Gibraltar'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Shambali'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Eichenwalde (Halloween)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Nepal'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Samoa'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Horizon Lunar Colony'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Paris'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Esperanca'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Black Forest'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Antarctic Peninsula'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Workshop Chamber'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Hollywood'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'New Queen Street'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Rialto'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Busan'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Malevento'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Temple of Anubis'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Ilios'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Ecopoint: Antarctica (Winter)'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Numbani'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Adlersbrunn'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Aatlis'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Framework'
-);
-INSERT INTO maps.names (
-    name
-)
-VALUES (
-    'Tools'
-);
+INSERT INTO maps.names (name)
+VALUES
+    ('Circuit Royal'),
+    ('Runasapi'),
+    ('Practice Range'),
+    ('Route 66'),
+    ('Midtown'),
+    ('Junkertown'),
+    ('Colosseo'),
+    ('Lijiang Tower (Lunar New Year)'),
+    ('Dorado'),
+    ('Throne of Anubis'),
+    ('Castillo'),
+    ('Blizzard World (Winter)'),
+    ('Hollywood (Halloween)'),
+    ('King''s Row'),
+    ('Black Forest (Winter)'),
+    ('Petra'),
+    ('Framework'),
+    ('Eichenwalde'),
+    ('Workshop Island'),
+    ('Chateau Guillard (Halloween)'),
+    ('New Junk City'),
+    ('Necropolis'),
+    ('Kanezaka'),
+    ('Havana'),
+    ('Oasis'),
+    ('Ayutthaya'),
+    ('Volskaya Industries'),
+    ('Hanamura'),
+    ('Workshop Expanse'),
+    ('Hanaoka'),
+    ('Lijiang Tower'),
+    ('Busan (Lunar New Year)'),
+    ('Suravasa'),
+    ('King''s Row (Winter)'),
+    ('Ecopoint: Antarctica'),
+    ('Hanamura (Winter)'),
+    ('Blizzard World'),
+    ('Chateau Guillard'),
+    ('Paraiso'),
+    ('Workshop Green Screen'),
+    ('Watchpoint: Gibraltar'),
+    ('Shambali'),
+    ('Eichenwalde (Halloween)'),
+    ('Tools'),
+    ('Nepal'),
+    ('Samoa'),
+    ('Horizon Lunar Colony'),
+    ('Paris'),
+    ('Esperanca'),
+    ('Black Forest'),
+    ('Antarctic Peninsula'),
+    ('Workshop Chamber'),
+    ('Hollywood'),
+    ('New Queen Street'),
+    ('Rialto'),
+    ('Busan'),
+    ('Malevento'),
+    ('Temple of Anubis'),
+    ('Ilios'),
+    ('Ecopoint: Antarctica (Winter)'),
+    ('Numbani'),
+    ('Adlersbrunn'),
+    ('Aatlis'),
+    ('Arena Victoriae'),
+    ('Redwood Dam'),
+    ('Thames District'),
+    ('Gogadoro'),
+    ('Powder Keg Mine'),
+    ('Place Lacroix'),
+    ('Neon Junction')
+ON CONFLICT DO NOTHING;
 
 
 CREATE TABLE IF NOT EXISTS public.newsfeed

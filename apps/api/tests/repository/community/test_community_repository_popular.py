@@ -14,6 +14,10 @@ from repository.community_repository import CommunityRepository
 
 fake = Faker()
 
+# Phase 15 (REQ-01): OverwatchMap is now `str`; map names come from this seed subset
+# (real `maps.names` FK targets) instead of calling get_args on the old OverwatchMap Literal, which now returns ().
+_SEED_MAP_NAMES = ["Hanamura", "Busan", "Ilios", "Nepal", "Oasis"]
+
 pytestmark = [
     pytest.mark.domain_community,
 ]
@@ -42,7 +46,7 @@ class TestFetchPopularMaps:
     ) -> None:
         """Test that maps are ranked by completion count descending."""
         from typing import get_args
-        from genjishimada_sdk.maps import MapCategory, OverwatchMap
+        from genjishimada_sdk.maps import MapCategory
         from genjishimada_sdk import difficulties
 
         # Arrange - Create maps with different completion counts
@@ -60,7 +64,7 @@ class TestFetchPopularMaps:
             RETURNING id
             """,
             code1,
-            fake.random_element(elements=get_args(OverwatchMap)),
+            fake.random_element(elements=_SEED_MAP_NAMES),
             fake.random_element(elements=get_args(MapCategory)),
             10,
             True,
@@ -93,7 +97,7 @@ class TestFetchPopularMaps:
             RETURNING id
             """,
             code2,
-            fake.random_element(elements=get_args(OverwatchMap)),
+            fake.random_element(elements=_SEED_MAP_NAMES),
             fake.random_element(elements=get_args(MapCategory)),
             10,
             True,
@@ -138,7 +142,7 @@ class TestFetchPopularMaps:
     ) -> None:
         """Test that at most 5 maps per difficulty are returned."""
         from typing import get_args
-        from genjishimada_sdk.maps import MapCategory, OverwatchMap
+        from genjishimada_sdk.maps import MapCategory
         from genjishimada_sdk import difficulties
 
         # Arrange - Create 7 Easy maps
@@ -156,7 +160,7 @@ class TestFetchPopularMaps:
                 RETURNING id
                 """,
                 code,
-                fake.random_element(elements=get_args(OverwatchMap)),
+                fake.random_element(elements=_SEED_MAP_NAMES),
                 fake.random_element(elements=get_args(MapCategory)),
                 10,
                 True,

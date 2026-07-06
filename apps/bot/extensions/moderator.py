@@ -102,7 +102,8 @@ class ModeratorCog(BaseCog):
         if not map_data:
             raise UserFacingError(f"Map `{code}` not found.")
 
-        view = MapEditWizardView(map_data, is_mod=True)
+        all_maps = await itx.client.api.get_all_map_names()
+        view = MapEditWizardView(map_data, is_mod=True, all_maps=all_maps)
         await itx.edit_original_response(view=view)
         view.original_interaction = itx
 
@@ -758,15 +759,16 @@ class MapNameSelect(ui.Select["MapEditWizardView"]):
 
     view: MapEditWizardView
 
-    def __init__(self, current: OverwatchMap | None, page: int = 0) -> None:
+    def __init__(self, current: OverwatchMap | None, all_maps: list[str], page: int = 0) -> None:
         """Initialize the map name select.
 
         Args:
             current: The current map name value.
+            all_maps: The full, DB-fed list of map names (fetched once in the async
+                wizard-build context). Replaces the now-empty compiled-in Literal.
             page: The current page (0-indexed).
         """
-        all_maps = list(get_args(OverwatchMap))
-        all_maps.sort()
+        all_maps = sorted(all_maps)
 
         start_idx = page * _PAGINATED_SELECT_PAGE_SIZE
         end_idx = start_idx + _PAGINATED_SELECT_PAGE_SIZE
@@ -1273,18 +1275,21 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
 class MapEditWizardView(BaseView):
     """Main wizard view for editing maps."""
 
-    def __init__(self, map_data: MapModel, is_mod: bool) -> None:
+    def __init__(self, map_data: MapModel, is_mod: bool, all_maps: list[str]) -> None:
         """Initialize the wizard view.
 
         Args:
             map_data: The map being edited.
             is_mod: Whether the user is a moderator.
+            all_maps: The full, DB-fed list of map names (fetched once in the async
+                command callback) threaded into the MapNameSelect.
         """
         super().__init__()
         self.state = MapEditWizardState(map_data, is_mod)
         self.submitted = False
         self.cancelled = False
         self.map_name_page = 0
+        self._all_maps = all_maps
         self.rebuild()
 
     def rebuild(self) -> None:  # noqa: PLR0912, PLR0915
@@ -1333,6 +1338,7 @@ class MapEditWizardView(BaseView):
             elif field == EditableField.MAP_NAME:
                 map_select = MapNameSelect(
                     cast(OverwatchMap | None, current_value),
+                    all_maps=self._all_maps,
                     page=self.map_name_page,
                 )
                 container.add_item(ui.ActionRow(map_select))

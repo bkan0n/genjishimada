@@ -53,6 +53,7 @@ class MapSearchFilters(msgspec.Struct):
     official: bool | None = None
     playtest_thread_id: int | None = None
     code: OverwatchCode | None = None
+    map_id: int | None = None
     category: list[MapCategory] | None = None
     map_name: list[OverwatchMap] | None = None
     sort: list[SortKey] | None = None
@@ -187,7 +188,7 @@ class MapSearchSQLSpecBuilder:
         Returns:
             list[tuple[str, Select]]: Ordered CTE name/query pairs.
         """
-        if self._filters.code and not self._filters.force_filters:
+        if (self._filters.code or self._filters.map_id) and not self._filters.force_filters:
             return []
 
         ctes: list[tuple[str, Select]] = []
@@ -443,6 +444,9 @@ class MapSearchSQLSpecBuilder:
 
         if self._filters.code:
             query.where_eq("m.code", self._filters.code)
+
+        if self._filters.map_id:
+            query.where_eq("m.id", self._filters.map_id)
 
         if self._filters.playtesting:
             query.where_eq("m.playtesting", self._filters.playtesting)
