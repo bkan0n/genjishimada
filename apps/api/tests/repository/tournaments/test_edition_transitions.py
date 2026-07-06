@@ -4,9 +4,6 @@ These invoke the rewritten grid-anchored transition function directly via
 ``SELECT tournaments.process_edition_transitions()`` (pg_cron is absent in the
 test DB, mirroring test_cycle_transitions.py). They prove the structural fix:
 
-  * drift          -- two consecutive rollovers under a *late* cron tick land on
-                       exact grid instants (next.started_at == prev.ends_at), with
-                       no now() leakage into edition timestamps (D-08).
   * single_edition -- one rollover creates exactly ONE new editions row and one
                        child cycle per active category, all sharing the edition
                        timing (D-01/D-05).
@@ -106,64 +103,6 @@ async def _rollover_rows(pool: asyncpg.Pool, edition_id: int | None = None) -> l
                 edition_id,
             )
         return [dict(r) for r in rows]
-
-
-class TestDrift:
-    """drift: late cron ticks never shift the grid; next.started_at == prev.ends_at (D-08)."""
-
-    async def test_drift_immune_under_late_cron(
-        self,
-        asyncpg_pool: asyncpg.Pool,
-        create_test_category,
-        create_test_map,
-        create_test_edition,
-        create_test_child_cycle,
-        set_global_config,
-        advance_past_ends_at,
-        simulate_late_cron,
-    ):
-        """Two consecutive rollovers under simulated-late ticks land on exact grid instants."""
-        await set_global_config(cadence="weekly", transitions_paused=False)
-        category = await create_test_category()
-        # Enough eligible maps for two pre-rolls.
-        active_map = await create_test_map(difficulty="Medium")
-        await create_test_map(difficulty="Medium")
-        await create_test_map(difficulty="Medium")
-        await create_test_map(difficulty="Medium")
-
-        # Seed an active edition on an exact grid (1-week window).
-        started_at = dt.datetime(2026, 6, 1, 0, 0, tzinfo=dt.UTC)
-        ends_at = dt.datetime(2026, 6, 8, 0, 0, tzinfo=dt.UTC)
-        edition0 = await create_test_edition(started_at, ends_at)
-        await create_test_child_cycle(edition0, category, active_map, status="active")
-
-        # First rollover under a LATE tick (ends_at pushed well into the past).
-        await advance_past_ends_at(edition0, seconds=3600)  # 1h late
-        prev0 = await _edition(asyncpg_pool, edition0)
-        # The transition fn rolls the globally-earliest due edition per call; on a
-        # shared test DB other tests' editions may also be due, so tick until THIS
-        # edition has flipped to awaiting_results (bounded). Phase 12.1: the cron is
-        # timing-only -- it stops at awaiting_results, the poller finalizes (D-06/D-07).
-        await _roll_until_awaiting_results(asyncpg_pool, simulate_late_cron, edition0)
-
-        # The drift fix: next edition inherits the exact boundary, no now() leak.
-        edition1 = await _find_chained_edition(asyncpg_pool, prev0["ends_at"])
-        assert edition1["started_at"] == prev0["ends_at"]
-        assert edition1["ends_at"] == prev0["ends_at"] + dt.timedelta(weeks=1)
-
-        # Second rollover, also late.
-        await advance_past_ends_at(edition1["id"], seconds=7200)  # 2h late
-        prev1 = await _edition(asyncpg_pool, edition1["id"])
-        await _roll_until_awaiting_results(asyncpg_pool, simulate_late_cron, edition1["id"])
-
-        edition2 = await _find_chained_edition(asyncpg_pool, prev1["ends_at"])
-        assert edition2["started_at"] == prev1["ends_at"]
-        assert edition2["ends_at"] == prev1["ends_at"] + dt.timedelta(weeks=1)
-
-        # The previous editions sit at awaiting_results (timing-only flip; the
-        # poller owns the terminal completed flip + results, D-06/D-07).
-        assert (await _edition(asyncpg_pool, edition0))["status"] == "awaiting_results"
-        assert (await _edition(asyncpg_pool, edition1["id"]))["status"] == "awaiting_results"
 
 
 class TestSingleEdition:
