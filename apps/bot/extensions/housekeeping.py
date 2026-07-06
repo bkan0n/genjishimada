@@ -10,7 +10,6 @@ from discord.ext import commands
 
 from extensions.playtest import PlaytestCog, PlaytestComponentsV2View
 from utilities.base import BaseCog
-from utilities.config import Admin, Roles
 
 if TYPE_CHECKING:
     from core import Genji
@@ -29,46 +28,6 @@ class HousekeepingCog(BaseCog):
             guild_ids=[int(os.getenv("DISCORD_GUILD_ID", "0"))],
         )
         self.bot.tree.add_command(self.repair_context_menu)
-
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message) -> None:
-        """Listen for honeypot spam."""
-        if message.channel.id != self.bot.config.channels.admin.anti_spam:
-            return
-
-        if message.author.bot:
-            return
-
-        assert isinstance(message.author, discord.Member)
-        admin = self.bot.config.roles.admin
-        if {admin.dev, admin.mod, admin.sensei, admin.joe} & {role.id for role in message.author.roles}:
-            return
-
-        await message.author.ban(reason="Honeypot spam detected.", delete_message_days=7)
-
-    @commands.command()
-    @commands.guild_only()
-    @commands.is_owner()
-    async def honeypot(
-        self,
-        ctx: GenjiCtx,
-    ) -> None:
-        """Set up Honeypot command."""
-        view = ui.LayoutView()
-        container = ui.Container()
-        container.add_item(ui.TextDisplay("# DO NOT SEND MESSAGES IN THIS CHANNEL"))
-        container.add_item(ui.Separator())
-        container.add_item(
-            ui.TextDisplay(
-                "This channel is used to catch spam bots. "
-                "Any messages sent here will result in a **ban**"
-                " and your messages from the last 7 days will be deleted."
-                "\n\nThis is not a joke. Do not try it."
-            )
-        )
-        view.add_item(container)
-        await ctx.send(view=view)
-        await ctx.message.delete()
 
     @commands.command()
     @commands.guild_only()
