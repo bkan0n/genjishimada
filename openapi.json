@@ -876,6 +876,127 @@
         "deprecated": false
       }
     },
+    "/api/v3/store/admin/quests": {
+      "get": {
+        "tags": [
+          "Store"
+        ],
+        "summary": "List All Quests (Admin)",
+        "description": "List all global quest-pool entries for the admin pool browser.",
+        "operationId": "ApiV3StoreAdminQuestsListQuests",
+        "parameters": [
+          {
+            "name": "is_active",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "difficulty",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QuestPoolResponse"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
     "/api/v3/store/purchase/item": {
       "post": {
         "tags": [
@@ -1456,6 +1577,26 @@
             "allowReserved": false
           },
           {
+            "name": "map_id",
+            "in": "query",
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by map ID"
+            },
+            "description": "Filter by map ID",
+            "required": false,
+            "deprecated": false,
+            "allowEmptyValue": false,
+            "allowReserved": false
+          },
+          {
             "name": "playtest_status",
             "in": "query",
             "schema": {
@@ -1592,79 +1733,7 @@
               "oneOf": [
                 {
                   "items": {
-                    "type": "string",
-                    "enum": [
-                      "Circuit Royal",
-                      "Runasapi",
-                      "Practice Range",
-                      "Route 66",
-                      "Midtown",
-                      "Junkertown",
-                      "Colosseo",
-                      "Lijiang Tower (Lunar New Year)",
-                      "Dorado",
-                      "Throne of Anubis",
-                      "Castillo",
-                      "Blizzard World (Winter)",
-                      "Hollywood (Halloween)",
-                      "King's Row",
-                      "Black Forest (Winter)",
-                      "Petra",
-                      "Framework",
-                      "Eichenwalde",
-                      "Workshop Island",
-                      "Chateau Guillard (Halloween)",
-                      "New Junk City",
-                      "Necropolis",
-                      "Kanezaka",
-                      "Havana",
-                      "Oasis",
-                      "Ayutthaya",
-                      "Volskaya Industries",
-                      "Hanamura",
-                      "Workshop Expanse",
-                      "Hanaoka",
-                      "Lijiang Tower",
-                      "Busan (Lunar New Year)",
-                      "Suravasa",
-                      "King's Row (Winter)",
-                      "Ecopoint: Antarctica",
-                      "Hanamura (Winter)",
-                      "Blizzard World",
-                      "Chateau Guillard",
-                      "Paraiso",
-                      "Workshop Green Screen",
-                      "Watchpoint: Gibraltar",
-                      "Shambali",
-                      "Eichenwalde (Halloween)",
-                      "Tools",
-                      "Nepal",
-                      "Samoa",
-                      "Horizon Lunar Colony",
-                      "Paris",
-                      "Esperanca",
-                      "Black Forest",
-                      "Antarctic Peninsula",
-                      "Workshop Chamber",
-                      "Hollywood",
-                      "New Queen Street",
-                      "Rialto",
-                      "Busan",
-                      "Malevento",
-                      "Temple of Anubis",
-                      "Ilios",
-                      "Ecopoint: Antarctica (Winter)",
-                      "Numbani",
-                      "Adlersbrunn",
-                      "Aatlis",
-                      "Arena Victoriae",
-                      "Redwood Dam",
-                      "Thames District",
-                      "Gogadoro",
-                      "Powder Keg Mine",
-                      "Place Lacroix",
-                      "Neon Junction"
-                    ]
+                    "type": "string"
                   },
                   "type": "array"
                 },
@@ -2586,82 +2655,13 @@
             "name": "map_name",
             "in": "query",
             "schema": {
-              "type": [
-                "null",
-                "string"
-              ],
-              "enum": [
-                "Circuit Royal",
-                "Runasapi",
-                "Practice Range",
-                "Route 66",
-                "Midtown",
-                "Junkertown",
-                "Colosseo",
-                "Lijiang Tower (Lunar New Year)",
-                "Dorado",
-                "Throne of Anubis",
-                "Castillo",
-                "Blizzard World (Winter)",
-                "Hollywood (Halloween)",
-                "King's Row",
-                "Black Forest (Winter)",
-                "Petra",
-                "Framework",
-                "Eichenwalde",
-                "Workshop Island",
-                "Chateau Guillard (Halloween)",
-                "New Junk City",
-                "Necropolis",
-                "Kanezaka",
-                "Havana",
-                "Oasis",
-                "Ayutthaya",
-                "Volskaya Industries",
-                "Hanamura",
-                "Workshop Expanse",
-                "Hanaoka",
-                "Lijiang Tower",
-                "Busan (Lunar New Year)",
-                "Suravasa",
-                "King's Row (Winter)",
-                "Ecopoint: Antarctica",
-                "Hanamura (Winter)",
-                "Blizzard World",
-                "Chateau Guillard",
-                "Paraiso",
-                "Workshop Green Screen",
-                "Watchpoint: Gibraltar",
-                "Shambali",
-                "Eichenwalde (Halloween)",
-                "Tools",
-                "Nepal",
-                "Samoa",
-                "Horizon Lunar Colony",
-                "Paris",
-                "Esperanca",
-                "Black Forest",
-                "Antarctic Peninsula",
-                "Workshop Chamber",
-                "Hollywood",
-                "New Queen Street",
-                "Rialto",
-                "Busan",
-                "Malevento",
-                "Temple of Anubis",
-                "Ilios",
-                "Ecopoint: Antarctica (Winter)",
-                "Numbani",
-                "Adlersbrunn",
-                "Aatlis",
-                "Arena Victoriae",
-                "Redwood Dam",
-                "Thames District",
-                "Gogadoro",
-                "Powder Keg Mine",
-                "Place Lacroix",
-                "Neon Junction",
-                null
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
               ]
             },
             "required": false,
@@ -4626,6 +4626,78 @@
           "204": {
             "description": "Request fulfilled, nothing follows",
             "headers": {}
+          },
+          "400": {
+            "description": "Bad request syntax or unsupported method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "status_code": {
+                      "type": "integer"
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "extra": {
+                      "additionalProperties": {},
+                      "type": [
+                        "null",
+                        "object",
+                        "array"
+                      ]
+                    }
+                  },
+                  "type": "object",
+                  "required": [
+                    "detail",
+                    "status_code"
+                  ],
+                  "description": "Validation Exception",
+                  "examples": [
+                    {
+                      "status_code": 400,
+                      "detail": "Bad Request",
+                      "extra": {}
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
+    "/api/v3/content/maps": {
+      "post": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Create Overwatch Map",
+        "description": "Create a new Overwatch map from a mixed-multipart request (name + required banner). Idempotent: re-posting an existing name returns 201 with `inserted: false` and overwrites the banner at the same stripped key (replace-banner). Requires the `content:admin` scope.",
+        "operationId": "ApiV3ContentMapsCreateMap",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/MapCreateMultipart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Document created, URL follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapCreateResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "Bad request syntax or unsupported method",
@@ -8969,79 +9041,7 @@
                   "oneOf": [
                     {
                       "items": {
-                        "type": "string",
-                        "enum": [
-                          "Circuit Royal",
-                          "Runasapi",
-                          "Practice Range",
-                          "Route 66",
-                          "Midtown",
-                          "Junkertown",
-                          "Colosseo",
-                          "Lijiang Tower (Lunar New Year)",
-                          "Dorado",
-                          "Throne of Anubis",
-                          "Castillo",
-                          "Blizzard World (Winter)",
-                          "Hollywood (Halloween)",
-                          "King's Row",
-                          "Black Forest (Winter)",
-                          "Petra",
-                          "Framework",
-                          "Eichenwalde",
-                          "Workshop Island",
-                          "Chateau Guillard (Halloween)",
-                          "New Junk City",
-                          "Necropolis",
-                          "Kanezaka",
-                          "Havana",
-                          "Oasis",
-                          "Ayutthaya",
-                          "Volskaya Industries",
-                          "Hanamura",
-                          "Workshop Expanse",
-                          "Hanaoka",
-                          "Lijiang Tower",
-                          "Busan (Lunar New Year)",
-                          "Suravasa",
-                          "King's Row (Winter)",
-                          "Ecopoint: Antarctica",
-                          "Hanamura (Winter)",
-                          "Blizzard World",
-                          "Chateau Guillard",
-                          "Paraiso",
-                          "Workshop Green Screen",
-                          "Watchpoint: Gibraltar",
-                          "Shambali",
-                          "Eichenwalde (Halloween)",
-                          "Tools",
-                          "Nepal",
-                          "Samoa",
-                          "Horizon Lunar Colony",
-                          "Paris",
-                          "Esperanca",
-                          "Black Forest",
-                          "Antarctic Peninsula",
-                          "Workshop Chamber",
-                          "Hollywood",
-                          "New Queen Street",
-                          "Rialto",
-                          "Busan",
-                          "Malevento",
-                          "Temple of Anubis",
-                          "Ilios",
-                          "Ecopoint: Antarctica (Winter)",
-                          "Numbani",
-                          "Adlersbrunn",
-                          "Aatlis",
-                          "Arena Victoriae",
-                          "Redwood Dam",
-                          "Thames District",
-                          "Gogadoro",
-                          "Powder Keg Mine",
-                          "Place Lacroix",
-                          "Neon Junction"
-                        ]
+                        "type": "string"
                       },
                       "type": "array"
                     },
@@ -9427,6 +9427,34 @@
         "deprecated": false
       }
     },
+    "/api/v3/utilities/map-names": {
+      "get": {
+        "tags": [
+          "Autocomplete",
+          "Change Requests"
+        ],
+        "summary": "List All Map Names",
+        "description": "Return all Overwatch map names alphabetically. Full list, no search/limit.",
+        "operationId": "ApiV3UtilitiesMapNamesListAllMapNames",
+        "responses": {
+          "200": {
+            "description": "Request fulfilled, document follows",
+            "headers": {},
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": false
+      }
+    },
     "/api/v3/utilities/transformers/codes": {
       "get": {
         "tags": [
@@ -9697,82 +9725,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": [
-                    "null",
-                    "string"
-                  ],
-                  "enum": [
-                    "Circuit Royal",
-                    "Runasapi",
-                    "Practice Range",
-                    "Route 66",
-                    "Midtown",
-                    "Junkertown",
-                    "Colosseo",
-                    "Lijiang Tower (Lunar New Year)",
-                    "Dorado",
-                    "Throne of Anubis",
-                    "Castillo",
-                    "Blizzard World (Winter)",
-                    "Hollywood (Halloween)",
-                    "King's Row",
-                    "Black Forest (Winter)",
-                    "Petra",
-                    "Framework",
-                    "Eichenwalde",
-                    "Workshop Island",
-                    "Chateau Guillard (Halloween)",
-                    "New Junk City",
-                    "Necropolis",
-                    "Kanezaka",
-                    "Havana",
-                    "Oasis",
-                    "Ayutthaya",
-                    "Volskaya Industries",
-                    "Hanamura",
-                    "Workshop Expanse",
-                    "Hanaoka",
-                    "Lijiang Tower",
-                    "Busan (Lunar New Year)",
-                    "Suravasa",
-                    "King's Row (Winter)",
-                    "Ecopoint: Antarctica",
-                    "Hanamura (Winter)",
-                    "Blizzard World",
-                    "Chateau Guillard",
-                    "Paraiso",
-                    "Workshop Green Screen",
-                    "Watchpoint: Gibraltar",
-                    "Shambali",
-                    "Eichenwalde (Halloween)",
-                    "Tools",
-                    "Nepal",
-                    "Samoa",
-                    "Horizon Lunar Colony",
-                    "Paris",
-                    "Esperanca",
-                    "Black Forest",
-                    "Antarctic Peninsula",
-                    "Workshop Chamber",
-                    "Hollywood",
-                    "New Queen Street",
-                    "Rialto",
-                    "Busan",
-                    "Malevento",
-                    "Temple of Anubis",
-                    "Ilios",
-                    "Ecopoint: Antarctica (Winter)",
-                    "Numbani",
-                    "Adlersbrunn",
-                    "Aatlis",
-                    "Arena Victoriae",
-                    "Redwood Dam",
-                    "Thames District",
-                    "Gogadoro",
-                    "Powder Keg Mine",
-                    "Place Lacroix",
-                    "Neon Junction",
-                    null
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
                   ]
                 }
               }
@@ -9849,82 +9808,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": [
-                    "null",
-                    "string"
-                  ],
-                  "enum": [
-                    "Circuit Royal",
-                    "Runasapi",
-                    "Practice Range",
-                    "Route 66",
-                    "Midtown",
-                    "Junkertown",
-                    "Colosseo",
-                    "Lijiang Tower (Lunar New Year)",
-                    "Dorado",
-                    "Throne of Anubis",
-                    "Castillo",
-                    "Blizzard World (Winter)",
-                    "Hollywood (Halloween)",
-                    "King's Row",
-                    "Black Forest (Winter)",
-                    "Petra",
-                    "Framework",
-                    "Eichenwalde",
-                    "Workshop Island",
-                    "Chateau Guillard (Halloween)",
-                    "New Junk City",
-                    "Necropolis",
-                    "Kanezaka",
-                    "Havana",
-                    "Oasis",
-                    "Ayutthaya",
-                    "Volskaya Industries",
-                    "Hanamura",
-                    "Workshop Expanse",
-                    "Hanaoka",
-                    "Lijiang Tower",
-                    "Busan (Lunar New Year)",
-                    "Suravasa",
-                    "King's Row (Winter)",
-                    "Ecopoint: Antarctica",
-                    "Hanamura (Winter)",
-                    "Blizzard World",
-                    "Chateau Guillard",
-                    "Paraiso",
-                    "Workshop Green Screen",
-                    "Watchpoint: Gibraltar",
-                    "Shambali",
-                    "Eichenwalde (Halloween)",
-                    "Tools",
-                    "Nepal",
-                    "Samoa",
-                    "Horizon Lunar Colony",
-                    "Paris",
-                    "Esperanca",
-                    "Black Forest",
-                    "Antarctic Peninsula",
-                    "Workshop Chamber",
-                    "Hollywood",
-                    "New Queen Street",
-                    "Rialto",
-                    "Busan",
-                    "Malevento",
-                    "Temple of Anubis",
-                    "Ilios",
-                    "Ecopoint: Antarctica (Winter)",
-                    "Numbani",
-                    "Adlersbrunn",
-                    "Aatlis",
-                    "Arena Victoriae",
-                    "Redwood Dam",
-                    "Thames District",
-                    "Gogadoro",
-                    "Powder Keg Mine",
-                    "Place Lacroix",
-                    "Neon Junction",
-                    null
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
                   ]
                 }
               }
@@ -18296,79 +18186,7 @@
             ]
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "difficulty": {
             "type": "string",
@@ -18538,79 +18356,7 @@
             ]
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "hypothetical_rank": {
             "oneOf": [
@@ -18962,79 +18708,7 @@
             ]
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "difficulty": {
             "type": "string",
@@ -19736,79 +19410,7 @@
       "MapCountsResponse": {
         "properties": {
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "amount": {
             "type": "integer"
@@ -19821,6 +19423,24 @@
         ],
         "title": "MapCountsResponse"
       },
+      "MapCreateMultipart": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "banner": {
+            "type": "string",
+            "format": "binary",
+            "contentMediaType": "application/octet-stream"
+          }
+        },
+        "type": "object",
+        "required": [
+          "banner",
+          "name"
+        ],
+        "title": "MapCreateMultipart"
+      },
       "MapCreateRequest": {
         "properties": {
           "code": {
@@ -19830,79 +19450,7 @@
             "pattern": "^[A-Z0-9]*$"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "category": {
             "type": "string",
@@ -20084,6 +19632,22 @@
         ],
         "title": "MapCreateRequest"
       },
+      "MapCreateResponse": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "inserted": {
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inserted",
+          "name"
+        ],
+        "title": "MapCreateResponse"
+      },
       "MapCreationJobResponse": {
         "properties": {
           "job_status": {
@@ -20133,79 +19697,7 @@
           "map_name": {
             "oneOf": [
               {
-                "type": "string",
-                "enum": [
-                  "Circuit Royal",
-                  "Runasapi",
-                  "Practice Range",
-                  "Route 66",
-                  "Midtown",
-                  "Junkertown",
-                  "Colosseo",
-                  "Lijiang Tower (Lunar New Year)",
-                  "Dorado",
-                  "Throne of Anubis",
-                  "Castillo",
-                  "Blizzard World (Winter)",
-                  "Hollywood (Halloween)",
-                  "King's Row",
-                  "Black Forest (Winter)",
-                  "Petra",
-                  "Framework",
-                  "Eichenwalde",
-                  "Workshop Island",
-                  "Chateau Guillard (Halloween)",
-                  "New Junk City",
-                  "Necropolis",
-                  "Kanezaka",
-                  "Havana",
-                  "Oasis",
-                  "Ayutthaya",
-                  "Volskaya Industries",
-                  "Hanamura",
-                  "Workshop Expanse",
-                  "Hanaoka",
-                  "Lijiang Tower",
-                  "Busan (Lunar New Year)",
-                  "Suravasa",
-                  "King's Row (Winter)",
-                  "Ecopoint: Antarctica",
-                  "Hanamura (Winter)",
-                  "Blizzard World",
-                  "Chateau Guillard",
-                  "Paraiso",
-                  "Workshop Green Screen",
-                  "Watchpoint: Gibraltar",
-                  "Shambali",
-                  "Eichenwalde (Halloween)",
-                  "Tools",
-                  "Nepal",
-                  "Samoa",
-                  "Horizon Lunar Colony",
-                  "Paris",
-                  "Esperanca",
-                  "Black Forest",
-                  "Antarctic Peninsula",
-                  "Workshop Chamber",
-                  "Hollywood",
-                  "New Queen Street",
-                  "Rialto",
-                  "Busan",
-                  "Malevento",
-                  "Temple of Anubis",
-                  "Ilios",
-                  "Ecopoint: Antarctica (Winter)",
-                  "Numbani",
-                  "Adlersbrunn",
-                  "Aatlis",
-                  "Arena Victoriae",
-                  "Redwood Dam",
-                  "Thames District",
-                  "Gogadoro",
-                  "Powder Keg Mine",
-                  "Place Lacroix",
-                  "Neon Junction"
-                ]
+                "type": "string"
               }
             ]
           },
@@ -20578,79 +20070,7 @@
             "pattern": "^[A-Z0-9]*$"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "difficulty": {
             "type": "string",
@@ -20723,79 +20143,7 @@
             "type": "integer"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "level": {
             "type": "string"
@@ -20812,79 +20160,7 @@
       "MapMasteryCreateResponse": {
         "properties": {
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "medal": {
             "type": "string"
@@ -20908,79 +20184,7 @@
       "MapMasteryResponse": {
         "properties": {
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "amount": {
             "type": "integer"
@@ -21049,79 +20253,7 @@
             "type": "string"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "checkpoints": {
             "type": "integer"
@@ -21153,79 +20285,7 @@
           "map_name": {
             "oneOf": [
               {
-                "type": "string",
-                "enum": [
-                  "Circuit Royal",
-                  "Runasapi",
-                  "Practice Range",
-                  "Route 66",
-                  "Midtown",
-                  "Junkertown",
-                  "Colosseo",
-                  "Lijiang Tower (Lunar New Year)",
-                  "Dorado",
-                  "Throne of Anubis",
-                  "Castillo",
-                  "Blizzard World (Winter)",
-                  "Hollywood (Halloween)",
-                  "King's Row",
-                  "Black Forest (Winter)",
-                  "Petra",
-                  "Framework",
-                  "Eichenwalde",
-                  "Workshop Island",
-                  "Chateau Guillard (Halloween)",
-                  "New Junk City",
-                  "Necropolis",
-                  "Kanezaka",
-                  "Havana",
-                  "Oasis",
-                  "Ayutthaya",
-                  "Volskaya Industries",
-                  "Hanamura",
-                  "Workshop Expanse",
-                  "Hanaoka",
-                  "Lijiang Tower",
-                  "Busan (Lunar New Year)",
-                  "Suravasa",
-                  "King's Row (Winter)",
-                  "Ecopoint: Antarctica",
-                  "Hanamura (Winter)",
-                  "Blizzard World",
-                  "Chateau Guillard",
-                  "Paraiso",
-                  "Workshop Green Screen",
-                  "Watchpoint: Gibraltar",
-                  "Shambali",
-                  "Eichenwalde (Halloween)",
-                  "Tools",
-                  "Nepal",
-                  "Samoa",
-                  "Horizon Lunar Colony",
-                  "Paris",
-                  "Esperanca",
-                  "Black Forest",
-                  "Antarctic Peninsula",
-                  "Workshop Chamber",
-                  "Hollywood",
-                  "New Queen Street",
-                  "Rialto",
-                  "Busan",
-                  "Malevento",
-                  "Temple of Anubis",
-                  "Ilios",
-                  "Ecopoint: Antarctica (Winter)",
-                  "Numbani",
-                  "Adlersbrunn",
-                  "Aatlis",
-                  "Arena Victoriae",
-                  "Redwood Dam",
-                  "Thames District",
-                  "Gogadoro",
-                  "Powder Keg Mine",
-                  "Place Lacroix",
-                  "Neon Junction"
-                ]
+                "type": "string"
               }
             ]
           },
@@ -21556,79 +20616,7 @@
             "pattern": "^[A-Z0-9]*$"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "category": {
             "type": "string",
@@ -21970,79 +20958,7 @@
             "pattern": "^[A-Z0-9]*$"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "creators": {
             "items": {
@@ -22422,79 +21338,7 @@
             "pattern": "^[A-Z0-9]*$"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "difficulty": {
             "type": "string",
@@ -22571,79 +21415,7 @@
             "pattern": "^[A-Z0-9]*$"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "time": {
             "type": "number"
@@ -22747,79 +21519,7 @@
             "pattern": "^[A-Z0-9]*$"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "creators": {
             "items": {
@@ -24491,6 +23191,55 @@
           "total"
         ],
         "title": "QuestHistoryResponse"
+      },
+      "QuestPoolResponse": {
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "quest_type": {
+            "type": "string"
+          },
+          "difficulty": {
+            "type": "string"
+          },
+          "coin_reward": {
+            "type": "integer"
+          },
+          "xp_reward": {
+            "type": "integer"
+          },
+          "requirements": {
+            "type": "object"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "coin_reward",
+          "created_at",
+          "description",
+          "difficulty",
+          "id",
+          "is_active",
+          "name",
+          "quest_type",
+          "requirements",
+          "xp_reward"
+        ],
+        "title": "QuestPoolResponse"
       },
       "QuestProgress": {
         "properties": {
@@ -27284,79 +26033,7 @@
             "pattern": "^[A-Z0-9]*$"
           },
           "map_name": {
-            "type": "string",
-            "enum": [
-              "Circuit Royal",
-              "Runasapi",
-              "Practice Range",
-              "Route 66",
-              "Midtown",
-              "Junkertown",
-              "Colosseo",
-              "Lijiang Tower (Lunar New Year)",
-              "Dorado",
-              "Throne of Anubis",
-              "Castillo",
-              "Blizzard World (Winter)",
-              "Hollywood (Halloween)",
-              "King's Row",
-              "Black Forest (Winter)",
-              "Petra",
-              "Framework",
-              "Eichenwalde",
-              "Workshop Island",
-              "Chateau Guillard (Halloween)",
-              "New Junk City",
-              "Necropolis",
-              "Kanezaka",
-              "Havana",
-              "Oasis",
-              "Ayutthaya",
-              "Volskaya Industries",
-              "Hanamura",
-              "Workshop Expanse",
-              "Hanaoka",
-              "Lijiang Tower",
-              "Busan (Lunar New Year)",
-              "Suravasa",
-              "King's Row (Winter)",
-              "Ecopoint: Antarctica",
-              "Hanamura (Winter)",
-              "Blizzard World",
-              "Chateau Guillard",
-              "Paraiso",
-              "Workshop Green Screen",
-              "Watchpoint: Gibraltar",
-              "Shambali",
-              "Eichenwalde (Halloween)",
-              "Tools",
-              "Nepal",
-              "Samoa",
-              "Horizon Lunar Colony",
-              "Paris",
-              "Esperanca",
-              "Black Forest",
-              "Antarctic Peninsula",
-              "Workshop Chamber",
-              "Hollywood",
-              "New Queen Street",
-              "Rialto",
-              "Busan",
-              "Malevento",
-              "Temple of Anubis",
-              "Ilios",
-              "Ecopoint: Antarctica (Winter)",
-              "Numbani",
-              "Adlersbrunn",
-              "Aatlis",
-              "Arena Victoriae",
-              "Redwood Dam",
-              "Thames District",
-              "Gogadoro",
-              "Powder Keg Mine",
-              "Place Lacroix",
-              "Neon Junction"
-            ]
+            "type": "string"
           },
           "clicks": {
             "type": "integer"
