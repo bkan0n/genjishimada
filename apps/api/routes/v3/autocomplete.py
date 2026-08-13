@@ -23,6 +23,7 @@ class AutocompleteController(Controller):
         tags=["Autocomplete"],
         summary="Autocomplete Map Names",
         description="Return a list of map names ordered by text similarity to the provided search string.",
+        opt={"required_scopes": {"maps:read"}},
     )
     async def get_similar_map_names(
         self, autocomplete: AutocompleteRepository, search: str, limit: int = 5
@@ -45,6 +46,7 @@ class AutocompleteController(Controller):
         tags=["Autocomplete"],
         summary="List All Map Names",
         description="Return all Overwatch map names alphabetically. Full list, no search/limit.",
+        opt={"required_scopes": {"maps:read"}},
     )
     async def list_all_map_names(self, autocomplete: AutocompleteRepository) -> list[str]:
         """List all Overwatch map names (full list, sorted, no search/limit).
