@@ -40,19 +40,25 @@ jobs:
       - name: Sync dependencies
         run: uv sync --all-groups
 
+      # Run ruff through uv so CI uses the version locked in uv.lock — the same
+      # one `just lint-api` / `lint-bot` / `lint-sdk` use locally. astral-sh/ruff-action@v1
+      # resolved ruff at runtime (`pipx run ruff`, no version pin), so a ruff release
+      # could break main with no code change, and its `src` input defaults to `.`,
+      # which appended the repo root to the explicit package paths and pulled
+      # unrelated files (docs/**/*.md) into the check.
+      # RUFF_OUTPUT_FORMAT is set on `check` only (inline PR annotations); the
+      # formatter rejects it as an unstable preview flag.
       - name: Ruff format (check)
         id: ruff-format
         continue-on-error: true
-        uses: astral-sh/ruff-action@v1
-        with:
-          args: format --check apps/api apps/bot libs/sdk
+        run: uv run ruff format --check apps/api apps/bot libs/sdk
 
       - name: Ruff check
         id: ruff-check
         continue-on-error: true
-        uses: astral-sh/ruff-action@v1
-        with:
-          args: check apps/api apps/bot libs/sdk
+        env:
+          RUFF_OUTPUT_FORMAT: github
+        run: uv run ruff check apps/api apps/bot libs/sdk
 
       - name: Basedpyright API
         id: pyright-api
