@@ -178,9 +178,20 @@ class TestNoEligibleMaps:
     ):
         """A category whose difficulties match zero maps yields NULL (drives D-07 skip).
 
-        Uses the rare "Extreme +" grouping with zero maps created for it.
+        Uses an empty grouping rather than a "rare" difficulty. `select_eligible_map`
+        matches with `= ANY(v_difficulties)`, which is false for every row when the
+        array is empty, so both the primary select and the LRU fallback return NULL —
+        the same path a non-empty-but-unmatched grouping takes, but deterministically,
+        without depending on what other tests leave in the session-wide database.
+
+        Do NOT reach for an extended difficulty like "Extreme +" to force an empty
+        pool. `tournaments.categories.difficulties` holds DifficultyTop values, and
+        `TournamentCategoryResponse.difficulties` is typed `list[DifficultyTop]`, so a
+        leaked extended value makes every later `GET /tournaments/categories` fail
+        deserialization with a 500 — a cross-test failure that only shows up depending
+        on ordering.
         """
-        category = await create_test_category(difficulties=["Extreme +"])
+        category = await create_test_category(difficulties=[])
         # Maps that do NOT match the category difficulty.
         await create_test_map(difficulty="Easy")
         await create_test_map(difficulty="Medium")

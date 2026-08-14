@@ -1,11 +1,12 @@
 """Tournament repository test fixtures."""
 
 import datetime as dt
-from typing import Any
+from typing import Any, get_args
 from uuid import uuid4
 
 import asyncpg
 import pytest
+from genjishimada_sdk.difficulties import DifficultyTop
 
 from repository.tournaments_repository import TournamentRepository
 
@@ -44,6 +45,25 @@ async def create_test_category(asyncpg_pool: asyncpg.Pool):
         # Drop any stale cycle_frequency override silently (column no longer exists).
         overrides.pop("cycle_frequency", None)
         data.update(overrides)
+
+        # tournaments.categories.difficulties holds DifficultyTop values, and
+        # TournamentCategoryResponse types it as list[DifficultyTop]. The column is a
+        # bare text[] with no CHECK, and the test database is shared session-wide, so
+        # an out-of-contract value inserted here does not fail locally — it silently
+        # persists and makes every later GET /tournaments/categories return a 500 on
+        # deserialization, in whichever unrelated test happens to run afterwards.
+        # Fail loudly at the insert instead.
+        invalid = [d for d in data["difficulties"] if d not in get_args(DifficultyTop)]
+        if invalid:
+            msg = (
+                f"create_test_category received difficulties not in DifficultyTop: {invalid}. "
+                f"Valid values: {list(get_args(DifficultyTop))}. "
+                "Extended values (e.g. 'Extreme +') belong to DifficultyAll and must never be "
+                "written to tournaments.categories — they poison GET /tournaments/categories "
+                "for the rest of the session. Use difficulties=[] if you need a grouping that "
+                "matches zero maps."
+            )
+            raise ValueError(msg)
 
         async with asyncpg_pool.acquire() as conn:
             category_id: int = await conn.fetchval(
