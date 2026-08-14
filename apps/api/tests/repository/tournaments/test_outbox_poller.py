@@ -294,8 +294,13 @@ class TestRolloverRewardPerChildCycle:
 
         await publish_pending_transitions(state)
 
+        # Scope to our own cycles. publish_pending_transitions drains the outbox
+        # globally, and _clear_other_unpublished is only a point-in-time delete — a
+        # sibling xdist worker can insert rows for its own edition between that delete
+        # and this poll, whose reward calls would otherwise land in `captured`.
         expected = sorted(c for (_cat, _m, c) in children)
-        assert sorted(captured) == expected  # once per child cycle, not once per edition
+        ours = set(expected)
+        assert sorted(c for c in captured if c in ours) == expected  # once per child cycle, not once per edition
 
 
 class TestRolloverHiatusSections:
@@ -374,7 +379,10 @@ class TestRolloverHiatusSections:
         assert len(our) == 1
         assert our[0]["data"].results == []
         assert len(our[0]["data"].started) == 1
-        assert captured == []  # no results entries -> no reward calls
+        # Scope to our own cycle, for the same reason as TestRewardFanout above: the
+        # poller drains the outbox globally, so an unscoped `captured == []` fails
+        # whenever a sibling worker's rollover rows are picked up by this poll.
+        assert cycle_a not in captured  # no results entries -> no reward calls for our cycle
         assert await _published(asyncpg_pool, row_id) is True
 
 
