@@ -8,6 +8,7 @@ from .internal import JobStatusResponse
 from .maps import GuideURL, MedalType, OverwatchCode, OverwatchMap
 
 __all__ = (
+    "ArchivedFilter",
     "CompletionCreateRequest",
     "CompletionCreatedEvent",
     "CompletionModerateRequest",
@@ -283,6 +284,12 @@ class CompletionVerificationUpdateRequest(Struct):
 
 
 SuspiciousFlag = Literal["Cheating", "Scripting"]
+
+#: Tribool filter for the archive state of the map a completion belongs to.
+#: ``all`` applies no filter (the default, matching pre-filter behaviour),
+#: ``archived`` returns only completions on archived maps, and ``not_archived``
+#: returns only completions on maps that are not archived.
+ArchivedFilter = Literal["all", "archived", "not_archived"]
 
 
 class CompletionModerateRequest(Struct, kw_only=True):

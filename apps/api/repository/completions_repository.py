@@ -30,13 +30,14 @@ class CompletionsRepository(BaseRepository):
         """
         super().__init__(pool)
 
-    async def fetch_user_completions(
+    async def fetch_user_completions(  # noqa: PLR0913
         self,
         user_id: int,
         difficulty: str | None,
         page_size: int,
         page_number: int,
         *,
+        archived: str = "all",
         conn: Connection | None = None,
     ) -> list[dict]:
         """Fetch verified completions for a user.
@@ -46,6 +47,8 @@ class CompletionsRepository(BaseRepository):
             difficulty: Optional difficulty filter.
             page_size: Number of results per page.
             page_number: Page number (1-indexed).
+            archived: Archive state filter for the completed map. One of
+                ``all`` (no filter), ``archived``, or ``not_archived``.
             conn: Optional connection for transaction support.
 
         Returns:
@@ -62,6 +65,7 @@ class CompletionsRepository(BaseRepository):
                 raw_difficulty
             FROM core.maps
             WHERE code IS NOT NULL
+            AND ($5::text = 'all' OR (archived IS TRUE) = ($5::text = 'archived'))
         ), latest_per_user_all AS (
             SELECT DISTINCT ON (c.user_id, c.map_id)
                 c.user_id,
@@ -197,19 +201,22 @@ class CompletionsRepository(BaseRepository):
         LIMIT $3 OFFSET $4;
         """
         offset = (page_number - 1) * page_size
-        rows = await _conn.fetch(query, user_id, difficulty, page_size, offset)
+        rows = await _conn.fetch(query, user_id, difficulty, page_size, offset, archived)
         return [dict(row) for row in rows]
 
     async def fetch_world_records_per_user(
         self,
         user_id: int,
         *,
+        archived: str = "all",
         conn: Connection | None = None,
     ) -> list[dict]:
         """Fetch all world records (rank 1) for a user.
 
         Args:
             user_id: User ID to fetch world records for.
+            archived: Archive state filter for the completed map. One of
+                ``all`` (no filter), ``archived``, or ``not_archived``.
             conn: Optional connection for transaction support.
 
         Returns:
@@ -270,7 +277,10 @@ class CompletionsRepository(BaseRepository):
                     md.silver,
                     md.bronze
                 FROM ranked r
-                JOIN core.maps m ON m.id = r.map_id AND m.code IS NOT NULL
+                JOIN core.maps m
+                    ON m.id = r.map_id
+                    AND m.code IS NOT NULL
+                    AND ($2::text = 'all' OR (m.archived IS TRUE) = ($2::text = 'archived'))
                 LEFT JOIN maps.medals md ON md.map_id = r.map_id
             ),
             user_names AS (
@@ -346,7 +356,7 @@ class CompletionsRepository(BaseRepository):
             wm.time,
             wm.inserted_at;
         """
-        rows = await _conn.fetch(query, user_id)
+        rows = await _conn.fetch(query, user_id, archived)
         return [dict(row) for row in rows]
 
     async def fetch_map_leaderboard(
