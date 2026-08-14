@@ -31,6 +31,7 @@ from discord import (
     utils,
 )
 from genjishimada_sdk.completions import (
+    ArchivedFilter,
     CompletionCreatedEvent,
     CompletionPatchRequest,
     CompletionResponse,
@@ -79,6 +80,26 @@ if TYPE_CHECKING:
     from utilities._types import GenjiItx
 
 log = getLogger(__name__)
+
+_ARCHIVED_FILTER_CHOICES = [
+    app_commands.Choice(name="All", value="all"),
+    app_commands.Choice(name="Archived only", value="archived"),
+    app_commands.Choice(name="Not archived", value="not_archived"),
+]
+
+
+def _resolve_archived_filter(choice: app_commands.Choice[str] | None) -> ArchivedFilter:
+    """Resolve an optional archive-state command choice into an API filter value.
+
+    Args:
+        choice (app_commands.Choice[str] | None): The selected choice, if any.
+
+    Returns:
+        ArchivedFilter: The selected filter, or ``all`` when nothing was selected.
+    """
+    if choice is None:
+        return "all"
+    return cast("ArchivedFilter", choice.value)
 
 
 class RejectionReasonModal(ui.Modal):
@@ -1169,21 +1190,24 @@ class CompletionsCog(BaseCog):
 
     @app_commands.command(name="user-completions")
     @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
+    @app_commands.choices(archived=_ARCHIVED_FILTER_CHOICES)
     async def get_completions_for_user(
         self,
         itx: GenjiItx,
         user: app_commands.Transform[int, transformers.UserTransformer],
         difficulty: DifficultyTop | None = None,
+        archived: app_commands.Choice[str] | None = None,
     ) -> None:
         """Get verified completions for a user.
 
-        Fetches the user's completions, optionally filtered by difficulty, and
-        displays them in a paginated view.
+        Fetches the user's completions, optionally filtered by difficulty and by
+        the archive state of the map, and displays them in a paginated view.
 
         Args:
             itx: The interaction context for the command.
             user: Target user ID, transformed from input.
             difficulty: Optional difficulty filter.
+            archived: Optional archive state filter. Defaults to including all maps.
 
         Raises:
             UserFacingError: If the user has no completions.
@@ -1196,6 +1220,7 @@ class CompletionsCog(BaseCog):
                 self.bot.api.get_completions_for_user,
                 user_id=user,
                 difficulty=difficulty,
+                archived=_resolve_archived_filter(archived),
             ),
             guild_id=self.bot.config.guild,
             channel_id=self.bot.config.channels.submission.completions,
@@ -1206,19 +1231,22 @@ class CompletionsCog(BaseCog):
 
     @app_commands.command(name="world-records")
     @app_commands.guilds(int(os.getenv("DISCORD_GUILD_ID", "0")))
+    @app_commands.choices(archived=_ARCHIVED_FILTER_CHOICES)
     async def get_world_records_for_user(
         self,
         itx: GenjiItx,
         user: app_commands.Transform[int, transformers.UserTransformer],
+        archived: app_commands.Choice[str] | None = None,
     ) -> None:
         """Get world records held by a user.
 
-        Fetches the user's verified world records and displays them in a
-        paginated view.
+        Fetches the user's verified world records, optionally filtered by the
+        archive state of the map, and displays them in a paginated view.
 
         Args:
             itx: The interaction context for the command.
             user: Target user ID, transformed from input.
+            archived: Optional archive state filter. Defaults to including all maps.
 
         Raises:
             UserFacingError: If the user has no world records.
@@ -1230,6 +1258,7 @@ class CompletionsCog(BaseCog):
             fetch_func=partial(
                 self.bot.api.get_world_records_for_user,
                 user_id=user,
+                archived=_resolve_archived_filter(archived),
             ),
             guild_id=self.bot.config.guild,
             channel_id=self.bot.config.channels.submission.completions,

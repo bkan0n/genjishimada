@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from logging import getLogger
-from typing import Literal
+from typing import Annotated, Literal
 
 from genjishimada_sdk.completions import (
+    ArchivedFilter,
     CompletionCreateRequest,
     CompletionModerateRequest,
     CompletionPatchRequest,
@@ -29,6 +30,7 @@ from litestar import Controller, Request, Response, delete, get, patch, post, pu
 from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.exceptions import HTTPException
+from litestar.params import Parameter
 from litestar.status_codes import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
 from repository.completions_repository import provide_completions_repository
@@ -81,34 +83,48 @@ class CompletionsController(Controller):
     @get(
         path="/",
         summary="Get User Completions",
-        description="Retrieve all verified completions for a given user, optionally filtered by difficulty.",
+        description=(
+            "Retrieve all verified completions for a given user, optionally filtered by difficulty "
+            "and by the archive state of the completed map."
+        ),
         opt={"required_scopes": {"completions:read"}},
     )
-    async def get_completions_for_user(
+    async def get_completions_for_user(  # noqa: PLR0913
         self,
         svc: CompletionsService,
         user_id: int,
         difficulty: DifficultyTop | None = None,
         page_size: int = 10,
         page_number: int = 1,
+        archived: Annotated[
+            ArchivedFilter,
+            Parameter(description="Filter by the archive state of the completed map."),
+        ] = "all",
     ) -> Response[list[CompletionResponse]]:
         """Get completions for a specific user."""
-        resp = await svc.get_completions_for_user(user_id, difficulty, page_size, page_number)
+        resp = await svc.get_completions_for_user(user_id, difficulty, page_size, page_number, archived)
         return Response(resp)
 
     @get(
         path="/world-records",
         summary="Get User World Records",
-        description="Retrieve all verified World Records for a given user.",
+        description=(
+            "Retrieve all verified World Records for a given user, optionally filtered by the "
+            "archive state of the completed map."
+        ),
         opt={"required_scopes": {"completions:read"}},
     )
     async def get_world_records_per_user(
         self,
         svc: CompletionsService,
         user_id: int,
+        archived: Annotated[
+            ArchivedFilter,
+            Parameter(description="Filter by the archive state of the completed map."),
+        ] = "all",
     ) -> list[CompletionResponse]:
         """Get completions for a specific user."""
-        return await svc.get_world_records_per_user(user_id)
+        return await svc.get_world_records_per_user(user_id, archived)
 
     @post(path="/", summary="Submit Completion", description="Submit a new completion record and publish an event.")
     async def submit_completion(

@@ -13,6 +13,7 @@ import sentry_sdk
 from asyncpg import Connection, Pool
 from asyncpg.exceptions import CheckViolationError
 from genjishimada_sdk.completions import (
+    ArchivedFilter,
     CompletionCreatedEvent,
     CompletionCreateRequest,
     CompletionModerateRequest,
@@ -298,6 +299,7 @@ class CompletionsService(BaseService):
         difficulty: DifficultyTop | None = None,
         page_size: int = 10,
         page_number: int = 1,
+        archived: ArchivedFilter = "all",
     ) -> list[CompletionResponse]:
         """Retrieve verified completions for a user."""
         rows = await self._completions_repo.fetch_user_completions(
@@ -305,6 +307,7 @@ class CompletionsService(BaseService):
             difficulty=difficulty,
             page_size=page_size,
             page_number=page_number,
+            archived=archived,
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
@@ -1277,9 +1280,13 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
-    async def get_world_records_per_user(self, user_id: int) -> list[CompletionResponse]:
+    async def get_world_records_per_user(
+        self,
+        user_id: int,
+        archived: ArchivedFilter = "all",
+    ) -> list[CompletionResponse]:
         """Get all world records for a specific user."""
-        rows = await self._completions_repo.fetch_world_records_per_user(user_id)
+        rows = await self._completions_repo.fetch_world_records_per_user(user_id, archived=archived)
         return msgspec.convert(rows, list[CompletionResponse])
 
     async def get_legacy_completions_per_map(

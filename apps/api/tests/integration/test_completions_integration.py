@@ -126,6 +126,57 @@ class TestGetCompletionsForUser:
             # Verify it's the medium code by checking the code field
             assert completion["code"] == medium_code
 
+    async def test_archived_filter(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        create_test_completion,
+        global_code_tracker,
+        unique_message_id,
+    ):
+        """Archived tribool filter narrows results; omitting it returns everything."""
+        user_id = await create_test_user()
+
+        def generate_unique_code():
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
+            return code
+
+        archived_code = generate_unique_code()
+        active_code = generate_unique_code()
+
+        archived_map_id = await create_test_map(code=archived_code, checkpoints=10, archived=True)
+        active_map_id = await create_test_map(code=active_code, checkpoints=10, archived=False)
+
+        await create_test_completion(
+            user_id, archived_map_id, completion=False, time=25.0, message_id=unique_message_id
+        )
+        await create_test_completion(
+            user_id, active_map_id, completion=False, time=35.0, message_id=unique_message_id + 1
+        )
+
+        async def codes_for(params: dict) -> set[str]:
+            response = await test_client.get("/api/v3/completions/", params={"user_id": user_id, **params})
+            assert response.status_code == 200
+            return {completion["code"] for completion in response.json()}
+
+        # Default is "all" — non-breaking for existing callers.
+        assert await codes_for({}) == {archived_code, active_code}
+        assert await codes_for({"archived": "all"}) == {archived_code, active_code}
+        assert await codes_for({"archived": "archived"}) == {archived_code}
+        assert await codes_for({"archived": "not_archived"}) == {active_code}
+
+    async def test_archived_filter_rejects_unknown_value(self, test_client, create_test_user):
+        """An unsupported archived value is rejected rather than silently ignored."""
+        user_id = await create_test_user()
+
+        response = await test_client.get(
+            "/api/v3/completions/",
+            params={"user_id": user_id, "archived": "sometimes"},
+        )
+
+        assert response.status_code == 400
 
 
 class TestGetWorldRecordsPerUser:
@@ -159,6 +210,49 @@ class TestGetWorldRecordsPerUser:
         )
 
         assert response.status_code == 401
+
+    async def test_archived_filter(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        create_test_completion,
+        global_code_tracker,
+        unique_message_id,
+    ):
+        """Archived tribool filter narrows world records; omitting it returns everything."""
+        user_id = await create_test_user()
+
+        def generate_unique_code():
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
+            return code
+
+        archived_code = generate_unique_code()
+        active_code = generate_unique_code()
+
+        archived_map_id = await create_test_map(code=archived_code, checkpoints=10, archived=True)
+        active_map_id = await create_test_map(code=active_code, checkpoints=10, archived=False)
+
+        await create_test_completion(
+            user_id, archived_map_id, completion=False, time=25.0, message_id=unique_message_id
+        )
+        await create_test_completion(
+            user_id, active_map_id, completion=False, time=35.0, message_id=unique_message_id + 1
+        )
+
+        async def codes_for(params: dict) -> set[str]:
+            response = await test_client.get(
+                "/api/v3/completions/world-records",
+                params={"user_id": user_id, **params},
+            )
+            assert response.status_code == 200
+            return {record["code"] for record in response.json()}
+
+        assert await codes_for({}) == {archived_code, active_code}
+        assert await codes_for({"archived": "all"}) == {archived_code, active_code}
+        assert await codes_for({"archived": "archived"}) == {archived_code}
+        assert await codes_for({"archived": "not_archived"}) == {active_code}
 
 
 class TestSubmitCompletion:

@@ -28,6 +28,7 @@ import discord
 import msgspec
 from genjishimada_sdk.change_requests import ChangeRequestResponse, StaleChangeRequestResponse
 from genjishimada_sdk.completions import (
+    ArchivedFilter,
     CompletionCreateRequest,
     CompletionModerateRequest,
     CompletionPatchRequest,
@@ -1246,6 +1247,7 @@ class APIService:
         *,
         page_number: int | None = None,
         page_size: int | None = None,
+        archived: ArchivedFilter = "all",
     ) -> Response[list[CompletionUserFormattable]]:
         """Fetch the completions for a specific user id.
 
@@ -1254,12 +1256,13 @@ class APIService:
             difficulty (DifficultyTop): The difficulty to filter by.
             page_number (int | None): Optional page number for pagination (1-based).
             page_size (int | None): Optional page size for pagination. If None, returns all results.
+            archived (ArchivedFilter): Archive state of the completed map to filter by.
 
         Returns:
             Response[list[CompletionUserFormattable]]: The completions data for a specific user.
         """
         r = Route("GET", "/completions")
-        params: dict[str, int | str] = {"user_id": user_id}
+        params: dict[str, int | str] = {"user_id": user_id, "archived": archived}
         if difficulty is not None:
             params["difficulty"] = difficulty
         if page_number is not None:
@@ -1280,6 +1283,7 @@ class APIService:
         *,
         page_number: int | None = None,
         page_size: int | None = None,
+        archived: ArchivedFilter = "all",
     ) -> Response[list[CompletionUserFormattable]]:
         """Fetch the world record completions for a specific user id.
 
@@ -1287,12 +1291,13 @@ class APIService:
             user_id (int): The user_id to filter by.
             page_number (int | None): Optional page number for pagination (1-based).
             page_size (int | None): Optional page size for pagination. If None, returns all results.
+            archived (ArchivedFilter): Archive state of the completed map to filter by.
 
         Returns:
             Response[list[CompletionUserFormattable]]: The completions data for a specific user.
         """
         r = Route("GET", "/completions/world-records")
-        params: dict[str, int] = {"user_id": user_id}
+        params: dict[str, int | str] = {"user_id": user_id, "archived": archived}
         if page_number is not None:
             params["page_number"] = page_number
         if page_size is not None:
