@@ -15,7 +15,7 @@ dev = [
 ]
 dev-common = [
     "basedpyright>=1.29.4",
-    "ruff>=0.12.0",
+    "ruff>=0.15.17",
     "complexipy>=5.5.0",
 ]
 
