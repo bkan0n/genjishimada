@@ -1263,6 +1263,28 @@ class MapsRepository(BaseRepository):
         )
         return playtest_id
 
+    async def reopen_latest_playtest(
+        self,
+        map_id: int,
+        *,
+        conn: Connection | None = None,
+    ) -> None:
+        """Reopen the most recent completed playtest for a map."""
+        _conn = self._get_connection(conn)
+        await _conn.execute(
+            """
+            UPDATE playtests.meta
+            SET completed = FALSE
+            WHERE id = (
+                SELECT id FROM playtests.meta
+                WHERE map_id = $1
+                ORDER BY id DESC
+                LIMIT 1
+            ) AND completed = TRUE
+            """,
+            map_id,
+        )
+
     async def update_playtest_initial_difficulty(
         self,
         thread_id: int,

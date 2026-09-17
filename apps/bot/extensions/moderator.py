@@ -168,7 +168,7 @@ class ModeratorCog(BaseCog):
 
         playtesting = (
             cast("PlaytestStatus", view.playtest_status_select.values[0])
-            if view.playtest_status_select.values
+            if view.playtest_status_select.values and not view.send_to_playtest_button.enabled
             else UNSET
         )
 
