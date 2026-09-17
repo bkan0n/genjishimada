@@ -503,6 +503,31 @@ class TestCreateMap:
 class TestUpdateMap:
     """PATCH /api/v3/maps/{code}"""
 
+    async def test_reopening_rejected_map_reopens_its_playtest(
+        self,
+        test_client,
+        create_test_map,
+        create_test_playtest,
+        unique_map_code,
+        unique_thread_id,
+        asyncpg_pool,
+    ):
+        map_id = await create_test_map(code=unique_map_code, playtesting="Rejected")
+        await create_test_playtest(map_id, thread_id=unique_thread_id, completed=True)
+
+        response = await test_client.patch(
+            f"/api/v3/maps/{unique_map_code}",
+            json={"playtesting": "In Progress"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["playtest"]["thread_id"] == unique_thread_id
+        async with asyncpg_pool.acquire() as conn:
+            completed = await conn.fetchval(
+                "SELECT completed FROM playtests.meta WHERE thread_id = $1", unique_thread_id
+            )
+        assert completed is False
+
     async def test_update_checkpoints(self, test_client, create_test_map, unique_map_code):
         """Update map checkpoints."""
         code = unique_map_code

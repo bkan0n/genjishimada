@@ -365,6 +365,9 @@ class MapsService(BaseService):
                         conn=conn,  # type: ignore[arg-type]
                     )
 
+                if data.playtesting == "In Progress" and original_map.playtesting != "In Progress":
+                    await self._maps_repo.reopen_latest_playtest(map_id, conn=conn)  # type: ignore[arg-type]
+
                 if (
                     data.difficulty is not msgspec.UNSET
                     and original_map.playtesting == "In Progress"
