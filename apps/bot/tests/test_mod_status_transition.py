@@ -4,6 +4,7 @@ import asyncio
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 from msgspec import UNSET
@@ -39,7 +40,8 @@ def test_send_to_playtest_does_not_set_in_progress_before_send(monkeypatch):
         edit_original_response=AsyncMock(),
     )
 
-    asyncio.run(moderator.ModeratorCog.edit_status.callback(moderator.ModeratorCog(bot), interaction, "ABCDE"))
+    callback = cast(Any, moderator.ModeratorCog.edit_status.callback)
+    asyncio.run(callback(moderator.ModeratorCog(cast(Any, bot)), interaction, "ABCDE"))
 
     assert api.edit_map.await_args.args[1].playtesting is UNSET
     api.send_map_to_playtest.assert_awaited_once()
