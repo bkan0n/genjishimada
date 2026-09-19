@@ -205,6 +205,3 @@ async def on_command_error(itx: GenjiItx, error: Exception) -> None:
             await itx.edit_original_response(content=None, view=view)  # type: ignore
         else:
             await itx.response.send_message(view=view, ephemeral=True)
-
-    if not isinstance(exception, UserFacingError):
-        raise exception

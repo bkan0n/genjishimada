@@ -49,10 +49,19 @@ from utilities.views.mod_status_view import ModStatusView
 
 if TYPE_CHECKING:
     from core import Genji
+    from extensions.api_service import APIService
     from utilities._types import GenjiItx
     from utilities.maps import MapModel
 
 log = getLogger(__name__)
+
+
+async def _send_map_to_playtest(api: APIService, code: OverwatchCode, difficulty: DifficultyAll) -> None:
+    """Send a map to playtest after confirming its current API state."""
+    current_map = await api.get_map(code=code)
+    if current_map.playtesting == "In Progress":
+        raise UserFacingError("This map is already in playtest.")
+    await api.send_map_to_playtest(code, SendToPlaytestRequest(difficulty))
 
 
 class ModeratorCog(BaseCog):
@@ -171,6 +180,11 @@ class ModeratorCog(BaseCog):
             if view.playtest_status_select.values and not view.send_to_playtest_button.enabled
             else UNSET
         )
+        playtesting_difficulty: DifficultyAll | None = None
+        if view.send_to_playtest_button.enabled:
+            if not view.playtest_difficulty_select.values:
+                raise UserFacingError("Select a playtest difficulty before confirming.")
+            playtesting_difficulty = cast(DifficultyAll, view.playtest_difficulty_select.values[0])
 
         await self.bot.api.edit_map(
             code,
@@ -181,9 +195,8 @@ class ModeratorCog(BaseCog):
                 playtesting=playtesting,
             ),
         )
-        if view.send_to_playtest_button.enabled:
-            playtesting_difficulty = cast(DifficultyAll, view.playtest_difficulty_select.values[0])
-            await self.bot.api.send_map_to_playtest(data.code, SendToPlaytestRequest(playtesting_difficulty))
+        if playtesting_difficulty is not None:
+            await _send_map_to_playtest(self.bot.api, data.code, playtesting_difficulty)
 
     @map_group.command(name="link-codes")
     async def link_codes(
@@ -543,7 +556,9 @@ class FieldSelectionSelect(ui.Select["MapEditWizardView"]):
                 description=self._get_current_preview(map_data, field),
             )
             for field in EditableField
-            if field not in _EXCLUDED_FIELDS and (is_mod or field not in _MOD_ONLY_FIELDS)
+            if field not in _EXCLUDED_FIELDS
+            and (is_mod or field not in _MOD_ONLY_FIELDS)
+            and not (field == EditableField.SEND_TO_PLAYTEST and map_data.playtesting == "In Progress")
         ]
         super().__init__(
             placeholder="Select fields to edit...",
@@ -1193,9 +1208,10 @@ class SubmitButton(ui.Button["MapEditWizardView"]):
                 state.get_mod_action(EditableField.SEND_TO_PLAYTEST),
             )
             if playtest_difficulty is not None:
-                await itx.client.api.send_map_to_playtest(
+                await _send_map_to_playtest(
+                    itx.client.api,
                     state.map_data.code,
-                    SendToPlaytestRequest(playtest_difficulty),
+                    playtest_difficulty,
                 )
             make_legacy = bool(state.get_mod_action(EditableField.MAKE_LEGACY) or False)
             if make_legacy:
@@ -1901,7 +1917,7 @@ class ModRecordManagementView(PaginatorView[CompletionLeaderboardFormattable]):
 
         self.rebuild_data(records)
         self.rebuild_components()
-        await itx.edit_original_response(view=self)
+        await itx.edit_original_response(content=None, view=self)
 
     def build_page_body(self) -> Sequence[ui.Item]:
         """Build the UI components for the current page of records.
