@@ -64,7 +64,7 @@ class ModPlaytestSendToPlaytestButton(ui.Button["ModStatusView"]):
         self._rebuild()
         assert self.view
         self.view.playtest_difficulty_select.disabled = not self.enabled
-        self.view.confirmation_button.disabled = not (self.enabled or self.view.playtest_difficulty_select.values)
+        self.view.confirmation_button.disabled = self.enabled and not self.view.playtest_difficulty_select.values
         await itx.response.edit_message(view=self.view)
 
     def _rebuild(self) -> None:
@@ -87,7 +87,7 @@ class PlaytestDifficultySelect(ui.Select["ModStatusView"]):
         for option in self.options:
             option.default = option.value in self.values
         assert self.view
-        self.view.confirmation_button.disabled = not (self.view.send_to_playtest_button.enabled or self.values)
+        self.view.confirmation_button.disabled = self.view.send_to_playtest_button.enabled and not self.values
         await itx.response.edit_message(view=self.view)
 
 
@@ -140,7 +140,7 @@ class ModStatusView(BaseView):
                 ),
                 ui.ActionRow(self.playtest_difficulty_select),
             )
-            if self._data.playtesting
+            if self._data.playtesting != "In Progress"
             else ()
         )
         container = ui.Container(
