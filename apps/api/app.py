@@ -13,6 +13,7 @@ from aio_pika.abc import AbstractRobustConnection
 from aio_pika.pool import Pool
 from asyncpg import Connection
 from litestar import Litestar, Request, Response, get
+from litestar.events.emitter import BaseEventEmitterBackend, SimpleEventEmitter
 from litestar.exceptions import HTTPException
 from litestar.logging.config import LoggingConfig
 from litestar.middleware import DefineMiddleware
@@ -225,7 +226,13 @@ class EndpointLogFilter(logging.Filter):
         return not any(path in msg for path in self.EXCLUDED_PATHS)
 
 
-def create_app(psql_dsn: str | None = None) -> Litestar:
+def create_app(
+    psql_dsn: str | None = None,
+    *,
+    run_pollers: bool = True,
+    pool_config: PoolConfig | None = None,
+    event_emitter_backend: type[BaseEventEmitterBackend] = SimpleEventEmitter,
+) -> Litestar:
     """Create and configure a Litestar application.
 
     This function initializes a Litestar application by setting up a database plugin,
@@ -237,6 +244,10 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
         psql_dsn (Optional[str]): A PostgreSQL DSN to configure the database connection. If not provided,
             the function will use the DSN from the environment variable `PSQL_DSN` or fallback to the
             default DSN defined by `DEFAULT_DSN`.
+        run_pollers: Start the tournament outbox and skill rebuild pollers. Defaults to True.
+        pool_config: Optional complete pool configuration, including its DSN and connection initializer.
+            When supplied, this takes precedence over the default pool configuration.
+        event_emitter_backend: Event delivery backend. Defaults to Litestar's SimpleEventEmitter.
 
     Returns:
         Litestar: An instance of the configured Litestar application.
@@ -246,7 +257,7 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
     assert dsn
     asyncpg = AsyncpgPlugin(
         config=AsyncpgConfig(
-            pool_config=PoolConfig(dsn=dsn, init=_async_pg_init),
+            pool_config=pool_config if pool_config is not None else PoolConfig(dsn=dsn, init=_async_pg_init),
             connection_dependency_key="conn",
         ),
     )
@@ -317,7 +328,11 @@ def create_app(psql_dsn: str | None = None) -> Litestar:
             HTTP_500_INTERNAL_SERVER_ERROR: internal_server_error_handler,
         },
         listeners=listeners,
-        lifespan=[rabbitmq_connection, tournament_outbox_poller, skill_nightly_rebuild_poller],
+        event_emitter_backend=event_emitter_backend,
+        lifespan=[
+            rabbitmq_connection,
+            *([tournament_outbox_poller, skill_nightly_rebuild_poller] if run_pollers else []),
+        ],
         logging_config=logging_config,
         middleware=[auth_middleware],
         guards=[scope_guard],
