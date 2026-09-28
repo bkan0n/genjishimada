@@ -20,6 +20,7 @@ from litestar import Litestar
 from litestar.events.emitter import BaseEventEmitterBackend
 from litestar.events.listener import EventListener
 from litestar.exceptions import ImproperlyConfiguredException
+from litestar.logging.config import LoggingConfig
 from litestar.testing import AsyncTestClient
 from litestar_asyncpg import PoolConfig
 
@@ -106,6 +107,20 @@ def create_test_app(
             connect_kwargs={"command_timeout": 30, "server_settings": {"lock_timeout": "5s"}},
         ),
         event_emitter_backend=event_emitter_backend,
+        configure_sentry=False,
+        logging_config=LoggingConfig(
+            # Litestar installs a default queue listener unless this exact
+            # handler name is overridden. Keep logging synchronous so repeated
+            # test applications do not accumulate logging monitor threads.
+            handlers={
+                "queue_listener": {
+                    "class": "logging.StreamHandler",
+                    "level": "INFO",
+                    "formatter": "standard",
+                },
+            },
+            log_exceptions="always",
+        ),
     )
 
 

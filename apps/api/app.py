@@ -232,6 +232,8 @@ def create_app(
     run_pollers: bool = True,
     pool_config: PoolConfig | None = None,
     event_emitter_backend: type[BaseEventEmitterBackend] = SimpleEventEmitter,
+    logging_config: LoggingConfig | None = None,
+    configure_sentry: bool = True,
 ) -> Litestar:
     """Create and configure a Litestar application.
 
@@ -248,6 +250,8 @@ def create_app(
         pool_config: Optional complete pool configuration, including its DSN and connection initializer.
             When supplied, this takes precedence over the default pool configuration.
         event_emitter_backend: Event delivery backend. Defaults to Litestar's SimpleEventEmitter.
+        logging_config: Optional logging configuration. Defaults to the queue-backed production configuration.
+        configure_sentry: Initialize Sentry for this application. Defaults to True.
 
     Returns:
         Litestar: An instance of the configured Litestar application.
@@ -290,24 +294,26 @@ def create_app(
         ],
     )
 
-    logging_config = LoggingConfig(
-        root={"level": "INFO", "handlers": ["queue_listener"]},
-        formatters={"standard": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"}},
-        log_exceptions="always",
-    )
+    if logging_config is None:
+        logging_config = LoggingConfig(
+            root={"level": "INFO", "handlers": ["queue_listener"]},
+            formatters={"standard": {"format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"}},
+            log_exceptions="always",
+        )
 
     auth_middleware = DefineMiddleware(CustomAuthenticationMiddleware, exclude=["/docs", "/schema", "/healthcheck"])
 
-    sentry_sdk.init(
-        dsn=os.getenv("SENTRY_DSN"),
-        send_default_pii=True,
-        enable_logs=True,
-        traces_sample_rate=1.0,
-        profile_session_sample_rate=1.0,
-        profile_lifecycle="trace",
-        environment=APP_ENVIRONMENT,
-        release=os.getenv("SENTRY_RELEASE", "unknown"),
-    )
+    if configure_sentry:
+        sentry_sdk.init(
+            dsn=os.getenv("SENTRY_DSN"),
+            send_default_pii=True,
+            enable_logs=True,
+            traces_sample_rate=1.0,
+            profile_session_sample_rate=1.0,
+            profile_lifecycle="trace",
+            environment=APP_ENVIRONMENT,
+            release=os.getenv("SENTRY_RELEASE", "unknown"),
+        )
 
     _app = Litestar(
         plugins=[asyncpg],
