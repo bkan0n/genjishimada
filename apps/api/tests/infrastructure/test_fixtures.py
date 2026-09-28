@@ -1,5 +1,8 @@
 """Test that conftest.py fixtures work correctly."""
 
+import threading
+from unittest.mock import patch
+
 import asyncpg
 import psycopg
 import pytest
@@ -8,7 +11,7 @@ from litestar.testing import AsyncTestClient
 
 from app import app as production_app
 from app import skill_nightly_rebuild_poller, tournament_outbox_poller
-from tests.support.application import DeterministicEventEmitter
+from tests.support.application import DeterministicEventEmitter, create_test_app
 from tests.support.database import DatabaseBaseline
 
 pytestmark = [pytest.mark.database, pytest.mark.integration]
@@ -22,7 +25,7 @@ async def test_database_connection(asyncpg_conn: asyncpg.Connection) -> None:
     assert await asyncpg_conn.fetchval("SELECT count(*) FROM core.maps") == 0
 
 
-async def test_client_headers(test_client: AsyncTestClient) -> None:
+async def test_client_headers(test_client: AsyncTestClient, database_url: str) -> None:
     """Test that test client has required headers."""
     assert test_client.headers["x-pytest-enabled"] == "1"
     assert test_client.headers["X-API-KEY"] == "testing"
@@ -31,6 +34,16 @@ async def test_client_headers(test_client: AsyncTestClient) -> None:
     for poller in (tournament_outbox_poller, skill_nightly_rebuild_poller):
         assert poller in production_app._lifespan_managers
         assert poller not in test_client.app._lifespan_managers
+
+    # Constructing another app must not accumulate process-wide telemetry or
+    # logging workers. A full serial suite creates hundreds of app instances.
+    threads_before = {thread.ident for thread in threading.enumerate()}
+    with patch("app.sentry_sdk.init") as initialize_sentry:
+        for _ in range(3):
+            extra_app = create_test_app(database_url)
+            assert extra_app.logger is not None
+        initialize_sentry.assert_not_called()
+    assert {thread.ident for thread in threading.enumerate()} <= threads_before
 
 
 async def test_database_has_migrations(
