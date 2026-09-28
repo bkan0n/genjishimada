@@ -6,8 +6,12 @@ error translation, and full stack flow through real database.
 
 from uuid import uuid4
 
+from asyncpg.exceptions import CheckViolationError
 from faker import Faker
 import pytest
+
+from repository.completions_repository import CompletionsRepository
+from repository.exceptions import ForeignKeyViolationError, UniqueConstraintViolationError
 
 pytestmark = [
     pytest.mark.integration,
@@ -323,6 +327,139 @@ class TestSubmitCompletion:
         response2 = await test_client.post("/api/v3/completions/", json=payload)
 
         assert response2.status_code == 400
+        assert "pending verification" in response2.json()["error"]
+        assert "Debug details:" not in response2.json()["error"]
+
+    @pytest.mark.parametrize("new_time", [45.5, 60.0])
+    @pytest.mark.parametrize("completion", [True, False])
+    async def test_verified_time_rejection_is_user_friendly(
+        self, test_client, create_test_user, create_test_map, create_test_completion,
+        unique_map_code, new_time, completion,
+    ):
+        """Explain the verified-time rule first and retain diagnostic metadata for screenshots."""
+        user_id = await create_test_user()
+        map_id = await create_test_map(code=unique_map_code, official=True)
+        await create_test_completion(user_id, map_id, time=45.5, completion=completion)
+
+        response = await test_client.post(
+            "/api/v3/completions/",
+            json={
+                "user_id": user_id,
+                "code": unique_map_code,
+                "time": new_time,
+                "screenshot": "https://example.com/screenshot.png",
+                "video": None if completion else "https://youtube.com/watch?v=test",
+            },
+        )
+
+        assert response.status_code == 400
+        message = response.json()["error"]
+        assert message.startswith(
+            "You already have a verified time of 45.5s on this map. "
+            "Submit a time faster than 45.5s.\n\nDebug details: "
+        )
+        assert f"completion={'TRUE' if completion else 'FALSE'} time {new_time:.2f}" in message
+        assert "45.50" in message
+        assert f"user {user_id}, map {map_id}, code {unique_map_code}" in message
+
+    @pytest.mark.parametrize(
+        "error, expected_status, expected_message",
+        [
+            (
+                CheckViolationError('new row violates check constraint "positive_time"'),
+                500,
+                'new row violates check constraint "positive_time"',
+            ),
+            (
+                CheckViolationError(
+                    "You have a pending verification for map ABC123 with time 40. "
+                    "New submission (60) must be faster or wait for verification."
+                ),
+                500,
+                "You have a pending verification for map ABC123 with time 40. "
+                "New submission (60) must be faster or wait for verification.",
+            ),
+            (
+                CheckViolationError("completion=TRUE time 60 must be strictly faster than current best unknown"),
+                500,
+                "completion=TRUE time 60 must be strictly faster than current best unknown",
+            ),
+            (
+                ValueError(
+                    "completion=TRUE time 60 must be strictly faster than current best 40 "
+                    "(user 123, map 777, code ABC123)"
+                ),
+                500,
+                "completion=TRUE time 60 must be strictly faster than current best 40 "
+                "(user 123, map 777, code ABC123)",
+            ),
+            (
+                UniqueConstraintViolationError("completion_unique", "core.completions"),
+                409,
+                "You already have a completion for this map.",
+            ),
+            (
+                ForeignKeyViolationError("completions_user_id_fkey", "core.completions"),
+                404,
+                "Completion not found.",
+            ),
+        ],
+    )
+    async def test_other_submission_errors_keep_existing_http_response(
+        self, test_client, create_test_user, create_test_map, unique_map_code, mocker,
+        error, expected_status, expected_message,
+    ):
+        """Only recognized verified-time check violations receive the new message."""
+        user_id = await create_test_user()
+        await create_test_map(code=unique_map_code)
+        mocker.patch.object(CompletionsRepository, "insert_completion", side_effect=error)
+
+        response = await test_client.post(
+            "/api/v3/completions/",
+            json={
+                "user_id": user_id,
+                "code": unique_map_code,
+                "time": 60.0,
+                "screenshot": "https://example.com/screenshot.png",
+                "video": None,
+            },
+        )
+
+        assert response.status_code == expected_status
+        assert response.json()["error"] == expected_message
+
+    @pytest.mark.parametrize(
+        "existing_overrides, new_time",
+        [
+            ({"verified": True}, 40.0),
+            ({"verified": False, "rejected": True}, 60.0),
+            ({"verified": True, "legacy": True}, 60.0),
+        ],
+    )
+    async def test_allowed_resubmissions_still_succeed(
+        self, test_client, create_test_user, create_test_map, create_test_completion,
+        unique_map_code, existing_overrides, new_time,
+    ):
+        """Faster times and runs following rejected or legacy records remain valid."""
+        user_id = await create_test_user()
+        map_id = await create_test_map(code=unique_map_code)
+        overrides = dict(existing_overrides)
+        if overrides.pop("rejected", False):
+            overrides["verified_by"] = user_id
+        await create_test_completion(user_id, map_id, time=45.5, **overrides)
+
+        response = await test_client.post(
+            "/api/v3/completions/",
+            json={
+                "user_id": user_id,
+                "code": unique_map_code,
+                "time": new_time,
+                "screenshot": "https://example.com/screenshot.png",
+                "video": None,
+            },
+        )
+
+        assert response.status_code == 201
 
     async def test_submit_completion_updates_quest_progress(
         self,

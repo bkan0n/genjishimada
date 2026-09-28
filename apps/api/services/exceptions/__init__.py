@@ -30,6 +30,7 @@ from .completions import (
     DuplicateUpvoteError,
     DuplicateVerificationError,
     SlowerThanPendingError,
+    SlowerThanVerifiedError,
 )
 from .completions import (
     MapNotFoundError as CompletionsMapNotFoundError,
@@ -170,6 +171,7 @@ __all__ = [
     "RateLimitExceededError",
     "RotationExpiredError",
     "SlowerThanPendingError",
+    "SlowerThanVerifiedError",
     "StoreError",
     "TechniqueNotFoundError",
     "TokenAlreadyUsedError",

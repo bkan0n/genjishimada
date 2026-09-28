@@ -69,6 +69,7 @@ from services.exceptions.completions import (
     DuplicateVerificationError,
     MapNotFoundError,
     SlowerThanPendingError,
+    SlowerThanVerifiedError,
 )
 
 from .base import BaseService
@@ -658,6 +659,7 @@ class CompletionsService(BaseService):
             MapNotFoundError: If map code doesn't exist or is archived.
             DuplicateCompletionError: If user already has completion for this map.
             SlowerThanPendingError: If new time is slower than pending verification.
+            SlowerThanVerifiedError: If new time does not beat an existing verified time.
             CompletionNotFoundError: If referenced completion not found (FK violation).
         """
         map_exists = await self._completions_repo.check_map_exists(data.code)
@@ -697,13 +699,17 @@ class CompletionsService(BaseService):
                     video=data.video,
                     conn=conn,  # type: ignore
                 )
-            except CheckViolationError:
+            except CheckViolationError as e:
                 # The 0017 speed trigger (ERRCODE 23514) rejected a slower-than-PB
                 # run. D-07: ONLY relax on a tournament map — record a tournament
                 # row with NO core row and NO FK link. On a non-tournament map,
-                # re-raise so the existing HTTP-400 path is preserved. Unique/FK
+                # translate known verified-time errors for the user. Unique/FK
                 # violations are NOT caught here, so they still propagate (P7).
                 if active_cycle is None:
+                    # Match only the speed trigger, leaving unrelated database
+                    # errors untouched. Keep its metadata visible for support.
+                    if speed_error := SlowerThanVerifiedError.from_database_message(e.message or str(e)):
+                        raise speed_error from e
                     raise
                 non_pb_id = await self._record_tournament_completion(active_cycle, data, conn=conn)
                 if non_pb_id is not None:

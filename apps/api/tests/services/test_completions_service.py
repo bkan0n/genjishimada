@@ -1602,7 +1602,10 @@ class TestSubmitTournamentSlowerRelax:
         )
         mock_completions_repo.get_pending_verification.return_value = None
         mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
-        mock_completions_repo.insert_completion.side_effect = CheckViolationError("speed trigger")
+        mock_completions_repo.insert_completion.side_effect = CheckViolationError(
+            "completion=TRUE time 99.00 must be strictly faster than current best 45.50 "
+            "(user 123, map 777, code ABC123)"
+        )
         service.get_suspicious_flags = mocker.AsyncMock(return_value=[])
         tournament_repo.get_active_cycle_by_map_id.return_value = {
             "id": 42,
@@ -1628,10 +1631,10 @@ class TestSubmitTournamentSlowerRelax:
         tournament_repo.create_tournament_completion.assert_awaited_once()
         mock_completions_repo.set_completion_tournament_link.assert_not_awaited()
 
-    async def test_slower_on_non_cycle_map_propagates_check_violation(
+    async def test_unrecognized_check_violation_propagates_on_non_cycle_map(
         self, mock_pool, mock_state, mock_completions_repo, mocker
     ):
-        """D-07 guard: slower run on a non-tournament map re-raises (preserves HTTP 400)."""
+        """An unrecognized check violation retains its original error behavior."""
         from asyncpg.exceptions import CheckViolationError
 
         service, tournament_repo, _ = _tournament_service(
