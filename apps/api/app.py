@@ -226,7 +226,7 @@ class EndpointLogFilter(logging.Filter):
         return not any(path in msg for path in self.EXCLUDED_PATHS)
 
 
-def create_app(
+def create_app(  # noqa: PLR0913  # independent startup controls retain production defaults
     psql_dsn: str | None = None,
     *,
     run_pollers: bool = True,
