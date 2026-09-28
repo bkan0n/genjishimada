@@ -35,17 +35,20 @@ lint-api:
     -uv run ruff check apps/api
     -uv run basedpyright apps/api/repository apps/api/services apps/api/routes apps/api/middleware apps/api/utilities
 
-# Test API (requires Docker to be running for test database)
-test-api:
-    uv run pytest -n 4 apps/api -x
+# Full API suite; pass runner/pytest options after the recipe name
+[positional-arguments]
+test-api *args:
+    uv run --project apps/api --group dev-api python scripts/run_api_tests.py "$@"
 
-# Test API - full suite, bypassing testmon
-test-api-all:
-    uv run pytest -n 4 apps/api -x --no-testmon
+# Compatibility alias: the standard command already runs the full suite
+[positional-arguments]
+test-api-all *args:
+    uv run --project apps/api --group dev-api python scripts/run_api_tests.py "$@"
 
-# Test v3 API only (requires Docker to be running for test database)
-test-api-v3:
-    uv run pytest -n 4 apps/api/tests -x
+# Compatibility alias for the feature-organized API suite
+[positional-arguments]
+test-api-v3 *args:
+    uv run --project apps/api --group dev-api python scripts/run_api_tests.py "$@"
 
 # ----------------------------
 # Bot app (genjishimada-bot)

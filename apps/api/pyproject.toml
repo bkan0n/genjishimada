@@ -36,16 +36,22 @@ dev-api = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "--testmon"
+addopts = "--strict-markers --strict-config --import-mode=importlib"
+testpaths = ["tests"]
+pythonpath = ["."]
+faulthandler_timeout = 60
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
+    "unit: Tests that do not require a database or application server",
+    "database: Tests using an isolated PostgreSQL database",
     "integration: Integration tests with real database and HTTP layer",
     "domain_auth: Auth domain tests",
     "domain_autocomplete: Autocomplete domain tests",
     "domain_change_requests: Change requests domain tests",
     "domain_community: Community domain tests",
     "domain_completions: Completions domain tests",
+    "domain_content: Content domain tests",
     "domain_jobs: Jobs domain tests",
     "domain_lootbox: Lootbox domain tests",
     "domain_map_edits: Map edits domain tests",
@@ -55,6 +61,8 @@ markers = [
     "domain_playtests: Playtests domain tests",
     "domain_rank_card: Rank card domain tests",
     "domain_skill: Skill-score domain tests",
+    "domain_store: Store domain tests",
+    "domain_tags: Tags domain tests",
     "domain_tournaments: Tournament domain tests",
     "domain_users: Users domain tests",
     "domain_utilities: Utilities domain tests",
