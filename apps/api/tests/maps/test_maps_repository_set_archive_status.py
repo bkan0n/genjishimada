@@ -1,0 +1,383 @@
+"""Focused tests for MapsRepository.set_archive_status method.
+
+Test Coverage:
+- Set archived=true (1 test)
+- Set archived=false (1 test)
+- Bulk archive (1 test)
+- Bulk unarchive (1 test)
+- Archive affects queries (1 test)
+- Updated_at changes (1 test)
+- Transaction commit (1 test)
+- Archive in-progress playtest sets rejected + completed (1 test)
+- Archive in-progress playtest returns affected thread IDs (1 test)
+- Unarchive does not revert rejected/completed (1 test)
+
+Total: 10 tests
+"""
+
+import asyncpg
+import pytest
+from faker import Faker
+
+from repository.maps_repository import MapsRepository
+
+fake = Faker()
+
+pytestmark = [
+    pytest.mark.domain_maps,
+    pytest.mark.database,
+]
+
+
+# ==============================================================================
+# FIXTURES
+# ==============================================================================
+
+
+@pytest.fixture
+def used_codes() -> set[str]:
+    """Track map codes created within this isolated test."""
+    return set()
+
+
+@pytest.fixture
+async def db_pool(asyncpg_pool: asyncpg.Pool) -> asyncpg.Pool:
+    """Reuse the isolated, fixture-owned pool."""
+    return asyncpg_pool
+
+
+@pytest.fixture
+async def maps_repo(db_pool: asyncpg.Pool) -> MapsRepository:
+    """Create repository instance."""
+    return MapsRepository(db_pool)
+
+
+@pytest.fixture
+def unique_map_code(used_codes: set[str]) -> str:
+    """Generate a unique map code with collision prevention."""
+    max_attempts = 10
+    for _ in range(max_attempts):
+        length = fake.random_int(min=4, max=6)
+        code = "".join(fake.random_choices(elements="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", length=length))
+
+        if code not in used_codes:
+            used_codes.add(code)
+            return code
+
+    # Fallback: timestamp-based code
+    import time
+
+    timestamp = str(int(time.time() * 1000))[-6:]
+    code = f"T{timestamp[:5]}"
+    used_codes.add(code)
+    return code
+
+
+async def create_test_map(
+    db_pool: asyncpg.Pool,
+    code: str,
+    *,
+    archived: bool = False,
+    playtesting: str = "Approved",
+) -> int:
+    """Helper to create a test map."""
+    async with db_pool.acquire() as conn:
+        map_id = await conn.fetchval(
+            """
+            INSERT INTO core.maps (
+                code, map_name, category, checkpoints, official,
+                playtesting, difficulty, raw_difficulty, archived
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING id
+            """,
+            code,
+            "King's Row",
+            "Classic",
+            10,
+            True,
+            playtesting,
+            "Medium",
+            5.0,
+            archived,
+        )
+    return map_id
+
+
+async def create_test_playtest(
+    db_pool: asyncpg.Pool,
+    map_id: int,
+    thread_id: int,
+    *,
+    completed: bool = False,
+) -> int:
+    """Helper to create a playtest meta row."""
+    async with db_pool.acquire() as conn:
+        playtest_id = await conn.fetchval(
+            """
+            INSERT INTO playtests.meta (thread_id, map_id, initial_difficulty, completed)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id
+            """,
+            thread_id,
+            map_id,
+            5.0,
+            completed,
+        )
+    return playtest_id
+
+
+# ==============================================================================
+# CORE FUNCTIONALITY TESTS
+# ==============================================================================
+
+
+class TestSetArchiveStatusCore:
+    """Test core archive/unarchive functionality."""
+
+    @pytest.mark.asyncio
+    async def test_set_archived_true(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Test setting archived=true on a map."""
+        await create_test_map(db_pool, unique_map_code, archived=False)
+
+        await maps_repo.set_archive_status([unique_map_code], archived=True)
+
+        async with db_pool.acquire() as conn:
+            result = await conn.fetchrow("SELECT archived FROM core.maps WHERE code = $1", unique_map_code)
+
+        assert result["archived"] is True
+
+    @pytest.mark.asyncio
+    async def test_set_archived_false(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Test setting archived=false on a map."""
+        await create_test_map(db_pool, unique_map_code, archived=True)
+
+        await maps_repo.set_archive_status([unique_map_code], archived=False)
+
+        async with db_pool.acquire() as conn:
+            result = await conn.fetchrow("SELECT archived FROM core.maps WHERE code = $1", unique_map_code)
+
+        assert result["archived"] is False
+
+    @pytest.mark.asyncio
+    async def test_bulk_archive(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        used_codes: set[str],
+    ) -> None:
+        """Test archiving multiple maps at once."""
+        codes = []
+        for i in range(5):
+            code = f"BULK{i:02d}"
+            used_codes.add(code)
+            await create_test_map(db_pool, code, archived=False)
+            codes.append(code)
+
+        await maps_repo.set_archive_status(codes, archived=True)
+
+        async with db_pool.acquire() as conn:
+            results = await conn.fetch(
+                "SELECT code, archived FROM core.maps WHERE code = ANY($1::text[])",
+                codes,
+            )
+
+        assert len(results) == 5
+        assert all(r["archived"] is True for r in results)
+
+    @pytest.mark.asyncio
+    async def test_bulk_unarchive(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        used_codes: set[str],
+    ) -> None:
+        """Test unarchiving multiple maps at once."""
+        codes = []
+        for i in range(5):
+            code = f"UNAR{i:02d}"
+            used_codes.add(code)
+            await create_test_map(db_pool, code, archived=True)
+            codes.append(code)
+
+        await maps_repo.set_archive_status(codes, archived=False)
+
+        async with db_pool.acquire() as conn:
+            results = await conn.fetch(
+                "SELECT code, archived FROM core.maps WHERE code = ANY($1::text[])",
+                codes,
+            )
+
+        assert len(results) == 5
+        assert all(r["archived"] is False for r in results)
+
+    @pytest.mark.asyncio
+    async def test_archive_affects_queries(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Test that archived status affects query filtering."""
+        await create_test_map(db_pool, unique_map_code, archived=False)
+
+        # Archive the map
+        await maps_repo.set_archive_status([unique_map_code], archived=True)
+
+        # Verify filtering by archived status works
+        async with db_pool.acquire() as conn:
+            archived_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM core.maps WHERE code = $1 AND archived = TRUE",
+                unique_map_code,
+            )
+            unarchived_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM core.maps WHERE code = $1 AND archived = FALSE",
+                unique_map_code,
+            )
+
+        assert archived_count == 1
+        assert unarchived_count == 0
+
+    @pytest.mark.asyncio
+    async def test_updated_at_changes(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Test that updated_at timestamp changes when archiving."""
+        await create_test_map(db_pool, unique_map_code, archived=False)
+
+        # Get original updated_at
+        async with db_pool.acquire() as conn:
+            original = await conn.fetchrow("SELECT updated_at FROM core.maps WHERE code = $1", unique_map_code)
+
+        # Wait briefly to ensure timestamp difference
+        import asyncio
+
+        await asyncio.sleep(0.1)
+
+        # Archive
+        await maps_repo.set_archive_status([unique_map_code], archived=True)
+
+        # Get new updated_at
+        async with db_pool.acquire() as conn:
+            updated = await conn.fetchrow("SELECT updated_at FROM core.maps WHERE code = $1", unique_map_code)
+
+        assert updated["updated_at"] > original["updated_at"]
+
+    @pytest.mark.asyncio
+    async def test_transaction_commit(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Test that archiving within a committed transaction persists."""
+        await create_test_map(db_pool, unique_map_code, archived=False)
+
+        async with db_pool.acquire() as conn:
+            async with conn.transaction():
+                await maps_repo.set_archive_status([unique_map_code], archived=True, conn=conn)
+
+        async with db_pool.acquire() as conn:
+            result = await conn.fetchrow("SELECT archived FROM core.maps WHERE code = $1", unique_map_code)
+
+        assert result["archived"] is True
+
+
+# ==============================================================================
+# PLAYTEST CANCELLATION ON ARCHIVE TESTS
+# ==============================================================================
+
+
+class TestArchiveInProgressPlaytest:
+    """Test that archiving a map with an active playtest cancels the playtest."""
+
+    @pytest.mark.asyncio
+    async def test_archive_in_progress_sets_rejected_and_completed(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Archiving an In Progress map sets playtesting=Rejected and completed=TRUE."""
+        thread_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+        map_id = await create_test_map(db_pool, unique_map_code, playtesting="In Progress")
+        await create_test_playtest(db_pool, map_id, thread_id)
+
+        await maps_repo.set_archive_status([unique_map_code], archived=True)
+
+        async with db_pool.acquire() as conn:
+            map_row = await conn.fetchrow(
+                "SELECT archived, playtesting FROM core.maps WHERE code = $1",
+                unique_map_code,
+            )
+            playtest_row = await conn.fetchrow(
+                "SELECT completed FROM playtests.meta WHERE thread_id = $1",
+                thread_id,
+            )
+
+        assert map_row["archived"] is True
+        assert map_row["playtesting"] == "Rejected"
+        assert playtest_row["completed"] is True
+
+    @pytest.mark.asyncio
+    async def test_archive_in_progress_returns_affected_threads(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Archiving an In Progress map returns affected thread IDs."""
+        thread_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+        map_id = await create_test_map(db_pool, unique_map_code, playtesting="In Progress")
+        await create_test_playtest(db_pool, map_id, thread_id)
+
+        result = await maps_repo.set_archive_status([unique_map_code], archived=True)
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["code"] == unique_map_code
+        assert result[0]["thread_id"] == thread_id
+
+    @pytest.mark.asyncio
+    async def test_unarchive_does_not_revert_rejected(
+        self,
+        maps_repo: MapsRepository,
+        db_pool: asyncpg.Pool,
+        unique_map_code: str,
+    ) -> None:
+        """Unarchiving does not revert playtesting=Rejected or completed=TRUE."""
+        thread_id = fake.random_int(min=100000000000000000, max=999999999999999999)
+        map_id = await create_test_map(db_pool, unique_map_code, playtesting="In Progress")
+        await create_test_playtest(db_pool, map_id, thread_id)
+
+        # Archive first (triggers rejection)
+        await maps_repo.set_archive_status([unique_map_code], archived=True)
+        # Unarchive
+        await maps_repo.set_archive_status([unique_map_code], archived=False)
+
+        async with db_pool.acquire() as conn:
+            map_row = await conn.fetchrow(
+                "SELECT archived, playtesting FROM core.maps WHERE code = $1",
+                unique_map_code,
+            )
+            playtest_row = await conn.fetchrow(
+                "SELECT completed FROM playtests.meta WHERE thread_id = $1",
+                thread_id,
+            )
+
+        assert map_row["archived"] is False
+        assert map_row["playtesting"] == "Rejected"
+        assert playtest_row["completed"] is True

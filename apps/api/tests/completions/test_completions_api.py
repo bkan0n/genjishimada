@@ -1,0 +1,1527 @@
+"""Integration tests for Completions v4 controller.
+
+Tests HTTP interface: request/response serialization,
+error translation, and full stack flow through real database.
+"""
+
+from uuid import uuid4
+
+from asyncpg.exceptions import CheckViolationError
+from faker import Faker
+import pytest
+
+from repository.completions_repository import CompletionsRepository
+from repository.exceptions import ForeignKeyViolationError, UniqueConstraintViolationError
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.domain_completions,
+    pytest.mark.database,
+]
+
+faker = Faker()
+
+
+class TestGetCompletionsForUser:
+    """GET /api/v3/completions/ with user_id query param"""
+
+    async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
+        """Get completions for user returns list with valid structure."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit a completion first
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+        await test_client.post("/api/v3/completions/", json=completion_payload)
+
+        response = await test_client.get("/api/v3/completions/", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate response structure if completions exist
+        if data:
+            completion = data[0]
+            assert "id" in completion
+            assert "user_id" in completion
+            assert completion["user_id"] == user_id
+            assert "code" in completion
+            assert "time" in completion
+            assert isinstance(completion["time"], (int, float))
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Get completions without auth returns 401."""
+        user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            "/api/v3/completions/",
+            params={"user_id": user_id},
+        )
+
+        assert response.status_code == 401
+
+    async def test_difficulty_filter(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        unique_message_id,
+        global_code_tracker,
+    ):
+        """Difficulty filter returns only matching difficulty completions."""
+        from uuid import uuid4
+
+        user_id = await create_test_user()
+
+        # Generate 3 unique codes upfront
+        def generate_unique_code():
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
+            return code
+
+        easy_code = generate_unique_code()
+        medium_code = generate_unique_code()
+        hard_code = generate_unique_code()
+
+        await create_test_map(code=easy_code, difficulty="Easy", checkpoints=10)
+        await create_test_map(code=medium_code, difficulty="Medium", checkpoints=10)
+        await create_test_map(code=hard_code, difficulty="Hard", checkpoints=10)
+
+        # Submit completions for all 3 maps
+        for code in [easy_code, medium_code, hard_code]:
+            msg_id = unique_message_id + hash(code) % 1000000
+            completion_payload = {
+                "user_id": user_id,
+                "code": code,
+                "time": 45.5,
+                "video": "https://youtube.com/watch?v=test",
+                "screenshot": "https://example.com/screenshot.png",
+                "message_id": msg_id,
+            }
+            submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+            assert submit_response.status_code == 201
+
+            # Verify each completion so it appears in results
+            completion_id = submit_response.json()["completion_id"]
+            verify_payload = {"verified": True, "verified_by": user_id, "reason": None}
+            await test_client.put(f"/api/v3/completions/{completion_id}/verification", json=verify_payload)
+
+            # Patch with message_id after verification
+            patch_payload = {"message_id": msg_id}
+            await test_client.patch(f"/api/v3/completions/{completion_id}", json=patch_payload)
+
+        # Query with difficulty filter
+        response = await test_client.get("/api/v3/completions/", params={"user_id": user_id, "difficulty": "Medium"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        # Should only return Medium difficulty completion
+        assert len(data) >= 1
+        for completion in data:
+            # Verify it's the medium code by checking the code field
+            assert completion["code"] == medium_code
+
+    async def test_archived_filter(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        create_test_completion,
+        global_code_tracker,
+        unique_message_id,
+    ):
+        """Archived tribool filter narrows results; omitting it returns everything."""
+        user_id = await create_test_user()
+
+        def generate_unique_code():
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
+            return code
+
+        archived_code = generate_unique_code()
+        active_code = generate_unique_code()
+
+        archived_map_id = await create_test_map(code=archived_code, checkpoints=10, archived=True)
+        active_map_id = await create_test_map(code=active_code, checkpoints=10, archived=False)
+
+        await create_test_completion(
+            user_id, archived_map_id, completion=False, time=25.0, message_id=unique_message_id
+        )
+        await create_test_completion(
+            user_id, active_map_id, completion=False, time=35.0, message_id=unique_message_id + 1
+        )
+
+        async def codes_for(params: dict) -> set[str]:
+            response = await test_client.get("/api/v3/completions/", params={"user_id": user_id, **params})
+            assert response.status_code == 200
+            return {completion["code"] for completion in response.json()}
+
+        # Default is "all" — non-breaking for existing callers.
+        assert await codes_for({}) == {archived_code, active_code}
+        assert await codes_for({"archived": "all"}) == {archived_code, active_code}
+        assert await codes_for({"archived": "archived"}) == {archived_code}
+        assert await codes_for({"archived": "not_archived"}) == {active_code}
+
+    async def test_archived_filter_rejects_unknown_value(self, test_client, create_test_user):
+        """An unsupported archived value is rejected rather than silently ignored."""
+        user_id = await create_test_user()
+
+        response = await test_client.get(
+            "/api/v3/completions/",
+            params={"user_id": user_id, "archived": "sometimes"},
+        )
+
+        assert response.status_code == 400
+
+
+class TestGetWorldRecordsPerUser:
+    """GET /api/v3/completions/world-records with user_id query param"""
+
+    async def test_happy_path(self, test_client, create_test_user):
+        """Get world records for user returns list with valid structure."""
+        user_id = await create_test_user()
+
+        response = await test_client.get("/api/v3/completions/world-records", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate response structure (list of CompletionResponse)
+        for record in data:
+            assert "id" in record
+            assert "user_id" in record
+            assert "code" in record
+            assert "time" in record
+            assert isinstance(record["time"], (int, float))
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Get world records without auth returns 401."""
+        user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            "/api/v3/completions/world-records",
+            params={"user_id": user_id},
+        )
+
+        assert response.status_code == 401
+
+    async def test_archived_filter(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        create_test_completion,
+        global_code_tracker,
+        unique_message_id,
+    ):
+        """Archived tribool filter narrows world records; omitting it returns everything."""
+        user_id = await create_test_user()
+
+        def generate_unique_code():
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
+            return code
+
+        archived_code = generate_unique_code()
+        active_code = generate_unique_code()
+
+        archived_map_id = await create_test_map(code=archived_code, checkpoints=10, archived=True)
+        active_map_id = await create_test_map(code=active_code, checkpoints=10, archived=False)
+
+        await create_test_completion(
+            user_id, archived_map_id, completion=False, time=25.0, message_id=unique_message_id
+        )
+        await create_test_completion(
+            user_id, active_map_id, completion=False, time=35.0, message_id=unique_message_id + 1
+        )
+
+        async def codes_for(params: dict) -> set[str]:
+            response = await test_client.get(
+                "/api/v3/completions/world-records",
+                params={"user_id": user_id, **params},
+            )
+            assert response.status_code == 200
+            return {record["code"] for record in response.json()}
+
+        assert await codes_for({}) == {archived_code, active_code}
+        assert await codes_for({"archived": "all"}) == {archived_code, active_code}
+        assert await codes_for({"archived": "archived"}) == {archived_code}
+        assert await codes_for({"archived": "not_archived"}) == {active_code}
+
+
+class TestSubmitCompletion:
+    """POST /api/v3/completions/"""
+
+    async def test_happy_path(self, test_client, create_test_user, create_test_map, unique_map_code):
+        """Submit completion creates record."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+
+        response = await test_client.post("/api/v3/completions/", json=payload)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "completion_id" in data
+        assert "job_status" in data
+
+    async def test_map_not_found_returns_404(self, test_client, create_test_user):
+        """Submit completion for non-existent map should return 404."""
+        user_id = await create_test_user()
+
+        payload = {
+            "user_id": user_id,
+            "code": "ZZZZZZ",  # Valid length, but non-existent map
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+
+        response = await test_client.post("/api/v3/completions/", json=payload)
+
+        assert response.status_code == 404
+
+    async def test_duplicate_completion_returns_400(
+        self, test_client, create_test_user, create_test_map, unique_map_code
+    ):
+        """Submit duplicate completion with same time should return 400 (SlowerThanPendingError)."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+
+        # First submission
+        response1 = await test_client.post("/api/v3/completions/", json=payload)
+        assert response1.status_code == 201
+
+        # Duplicate submission (same user + map, same time) - should return 400
+        payload["message_id"] = 987654321
+        response2 = await test_client.post("/api/v3/completions/", json=payload)
+
+        assert response2.status_code == 400
+        assert "pending verification" in response2.json()["error"]
+        assert "Debug details:" not in response2.json()["error"]
+
+    @pytest.mark.parametrize("new_time", [45.5, 60.0])
+    @pytest.mark.parametrize("completion", [True, False])
+    async def test_verified_time_rejection_is_user_friendly(
+        self, test_client, create_test_user, create_test_map, create_test_completion,
+        unique_map_code, new_time, completion,
+    ):
+        """Explain the verified-time rule first and retain diagnostic metadata for screenshots."""
+        user_id = await create_test_user()
+        map_id = await create_test_map(code=unique_map_code, official=True)
+        await create_test_completion(user_id, map_id, time=45.5, completion=completion)
+
+        response = await test_client.post(
+            "/api/v3/completions/",
+            json={
+                "user_id": user_id,
+                "code": unique_map_code,
+                "time": new_time,
+                "screenshot": "https://example.com/screenshot.png",
+                "video": None if completion else "https://youtube.com/watch?v=test",
+            },
+        )
+
+        assert response.status_code == 400
+        message = response.json()["error"]
+        assert message.startswith(
+            "You already have a verified time of 45.5s on this map. "
+            "Submit a time faster than 45.5s.\n\nDebug details: "
+        )
+        assert f"completion={'TRUE' if completion else 'FALSE'} time {new_time:.2f}" in message
+        assert "45.50" in message
+        assert f"user {user_id}, map {map_id}, code {unique_map_code}" in message
+
+    @pytest.mark.parametrize(
+        "error, expected_status, expected_message",
+        [
+            (
+                CheckViolationError('new row violates check constraint "positive_time"'),
+                500,
+                'new row violates check constraint "positive_time"',
+            ),
+            (
+                CheckViolationError(
+                    "You have a pending verification for map ABC123 with time 40. "
+                    "New submission (60) must be faster or wait for verification."
+                ),
+                500,
+                "You have a pending verification for map ABC123 with time 40. "
+                "New submission (60) must be faster or wait for verification.",
+            ),
+            (
+                CheckViolationError("completion=TRUE time 60 must be strictly faster than current best unknown"),
+                500,
+                "completion=TRUE time 60 must be strictly faster than current best unknown",
+            ),
+            (
+                ValueError(
+                    "completion=TRUE time 60 must be strictly faster than current best 40 "
+                    "(user 123, map 777, code ABC123)"
+                ),
+                500,
+                "completion=TRUE time 60 must be strictly faster than current best 40 "
+                "(user 123, map 777, code ABC123)",
+            ),
+            (
+                UniqueConstraintViolationError("completion_unique", "core.completions"),
+                409,
+                "You already have a completion for this map.",
+            ),
+            (
+                ForeignKeyViolationError("completions_user_id_fkey", "core.completions"),
+                404,
+                "Completion not found.",
+            ),
+        ],
+    )
+    async def test_other_submission_errors_keep_existing_http_response(
+        self, test_client, create_test_user, create_test_map, unique_map_code, mocker,
+        error, expected_status, expected_message,
+    ):
+        """Only recognized verified-time check violations receive the new message."""
+        user_id = await create_test_user()
+        await create_test_map(code=unique_map_code)
+        mocker.patch.object(CompletionsRepository, "insert_completion", side_effect=error)
+
+        response = await test_client.post(
+            "/api/v3/completions/",
+            json={
+                "user_id": user_id,
+                "code": unique_map_code,
+                "time": 60.0,
+                "screenshot": "https://example.com/screenshot.png",
+                "video": None,
+            },
+        )
+
+        assert response.status_code == expected_status
+        assert response.json()["error"] == expected_message
+
+    @pytest.mark.parametrize(
+        "existing_overrides, new_time",
+        [
+            ({"verified": True}, 40.0),
+            ({"verified": False, "rejected": True}, 60.0),
+            ({"verified": True, "legacy": True}, 60.0),
+        ],
+    )
+    async def test_allowed_resubmissions_still_succeed(
+        self, test_client, create_test_user, create_test_map, create_test_completion,
+        unique_map_code, existing_overrides, new_time,
+    ):
+        """Faster times and runs following rejected or legacy records remain valid."""
+        user_id = await create_test_user()
+        map_id = await create_test_map(code=unique_map_code)
+        overrides = dict(existing_overrides)
+        if overrides.pop("rejected", False):
+            overrides["verified_by"] = user_id
+        await create_test_completion(user_id, map_id, time=45.5, **overrides)
+
+        response = await test_client.post(
+            "/api/v3/completions/",
+            json={
+                "user_id": user_id,
+                "code": unique_map_code,
+                "time": new_time,
+                "screenshot": "https://example.com/screenshot.png",
+                "video": None,
+            },
+        )
+
+        assert response.status_code == 201
+
+    async def test_submit_completion_updates_quest_progress(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        asyncpg_pool,
+        unique_map_code,
+    ):
+        """Submit completion updates quest progress and creates notification."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code, checkpoints=10, difficulty="Easy", category="Classic")
+
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute("SELECT store.check_and_generate_quest_rotation()")
+            rotation_id = await conn.fetchval(
+                "SELECT current_rotation_id FROM store.quest_config WHERE id = 1",
+            )
+            quest_id = await conn.fetchval(
+                """
+                INSERT INTO store.quests (name, description, quest_type, difficulty, coin_reward, xp_reward, requirements)
+                VALUES ('Complete Map', 'Finish the map', 'global', 'easy', 10, 5,
+                    jsonb_build_object('type','complete_map','map_id',$1::int,'target','complete'))
+                RETURNING id
+                """,
+                map_id,
+            )
+            progress_id = await conn.fetchval(
+                """
+                INSERT INTO store.user_quest_progress (user_id, rotation_id, quest_id, quest_data, progress)
+                VALUES ($1, $2, $3,
+                    jsonb_build_object('name','Complete Map','description','Finish the map','difficulty','easy',
+                                       'coin_reward',10,'xp_reward',5,
+                                       'requirements', jsonb_build_object('type','complete_map','map_id',$4::int,'target','complete')),
+                    jsonb_build_object('completed', false))
+                RETURNING id
+                """,
+                user_id,
+                rotation_id,
+                quest_id,
+                map_id,
+            )
+
+        payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+
+        response = await test_client.post("/api/v3/completions/", json=payload)
+
+        assert response.status_code == 201
+        completion_id = response.json()["completion_id"]
+
+        verify_payload = {"verified": True, "verified_by": user_id, "reason": None}
+        verify_response = await test_client.put(
+            f"/api/v3/completions/{completion_id}/verification",
+            json=verify_payload,
+        )
+        assert verify_response.status_code == 200
+
+        async with asyncpg_pool.acquire() as conn:
+            completed_at = await conn.fetchval(
+                "SELECT completed_at FROM store.user_quest_progress WHERE id = $1",
+                progress_id,
+            )
+            notification_count = await conn.fetchval(
+                """
+                SELECT COUNT(*) FROM notifications.events
+                WHERE user_id = $1 AND event_type = 'quest_complete'
+                """,
+                user_id,
+            )
+
+        assert completed_at is not None
+        assert notification_count >= 1
+
+
+class TestGetPendingVerifications:
+    """GET /api/v3/completions/pending"""
+
+    async def test_happy_path(self, test_client):
+        """Get pending verifications returns list with valid structure."""
+        response = await test_client.get("/api/v3/completions/pending")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate pending verification entries if any exist
+        for verification in data:
+            assert "id" in verification
+            assert "user_id" in verification
+            assert "code" in verification
+            assert "time" in verification
+            assert isinstance(verification["time"], (int, float))
+            assert "message_id" in verification
+            assert "created_at" in verification
+
+
+class TestGetCompletionsLeaderboard:
+    """GET /api/v3/completions/{code}"""
+
+    async def test_happy_path(self, test_client, create_test_map, unique_map_code):
+        """Get leaderboard returns list with valid structure."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await test_client.get(f"/api/v3/completions/{code}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate leaderboard entries if any exist
+        for entry in data:
+            assert "id" in entry
+            assert "user_id" in entry
+            assert "code" in entry
+            assert entry["code"] == code
+            assert "time" in entry
+            assert isinstance(entry["time"], (int, float))
+            assert "created_at" in entry
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_map, unique_map_code):
+        """Get leaderboard without auth returns 401."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await unauthenticated_client.get(
+            f"/api/v3/completions/{code}",
+        )
+
+        assert response.status_code == 401
+
+    @pytest.mark.parametrize("page_size", [10, 20, 25, 50])
+    @pytest.mark.parametrize("page_number", [1, 2])
+    async def test_pagination(self, test_client, create_test_map, unique_map_code, page_size, page_number):
+        """Leaderboard pagination works."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await test_client.get(
+            f"/api/v3/completions/{code}",
+            params={"page_size": page_size, "page_number": page_number},
+        )
+
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+
+class TestGetAllCompletions:
+    """GET /api/v3/completions/all"""
+
+    async def test_happy_path(self, test_client):
+        """Get all completions returns list with valid structure."""
+        response = await test_client.get("/api/v3/completions/all")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate completion entries if any exist
+        for completion in data:
+            assert "id" in completion
+            assert "user_id" in completion
+            assert "code" in completion
+            assert "time" in completion
+            assert isinstance(completion["time"], (int, float))
+            assert "verified" in completion
+
+
+class TestGetSuspiciousFlags:
+    """GET /api/v3/completions/suspicious"""
+
+    async def test_happy_path(self, test_client, create_test_user):
+        """Get suspicious flags returns list with valid structure."""
+        user_id = await create_test_user()
+
+        response = await test_client.get(
+            "/api/v3/completions/suspicious",
+            params={"user_id": user_id},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate suspicious flag entries if any exist
+        for flag in data:
+            assert "verification_id" in flag
+            assert "message_id" in flag
+            assert "reason" in flag
+            assert "created_at" in flag
+
+
+class TestRemoveSuspiciousFlag:
+    """DELETE /api/v3/completions/suspicious"""
+
+    async def test_happy_path_removes_flag(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id, asyncpg_pool
+    ):
+        """Deleting a suspicious flag by message_id returns 200 with count 1 and removes the flag."""
+        user_id = await create_test_user()
+        flagger_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        message_id = unique_message_id
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+        completion_id = submit_response.json()["completion_id"]
+
+        # Completions are created pending (message_id NULL); the suspicious-flag identifier
+        # model resolves the completion by message_id, so attach it the way verification does.
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE core.completions SET message_id=$1 WHERE id=$2", message_id, completion_id
+            )
+
+        # Flag the completion as suspicious via the existing add route
+        flag_response = await test_client.post(
+            "/api/v3/completions/suspicious",
+            json={
+                "context": "Suspiciously fast run",
+                "flag_type": "Cheating",
+                "flagged_by": flagger_id,
+                "message_id": message_id,
+            },
+        )
+        assert flag_response.status_code in (200, 201)
+
+        # Sanity check: the flag is listed for the flagged user
+        list_before = await test_client.get("/api/v3/completions/suspicious", params={"user_id": user_id})
+        assert list_before.status_code == 200
+        assert any(flag["message_id"] == message_id for flag in list_before.json())
+
+        # Remove the flag
+        delete_response = await test_client.request(
+            "DELETE",
+            "/api/v3/completions/suspicious",
+            json={"message_id": message_id},
+        )
+        assert delete_response.status_code == 200
+        assert delete_response.json() == 1
+
+        # The flag should no longer be listed
+        list_after = await test_client.get("/api/v3/completions/suspicious", params={"user_id": user_id})
+        assert list_after.status_code == 200
+        assert not any(flag["message_id"] == message_id for flag in list_after.json())
+
+    async def test_remove_nonexistent_flag_returns_zero(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id, asyncpg_pool
+    ):
+        """Deleting a flag when none exists returns 200 with count 0 (no error)."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        message_id = unique_message_id
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+        completion_id = submit_response.json()["completion_id"]
+        async with asyncpg_pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE core.completions SET message_id=$1 WHERE id=$2", message_id, completion_id
+            )
+
+        delete_response = await test_client.request(
+            "DELETE",
+            "/api/v3/completions/suspicious",
+            json={"message_id": message_id},
+        )
+        assert delete_response.status_code == 200
+        assert delete_response.json() == 0
+
+    async def test_remove_requires_identifier(self, test_client):
+        """Deleting without message_id or verification_id returns 400."""
+        delete_response = await test_client.request(
+            "DELETE",
+            "/api/v3/completions/suspicious",
+            json={},
+        )
+        assert delete_response.status_code == 400
+
+
+class TestEditCompletion:
+    """PATCH /api/v3/completions/{record_id}"""
+
+    async def test_happy_path(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
+    ):
+        """Edit completion updates fields successfully."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit completion first
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": unique_message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+        completion_id = submit_response.json()["completion_id"]
+
+        # Edit the completion (patch accepts message_id, completion, verification_id, legacy, legacy_medal, wr_xp_check)
+        new_message_id = unique_message_id + 1
+        edit_payload = {
+            "message_id": new_message_id,
+            "legacy": False,
+        }
+        response = await test_client.patch(f"/api/v3/completions/{completion_id}", json=edit_payload)
+
+        assert response.status_code in [200, 204]
+
+    async def test_not_found_returns_404(self, test_client):
+        """Edit non-existent completion should return 404."""
+        record_id = 999999999
+
+        response = await test_client.patch(
+            f"/api/v3/completions/{record_id}",
+            json={"time": 30.5},
+        )
+
+        assert response.status_code == 404
+
+
+class TestGetCompletionSubmission:
+    """GET /api/v3/completions/{record_id}/submission"""
+
+    async def test_happy_path(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
+    ):
+        """Get completion submission returns enriched details."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit completion first
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": unique_message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+        completion_id = submit_response.json()["completion_id"]
+
+        # Get submission details
+        response = await test_client.get(f"/api/v3/completions/{completion_id}/submission")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "id" in data
+        assert "user_id" in data
+        assert data["user_id"] == user_id
+        assert "code" in data
+        assert "time" in data
+
+    async def test_not_found_returns_404(self, test_client):
+        """Get non-existent completion submission should return 404."""
+        record_id = 999999999
+
+        response = await test_client.get(f"/api/v3/completions/{record_id}/submission")
+
+        assert response.status_code == 404
+
+
+class TestVerifyCompletion:
+    """PUT /api/v3/completions/{record_id}/verification"""
+
+    async def test_happy_path(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
+    ):
+        """Verify completion returns JobStatusResponse."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit completion first
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": unique_message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+        completion_id = submit_response.json()["completion_id"]
+
+        # Verify the completion
+        verify_payload = {
+            "verified": True,
+            "verified_by": user_id,
+            "reason": None,
+        }
+        response = await test_client.put(f"/api/v3/completions/{completion_id}/verification", json=verify_payload)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "id" in data
+        assert "status" in data
+
+
+    async def test_not_found_returns_404(self, test_client):
+        """Verify non-existent completion should return 404."""
+        record_id = 999999999
+        payload = {
+            "verified": True,
+            "verified_by": 123,
+            "reason": None,
+        }
+
+        response = await test_client.put(f"/api/v3/completions/{record_id}/verification", json=payload)
+
+        assert response.status_code == 404
+
+
+class TestSetSuspiciousFlag:
+    """POST /api/v3/completions/suspicious"""
+
+    async def test_happy_path(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
+    ):
+        """Set suspicious flag succeeds."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit completion first
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": unique_message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+
+        # Set suspicious flag
+        flag_payload = {
+            "message_id": unique_message_id,
+            "context": "Suspicious completion time",
+            "flag_type": "Cheating",  # Valid values: "Cheating" or "Scripting"
+            "flagged_by": user_id,
+        }
+        response = await test_client.post("/api/v3/completions/suspicious", json=flag_payload)
+
+        assert response.status_code in [200, 201, 204]
+
+
+    async def test_requires_message_id_or_verification_id(self, test_client):
+        """Setting suspicious flag without required fields returns 400."""
+        payload = {"reason": "Suspicious activity"}
+
+        response = await test_client.post("/api/v3/completions/suspicious", json=payload)
+
+        assert response.status_code == 400
+
+
+class TestUpvoteSubmission:
+    """POST /api/v3/completions/upvoting"""
+
+    async def test_non_existent_message_returns_404(self, test_client):
+        """Upvoting non-existent message should return 404."""
+        payload = {"message_id": 999999999, "user_id": 999}
+
+        response = await test_client.post("/api/v3/completions/upvoting", json=payload)
+
+        assert response.status_code == 404
+
+    async def test_duplicate_upvote_returns_409(
+        self, test_client, create_test_user, create_test_map, unique_map_code
+    ):
+        """Duplicate upvote should return 409."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit a completion
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": 123456789,
+        }
+        response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert response.status_code == 201
+        completion_id = response.json()["completion_id"]
+
+        # Patch the completion to set message_id
+        await test_client.patch(
+            f"/api/v3/completions/{completion_id}",
+            json={"message_id": 123456789},
+        )
+
+        upvote_payload = {"message_id": 123456789, "user_id": user_id}
+
+        # First upvote
+        response1 = await test_client.post("/api/v3/completions/upvoting", json=upvote_payload)
+        assert response1.status_code == 201
+
+        # Duplicate upvote
+        response2 = await test_client.post("/api/v3/completions/upvoting", json=upvote_payload)
+
+        assert response2.status_code == 409
+
+
+class TestCheckWorldRecordXp:
+    """GET /api/v3/completions/{code}/wr-xp-check"""
+
+    async def test_returns_boolean(self, test_client, create_test_map, create_test_user, unique_map_code):
+        """Check WR XP returns boolean with correct type."""
+        code = unique_map_code
+        user_id = await create_test_user()
+        await create_test_map(code=code)
+
+        response = await test_client.get(
+            f"/api/v3/completions/{code}/wr-xp-check",
+            params={"user_id": user_id},
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert isinstance(result, bool)
+        # Should be False for new user with no WR XP history
+        assert result is False
+
+
+class TestGetRecordsFiltered:
+    """GET /api/v3/completions/moderation/records"""
+
+    async def test_happy_path(self, test_client):
+        """Get filtered records for moderation with valid structure."""
+        response = await test_client.get("/api/v3/completions/moderation/records")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate moderation record entries if any exist
+        for record in data:
+            assert "id" in record
+            assert "user_id" in record
+            assert "code" in record
+            assert "time" in record
+            assert isinstance(record["time"], (int, float))
+            assert "verified" in record
+            assert isinstance(record["verified"], bool)
+
+    @pytest.mark.parametrize("verification_status", ["Verified", "Unverified", "All"])
+    @pytest.mark.parametrize("latest_only", [True, False])
+    async def test_filter_combinations(self, test_client, verification_status, latest_only):
+        """Test various filter combinations."""
+        response = await test_client.get(
+            "/api/v3/completions/moderation/records",
+            params={"verification_status": verification_status, "latest_only": latest_only},
+        )
+
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+    async def test_verification_status_filter(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
+    ):
+        """Verification status filter returns only matching completions."""
+        user1 = await create_test_user()
+        user2 = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit two completions
+        msg_id1 = unique_message_id
+        msg_id2 = unique_message_id + 1
+        completion_ids = []
+
+        for user, msg_id in [(user1, msg_id1), (user2, msg_id2)]:
+            payload = {
+                "user_id": user,
+                "code": code,
+                "time": faker.pyfloat(left_digits=8, right_digits=2),  # Different times to avoid conflicts
+                "video": "https://youtube.com/watch?v=test",
+                "screenshot": "https://example.com/screenshot.png",
+                "message_id": msg_id,
+            }
+            response = await test_client.post("/api/v3/completions/", json=payload)
+            assert response.status_code == 201
+            completion_ids.append(response.json()["completion_id"])
+
+        # Verify only the first one
+        verify_payload = {"verified": True, "verified_by": user1, "reason": None}
+        await test_client.put(f"/api/v3/completions/{completion_ids[0]}/verification", json=verify_payload)
+
+        # Patch with message_id after verification
+        patch_payload = {"message_id": msg_id1}
+        await test_client.patch(f"/api/v3/completions/{completion_ids[0]}", json=patch_payload)
+
+        # Filter by verified status
+        response = await test_client.get(
+            "/api/v3/completions/moderation/records",
+            params={"code": code, "verification_status": "Verified"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # Should return at least the verified completion
+        verified_ids = [r["id"] for r in data if r.get("verified") is True]
+        assert completion_ids[0] in verified_ids
+
+    async def test_code_filter(
+        self,
+        test_client,
+        create_test_user,
+        create_test_map,
+        unique_message_id,
+        global_code_tracker,
+    ):
+        """Code filter returns only completions for that map."""
+        from uuid import uuid4
+
+        user = await create_test_user()
+
+        # Generate 2 unique codes upfront
+        def generate_unique_code():
+            code = f"T{uuid4().hex[:5].upper()}"
+            global_code_tracker.add(code)
+            return code
+
+        code1 = generate_unique_code()
+        code2 = generate_unique_code()
+        await create_test_map(code=code1, checkpoints=10)
+        await create_test_map(code=code2, checkpoints=10)
+
+        # Submit completions for both maps
+        msg_id1 = unique_message_id
+        msg_id2 = unique_message_id + 1
+
+        for code, msg_id in [(code1, msg_id1), (code2, msg_id2)]:
+            payload = {
+                "user_id": user,
+                "code": code,
+                "time": 45.5,
+                "video": "https://youtube.com/watch?v=test",
+                "screenshot": "https://example.com/screenshot.png",
+                "message_id": msg_id,
+            }
+            response = await test_client.post("/api/v3/completions/", json=payload)
+            assert response.status_code == 201
+
+        # Filter by specific code
+        response = await test_client.get("/api/v3/completions/moderation/records", params={"code": code1})
+
+        assert response.status_code == 200
+        data = response.json()
+        # All results should be for code1
+        for record in data:
+            if record["code"] == code1 or record["code"] == code2:
+                assert record["code"] == code1
+
+    async def test_user_id_filter(self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id):
+        """User ID filter returns only completions for that user."""
+        user1 = await create_test_user()
+        user2 = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit completions from both users
+        msg_id1 = unique_message_id
+        msg_id2 = unique_message_id + 1
+
+        for user, msg_id in [(user1, msg_id1), (user2, msg_id2)]:
+            payload = {
+                "user_id": user,
+                "code": code,
+                "time": faker.pyfloat(left_digits=8, right_digits=2),  # Different times
+                "video": "https://youtube.com/watch?v=test",
+                "screenshot": "https://example.com/screenshot.png",
+                "message_id": msg_id,
+            }
+            response = await test_client.post("/api/v3/completions/", json=payload)
+            assert response.status_code == 201
+
+        # Filter by user1
+        response = await test_client.get("/api/v3/completions/moderation/records", params={"user_id": user1})
+
+        assert response.status_code == 200
+        data = response.json()
+        # All results should be for user1
+        for record in data:
+            if record["user_id"] in [user1, user2]:
+                assert record["user_id"] == user1
+
+    async def test_latest_only_filter(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
+    ):
+        """Latest only filter returns only most recent completion per user+map."""
+        user = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit first completion
+        msg_id1 = unique_message_id
+        payload1 = {
+            "user_id": user,
+            "code": code,
+            "time": 50.0,
+            "video": "https://youtube.com/watch?v=test1",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": msg_id1,
+        }
+        response1 = await test_client.post("/api/v3/completions/", json=payload1)
+        assert response1.status_code == 201
+        completion_id1 = response1.json()["completion_id"]
+
+        # Verify first completion
+        verify_payload = {"verified": True, "verified_by": user, "reason": None}
+        await test_client.put(f"/api/v3/completions/{completion_id1}/verification", json=verify_payload)
+
+        # Edit to create a second version (simulates new submission)
+        edit_payload = {"time": 45.0}
+        await test_client.patch(f"/api/v3/completions/{completion_id1}", json=edit_payload)
+
+        # Filter with latest_only=True should return only one
+        response_latest = await test_client.get(
+            "/api/v3/completions/moderation/records",
+            params={"user_id": user, "code": code, "latest_only": True},
+        )
+
+        assert response_latest.status_code == 200
+        data_latest = response_latest.json()
+        # Should return at most 1 result for this user+map combination
+        user_map_records = [r for r in data_latest if r["user_id"] == user and r["code"] == code]
+        assert len(user_map_records) <= 1
+
+
+class TestModerateCompletion:
+    """PUT /api/v3/completions/{record_id}/moderate"""
+
+    async def test_happy_path(
+        self, test_client, create_test_user, create_test_map, unique_map_code, unique_message_id
+    ):
+        """Moderate completion succeeds."""
+        user_id = await create_test_user()
+        moderator_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code, checkpoints=10)
+
+        # Submit completion first
+        completion_payload = {
+            "user_id": user_id,
+            "code": code,
+            "time": 45.5,
+            "video": "https://youtube.com/watch?v=test",
+            "screenshot": "https://example.com/screenshot.png",
+            "message_id": unique_message_id,
+        }
+        submit_response = await test_client.post("/api/v3/completions/", json=completion_payload)
+        assert submit_response.status_code == 201
+        completion_id = submit_response.json()["completion_id"]
+
+        # Moderate the completion
+        moderate_payload = {
+            "moderated_by": moderator_id,
+            "time": 40.0,
+            "time_change_reason": "Corrected timing error",
+        }
+        response = await test_client.put(f"/api/v3/completions/{completion_id}/moderate", json=moderate_payload)
+
+        assert response.status_code in [200, 204]
+
+    async def test_not_found_returns_404(self, test_client):
+        """Moderate non-existent completion should return 404."""
+        record_id = 999999999
+        payload = {
+            "moderated_by": 123,
+            "time": 45.0,
+        }
+
+        response = await test_client.put(f"/api/v3/completions/{record_id}/moderate", json=payload)
+
+        assert response.status_code == 404
+
+
+class TestGetLegacyCompletions:
+    """GET /api/v3/completions/{code}/legacy"""
+
+    async def test_happy_path(self, test_client, create_test_map, unique_map_code):
+        """Get legacy completions for a map with valid structure."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await test_client.get(f"/api/v3/completions/{code}/legacy")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+        # Validate legacy completion entries if any exist
+        for completion in data:
+            assert "id" in completion
+            assert "user_id" in completion
+            assert "code" in completion
+            assert completion["code"] == code
+            assert "time" in completion
+            assert isinstance(completion["time"], (int, float))
+
+    @pytest.mark.parametrize("page_size", [10, 20, 25, 50])
+    @pytest.mark.parametrize("page_number", [1, 2])
+    async def test_pagination(self, test_client, create_test_map, unique_map_code, page_size, page_number):
+        """Test pagination parameters."""
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        response = await test_client.get(
+            f"/api/v3/completions/{code}/legacy",
+            params={"page_size": page_size, "page_number": page_number},
+        )
+
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+
+class TestSetQualityVote:
+    """POST /api/v3/completions/{code}/quality"""
+
+    async def test_set_quality_vote(self, test_client, create_test_map, create_test_user, unique_map_code):
+        """Set quality vote for a map."""
+        code = unique_map_code
+        user_id = await create_test_user()
+        await create_test_map(code=code)
+
+        payload = {"user_id": user_id, "quality": 5}
+
+        response = await test_client.post(f"/api/v3/completions/{code}/quality", json=payload)
+
+        assert response.status_code == 201
+
+    async def test_map_not_found_returns_404(self, test_client, create_test_user):
+        """Quality vote for non-existent map should return 404."""
+        user_id = await create_test_user()
+
+        payload = {"user_id": user_id, "quality": 5}
+
+        response = await test_client.post("/api/v3/completions/ZZZZZZ/quality", json=payload)
+
+        assert response.status_code == 404
+
+    async def test_duplicate_vote_allows_update(self, test_client, create_test_user, create_test_map, unique_map_code):
+        """Duplicate quality vote should update existing vote (upsert behavior)."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        await create_test_map(code=code)
+
+        payload = {"user_id": user_id, "quality": 5}
+
+        # First vote
+        response1 = await test_client.post(f"/api/v3/completions/{code}/quality", json=payload)
+        assert response1.status_code == 201
+
+        # Duplicate vote (upsert updates existing)
+        response2 = await test_client.post(f"/api/v3/completions/{code}/quality", json=payload)
+
+        assert response2.status_code == 201
+
+
+class TestGetUpvotesFromMessageId:
+    """GET /api/v3/completions/upvoting/{message_id}"""
+
+    async def test_returns_integer_count(self, test_client):
+        """Get upvote count returns integer with correct type and value."""
+        message_id = 123456789
+
+        response = await test_client.get(f"/api/v3/completions/upvoting/{message_id}")
+
+        assert response.status_code == 200
+        count = response.json()
+        assert isinstance(count, int)
+        assert count >= 0  # Count should never be negative
+
+
+class TestGetDashboardCompletions:
+    """GET /api/v3/completions/dashboard"""
+
+    async def test_returns_verified_completion(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Verified completion returns status 'Verified' with reason."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+        moderator_id = await create_test_user()
+
+        await create_test_completion(
+            user_id,
+            map_id,
+            verified=True,
+            verified_by=moderator_id,
+            message_id=unique_message_id,
+            reason="Clean run",
+        )
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["status"] == "Verified"
+        assert data[0]["reason"] == "Clean run"
+        assert data[0]["code"] == code
+        assert data[0]["user_id"] == user_id
+
+    async def test_returns_rejected_completion(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Rejected completion returns status 'Rejected' with reason."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+        moderator_id = await create_test_user()
+
+        await create_test_completion(
+            user_id,
+            map_id,
+            verified=False,
+            verified_by=moderator_id,
+            message_id=unique_message_id,
+            reason="Screenshot doesn't match",
+        )
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["status"] == "Rejected"
+        assert data[0]["reason"] == "Screenshot doesn't match"
+
+    async def test_returns_pending_completion(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Pending completion (unreviewed) returns status 'Pending'."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+
+        await create_test_completion(
+            user_id,
+            map_id,
+            verified=False,
+            verified_by=None,
+            message_id=unique_message_id,
+            reason=None,
+        )
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["status"] == "Pending"
+        assert data[0]["reason"] is None
+
+    async def test_excludes_other_users(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Only returns completions for the requested user_id."""
+        user_a = await create_test_user()
+        user_b = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+
+        await create_test_completion(user_a, map_id, message_id=unique_message_id)
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_b})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_pagination(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Pagination returns correct page_size and total_results."""
+        user_id = await create_test_user()
+        moderator_id = await create_test_user()
+
+        # Create 3 completions on different maps
+        for i in range(3):
+            code = f"D{uuid4().hex[:5].upper()}"
+            map_id = await create_test_map(code=code)
+            msg_id = unique_message_id + i + 1
+            await create_test_completion(
+                user_id, map_id, verified=True, verified_by=moderator_id, message_id=msg_id
+            )
+
+        response = await test_client.get(
+            "/api/v3/completions/dashboard",
+            params={"user_id": user_id, "page_size": 2, "page_number": 1},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        assert data[0]["total_results"] == 3
+
+    async def test_excludes_legacy(
+        self, test_client, create_test_user, create_test_map, create_test_completion, unique_map_code, unique_message_id
+    ):
+        """Legacy completions are excluded from dashboard."""
+        user_id = await create_test_user()
+        code = unique_map_code
+        map_id = await create_test_map(code=code)
+
+        await create_test_completion(user_id, map_id, legacy=True, message_id=unique_message_id)
+
+        response = await test_client.get("/api/v3/completions/dashboard", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_requires_auth(self, unauthenticated_client, create_test_user):
+        """Dashboard endpoint requires authentication."""
+        user_id = await create_test_user()
+
+        response = await unauthenticated_client.get(
+            "/api/v3/completions/dashboard", params={"user_id": user_id}
+        )
+
+        assert response.status_code == 401
