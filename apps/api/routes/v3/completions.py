@@ -47,6 +47,7 @@ from services.exceptions.completions import (
     DuplicateVerificationError,
     MapNotFoundError,
     SlowerThanPendingError,
+    SlowerThanVerifiedError,
 )
 from services.notifications_service import NotificationsService, provide_notifications_service
 from services.skill_service import SkillService, provide_skill_service
@@ -143,7 +144,7 @@ class CompletionsController(Controller):
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e
         except DuplicateCompletionError as e:
             raise HTTPException(status_code=HTTP_409_CONFLICT, detail=str(e)) from e
-        except SlowerThanPendingError as e:
+        except (SlowerThanPendingError, SlowerThanVerifiedError) as e:
             raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
         except CompletionNotFoundError as e:
             raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail=str(e)) from e

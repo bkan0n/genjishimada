@@ -4,6 +4,10 @@ These exceptions represent business rule violations in the completions domain.
 They are raised by CompletionsService and caught by controllers.
 """
 
+from __future__ import annotations
+
+import re
+
 from utilities.errors import DomainError
 
 
@@ -36,6 +40,33 @@ class SlowerThanPendingError(CompletionsError):
             new_time=new_time,
             pending_time=pending_time,
         )
+
+
+class SlowerThanVerifiedError(CompletionsError):
+    """New submission does not beat an existing verified time."""
+
+    def __init__(self, best_time: str, debug_details: str) -> None:
+        super().__init__(
+            f"You already have a verified time of {best_time}s on this map. "
+            f"Submit a time faster than {best_time}s.\n\n"
+            f"Debug details: {debug_details}",
+        )
+
+    @classmethod
+    def from_database_message(cls, message: str) -> SlowerThanVerifiedError | None:
+        """Translate known speed-trigger messages while preserving their diagnostics."""
+        match = re.fullmatch(
+            r"completion=(?:TRUE|FALSE) time [0-9.]+ must be strictly faster "
+            r"than current best (?:non-completion )?([0-9.]+) "
+            r"\(user \d+, map \d+, code [A-Za-z0-9]+\)",
+            message,
+        )
+        if match is None:
+            return None
+        best_time = match.group(1)
+        if "." in best_time:
+            best_time = best_time.rstrip("0").rstrip(".")
+        return cls(best_time=best_time, debug_details=message)
 
 
 class CompletionNotFoundError(CompletionsError):
