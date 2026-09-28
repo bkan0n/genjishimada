@@ -70,8 +70,10 @@ fixtures, so importing the shared fixtures does not start infrastructure.
 The test client waits for real in-process business listeners, including skill
 recomputation, before returning an HTTP response. External email and OCR emissions
 are recorded without contacting those services. Dedicated poller and listener
-tests can still invoke the real behavior. Normal `create_app()` defaults retain
-the production pools, listeners, and pollers.
+tests can still invoke the real behavior. Test apps use a synchronous log handler
+and skip repeated Sentry initialization so app construction does not accumulate
+background threads. Normal `create_app()` defaults retain production logging,
+Sentry, pools, listeners, and pollers.
 
 ## Diagnosing failures
 
