@@ -35,7 +35,7 @@ def encode_payload(payload: object) -> bytes:
     return json.dumps(msgspec.to_builtins(payload), sort_keys=True, separators=(",", ":")).encode()
 
 
-async def enqueue_job(  # noqa: PLR0913 - explicit durable event metadata
+async def enqueue_job(  # noqa: PLR0912, PLR0913 - ordered producer, adoption, and enqueue protocol
     conn: asyncpg.Connection,
     *,
     event_name: str,
@@ -54,6 +54,11 @@ async def enqueue_job(  # noqa: PLR0913 - explicit durable event metadata
         raise ValueError("event_key is required")
     encoded = encode_payload(payload)
     fingerprint = hashlib.sha256(encoded).hexdigest()
+    if entity_key is not None:
+        # Mark this producer before allocating an order. Shared locks let one
+        # transaction enqueue several entities without opposing lock orders;
+        # readiness below defers until every producer for its entity commits.
+        await conn.execute("SELECT pg_advisory_xact_lock_shared(hashtextextended($1,0))", "queue-entity:" + entity_key)
     identity = job_id or uuid4()
     legacy = await conn.fetchrow("SELECT * FROM public.jobs WHERE id=$1 FOR UPDATE", identity) if job_id else None
     if legacy is not None:
@@ -65,9 +70,13 @@ async def enqueue_job(  # noqa: PLR0913 - explicit durable event metadata
             return await get_job(conn, identity)
         if legacy["status"] == "succeeded":
             raise ValueError("A completed legacy job cannot be replayed")
+        # Legacy rows received a sequence at migration, before they entered this
+        # queue. First adoption joins today's acceptance order; replay above
+        # preserves the already accepted sequence and public identity.
         await conn.execute(
             """UPDATE public.jobs SET event_key=$2,payload_hash=$3,payload=$4,
-            entity_key=$5,depends_on=$6,status='queued',error_code=NULL,error_msg=NULL,finished_at=NULL
+            entity_key=$5,depends_on=$6,event_sequence=DEFAULT,
+            status='queued',error_code=NULL,error_msg=NULL,finished_at=NULL
             WHERE id=$1""",
             identity,
             event_key,
@@ -155,6 +164,13 @@ async def ensure_ready(conn: asyncpg.Connection, context: JobContext) -> None:
             if parent.status != "succeeded":
                 raise DependencyUnavailable("Prerequisite has not completed")
         if row["entity_key"] is not None:
+            # Never wait for a producer while holding the execution's queue row:
+            # that producer may need the same row for a mutation receipt. The
+            # next statement gets a fresh snapshot of the committed predecessors.
+            if not await conn.fetchval(
+                "SELECT pg_try_advisory_xact_lock(hashtextextended($1,0))", "queue-entity:" + row["entity_key"]
+            ):
+                raise DependencyUnavailable("An entity producer has not committed")
             blocked = await conn.fetchval(
                 """SELECT EXISTS(SELECT 1 FROM public.jobs WHERE entity_key=$1 AND event_sequence<$2
                    AND status NOT IN ('succeeded') AND error_code IS DISTINCT FROM 'discarded')""",
