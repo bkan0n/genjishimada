@@ -48,6 +48,8 @@ def canonical(value: object) -> str:
 def identities(plan: ImportPlan) -> set[tuple[str, ...]]:
     """Match duplicate copies using the same identities as queue insertion."""
     result: set[tuple[str, ...]] = {("event", plan.event_name, plan.event_key)}
+    if plan.job_id is not None:
+        result.add(("job", str(plan.job_id)))
     try:
         if plan.record.get("job_id"):
             result.add(("job", str(UUID(str(plan.record["job_id"])))))
@@ -57,7 +59,7 @@ def identities(plan: ImportPlan) -> set[tuple[str, ...]]:
 
 
 def protect_duplicates(plans: list[ImportPlan]) -> list[ImportPlan]:
-    """Propagate conflicting or uncertain evidence across connected logical copies."""
+    """Resolve unambiguous UUIDs and preserve conflicts across connected logical copies."""
     parents = list(range(len(plans)))
     owners: dict[tuple[str, ...], int] = {}
 
@@ -71,6 +73,16 @@ def protect_duplicates(plans: list[ImportPlan]) -> list[ImportPlan]:
         for identity in identities(plan):
             parents[group(index)] = group(owners.setdefault(identity, index))
     blocked = {group(index) for index, plan in enumerate(plans) if plan.disposition != "enqueued"}
+    job_ids: dict[int, set[UUID]] = {}
+    events: dict[int, set[tuple[str, str]]] = {}
+    for index, plan in enumerate(plans):
+        identity = group(index)
+        if plan.job_id is not None:
+            job_ids.setdefault(identity, set()).add(plan.job_id)
+        events.setdefault(identity, set()).add((plan.event_name, plan.event_key))
+    blocked.update(identity for identity, values in job_ids.items() if len(values) > 1)
+    blocked.update(identity for identity, values in events.items() if len(values) > 1)
+    resolved = {identity: next(iter(values)) for identity, values in job_ids.items() if identity not in blocked}
     return [
         replace(
             plan,
@@ -78,6 +90,8 @@ def protect_duplicates(plans: list[ImportPlan]) -> list[ImportPlan]:
             reason="Another copy of this logical job is unresolved or has a conflicting disposition.",
         )
         if plan.disposition == "enqueued" and group(index) in blocked
+        else replace(plan, job_id=resolved[group(index)])
+        if plan.disposition == "enqueued" and group(index) in resolved
         else plan
         for index, plan in enumerate(plans)
     ]
@@ -118,7 +132,7 @@ def plan_record(record: dict[str, Any], fallback_id: str) -> ImportPlan:
     disposition = "needs_reconciliation"
     reason = "No reviewed disposition with supporting evidence."
     job_id = None
-    if isinstance(evidence, str) and evidence.strip():
+    if isinstance(requested, str) and isinstance(evidence, str) and evidence.strip():
         if requested in {"completed", "discarded"}:
             disposition, reason = requested, evidence
         elif requested == "enqueue":
@@ -201,7 +215,15 @@ async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]
                 counts["already_recorded"] += 1
                 continue
             job_id = plan.job_id
-            if plan.disposition == "enqueued":
+            disposition, reason = plan.disposition, plan.reason
+            if disposition == "enqueued" and job_id is not None:
+                existing_id = await connection.fetchval(
+                    "SELECT id FROM public.jobs WHERE action=$1 AND event_key=$2", plan.event_name, plan.event_key
+                )
+                if existing_id is not None and existing_id != job_id:
+                    disposition = "needs_reconciliation"
+                    reason = "This event already belongs to a different public job UUID."
+            if disposition == "enqueued":
                 response = await enqueue_job(
                     connection,
                     event_name=plan.event_name,
@@ -210,6 +232,8 @@ async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]
                     entity_key=plan.record.get("entity_key"),
                     job_id=job_id,
                 )
+                if job_id is not None and response.id != job_id:
+                    raise ValueError("Event identity changed during import; the supplied public job UUID was not used.")
                 job_id = response.id
             elif legacy_jobs.get(job_id) is None:
                 # Keep unmatched original IDs in the retained source, without creating runnable work.
@@ -219,11 +243,11 @@ async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]
                    VALUES ($1,$2,$3,$4,$5::jsonb)""",
                 plan.source_id,
                 job_id,
-                plan.disposition,
-                plan.reason,
+                disposition,
+                reason,
                 canonical(plan.record),
             )
-            counts[plan.disposition] += 1
+            counts[disposition] += 1
     return counts
 
 
