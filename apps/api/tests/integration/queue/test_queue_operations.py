@@ -37,6 +37,7 @@ async def test_Q27_import_replays_once_and_preserves_every_disposition(queue_db,
             "payload": {"completion_id": 1},
             "event_key": "completion:1",
             "disposition": "enqueue",
+            "effects_started": False,
             "evidence": "Synthetic review: no prior effect",
         },
         {
@@ -45,6 +46,7 @@ async def test_Q27_import_replays_once_and_preserves_every_disposition(queue_db,
             "payload": {"completion_id": 1},
             "event_key": "completion:1",
             "disposition": "enqueue",
+            "effects_started": False,
             "evidence": "Synthetic review: duplicate source copy",
         },
         {
@@ -52,6 +54,7 @@ async def test_Q27_import_replays_once_and_preserves_every_disposition(queue_db,
             "queue": "api.tournament.cycle_started",
             "payload": {},
             "disposition": "enqueue",
+            "effects_started": False,
             "evidence": "Unrecognized old event",
         },
         {
@@ -59,6 +62,7 @@ async def test_Q27_import_replays_once_and_preserves_every_disposition(queue_db,
             "queue": "api.completion.submission",
             "payload": {"completion_id": "invalid"},
             "disposition": "enqueue",
+            "effects_started": False,
             "evidence": "Invalid schema",
         },
         {
@@ -67,6 +71,7 @@ async def test_Q27_import_replays_once_and_preserves_every_disposition(queue_db,
             "payload": {"completion_id": 2},
             "legacy_claim": True,
             "disposition": "enqueue",
+            "effects_started": False,
             "evidence": "Old claim has no completion evidence",
         },
         {
@@ -107,7 +112,7 @@ async def test_Q27_import_replays_once_and_preserves_every_disposition(queue_db,
 async def test_Q27_import_preserves_existing_public_job_uuid(queue_db):
     legacy_id = uuid4()
     await queue_db.execute(
-        "INSERT INTO jobs(id,action,status) VALUES($1,'api.completion.submission','failed')", legacy_id
+        "INSERT INTO jobs(id,action,status) VALUES($1,'api.completion.submission','queued')", legacy_id
     )
     plan = importer().plan_record(
         {
@@ -116,7 +121,8 @@ async def test_Q27_import_preserves_existing_public_job_uuid(queue_db):
             "payload": {"completion_id": 8},
             "job_id": str(legacy_id),
             "disposition": "enqueue",
-            "evidence": "Synthetic reconciliation of legacy failed job",
+            "effects_started": False,
+            "evidence": "Synthetic review of unstarted legacy job",
         },
         "unused",
     )
@@ -135,6 +141,7 @@ async def test_Q27_conflicting_import_rolls_back_all_new_dispositions(queue_db):
         "queue": "api.completion.submission",
         "payload": {"completion_id": 1},
         "disposition": "enqueue",
+        "effects_started": False,
         "evidence": "Reviewed",
     }
     await importer().apply_manifest(queue_db, [importer().plan_record(baseline, "unused")])
@@ -197,6 +204,7 @@ async def test_Q27_import_cannot_repurpose_or_replay_completed_legacy_job(queue_
             "payload": {"completion_id": 8},
             "job_id": str(legacy_id),
             "disposition": "enqueue",
+            "effects_started": False,
             "evidence": "Synthetic review cannot override completed identity",
         },
         "unused",

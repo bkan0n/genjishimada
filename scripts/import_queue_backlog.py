@@ -63,12 +63,17 @@ def plan_record(record: dict[str, Any], fallback_id: str) -> ImportPlan:
             try:
                 if event_name not in EVENT_PAYLOAD_TYPES:
                     raise ValueError("Unsupported or retired event name; explicit reconciliation required.")
-                if record.get("legacy_claim") and not record.get("effects_reconciled"):
-                    raise ValueError("Legacy pre-execution claim is ambiguous; reconcile completed effects first.")
                 payload = msgspec.convert(payload, type=EVENT_PAYLOAD_TYPES[event_name], strict=True)
                 if record.get("job_id"):
                     job_id = UUID(str(record["job_id"]))
-                disposition, reason = "enqueued", evidence
+                if (
+                    record.get("effects_started") is not False
+                    or record.get("legacy_claim")
+                    or record.get("completed_effects")
+                ):
+                    reason = "Prior execution is possible; preserve completed effects before resuming work."
+                else:
+                    disposition, reason = "enqueued", evidence
             except (ValueError, TypeError, msgspec.ValidationError) as exc:
                 reason = (
                     f"Payload/identity validation failed ({type(exc).__name__}); review the retained source record."
@@ -120,7 +125,29 @@ async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]
                 counts["already_recorded"] += 1
                 continue
             job_id = plan.job_id
-            if plan.disposition == "enqueued":
+            disposition, reason = plan.disposition, plan.reason
+            legacy = (
+                await connection.fetchrow("SELECT * FROM public.jobs WHERE id=$1 FOR UPDATE", job_id)
+                if job_id
+                else None
+            )
+            if (
+                disposition == "enqueued"
+                and legacy is not None
+                and legacy["event_key"] is None
+                and legacy["queue_job_id"] is None
+                and legacy["action"] == plan.event_name
+                and legacy["status"] != "succeeded"
+                and (
+                    legacy["status"] != "queued"
+                    or legacy["attempts"] > 0
+                    or legacy["started_at"] is not None
+                    or legacy["finished_at"] is not None
+                )
+            ):
+                disposition = "needs_reconciliation"
+                reason = "Stored job history indicates prior execution; the manifest cannot authorize replay."
+            if disposition == "enqueued":
                 response = await enqueue_job(
                     connection,
                     event_name=plan.event_name,
@@ -130,16 +157,19 @@ async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]
                     job_id=job_id,
                 )
                 job_id = response.id
+            elif legacy is None:
+                # Keep unmatched original IDs in the retained source, without creating runnable work.
+                job_id = None
             await connection.execute(
                 """INSERT INTO public.job_imports(source_id,job_id,disposition,reason,payload)
                    VALUES ($1,$2,$3,$4,$5::jsonb)""",
                 plan.source_id,
                 job_id,
-                plan.disposition,
-                plan.reason,
+                disposition,
+                reason,
                 canonical(plan.record),
             )
-            counts[plan.disposition] += 1
+            counts[disposition] += 1
     return counts
 
 

@@ -53,7 +53,7 @@ Supported dispositions:
 
 | Input disposition | Result |
 | --- | --- |
-| `enqueue` with nonempty `evidence` | Validate a supported payload and enqueue the original logical work. |
+| `enqueue` with nonempty `evidence` and `effects_started: false` | Validate a supported payload and enqueue work confirmed never to have started. Prior claims or completed effects keep it in reconciliation. |
 | `completed` with `evidence` | Record the evidence of completed work without enqueueing. |
 | `discarded` with `evidence` | Record the explicit decision and reason without enqueueing. |
 | Missing, unsupported, malformed, or ambiguous | Preserve as `needs_reconciliation`; do not execute. |
@@ -61,10 +61,12 @@ Supported dispositions:
 An example using illustrative IDs:
 
 ```json
-{"source_id":"export-2026-10-02:api.newsfeed.create:42","queue":"api.newsfeed.create","payload":{"newsfeed_id":42},"event_key":"legacy-newsfeed:42","disposition":"enqueue","evidence":"Reviewed domain row and destinations; no completed delivery exists."}
+{"source_id":"export-2026-10-02:api.newsfeed.create:42","queue":"api.newsfeed.create","payload":{"newsfeed_id":42},"event_key":"legacy-newsfeed:42","disposition":"enqueue","effects_started":false,"evidence":"Reviewed source, domain row, and destinations; no effect was attempted."}
 ```
 
-The exact payload must match its shared SDK event model; the example is not production data. Supply the original `job_id` when it can be identified. Use the same `event_key` for duplicate copies of the same business event; different legitimate transitions need different keys. If `legacy_claim` is present, `effects_reconciled: true` and documented evidence are required before enqueueing.
+The exact payload must match its shared SDK event model; the example is not production data. Supply the original `job_id` when it can be identified. Use the same `event_key` for duplicate copies of the same business event; different legitimate transitions need different keys.
+
+Only explicitly unstarted work can be imported for execution. Missing or non-boolean `effects_started`, a truthy `legacy_claim`, or nonempty `completed_effects` keeps a record in `needs_reconciliation`, even if `effects_reconciled: true` is supplied. This importer does not reconstruct effect receipts or external bindings. Partially executed work must remain preserved until its completed effects can be retained through an explicit, event-specific recovery; restarting its full handler could send duplicate messages or award XP twice.
 
 Run the default dry-run without any database connection:
 
@@ -78,7 +80,7 @@ Review the disposition counts, then use the migration-owner connection through a
 uv run --project apps/api python scripts/import_queue_backlog.py /path/to/reviewed-manifest.jsonl --apply
 ```
 
-`--apply` reads `QUEUE_IMPORT_DATABASE_URL` by default; `--dsn-env` selects another environment variable. Never put a live password in a command argument, checked-in file, or report. The importer writes `public.job_imports` and accepted queue work in one transaction. Rerunning the same manifest does not create another job. Reusing a `source_id` with changed content fails the transaction, so a later reconciliation must be an explicit audited operation rather than silently editing an already-imported disposition. Malformed lines are retained with a generated export/line identity.
+`--apply` reads `QUEUE_IMPORT_DATABASE_URL` by default; `--dsn-env` selects another environment variable. Never put a live password in a command argument, checked-in file, or report. The importer writes `public.job_imports` and accepted queue work in one transaction. Apply also locks any original public job: execution history (including attempts, start/finish timestamps, or a processing/failed state) overrides an unstarted assertion and holds the record without altering that job. Dry-run only checks the manifest, so apply may report additional reconciliation items. Rerunning the same manifest does not create another job. Reusing a `source_id` with changed content fails the transaction, so a later reconciliation must be an explicit audited operation rather than silently editing an already-imported disposition. Malformed lines are retained with a generated export/line identity.
 
 Confirm every source line has a disposition, count the source messages and imported records, inspect all `needs_reconciliation` items, and check that no job lost its completed-effect evidence. Keep unresolved items preserved; do not treat a successful importer exit as proof they were completed.
 
