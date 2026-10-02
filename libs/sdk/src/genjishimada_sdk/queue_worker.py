@@ -76,6 +76,7 @@ class FencedQueries(Queries):
         """Retain each execution's ownership and pause claiming during shared outages."""
         if self.can_claim is not None and not self.can_claim():
             return []
+        await self.driver.execute("SELECT public.release_ready_job_dependencies($1::text[])", list(entrypoints))
         jobs = await super().dequeue(
             batch_size,
             entrypoints,
