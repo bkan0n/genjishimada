@@ -2,6 +2,8 @@
 
 PGQueuer 1.1.1 stores background work in the existing PostgreSQL database. Workers run inside the API and bot processes. A business change, its public job UUID, and its queue row commit together, so accepted work remains available after services restart.
 
+Jobs sharing an entity key run in enqueue sequence. Before checking for earlier unfinished work, a worker waits for pending enqueue transactions for that entity to finish. Unrelated entities can continue. Legacy jobs receive their sequence when first imported into the PostgreSQL queue; their public UUID and that sequence remain stable on retries.
+
 ## Credentials and startup
 
 Apply the checked-in queue migration with the database migration owner before starting the new workers. Runtime worker credentials do not install or upgrade schema.

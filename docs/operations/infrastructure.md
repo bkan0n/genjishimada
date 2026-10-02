@@ -51,11 +51,6 @@ PGQueuer 1.1.1 stores accepted work in the existing PostgreSQL instance. Workers
 
 See [Queue operations](../services/queue.md) for retries, alerts, credentials, and automated verification.
 
-# Staging
-
-# Production
-```
-
 ## Cloudflare R2
 
 ### Overview
