@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - "queue/**"
   workflow_call:
     inputs:
       ref:
@@ -38,7 +39,7 @@ jobs:
           enable-cache: true
 
       - name: Sync dependencies
-        run: uv sync --all-groups
+        run: uv sync --locked --all-groups --all-packages
 
       # Run ruff through uv so CI uses the version locked in uv.lock — the same
       # one `just lint-api` / `lint-bot` / `lint-sdk` use locally. astral-sh/ruff-action@v1

@@ -82,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         str(options.workers),
         "--dist=worksteal",
         "--durations=20",
+        # Queue acceptance owns a serial runner and an independent fixture boundary.
+        "--ignore=tests/integration/queue",
         f"--api-order={options.order}",
         f"--api-seed={options.seed}",
         *pytest_args,
