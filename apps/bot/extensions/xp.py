@@ -5,10 +5,10 @@ from logging import getLogger
 from math import floor
 from typing import TYPE_CHECKING
 
-from aio_pika.abc import AbstractIncomingMessage
 from discord import TextChannel, app_commands, utils
 from discord.ext import commands
 from genjishimada_sdk.notifications import NotificationEventType
+from genjishimada_sdk.queue import JobContext
 from genjishimada_sdk.xp import XP_AMOUNTS, XP_TYPES, XpGrantEvent, XpGrantRequest
 
 from extensions._queue_registry import queue_consumer
@@ -103,14 +103,14 @@ class XPHandler(BaseHandler):
         data = XpGrantRequest(XP_AMOUNTS[xp_type], xp_type)
         await self.bot.api.grant_user_xp(user_id, data)
 
-    @queue_consumer("api.xp.grant", struct_type=XpGrantEvent, idempotent=True)
-    async def _process_xp_grant(self, event: XpGrantEvent, _: AbstractIncomingMessage) -> None:
-        log.debug(f"[x] [RabbitMQ] Processing XP grant event: {event.user_id}")
+    @queue_consumer("api.xp.grant", struct_type=XpGrantEvent)
+    async def _process_xp_grant(self, event: XpGrantEvent, _: JobContext) -> None:
+        log.debug(f"[x] [Queue] Processing XP grant event: {event.user_id}")
         user = self.guild.get_member(event.user_id)
         if not user:
             return
 
-        multiplier = await self.bot.api.get_xp_multiplier()
+        multiplier = await self.bot.api.job_snapshot("xp-multiplier", await self.bot.api.get_xp_multiplier())
         amount = floor(event.amount * multiplier)
 
         type_display = f"{event.type} - {event.reason}" if event.reason else event.type
@@ -165,8 +165,8 @@ class XPHandler(BaseHandler):
             )
 
         if xp_data.prestige_change:
-            for __ in range(15):
-                await self.bot.api.grant_active_key_to_user(event.user_id)
+            for key_index in range(15):
+                await self.bot.api.grant_active_key_to_user(event.user_id, effect_key=f"prestige:{key_index}")
 
             old_rank = " ".join((xp_data.old_main_tier_name, xp_data.old_sub_tier_name))
             new_rank = " ".join((xp_data.new_main_tier_name, xp_data.new_sub_tier_name))

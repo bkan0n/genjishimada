@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import signal
 from typing import Iterator
 
 import aiohttp
@@ -97,7 +98,25 @@ async def main() -> None:
 
         async with bot:
             bot.tree.on_error = on_command_error  # pyright: ignore[reportAttributeAccessIssue]
-            await bot.start(os.environ["DISCORD_TOKEN"])
+            shutdown = asyncio.Event()
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, shutdown.set)
+            bot_task = asyncio.create_task(bot.start(os.environ["DISCORD_TOKEN"]), name="discord-bot")
+            shutdown_task = asyncio.create_task(shutdown.wait(), name="bot-shutdown")
+            try:
+                done, _ = await asyncio.wait({bot_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED)
+                if shutdown_task in done:
+                    await bot.close()
+                await bot_task
+                if bot.queue.failure is not None:
+                    raise RuntimeError("Queue worker stopped unexpectedly") from bot.queue.failure
+            finally:
+                shutdown_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await shutdown_task
+                for sig in (signal.SIGTERM, signal.SIGINT):
+                    loop.remove_signal_handler(sig)
 
 
 if __name__ == "__main__":

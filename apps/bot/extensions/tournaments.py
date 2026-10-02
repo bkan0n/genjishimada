@@ -16,14 +16,10 @@ so the consumer renders exactly one combined card.
 
 The bot is consumer-only: data missing from the event (category name +
 ``champion_role_id``, map difficulty) is sourced from existing API endpoints on
-event receipt (D-07). The consumer is edition-scoped idempotent — the outbox sets
-``message_id=tournament:rollover:{edition_id}`` and
-``@queue_consumer(idempotent=True)`` claims on that id, so no key is hand-rolled
-here.
+event receipt. The worker owns the durable queue claim; per-effect receipts preserve
+posted cards across retries. The queue service explicitly
+registers the consumers on ``bot.tournaments``.
 
-The handler is registered as a PUBLIC ``bot.tournaments`` attribute; ``RabbitHandler``
-discovers queue consumers by walking ``dir(bot)`` and skips ``_``-prefixed attributes, so a
-private attribute would silently never register the consumers.
 """
 
 from __future__ import annotations
@@ -43,6 +39,7 @@ from genjishimada_sdk.tournaments import (
     TournamentChooseMapRequest,
     TournamentCompletionCreatedEvent,
     TournamentCycleCompletedEvent,
+    TournamentCycleWithWinnerResponse,
     TournamentEditionResultsEvent,
     TournamentLeaderboardEntryResponse,
     TournamentRolloverEvent,
@@ -54,10 +51,11 @@ from utilities import transformers
 from utilities.base import BaseCog, BaseHandler, ConfirmationView
 from utilities.errors import APIHTTPError, APIUnavailableError, UserFacingError
 from utilities.extra import poll_job_until_complete
+from utilities.job_effects import send_once
 from utilities.paginator import StaticPaginatorView
 
 if TYPE_CHECKING:
-    from aio_pika.abc import AbstractIncomingMessage
+    from genjishimada_sdk.queue import JobContext
 
     import core
     from utilities._types import GenjiItx
@@ -325,9 +323,8 @@ class TournamentHandler(BaseHandler):
     @queue_consumer(
         "api.tournament.rollover",
         struct_type=TournamentRolloverEvent,
-        idempotent=True,
     )
-    async def _on_edition_rollover(self, event: TournamentRolloverEvent, _: AbstractIncomingMessage) -> None:
+    async def _on_edition_rollover(self, event: TournamentRolloverEvent, _: JobContext) -> None:
         """Transfer champions then post ONE combined CV2 rollover card (D-09 / D-10).
 
         Collapses the former ``cycles_started`` + ``cycles_completed`` consumer pair into a
@@ -342,13 +339,13 @@ class TournamentHandler(BaseHandler):
           transfer.
 
         Ordering (Pitfall 5): champion role transfers run FIRST (only when there are
-        results) and the single ``channel.send`` LAST, so a role-op failure retries (claim
-        released) before any message posts — a re-stripped/re-granted role is idempotent
+        results) and the single ``channel.send`` LAST, so a role-op failure retries
+        before any message posts. A re-stripped/re-granted role is idempotent
         whereas a duplicate ``send`` is visible spam. ``_transfer_champion_role`` strips the
         role from ALL current holders (self-healing, A6) then grants the winner, or leaves
         it vacant when ``winner_user_id`` is None. Member edits are staggered with
         ``_ROLE_OP_DELAY`` (Pitfall 2); a winner who left the guild is logged and skipped,
-        never crashed (Pitfall 3 — crashing would DLQ a valid event).
+        never crashed (Pitfall 3 — crashing would hold a valid event).
 
         Security (T-12-11 / T-10-10 / T-11-19): winners are mentioned ONLY by numeric
         ``<@id>``; the free-text standings ``name`` is never used in a mention, and
@@ -446,7 +443,7 @@ class TournamentHandler(BaseHandler):
 
         # Starting section (iff event.started). Category name + map difficulty fetched on
         # receipt (D-07). A missing map raises ``ValueError`` from ``get_map`` — let it
-        # propagate to the DLQ rather than posting a broken card.
+        # propagate to the hold rather than posting a broken card.
         if event.started:
             container.add_item(ui.Separator())
             container.add_item(
@@ -473,7 +470,7 @@ class TournamentHandler(BaseHandler):
         # (never free-text names — T-12-11 / T-10-10 / T-11-19).
         # Order-preservingly dedupe winner ids (Bug #2): a user who wins multiple categories
         # would otherwise appear twice, and discord.AllowedMentions(users=...) rejects a
-        # duplicate snowflake with `400 50035` -> DLQ. Use the deduped list for BOTH the ping
+        # duplicate snowflake with `400 50035` -> hold. Use the deduped list for BOTH the ping
         # text AND the allow-list.
         deduped_winners = list(dict.fromkeys(winners))
         if deduped_winners:
@@ -484,7 +481,10 @@ class TournamentHandler(BaseHandler):
         view.add_item(container)
 
         allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in deduped_winners]
-        await self.announcement_channel.send(
+        await send_once(
+            self.bot,
+            self.announcement_channel,
+            "tournament-announcement",
             view=view,
             allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=allowed_roles),
         )
@@ -498,9 +498,8 @@ class TournamentHandler(BaseHandler):
     @queue_consumer(
         "api.tournament.results",
         struct_type=TournamentEditionResultsEvent,
-        idempotent=True,
     )
-    async def _on_edition_results(self, event: TournamentEditionResultsEvent, _: AbstractIncomingMessage) -> None:
+    async def _on_edition_results(self, event: TournamentEditionResultsEvent, _: JobContext) -> None:
         """Post the DEFERRED results as a NEW card and perform the HELD champion transfer (D-04 / D-05).
 
         Fires on ``api.tournament.results`` when a finalized edition's verification queue
@@ -512,7 +511,7 @@ class TournamentHandler(BaseHandler):
         Ordering mirrors :meth:`_on_edition_rollover` (Pitfall 5): the HELD champion-role
         transfers run FIRST (per result entry, reusing :meth:`_transfer_champion_role`
         verbatim — strip-all-then-grant, staggered, guild-leave-safe, vacant-on-None-winner),
-        then ONE results card is sent LAST so a role-op failure retries (claim released)
+        then ONE results card is sent LAST so a role-op failure retries before completion
         before any visible post. The previous champion held the role through the pending
         window (D-05); the transfer happens HERE, now that results have settled.
 
@@ -524,7 +523,7 @@ class TournamentHandler(BaseHandler):
         data is fetched via the API on receipt — the bot NEVER reads Postgres (CLAUDE.md).
 
         Idempotency (T-12.1-16): the outbox sets ``message_id=tournament:results:{edition_id}``
-        and ``@queue_consumer(idempotent=True)`` claims on that id, so a re-delivered results
+        and each effect retains its completion evidence, so a re-delivered results
         event cannot double-transfer the role or double-post — no key is hand-rolled here.
 
         An empty / all-rejected edition (empty standings, ``winner_user_id`` None) posts a
@@ -595,7 +594,7 @@ class TournamentHandler(BaseHandler):
         # names — T-12.1-15).
         # Order-preservingly dedupe winner ids (Bug #2): a user who wins multiple categories
         # would otherwise appear twice, and discord.AllowedMentions(users=...) rejects a
-        # duplicate snowflake with `400 50035` -> DLQ. Use the deduped list for BOTH the ping
+        # duplicate snowflake with `400 50035` -> hold. Use the deduped list for BOTH the ping
         # text AND the allow-list.
         deduped_winners = list(dict.fromkeys(winners))
         if deduped_winners:
@@ -606,7 +605,10 @@ class TournamentHandler(BaseHandler):
         view.add_item(container)
 
         allowed_users: list[discord.abc.Snowflake] = [discord.Object(id=w) for w in deduped_winners]
-        await self.announcement_channel.send(
+        await send_once(
+            self.bot,
+            self.announcement_channel,
+            "tournament-announcement",
             view=view,
             allowed_mentions=discord.AllowedMentions(users=allowed_users, everyone=False, roles=allowed_roles),
         )
@@ -619,9 +621,8 @@ class TournamentHandler(BaseHandler):
     @queue_consumer(
         "api.tournament.completion.created",
         struct_type=TournamentCompletionCreatedEvent,
-        idempotent=True,
     )
-    async def _on_completion_created(self, event: TournamentCompletionCreatedEvent, _: AbstractIncomingMessage) -> None:
+    async def _on_completion_created(self, event: TournamentCompletionCreatedEvent, _: JobContext) -> None:
         """Render the mod Accept/Reject card for a non-PB video tournament run (D-04).
 
         The event carries the run's screenshot/video/time/user (Plan 11-01), so the card
@@ -637,7 +638,10 @@ class TournamentHandler(BaseHandler):
             event.user_id,
         )
         view = TournamentVerificationView(event, self.bot)
-        await self.verification_channel.send(
+        await send_once(
+            self.bot,
+            self.verification_channel,
+            "tournament-review",
             view=view,
             allowed_mentions=AllowedMentions(everyone=False, roles=False),
         )
@@ -646,11 +650,8 @@ class TournamentHandler(BaseHandler):
     @queue_consumer(
         "api.tournament.verification.changed",
         struct_type=TournamentVerificationChangedEvent,
-        idempotent=True,
     )
-    async def _on_verification_changed(
-        self, event: TournamentVerificationChangedEvent, _: AbstractIncomingMessage
-    ) -> None:
+    async def _on_verification_changed(self, event: TournamentVerificationChangedEvent, _: JobContext) -> None:
         """Acknowledge a tournament verification verdict.
 
         The per-run verdict message was intentionally dropped (commit d2554d6), so this
@@ -672,12 +673,35 @@ class TournamentHandler(BaseHandler):
             event.tournament_completion_id,
         )
 
-    async def _transfer_champion_role(
+    async def _current_champion(self, category_id: int) -> tuple[int, int | None] | None:
+        """Resolve the latest finished cycle and its authoritative leaderboard."""
+        latest: TournamentCycleWithWinnerResponse | None = None
+        offset = 0
+        while True:
+            page = await self.bot.api.list_tournament_cycles(
+                status="completed", category_id=category_id, limit=100, offset=offset
+            )
+            for cycle in page.cycles:
+                if latest is None or (cycle.started_at or cycle.created_at, cycle.id) > (
+                    latest.started_at or latest.created_at,
+                    latest.id,
+                ):
+                    latest = cycle
+            offset += len(page.cycles)
+            if not page.cycles or offset >= page.total:
+                break
+        if latest is None:
+            return None
+        standings = await self.bot.api.get_tournament_leaderboard(latest.id)
+        winner_id = standings[0].user_id if standings and standings[0].rank == 1 else None
+        return latest.id, winner_id
+
+    async def _transfer_champion_role(  # noqa: PLR0911 - explicit missing-resource outcomes
         self,
         event: TournamentCycleCompletedEvent,
         category: TournamentCategoryResponse,
     ) -> discord.Member | None:
-        """Strip the champion role from all holders then grant it to the winner.
+        """Reconcile champion membership against the latest completed cycle.
 
         Returns the winner ``Member`` when the role was granted, else None (no role
         configured, no winner, or the winner left the guild).
@@ -702,48 +726,57 @@ class TournamentHandler(BaseHandler):
             )
             return None
 
-        # D-04: strip from ALL current holders (self-healing), staggered (Pitfall 2). Each
-        # strip is isolated: a single member that can't be edited (role hierarchy / transient
-        # 403) is logged and skipped rather than crashing the handler — crashing would DLQ a
-        # valid event and re-strip every holder on each retry (Pitfall 3).
-        reason_reset = f"Tournament {category.name} cycle {event.cycle_id} reset"
+        # An old held announcement may resume after newer editions have finished.
+        # Resolve current results rather than restoring the announcement's winner.
+        champion = await self._current_champion(event.category_id)
+        if champion is None:
+            log.info("No completed cycle for category %s; retaining its champion role", event.category_id)
+            return None
+        cycle_id, winner_id = champion
+
+        # Role assignments are deterministic. Missing members can be skipped, while
+        # permissions and temporary service failures must remain visible to recovery.
+        reason_reset = f"Tournament {category.name} cycle {cycle_id} reset"
         for holder in list(role.members):
+            if holder.id == winner_id:
+                continue
             try:
                 await holder.remove_roles(role, reason=reason_reset)
-            except discord.HTTPException:
+            except discord.NotFound:
                 log.warning(
                     "[!] [Tournament] failed to strip champion role from %s; continuing (cycle=%s)",
                     holder.id,
-                    event.cycle_id,
+                    cycle_id,
                 )
             await asyncio.sleep(_ROLE_OP_DELAY)
 
         # D-05: no winner → leave the role vacant.
-        if event.winner_user_id is None:
-            log.info("[✓] [Tournament] champion role left vacant for cycle=%s (no winner)", event.cycle_id)
+        if winner_id is None:
+            log.info("[✓] [Tournament] champion role left vacant for cycle=%s (no winner)", cycle_id)
             return None
 
-        winner = self.guild.get_member(event.winner_user_id)
+        winner = self.guild.get_member(winner_id)
         if winner is None:
             # Pitfall 3: member left between submission and finalization — leave vacant.
             log.warning(
                 "[!] [Tournament] winner %s not in guild cache; champion role left vacant (cycle=%s)",
-                event.winner_user_id,
-                event.cycle_id,
+                winner_id,
+                cycle_id,
             )
             return None
 
         try:
-            await winner.add_roles(role, reason=f"Champion of {category.name}, cycle {event.cycle_id}")
-        except discord.HTTPException:
+            if role not in winner.roles:
+                await winner.add_roles(role, reason=f"Champion of {category.name}, cycle {cycle_id}")
+        except discord.NotFound:
             log.warning(
                 "[!] [Tournament] failed to grant champion role to %s; role left vacant (cycle=%s)",
-                event.winner_user_id,
-                event.cycle_id,
+                winner_id,
+                cycle_id,
             )
             return None
 
-        log.info("[✓] [Tournament] granted champion role to %s for cycle=%s", event.winner_user_id, event.cycle_id)
+        log.info("[✓] [Tournament] reconciled champion role to %s for cycle=%s", winner_id, cycle_id)
         return winner
 
 
@@ -1050,11 +1083,8 @@ class TournamentRerollCog(BaseCog):
 async def setup(bot: core.Genji) -> None:
     """Register the tournament handler + slash command cogs.
 
-    Keeps the PUBLIC ``bot.tournaments`` handler attribute (Pitfall 1 — RabbitHandler
-    discovers queue consumers by walking ``dir(bot)``) and adds the player command group
-    and the flat reroll command as SEPARATE cogs (Pitfall 7 — never assign a cog over
-    ``bot.tournaments``). Staying in this module keeps both cogs inside the EXTENSIONS
-    sort that loads before ``rabbit.py``.
+    The queue service explicitly registers consumers on ``bot.tournaments`` after all
+    extension setup hooks complete. Slash commands remain separate cogs.
     """
     bot.tournaments = TournamentHandler(bot)
     await bot.add_cog(TournamentCommandCog(bot))

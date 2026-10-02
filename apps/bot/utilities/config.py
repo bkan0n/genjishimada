@@ -57,7 +57,8 @@ class Updates(Base):
     xp: int
     editor_patch_notes: int
     website_patch_notes: int
-    dlq_alerts: int
+    job_alerts: int
+    job_alert_user_id: int = 141372217677053952
 
 
 class Information(Base):

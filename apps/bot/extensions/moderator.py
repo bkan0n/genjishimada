@@ -7,7 +7,6 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Any, Literal, Sequence, cast, get_args
 
 import discord
-from aio_pika.abc import AbstractIncomingMessage
 from discord import ButtonStyle, Member, SelectOption, TextStyle, app_commands, ui
 from discord.ui import LayoutView
 from genjishimada_sdk.completions import CompletionModerateRequest
@@ -33,6 +32,7 @@ from genjishimada_sdk.maps import (
     Tags,
     UnlinkMapsCreateRequest,
 )
+from genjishimada_sdk.queue import JobContext
 from msgspec import UNSET
 
 from extensions._queue_registry import queue_consumer
@@ -42,6 +42,7 @@ from utilities.base import BaseCog, BaseHandler, BaseView, ConfirmationView
 from utilities.emojis import generate_all_star_rating_strings, stars_rating_string
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.formatter import FilteredFormatter
+from utilities.job_effects import send_once
 from utilities.paginator import PaginatorView
 from utilities.views.mod_creator_view import MapCreatorModView
 from utilities.views.mod_guides_view import ModGuidePaginatorView
@@ -1977,16 +1978,16 @@ class MapEditHandler(BaseHandler):
         assert isinstance(channel, discord.TextChannel)
         self.verification_channel = channel
 
-    @queue_consumer("api.map_edit.created", struct_type=MapEditCreatedEvent, idempotent=True)
-    async def _process_edit_created(self, event: MapEditCreatedEvent, _: AbstractIncomingMessage) -> None:
+    @queue_consumer("api.map_edit.created", struct_type=MapEditCreatedEvent)
+    async def _process_edit_created(self, event: MapEditCreatedEvent, _: JobContext) -> None:
         """Handle new map edit request - post to verification queue."""
-        log.debug(f"[RabbitMQ] Processing map edit created: {event.edit_request_id}")
+        log.debug(f"[Queue] Processing map edit created: {event.edit_request_id}")
 
         data = await self.bot.api.get_map_edit_submission(event.edit_request_id)
         original_map_data = await self.bot.api.get_map(code=data.code)
 
         view = MapEditVerificationView(data, original_map_data)
-        message = await self.verification_channel.send(view=view)
+        message = await send_once(self.bot, self.verification_channel, "map-edit-review", view=view)
 
         await self.bot.api.set_map_edit_message_id(
             event.edit_request_id,
@@ -1996,13 +1997,13 @@ class MapEditHandler(BaseHandler):
         self.verification_views[message.id] = view
 
     @queue_consumer("api.map_edit.resolved", struct_type=MapEditResolvedEvent)
-    async def _process_edit_resolved(self, event: MapEditResolvedEvent, _: AbstractIncomingMessage) -> None:
+    async def _process_edit_resolved(self, event: MapEditResolvedEvent, _: JobContext) -> None:
         """Handle resolved map edit - clean up verification queue message.
 
         Note: User notification is handled by the API via the notification service.
         This consumer only handles Discord-side cleanup (deleting the queue message).
         """
-        log.debug(f"[RabbitMQ] Processing map edit resolved: {event.edit_request_id}")
+        log.debug(f"[Queue] Processing map edit resolved: {event.edit_request_id}")
 
         edit_data = await self.bot.api.get_map_edit_request(event.edit_request_id)
 

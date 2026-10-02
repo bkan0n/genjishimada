@@ -7,12 +7,11 @@ documented ``-k`` selector picks exactly one group:
 - ``-k champion_role``     → DSC-03 / RWD-03: strip role from all holders then grant to winner
 - ``-k champion_vacant``   → DSC-03 / RWD-03: winner_user_id is None → strip-all, leave vacant (D-05)
 - ``-k stagger``           → DSC-03 / RWD-03: role ops staggered to respect Discord rate limits
-- ``-k idempotency``       → D-09: edition-scoped dedupe; claim released on failure
 
 The handler body is invoked directly with injected fakes (mock ``bot.api``, a fake
 announcement channel, the conftest fake guild/role/member trio). The ``@queue_consumer``
-wrapper's pytest-header short-circuit covers the live RabbitMQ path; these tests exercise
-the underlying handler logic.
+wrapper's transport work is covered by the backend acceptance suite; these existing tests
+exercise the underlying handler logic.
 """
 
 from __future__ import annotations
@@ -85,6 +84,11 @@ def _load_tournaments_module() -> ModuleType:
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
+        # Keep existing handler tests at their external-send boundary. Durable effect
+        # reservation/recovery is verified by the PostgreSQL backend acceptance tests.
+        async def send_effect(_bot, destination, _key, *args, **kwargs):
+            return await destination.send(*args, **kwargs)
+        module.send_once = send_effect
         return module
     finally:
         for key in list(sys.modules):
@@ -96,12 +100,12 @@ def _load_tournaments_module() -> ModuleType:
 def _install_queue_registry_stub() -> None:
     """Stub ``extensions._queue_registry.queue_consumer`` as a no-op pass-through.
 
-    The real wrapper expects a raw RabbitMQ ``message`` it decodes into the struct; these
+    The real wrapper expects a transport-neutral job context it decodes into the struct; these
     tests invoke the handler body with an already-decoded event, so the stub decorator
-    returns the original handler unwrapped (attaching the metadata RabbitHandler reads).
+    returns the original handler unwrapped (attaching the registration metadata the queue worker reads).
     A minimal ``extensions`` package shell is registered so the ``from
     extensions._queue_registry import queue_consumer`` import resolves to the stub rather
-    than the real (aio_pika-importing) module.
+    than the real transport adapter.
     """
     extensions_pkg = ModuleType("extensions")
     extensions_pkg.__path__ = []  # type: ignore[attr-defined]
@@ -109,11 +113,10 @@ def _install_queue_registry_stub() -> None:
 
     qr_mod = ModuleType("extensions._queue_registry")
 
-    def _queue_consumer(queue_name: str, *, struct_type: Any, idempotent: bool = False, **_: Any):  # noqa: ANN202
+    def _queue_consumer(queue_name: str, *, struct_type: Any, **_: Any):  # noqa: ANN202
         def decorator(fn):  # noqa: ANN001, ANN202
             fn._queue_name = queue_name
             fn._struct_type = struct_type
-            fn._idempotent = idempotent
             return fn
 
         return decorator
@@ -156,6 +159,11 @@ def _make_handler(bot_api: AsyncMock, channel: Any, guild: Any | None = None) ->
     bot is ready; we side-step that and inject the resolved attributes directly.
     """
     handler = object.__new__(TournamentHandler)
+    now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+    bot_api.list_tournament_cycles.return_value = SimpleNamespace(
+        total=1, cycles=[SimpleNamespace(id=42, started_at=now, created_at=now)],
+    )
+    bot_api.get_tournament_leaderboard.return_value = _standings()
     # The handler reads bot.config.roles.mentionable.tournament_announcements when
     # building the announcement role ping; the `0` sentinel keeps the ping a no-op
     # (no <@&id> line, roles=False) so these card/allow-list assertions are unchanged.
@@ -337,6 +345,7 @@ async def test_rollover_results_empty_standings_renders_no_submissions(mock_api:
     channel = FakeChannel()
     handler = _make_handler(mock_api, channel, guild=guild)
 
+    mock_api.get_tournament_leaderboard.return_value = []
     completed = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=[], winner_user_id=None)
     await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[completed], started=[]), None)
 
@@ -452,6 +461,7 @@ async def test_on_edition_results_empty_standings_posts_no_winner_card_no_transf
     channel = FakeChannel()
     handler = _make_handler(mock_api, channel, guild=guild)
 
+    mock_api.get_tournament_leaderboard.return_value = []
     completed = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=[], winner_user_id=None)
     event = TournamentEditionResultsEvent(edition_id=7, results=[completed])
 
@@ -543,6 +553,7 @@ async def test_champion_vacant_when_no_winner(mock_api: AsyncMock, monkeypatch: 
 
     monkeypatch.setattr(_tournaments.asyncio, "sleep", AsyncMock())
 
+    mock_api.get_tournament_leaderboard.return_value = []
     event = TournamentCycleCompletedEvent(cycle_id=42, category_id=1, standings=[], winner_user_id=None)
     await handler._on_edition_rollover(TournamentRolloverEvent(edition_id=7, results=[event], started=[]), None)
 
@@ -621,63 +632,6 @@ async def test_role_ops_stagger_to_respect_rate_limits(
     # at least one stagger sleep per stale-holder strip
     assert sleep_mock.await_count >= 2
     sleep_mock.assert_awaited_with(_tournaments._ROLE_OP_DELAY)
-
-
-# ---------------------------------------------------------------------------
-# Idempotency (via the real @queue_consumer wrapper)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_idempotency_skips_duplicate_and_releases_claim_on_failure() -> None:
-    """DSC-01/02: duplicate message_id skips the body; a handler exception releases the claim."""
-    # Exercise the REAL queue_consumer wrapper (not the stub) so the idempotency
-    # claim/skip/release path is what is under test.
-    bot_root = _repo_root() / "apps" / "bot"
-    if str(bot_root) not in sys.path:
-        sys.path.insert(0, str(bot_root))
-    qr_path = bot_root / "extensions" / "_queue_registry.py"
-    spec = importlib.util.spec_from_file_location("real_queue_registry", qr_path)
-    assert spec is not None and spec.loader is not None
-    qr = importlib.util.module_from_spec(spec)
-    sys.modules["real_queue_registry"] = qr
-    spec.loader.exec_module(qr)
-
-    body = TournamentCycleCompletedEvent(cycle_id=1, category_id=1, standings=[], winner_user_id=None)
-    import msgspec  # noqa: PLC0415
-
-    encoded = msgspec.json.encode(body)
-
-    class FakeMessage:
-        def __init__(self) -> None:
-            self.headers: dict[str, Any] = {}
-            self.body = encoded
-            self.message_id = "tournament:cycle_completed:1"
-
-    # --- duplicate skip ---
-    body_called: list[int] = []
-
-    @qr.queue_consumer("api.tournament.cycle_completed", struct_type=TournamentCycleCompletedEvent, idempotent=True)
-    async def _h_skip(self: Any, event: Any, message: Any) -> None:  # noqa: ANN401
-        body_called.append(1)
-
-    api_dup = AsyncMock()
-    api_dup.claim_idempotency.return_value = SimpleNamespace(claimed=False)
-    svc_dup = SimpleNamespace(bot=SimpleNamespace(api=api_dup))
-    await _h_skip(svc_dup, FakeMessage())
-    assert body_called == []  # body never ran for a duplicate
-
-    # --- release on failure ---
-    @qr.queue_consumer("api.tournament.cycle_completed", struct_type=TournamentCycleCompletedEvent, idempotent=True)
-    async def _h_fail(self: Any, event: Any, message: Any) -> None:  # noqa: ANN401
-        raise RuntimeError("boom")
-
-    api_fail = AsyncMock()
-    api_fail.claim_idempotency.return_value = SimpleNamespace(claimed=True)
-    svc_fail = SimpleNamespace(bot=SimpleNamespace(api=api_fail))
-    with pytest.raises(RuntimeError):
-        await _h_fail(svc_fail, FakeMessage())
-    api_fail.delete_claimed_idempotency.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
