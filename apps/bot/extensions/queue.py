@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 
@@ -11,6 +10,7 @@ from genjishimada_sdk.queue_worker import QueueWorker
 
 from extensions._queue_registry import QueueHandler
 from utilities.errors import APIHTTPError
+from utilities.queue_config import queue_database_url
 
 if TYPE_CHECKING:
     import core
@@ -24,7 +24,7 @@ class QueueHandlerService:
     def __init__(self, bot: core.Genji) -> None:
         """Create the queue worker, leaving network connections to its supervisor."""
         self.bot = bot
-        self.worker = QueueWorker(os.environ["QUEUE_DATABASE_URL"], owner="bot", before_job=self._prepare_job)
+        self.worker = QueueWorker(queue_database_url(), owner="bot", before_job=self._prepare_job)
         self._task: asyncio.Task[None] | None = None
         self._running = False
         self._closing = False
