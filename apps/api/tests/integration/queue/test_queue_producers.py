@@ -646,6 +646,88 @@ async def test_Q04_tournament_non_pb_ocr_survives_speed_trigger(
     assert await asyncpg_pool.fetchval("SELECT count(*) FROM public.jobs WHERE action='tournament.ocr.requested'") == 1
 
 
+@pytest.mark.parametrize("producer", ["video", "ocr-fallback"])
+async def test_tournament_manual_review_orders_only_its_own_completion(asyncpg_pool, producer):
+    from types import SimpleNamespace
+    from genjishimada_sdk.completions import CompletionCreateRequest, CompletionCreatedEvent
+    from genjishimada_sdk.queue import DependencyUnavailable
+    from genjishimada_sdk.queue_store import enqueue_job, ensure_ready, get_job
+    from repository.completions_repository import CompletionsRepository
+    from repository.notifications_repository import NotificationsRepository
+    from services.completions_service import CompletionsService
+    from services.notifications_service import NotificationsService
+
+    # These IDs belong to separate tables and must never share an ordering fence.
+    completion_id = 42
+    state = State({"db_pool": asyncpg_pool})
+    service = CompletionsService(asyncpg_pool, state, CompletionsRepository(asyncpg_pool))
+    async with asyncpg_pool.acquire() as conn, conn.transaction():
+        core_job = await service.enqueue(
+            routing_key="api.completion.submission", data=CompletionCreatedEvent(completion_id), conn=conn
+        )
+        tournament_ocr = await enqueue_job(
+            conn,
+            event_name="tournament.ocr.requested",
+            event_key=f"tournament:ocr:{completion_id}",
+            payload={"tournament_completion_id": completion_id},
+            entity_key=f"tournament-completion:{completion_id}",
+        )
+    await asyncpg_pool.execute(
+        "UPDATE public.pgqueuer SET status='failed',failure_code='handler_failed' WHERE dedupe_key=$1",
+        str(core_job.id),
+    )
+    data = CompletionCreateRequest(
+        code="TST42",
+        user_id=99,
+        time=20.0,
+        screenshot="https://example.com/proof.png",
+        video="https://example.com/video.mp4",
+    )
+    if producer == "video":
+        await service._dispatch_non_pb_tournament(
+            tc_id=completion_id,
+            cycle={"id": 1},
+            data=data,
+            request=SimpleNamespace(headers=Headers()),
+            users=UsersService(asyncpg_pool, state, UsersRepository(asyncpg_pool)),
+            notifications=NotificationsService(
+                asyncpg_pool, state, NotificationsRepository(asyncpg_pool), UsersRepository(asyncpg_pool)
+            ),
+        )
+    else:
+        await service._publish_tournament_mod_review(
+            tournament_completion_id=completion_id,
+            cycle_id=1,
+            user_id=data.user_id,
+            time=data.time,
+            screenshot=data.screenshot,
+            idempotency_key=f"tournament:submission:{completion_id}",
+        )
+    async with asyncpg_pool.acquire() as conn:
+        review_id = await conn.fetchval("SELECT id FROM public.jobs WHERE action='api.tournament.completion.created'")
+        review = await get_job(conn, review_id)
+    context = await claim_job(asyncpg_pool, review)
+    async with asyncpg_pool.acquire() as conn:
+        with pytest.raises(DependencyUnavailable):
+            await ensure_ready(conn, context)
+
+    # Finishing the earlier tournament step must release review even though the
+    # unrelated core completion still needs operator recovery.
+    await asyncpg_pool.execute(
+        """WITH done AS (
+            DELETE FROM public.pgqueuer WHERE dedupe_key=$1 RETURNING *
+        ) INSERT INTO public.pgqueuer_log(job_id,status,entrypoint,priority)
+          SELECT id,'successful',entrypoint,priority FROM done""",
+        str(tournament_ocr.id),
+    )
+    async with asyncpg_pool.acquire() as conn:
+        await ensure_ready(conn, context)
+        assert (await get_job(conn, core_job.id)).status == "failed"
+        assert await conn.fetchval("SELECT entity_key FROM public.jobs WHERE id=$1", review.id) == (
+            f"tournament-completion:{completion_id}"
+        )
+
+
 async def test_Q14_linked_map_parent_retry_releases_continuation(asyncpg_pool, create_test_map):
     from genjishimada_sdk.maps import LinkMapsCreateRequest
     from genjishimada_sdk.queue import DependencyUnavailable, DependencyFailed
