@@ -87,7 +87,12 @@ class ContextPool:
     """Route legacy explicit pool acquisitions through the current transaction."""
 
     def __init__(self, pool: Pool) -> None:
-        self._pool = pool
+        self._pool = pool.pool if isinstance(pool, ContextPool) else pool
+
+    @property
+    def pool(self) -> Pool:
+        """Expose the underlying pool for callers that distinguish pools from connections."""
+        return self._pool
 
     @asynccontextmanager
     async def acquire(self, **kwargs: Any) -> AsyncIterator[Connection]:  # noqa: ANN401

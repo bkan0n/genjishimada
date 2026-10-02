@@ -345,6 +345,7 @@ class CompletionsService(BaseService):
             ),
             headers=Headers(),
             idempotency_key=idempotency_key,
+            entity_key=f"tournament-completion:{tournament_completion_id}",
         )
 
     async def verify_tournament_completion(self, tournament_completion_id: int) -> None:
@@ -631,6 +632,7 @@ class CompletionsService(BaseService):
             ),
             headers=request.headers,
             idempotency_key=f"tournament:submission:{data.user_id}:{tc_id}",
+            entity_key=f"tournament-completion:{tc_id}",
         )
         return CompletionSubmissionJobResponse(job_status=job_status, completion_id=0)
 

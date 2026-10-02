@@ -330,9 +330,11 @@ class JobOperationsCog(BaseCog):
                     view=_view(job),
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
-            await message.edit(
-                content=body + "\n" + marker, view=_view(job), allowed_mentions=discord.AllowedMentions.none()
-            )
+        # An unbound alert can recover an older card from its effect receipt or
+        # history marker. Refresh it before acknowledging this observation.
+        await message.edit(
+            content=body + "\n" + marker, view=_view(job), allowed_mentions=discord.AllowedMentions.none()
+        )
         generation = job["retry_generation"]
         notified = job.get("notified_generation")
         if newly_bound and generation == 0:

@@ -11,11 +11,12 @@ import time
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from http import HTTPStatus
-from typing import cast
+from typing import Any
 from uuid import UUID
 
 import asyncpg
 import msgspec
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.errors import RetryRequested
 from pgqueuer.models import Job, TracebackRecord
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -50,6 +51,41 @@ def safe_error(error: BaseException | str) -> str:
     return value[:1500]
 
 
+class BoundedQueueDriver(AsyncpgDriver):
+    """Break stalled queue connections so the supervisor cancels their executions."""
+
+    def __init__(self, connection: asyncpg.Connection, timeout_seconds: float) -> None:
+        super().__init__(connection)
+        self.connection = connection
+        self.timeout_seconds = timeout_seconds
+
+    async def _query[T](self, operation: Awaitable[T]) -> T:
+        try:
+            # Include waits for PGQueuer's shared connection lock, not just time
+            # executing SQL. An expired connection cannot keep renewing claims.
+            async with asyncio.timeout(self.timeout_seconds):
+                return await operation
+        except (TimeoutError, asyncpg.LockNotAvailableError, asyncpg.QueryCanceledError):
+            self.connection.terminate()
+            raise DependencyUnavailable("Queue database command timed out; reconnecting") from None
+
+    async def fetch(self, query: str, *args: object) -> list[dict[str, Any]]:
+        """Bound reads and claims, including time waiting for the driver lock."""
+        return await self._query(super().fetch(query, *args))
+
+    async def execute(self, query: str, *args: object) -> str:
+        """Bound heartbeat and status writes and abort the connection on timeout."""
+        return await self._query(super().execute(query, *args))
+
+    async def notify(self, channel: str, payload: str) -> None:
+        """Keep listener probes from waiting behind a blocked command forever."""
+        await self._query(super().notify(channel, payload))
+
+    async def add_listener(self, channel: str, callback: Callable[[str | bytes | bytearray], None]) -> None:
+        """Bound listener registration during startup."""
+        await self._query(super().add_listener(channel, callback))
+
+
 class FencedQueries(Queries):
     """Adapt the pinned library's unfenced terminal/retry/heartbeat persistence."""
 
@@ -76,6 +112,7 @@ class FencedQueries(Queries):
         """Retain each execution's ownership and pause claiming during shared outages."""
         if self.can_claim is not None and not self.can_claim():
             return []
+        await self.driver.execute("SELECT public.release_ready_job_dependencies($1::text[])", list(entrypoints))
         jobs = await super().dequeue(
             batch_size,
             entrypoints,
@@ -192,10 +229,13 @@ class QueueWorker:
         drain_seconds: float = 30,
         poll_seconds: float = 5,
         timeout_seconds: float = 120,
+        command_timeout_seconds: float = 10,
         retry_delays: tuple[float, ...] = (5, 15, 60, 300, 900),
     ) -> None:
         if owner not in {"api", "bot"}:
             raise ValueError("Unknown worker owner")
+        if command_timeout_seconds <= 0:
+            raise ValueError("Queue command timeout must be positive")
         self.dsn = dsn
         self.owner = owner
         self.before_job = before_job
@@ -203,6 +243,7 @@ class QueueWorker:
         self.drain_seconds = drain_seconds
         self.poll_seconds = poll_seconds
         self.timeout_seconds = timeout_seconds
+        self.command_timeout_seconds = command_timeout_seconds
         self.retry_delays = retry_delays
         self.handlers: dict[str, Handler] = {}
         self._stop = asyncio.Event()
@@ -330,7 +371,7 @@ class QueueWorker:
     def _build_manager(
         self, connection: asyncpg.Connection, *, on_ready: Callable[[], None] | None = None
     ) -> QueueManager:
-        queries = cast(FencedQueries, FencedQueries.from_asyncpg_connection(connection))
+        queries = FencedQueries(BoundedQueueDriver(connection, self.command_timeout_seconds))
         queries.can_claim = lambda: not self._stop.is_set() and time.monotonic() >= self._dependency_until
         queries.on_ready = on_ready
         manager = QueueManager(queries)
@@ -376,7 +417,7 @@ class QueueWorker:
             waiters: list[asyncio.Task] = []
             try:
                 self.state = "connecting"
-                connection = await asyncpg.connect(self.dsn, timeout=10)
+                connection = await asyncpg.connect(self.dsn, timeout=10, command_timeout=self.command_timeout_seconds)
                 disconnected = asyncio.Event()
                 connection.add_termination_listener(lambda _: disconnected.set())
                 manager = self._build_manager(connection, on_ready=ready)
