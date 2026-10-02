@@ -12,7 +12,7 @@ import json
 import os
 import sys
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -43,6 +43,68 @@ class ImportPlan:
 def canonical(value: object) -> str:
     """Return deterministic JSON for source identity comparisons."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def identities(plan: ImportPlan) -> set[tuple[str, ...]]:
+    """Match duplicate copies using the same identities as queue insertion."""
+    result: set[tuple[str, ...]] = {("event", plan.event_name, plan.event_key)}
+    try:
+        if plan.record.get("job_id"):
+            result.add(("job", str(UUID(str(plan.record["job_id"])))))
+    except ValueError:
+        pass  # Invalid identities remain in the preserved source record.
+    return result
+
+
+def protect_duplicates(plans: list[ImportPlan]) -> list[ImportPlan]:
+    """Propagate conflicting or uncertain evidence across connected logical copies."""
+    parents = list(range(len(plans)))
+    owners: dict[tuple[str, ...], int] = {}
+
+    def group(index: int) -> int:
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    for index, plan in enumerate(plans):
+        for identity in identities(plan):
+            parents[group(index)] = group(owners.setdefault(identity, index))
+    blocked = {group(index) for index, plan in enumerate(plans) if plan.disposition != "enqueued"}
+    return [
+        replace(
+            plan,
+            disposition="needs_reconciliation",
+            reason="Another copy of this logical job is unresolved or has a conflicting disposition.",
+        )
+        if plan.disposition == "enqueued" and group(index) in blocked
+        else plan
+        for index, plan in enumerate(plans)
+    ]
+
+
+def protect_legacy_history(plan: ImportPlan, legacy: asyncpg.Record | None) -> ImportPlan:
+    """Prefer stored execution evidence over an assertion that legacy work is unstarted."""
+    if (
+        plan.disposition == "enqueued"
+        and legacy is not None
+        and legacy["event_key"] is None
+        and legacy["queue_job_id"] is None
+        and legacy["action"] == plan.event_name
+        and legacy["status"] != "succeeded"
+        and (
+            legacy["status"] != "queued"
+            or legacy["attempts"] > 0
+            or legacy["started_at"] is not None
+            or legacy["finished_at"] is not None
+        )
+    ):
+        return replace(
+            plan,
+            disposition="needs_reconciliation",
+            reason="Stored job history indicates prior execution; the manifest cannot authorize replay.",
+        )
+    return plan
 
 
 def plan_record(record: dict[str, Any], fallback_id: str) -> ImportPlan:
@@ -103,16 +165,30 @@ def load_manifest(path: Path) -> list[ImportPlan]:
             raise ValueError(f"Source ID {plan.source_id!r} occurs with conflicting content; nothing was imported.")
         seen[plan.source_id] = fingerprint
         result.append(plan)
-    return result
+    return protect_duplicates(result)
 
 
 async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]) -> Counter:
     """Atomically persist dispositions and enqueue only reviewed work; reruns are safe."""
     counts = Counter()
     async with connection.transaction():
+        # Lock all source and logical identities in a stable order before inspecting
+        # prior imports, so concurrent manifests cannot bypass each other's evidence.
+        locks = {canonical(identity) for plan in plans for identity in identities(plan)}
+        locks.update(canonical(("source", plan.source_id)) for plan in plans)
+        for identity in sorted(locks):
+            await connection.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", identity)
+        legacy_jobs: dict[UUID | None, asyncpg.Record | None] = {
+            job_id: await connection.fetchrow("SELECT * FROM public.jobs WHERE id=$1 FOR UPDATE", job_id)
+            for job_id in sorted({plan.job_id for plan in plans if plan.job_id is not None})
+        }
+        prior = []
+        for row in await connection.fetch("SELECT * FROM public.job_imports WHERE disposition != 'enqueued'"):
+            record = json.loads(row["payload"]) if isinstance(row["payload"], str) else row["payload"]
+            prior.append(replace(plan_record(record, row["source_id"]), disposition=row["disposition"]))
+        guarded = [protect_legacy_history(plan, legacy_jobs.get(plan.job_id)) for plan in plans]
+        plans = protect_duplicates([*guarded, *prior])[: len(plans)]
         for plan in sorted(plans, key=lambda item: item.source_id):
-            # Serialize reruns of the same export, including source IDs absent from the table.
-            await connection.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", plan.source_id)
             old = await connection.fetchrow(
                 "SELECT payload, disposition FROM public.job_imports WHERE source_id=$1", plan.source_id
             )
@@ -125,29 +201,7 @@ async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]
                 counts["already_recorded"] += 1
                 continue
             job_id = plan.job_id
-            disposition, reason = plan.disposition, plan.reason
-            legacy = (
-                await connection.fetchrow("SELECT * FROM public.jobs WHERE id=$1 FOR UPDATE", job_id)
-                if job_id
-                else None
-            )
-            if (
-                disposition == "enqueued"
-                and legacy is not None
-                and legacy["event_key"] is None
-                and legacy["queue_job_id"] is None
-                and legacy["action"] == plan.event_name
-                and legacy["status"] != "succeeded"
-                and (
-                    legacy["status"] != "queued"
-                    or legacy["attempts"] > 0
-                    or legacy["started_at"] is not None
-                    or legacy["finished_at"] is not None
-                )
-            ):
-                disposition = "needs_reconciliation"
-                reason = "Stored job history indicates prior execution; the manifest cannot authorize replay."
-            if disposition == "enqueued":
+            if plan.disposition == "enqueued":
                 response = await enqueue_job(
                     connection,
                     event_name=plan.event_name,
@@ -157,7 +211,7 @@ async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]
                     job_id=job_id,
                 )
                 job_id = response.id
-            elif legacy is None:
+            elif legacy_jobs.get(job_id) is None:
                 # Keep unmatched original IDs in the retained source, without creating runnable work.
                 job_id = None
             await connection.execute(
@@ -165,11 +219,11 @@ async def apply_manifest(connection: asyncpg.Connection, plans: list[ImportPlan]
                    VALUES ($1,$2,$3,$4,$5::jsonb)""",
                 plan.source_id,
                 job_id,
-                disposition,
-                reason,
+                plan.disposition,
+                plan.reason,
                 canonical(plan.record),
             )
-            counts[disposition] += 1
+            counts[plan.disposition] += 1
     return counts
 
 

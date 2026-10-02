@@ -68,6 +68,8 @@ The exact payload must match its shared SDK event model; the example is not prod
 
 Only explicitly unstarted work can be imported for execution. Missing or non-boolean `effects_started`, a truthy `legacy_claim`, or nonempty `completed_effects` keeps a record in `needs_reconciliation`, even if `effects_reconciled: true` is supplied. This importer does not reconstruct effect receipts or external bindings. Partially executed work must remain preserved until its completed effects can be retained through an explicit, event-specific recovery; restarting its full handler could send duplicate messages or award XP twice.
 
+Copies sharing a public job UUID or event name/key are reviewed together before any enqueue. If one copy is unresolved, completed, or discarded, conflicting enqueue requests for that logical work also remain in reconciliation, regardless of source order. Apply includes previously recorded dispositions and stored job history in this check. Prepare the complete manifest before resuming workers; an unstarted assertion on a duplicate cannot override known prior execution.
+
 Run the default dry-run without any database connection:
 
 ```bash
