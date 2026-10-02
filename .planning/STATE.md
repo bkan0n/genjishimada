@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Phases
 status: milestone_complete
-last_updated: "2026-09-28T21:49:28.944018+00:00"
-last_activity: 2026-09-28
+last_updated: "2026-10-02T21:34:34.832072+00:00"
+last_activity: 2026-10-02
 progress:
   total_phases: 5
   completed_phases: 5
@@ -15,7 +15,7 @@ progress:
 
 # Tournament System — State
 
-Last activity: 2026-09-28 - Completed quick task 260928-m9b: Reorganize existing API tests with isolated fixtures, feature folders, and full-suite execution
+Last activity: 2026-10-02 - Completed quick task 261002-m8j: Fix all six PostgreSQL queue stack review findings with regression coverage
 
 ## Current Status
 
@@ -68,6 +68,7 @@ Controller → Service → Repository pattern:
 | 260813-fast | Scope the two map-name read routes to `maps:read` (`GET /utilities/autocomplete/names`, `GET /utilities/map-names`): both declared no `required_scopes`, which under `scope_guard` means superuser-only, so a non-superuser key (e.g. a `content:admin` map manager created via `POST /content/maps`) could add maps but never list them. Strictly permissive — superusers already bypassed the guard, so no existing caller changes. `just lint-api` clean; `tests/integration/test_autocomplete_integration.py` 24 passed (default test key is superuser). Executed via `/gsd:fast` — no quick-task directory. |
 | 260814-e27 | Add an `archived` tribool filter (`all` \| `archived` \| `not_archived`) to both personal-records endpoints — `GET /api/v3/completions` and `GET /api/v3/completions/world-records` — after a community user asked to filter their records by map archive state. Defaults to `all`, byte-identical to prior behaviour (pinned by test), so no existing caller changes. Full vertical slice: `ArchivedFilter` literal in the SDK, `archived` kwarg on `fetch_user_completions`/`fetch_world_records_per_user` (bound as an asyncpg positional param, predicate applied at the `core.maps` level), service passthrough, route query params, plus `archived` choices on the `/user-completions` and `/world-records` slash commands via `APIService`. Key finding: `rank()` is computed *before* the map join in both queries, so filtering maps cannot corrupt ranks on the maps that remain — pinned by `test_filter_does_not_change_rank`; map-level placement also keeps `COUNT(*) OVER()` (pagination `total_results`) consistent with the filtered set. 11 new tests (8 repository + 3 integration, incl. 400 on an unsupported value). `just lint-all` clean; full suite 1965 passed (baseline 1954). Note: `pytest -n 8` flakiness in store/autocomplete/tournament-rewards reproduces on a clean tree — pre-existing, deferred. | 2026-08-14 | 2279351 | [260814-e27-add-archived-state-tribool-filter-to-per](./quick/260814-e27-add-archived-state-tribool-filter-to-per/) | 2026-08-13 | 428ab58 | — |
 | 260928-m9b | Reorganize existing API tests using doompk isolation and feature-folder patterns. Preserve all 1,983 cases and runtime defaults; serial/reverse/shuffle pass, two-worker wall time 151.31s. Deliver three dependent draft PRs. | 2026-09-28 | 4943b05 | [260928-m9b-reorganize-existing-api-tests-using-doom](./quick/260928-m9b-reorganize-existing-api-tests-using-doom/) |
+| 261002-m8j | Fix six queue stack review findings: dependency recovery, bounded database operations, repository pool identity, tournament ordering, recovered alerts, and safe legacy import. Queue acceptance 132 passed; API 1,988 passed, 2 skipped, 2 expected failures; lint/type checks clean. | 2026-10-02 | 51c4bae | [261002-m8j-fix-six-review-findings-across-the-postg](./quick/261002-m8j-fix-six-review-findings-across-the-postg/) |
 
 ## Blockers/Concerns
 
