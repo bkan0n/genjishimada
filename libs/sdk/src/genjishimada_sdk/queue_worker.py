@@ -45,7 +45,10 @@ def safe_error(error: BaseException | str) -> str:
     """Keep operational diagnostics without storing bearer tokens or URL passwords."""
     value = str(error)
     value = re.sub(
-        r"(?i)(bearer\s+|(?:token|password|api[_-]?key|authorization)[=:]\s*)[^\s,;]+", r"\1[redacted]", value
+        r"(?i)(authorization[=:]\s*(?:(?:bearer|basic)\s+)?|bearer\s+|"
+        r"(?:token|password|api[_-]?key)[=:]\s*)[^\s,;]+",
+        r"\1[redacted]",
+        value,
     )
     value = re.sub(r"(://[^:/\s]+:)[^@\s]+@", r"\1[redacted]@", value)
     return value[:1500]
