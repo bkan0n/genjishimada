@@ -622,13 +622,13 @@ class TestSetArchiveStatusForceDeny:
         mock_newsfeed_service = mocker.AsyncMock()
         mock_headers = Headers({"x-pytest-enabled": "1"})
 
-        mocker.patch.object(service, "publish_message", new_callable=mocker.AsyncMock)
+        mocker.patch.object(service, "enqueue", new_callable=mocker.AsyncMock)
 
         data = ArchivalStatusPatchRequest(codes=["ABCDE"], status="Archive")
         await service.set_archive_status(data, mock_headers, mock_newsfeed_service)
 
-        service.publish_message.assert_called_once()
-        call_kwargs = service.publish_message.call_args.kwargs
+        service.enqueue.assert_called_once()
+        call_kwargs = service.enqueue.call_args.kwargs
         assert call_kwargs["routing_key"] == "api.playtest.force_deny"
         payload = call_kwargs["data"]
         assert isinstance(payload, PlaytestForceDeniedEvent)
@@ -679,9 +679,9 @@ class TestSetArchiveStatusForceDeny:
         mock_newsfeed_service = mocker.AsyncMock()
         mock_headers = Headers({"x-pytest-enabled": "1"})
 
-        mocker.patch.object(service, "publish_message", new_callable=mocker.AsyncMock)
+        mocker.patch.object(service, "enqueue", new_callable=mocker.AsyncMock)
 
         data = ArchivalStatusPatchRequest(codes=["ABCDE"], status="Archive")
         await service.set_archive_status(data, mock_headers, mock_newsfeed_service)
 
-        service.publish_message.assert_not_called()
+        service.enqueue.assert_not_called()

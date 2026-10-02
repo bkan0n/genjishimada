@@ -5,8 +5,11 @@ Database and HTTP tests require Docker; fixtures provision PostgreSQL themselves
 Unit tests do not start or connect to PostgreSQL.
 
 ```bash
-# Full suite with two workers; this is also the CI command.
+# Feature-organized suite with two workers; this is also the CI command.
 just test-api
+
+# Independent queue acceptance, including process and database fault recovery.
+just test-queue
 
 # Serial run, useful when reproducing an ordering failure.
 just test-api --workers 0
@@ -38,9 +41,9 @@ An absolute path to the runner works from any working directory when using the
 project's Python environment. Test paths and relative output paths passed to the
 runner are always resolved from `apps/api`. Other arguments pass through to pytest;
 use `-- --help` to inspect pytest's options. `test-api-all` and `test-api-v3` remain
-aliases for the same full-suite command.
+aliases for the same feature-suite runner.
 
-Full collection is the default. Testmon remains available for local iteration but
+The runner collects the complete feature-organized suite and excludes the queue acceptance directory, which has its own serial runner. Testmon remains available for local iteration but
 is never enabled by the normal command or restored from a CI cache. CI runs for
 pull requests targeting any branch, including intermediate branches in a PR stack,
 and for pushes to `main` or `dev`.
@@ -74,6 +77,13 @@ tests can still invoke the real behavior. Test apps use a synchronous log handle
 and skip repeated Sentry initialization so app construction does not accumulate
 background threads. Normal `create_app()` defaults retain production logging,
 Sentry, pools, listeners, and pollers.
+
+Queue acceptance lives under `tests/integration/queue/` and uses its own fixture
+boundary, disposable PostgreSQL instances, and serial runner. Use `just test-queue`
+for the full acceptance matrix or `just test-queue-fast` to omit process/container
+faults. It needs no live Discord credentials and does not contact Discord. Queue
+production remains real in ordinary API tests: mutation and enqueue share the
+same database transaction, and request headers cannot suppress enqueue.
 
 ## Diagnosing failures
 

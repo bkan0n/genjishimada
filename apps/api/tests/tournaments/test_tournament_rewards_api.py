@@ -10,10 +10,7 @@ These drive the two wired hook points end-to-end against a real database:
   driven here by seeding a ``cycle_completed`` pending_transitions row and calling
   the poller directly (the 07-03 pattern).
 
-No live broker is required: ``BaseService.publish_message`` is monkeypatched (the
-same effect as the documented ``X-PYTEST-ENABLED=1`` skip) so every grant's
-``api.xp.grant`` publish and the outbox publish are no-ops. Assertions read
-``tournaments.xp_grants`` (the ledger), ``tournaments.streaks``, and ``lootbox.xp``.
+The real transactional enqueue path runs alongside rewards; no external workers run.
 
 The session/xdist-shared DB means other tests may add rows; assertions use
 membership/property checks (e.g. a specific user's streak, a per-cycle ledger
@@ -26,24 +23,11 @@ from uuid import uuid4
 import pytest
 from litestar.datastructures import State
 
-import services.base as base_module
 from services.tournament_outbox_service import publish_pending_transitions
 
 pytestmark = [pytest.mark.integration, pytest.mark.domain_tournaments, pytest.mark.database]
 
 BASE = "/api/v3/tournaments"
-
-
-def _stub_publish(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Skip every RabbitMQ publish (outbox publish + inner api.xp.grant publish)."""
-    from uuid import uuid4 as _uuid4
-
-    from genjishimada_sdk.internal import JobStatusResponse
-
-    async def _fake_publish(self, *, routing_key, data, headers, idempotency_key=None):  # noqa: ANN001
-        return JobStatusResponse(_uuid4(), "succeeded")
-
-    monkeypatch.setattr(base_module.BaseService, "publish_message", _fake_publish)
 
 
 async def _seed_category(
@@ -199,7 +183,6 @@ class TestParticipationGrant:
         self, test_client, asyncpg_pool, monkeypatch, create_test_map, create_test_user
     ):
         """A normal completion on the cycle map records an unverified row (no XP); verifying grants it once."""
-        _stub_publish(monkeypatch)
 
         category_id = await _seed_category(asyncpg_pool, participation_xp=25)
         map_id = await create_test_map(difficulty="Easy")
@@ -250,7 +233,6 @@ class TestStreakIncrementAndReset:
         self, asyncpg_pool, monkeypatch, create_test_map, create_test_user
     ):
         """A cycle participant's current_streak increments after cycle_completed processing."""
-        _stub_publish(monkeypatch)
 
         category_id = await _seed_category(asyncpg_pool)
         map_id = await create_test_map(difficulty="Easy")
@@ -268,7 +250,6 @@ class TestStreakIncrementAndReset:
         self, asyncpg_pool, monkeypatch, create_test_map, create_test_user
     ):
         """A tracked user who did NOT submit this cycle has current_streak reset to 0."""
-        _stub_publish(monkeypatch)
 
         category_id = await _seed_category(asyncpg_pool)
         map_id = await create_test_map(difficulty="Easy")
@@ -308,7 +289,6 @@ class TestMultiCategoryDedupe:
         advance for the SAME cycle (the multi-category / replay window) does not
         double-increment.
         """
-        _stub_publish(monkeypatch)
 
         category_id = await _seed_category(asyncpg_pool)
         map_id = await create_test_map(difficulty="Easy")
@@ -337,7 +317,6 @@ class TestDoubleGrantReplaySafe:
         self, asyncpg_pool, monkeypatch, create_test_map, create_test_user
     ):
         """A second publish_pending_transitions over the same cycle adds no ledger rows or XP."""
-        _stub_publish(monkeypatch)
 
         category_id = await _seed_category(
             asyncpg_pool,

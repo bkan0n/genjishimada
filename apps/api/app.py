@@ -2,17 +2,19 @@ import asyncio
 import contextlib
 import logging
 import os
+import signal
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-import aio_pika
 import litestar
 import msgspec
 import sentry_sdk
-from aio_pika.abc import AbstractRobustConnection
-from aio_pika.pool import Pool
 from asyncpg import Connection
+from genjishimada_sdk.queue import JobContext
+from genjishimada_sdk.queue_store import ensure_ready
+from genjishimada_sdk.queue_worker import QueueWorker
 from litestar import Litestar, Request, Response, get
+from litestar.config.app import AppConfig
 from litestar.events.emitter import BaseEventEmitterBackend, SimpleEventEmitter
 from litestar.exceptions import HTTPException
 from litestar.logging.config import LoggingConfig
@@ -27,14 +29,13 @@ from litestar_asyncpg import AsyncpgConfig, AsyncpgConnection, AsyncpgPlugin, Po
 from events import listeners
 from middleware.auth import CustomAuthenticationMiddleware
 from middleware.guards import scope_guard
+from middleware.job_effects import JobEffectMiddleware
 from routes.v3 import route_handlers as v3_route_handlers
+from services.queue_continuations import register_continuations
 from utilities.errors import CustomHTTPException
+from utilities.queue_maintenance import queue_log_maintenance
 
 APP_ENVIRONMENT = os.getenv("APP_ENVIRONMENT")
-
-RABBITMQ_USER = os.getenv("RABBITMQ_USER")
-RABBITMQ_PASS = os.getenv("RABBITMQ_PASS")
-RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
 
 POSTGRES_USER = os.getenv("POSTGRES_USER")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
@@ -49,24 +50,53 @@ log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def rabbitmq_connection(_app: Litestar) -> AsyncGenerator[None, None]:
-    """Connect to RabbitMQ."""
-    _conn = getattr(_app.state, "rabbitmq_connection", None)
-    if _conn is None:
+async def api_queue_worker(_app: Litestar) -> AsyncGenerator[None, None]:
+    """Supervise the durable API worker and drain it before the database closes."""
+    if not _app.state.queue_workers_enabled:
+        yield
+        return
 
-        async def get_connection() -> AbstractRobustConnection:
-            return await aio_pika.connect_robust(f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}/")
+    async def before_job(context: JobContext) -> None:
+        async with _app.state.db_pool.acquire() as conn, conn.transaction():
+            await ensure_ready(conn, context)
 
-        connection_pool: Pool = Pool(get_connection, max_size=2)
+    worker = QueueWorker(_app.state.queue_dsn, owner="api", before_job=before_job)
+    register_continuations(worker, _app.state)
+    _app.state.queue_worker = worker
+    stopping = False
+    task = asyncio.create_task(worker.run(), name="api-queue-worker")
 
-        async def get_channel() -> aio_pika.Channel:
-            async with connection_pool.acquire() as connection:
-                return await connection.channel()
+    def require_restart(done: asyncio.Task) -> None:
+        if not stopping:
+            error = None if done.cancelled() else done.exception()
+            log.critical("API queue supervisor stopped unexpectedly; restarting process", exc_info=error)
+            os.kill(os.getpid(), signal.SIGTERM)
 
-        channel_pool: Pool = Pool(get_channel, max_size=10)
+    task.add_done_callback(require_restart)
+    try:
+        yield
+    finally:
+        stopping = True
+        worker.stop()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
-        _app.state.mq_channel_pool = channel_pool
-    yield
+
+@asynccontextmanager
+async def queue_retention(_app: Litestar) -> AsyncGenerator[None, None]:
+    """Stop queue maintenance before closing the application database pool."""
+    if not _app.state.queue_workers_enabled:
+        yield
+        return
+    stop = asyncio.Event()
+    task = asyncio.create_task(queue_log_maintenance(_app.state.db_pool, stop), name="queue-log-maintenance")
+    try:
+        yield
+    finally:
+        stop.set()
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 @asynccontextmanager
@@ -226,10 +256,25 @@ class EndpointLogFilter(logging.Filter):
         return not any(path in msg for path in self.EXCLUDED_PATHS)
 
 
+class QueueLifecyclePlugin:
+    """Append workers after the database so shutdown drains them before the pool."""
+
+    def __init__(self, *, run_pollers: bool) -> None:
+        self.run_pollers = run_pollers
+
+    def on_app_init(self, app_config: AppConfig) -> AppConfig:
+        """Order application background services after database initialization."""
+        app_config.lifespan.extend([api_queue_worker, queue_retention])
+        if self.run_pollers:
+            app_config.lifespan.extend([tournament_outbox_poller, skill_nightly_rebuild_poller])
+        return app_config
+
+
 def create_app(  # noqa: PLR0913  # independent startup controls retain production defaults
     psql_dsn: str | None = None,
     *,
     run_pollers: bool = True,
+    queue_workers_enabled: bool = True,
     pool_config: PoolConfig | None = None,
     event_emitter_backend: type[BaseEventEmitterBackend] = SimpleEventEmitter,
     logging_config: LoggingConfig | None = None,
@@ -243,6 +288,7 @@ def create_app(  # noqa: PLR0913  # independent startup controls retain producti
     to customize the database configuration.
 
     Args:
+        queue_workers_enabled: Start queue execution; tests disable external effects explicitly.
         psql_dsn (Optional[str]): A PostgreSQL DSN to configure the database connection. If not provided,
             the function will use the DSN from the environment variable `PSQL_DSN` or fallback to the
             default DSN defined by `DEFAULT_DSN`.
@@ -272,6 +318,10 @@ def create_app(  # noqa: PLR0913  # independent startup controls retain producti
     async def _health_check(conn: Connection) -> bool:
         try:
             await conn.fetchval("SELECT 1;")
+            if _app.state.queue_workers_enabled:
+                worker = _app.state.get("queue_worker")
+                if worker is None or worker.state != "running":
+                    raise RuntimeError("API queue worker is not ready")
             return True
         except Exception:
             raise CustomHTTPException(
@@ -316,7 +366,7 @@ def create_app(  # noqa: PLR0913  # independent startup controls retain producti
         )
 
     _app = Litestar(
-        plugins=[asyncpg],
+        plugins=[asyncpg, QueueLifecyclePlugin(run_pollers=run_pollers)],
         route_handlers=[
             _health_check,
             v3_router,
@@ -335,14 +385,12 @@ def create_app(  # noqa: PLR0913  # independent startup controls retain producti
         },
         listeners=listeners,
         event_emitter_backend=event_emitter_backend,
-        lifespan=[
-            rabbitmq_connection,
-            *([tournament_outbox_poller, skill_nightly_rebuild_poller] if run_pollers else []),
-        ],
         logging_config=logging_config,
-        middleware=[auth_middleware],
+        middleware=[auth_middleware, DefineMiddleware(JobEffectMiddleware)],
         guards=[scope_guard],
     )
+    _app.state.queue_dsn = pool_config.dsn if pool_config is not None and pool_config.dsn else dsn
+    _app.state.queue_workers_enabled = queue_workers_enabled
     logging.getLogger("uvicorn.access").addFilter(EndpointLogFilter())
     return _app
 

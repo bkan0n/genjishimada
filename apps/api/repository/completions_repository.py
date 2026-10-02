@@ -1887,10 +1887,12 @@ class CompletionsRepository(BaseRepository):
                 m.code,
                 c.time as old_time,
                 c.verified as old_verified,
+                c.verified_by as old_verified_by,
                 c.tournament_completion_id
             FROM core.completions c
             LEFT JOIN core.maps m ON m.id = c.map_id AND m.code IS NOT NULL
             WHERE c.id = $1
+            FOR UPDATE OF c
         """
         row = await _conn.fetchrow(query, completion_id)
         return dict(row) if row else None

@@ -48,7 +48,7 @@ class TestNotificationsServiceCreateAndDispatch:
     async def test_create_and_dispatch_success_no_discord_channels(
         self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo, mocker
     ):
-        """Successful creation without Discord channels does not publish to RabbitMQ."""
+        """Successful creation without Discord channels does not publish to PostgreSQL queue."""
         # Arrange
         service = NotificationsService(mock_pool, mock_state, mock_notifications_repo, mock_users_repo)
 
@@ -73,8 +73,8 @@ class TestNotificationsServiceCreateAndDispatch:
             {"event_type": NotificationEventType.MAP_EDIT_APPROVED.value, "channel": "web", "enabled": True}
         ]
 
-        # Spy on publish_message
-        publish_spy = mocker.spy(service, "publish_message")
+        # Spy on enqueue
+        publish_spy = mocker.patch.object(service, "enqueue", new_callable=mocker.AsyncMock)
 
         request = NotificationCreateRequest(
             user_id=123456789,
@@ -94,7 +94,7 @@ class TestNotificationsServiceCreateAndDispatch:
     async def test_create_and_dispatch_with_discord_channels_above_limit(
         self, mock_pool, mock_state, mock_notifications_repo, mock_users_repo, mocker
     ):
-        """Creation with Discord channels and user_id >= limit publishes to RabbitMQ."""
+        """Creation with Discord channels and user_id >= limit publishes to PostgreSQL queue."""
         # Arrange
         from litestar.datastructures import Headers
 
@@ -118,7 +118,7 @@ class TestNotificationsServiceCreateAndDispatch:
             {"event_type": NotificationEventType.MAP_EDIT_APPROVED.value, "channel": "discord_dm", "enabled": True}
         ]
 
-        publish_spy = mocker.spy(service, "publish_message")
+        publish_spy = mocker.patch.object(service, "enqueue", new_callable=mocker.AsyncMock)
 
         request = NotificationCreateRequest(
             user_id=DISCORD_USER_ID_LOWER_LIMIT,
@@ -127,7 +127,7 @@ class TestNotificationsServiceCreateAndDispatch:
             body="Test body",
         )
 
-        # Act - use pytest header to skip actual RabbitMQ publishing
+        # Act - the enqueue boundary is replaced by an explicit unit-test double
         headers = Headers({"X-PYTEST-ENABLED": "1"})
         result = await service.create_and_dispatch(request, headers=headers)
 
@@ -162,7 +162,7 @@ class TestNotificationsServiceCreateAndDispatch:
             {"event_type": NotificationEventType.MAP_EDIT_APPROVED.value, "channel": "discord_dm", "enabled": True}
         ]
 
-        publish_spy = mocker.spy(service, "publish_message")
+        publish_spy = mocker.patch.object(service, "enqueue", new_callable=mocker.AsyncMock)
 
         request = NotificationCreateRequest(
             user_id=DISCORD_USER_ID_LOWER_LIMIT - 1,

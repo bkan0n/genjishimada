@@ -486,10 +486,12 @@ class TestForceDenyPlaytest:
 class TestResetPlaytest:
     """POST /api/v3/maps/playtests/{thread_id}/reset"""
 
-    async def test_happy_path(self, test_client, unique_thread_id, create_test_user):
+    async def test_happy_path(self, test_client, unique_thread_id, create_test_user, create_test_map, create_test_playtest):
         """Reset playtest."""
         thread_id = unique_thread_id
         verifier_id = await create_test_user()
+        map_id = await create_test_map()
+        await create_test_playtest(map_id, thread_id=thread_id)
 
         payload = {
             "verifier_id": verifier_id,
@@ -511,4 +513,4 @@ class TestResetPlaytest:
         assert "id" in data
         assert "status" in data
         assert isinstance(data["id"], str)
-        assert data["status"] in ("pending", "succeeded", "failed")
+        assert data["status"] == "queued"

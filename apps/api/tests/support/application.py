@@ -44,8 +44,6 @@ class DeterministicEventEmitter(BaseEventEmitterBackend):
             "auth.verification.requested",
             "auth.verification.resend",
             "auth.password_reset.requested",
-            "completion.ocr.requested",
-            "tournament.ocr.requested",
         }
     )
 
@@ -99,6 +97,7 @@ def create_test_app(
     return create_app(
         psql_dsn=dsn,
         run_pollers=False,
+        queue_workers_enabled=False,
         pool_config=PoolConfig(
             dsn=dsn,
             min_size=1,

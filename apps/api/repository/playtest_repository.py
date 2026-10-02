@@ -287,7 +287,7 @@ class PlaytestRepository(BaseRepository):
         *,
         conn: Connection | None = None,
     ) -> int | None:
-        """Get map ID from playtest thread.
+        """Lock the playtest and map before changing their shared lifecycle state.
 
         Args:
             thread_id: Forum thread ID.
@@ -299,7 +299,9 @@ class PlaytestRepository(BaseRepository):
         _conn = self._get_connection(conn)
 
         return await _conn.fetchval(
-            "SELECT map_id FROM playtests.meta WHERE thread_id = $1",
+            """SELECT me.map_id FROM playtests.meta me
+            JOIN core.maps ma ON ma.id=me.map_id
+            WHERE me.thread_id=$1 FOR UPDATE OF ma,me""",
             thread_id,
         )
 

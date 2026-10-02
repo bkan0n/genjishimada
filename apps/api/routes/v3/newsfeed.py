@@ -26,7 +26,7 @@ class NewsfeedController(litestar.Controller):
         path="/",
         summary="Create Newsfeed Event",
         description=(
-            "Insert a newsfeed event and immediately publish its ID to RabbitMQ. "
+            "Insert a newsfeed event and immediately publish its ID to PostgreSQL queue. "
             "The request body must be a valid NewsfeedEvent; the response is the numeric ID of the newly created row."
         ),
         status_code=HTTP_201_CREATED,

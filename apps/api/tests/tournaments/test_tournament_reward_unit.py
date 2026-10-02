@@ -3,10 +3,10 @@
 Covers RWD-01 (participation), RWD-02 (placement), RWD-05 (streak bonus)
 against TournamentRewardService with a mocked grant seam — no real broker or DB.
 The injected LootboxService.grant_xp is an AsyncMock, so we assert grant
-call counts/args rather than hitting RabbitMQ or PostgreSQL.
+call counts/args rather than hitting PostgreSQL queue or PostgreSQL.
 """
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from genjishimada_sdk.tournaments import TournamentCycleCompletedEvent, TournamentLeaderboardEntryResponse
@@ -98,7 +98,7 @@ class TestAwardParticipation:
         """First participation call grants participation_xp via grant_xp."""
         mock_tournament_repo.fetch_category.return_value = _category(participation_xp=15)
 
-        await reward_service.award_participation(_cycle(), user_id=42, conn=object())
+        await reward_service.award_participation(_cycle(), user_id=42, conn=MagicMock())
 
         mock_lootbox_service.grant_xp.assert_awaited_once()
         kwargs = mock_lootbox_service.grant_xp.call_args.kwargs
@@ -113,8 +113,8 @@ class TestAwardParticipation:
         mock_tournament_repo.fetch_category.return_value = _category(participation_xp=15)
         mock_tournament_repo.claim_xp_grant.side_effect = [True, False]
 
-        await reward_service.award_participation(_cycle(), user_id=42, conn=object())
-        await reward_service.award_participation(_cycle(), user_id=42, conn=object())
+        await reward_service.award_participation(_cycle(), user_id=42, conn=MagicMock())
+        await reward_service.award_participation(_cycle(), user_id=42, conn=MagicMock())
 
         assert mock_lootbox_service.grant_xp.await_count == 1
 
@@ -122,7 +122,7 @@ class TestAwardParticipation:
         """participation_xp == 0 grants nothing and claims nothing."""
         mock_tournament_repo.fetch_category.return_value = _category(participation_xp=0)
 
-        await reward_service.award_participation(_cycle(), user_id=42, conn=object())
+        await reward_service.award_participation(_cycle(), user_id=42, conn=MagicMock())
 
         mock_lootbox_service.grant_xp.assert_not_awaited()
         mock_tournament_repo.claim_xp_grant.assert_not_awaited()
@@ -144,7 +144,7 @@ class TestAwardCycleEndPlacement:
         mock_tournament_repo.fetch_cycle_participants.return_value = []
         event = _completed_event(standings=[_leaderboard_entry(1, 11), _leaderboard_entry(2, 22)])
 
-        await reward_service.award_cycle_placements(event, conn=object())
+        await reward_service.award_cycle_placements(event, conn=MagicMock())
 
         amounts = {c.kwargs["user_id"]: c.kwargs["amount"] for c in mock_lootbox_service.grant_xp.call_args_list}
         assert amounts == {11: 100, 22: 50}
@@ -155,7 +155,7 @@ class TestAwardCycleEndPlacement:
         mock_tournament_repo.fetch_cycle_participants.return_value = []
         event = _completed_event(standings=[_leaderboard_entry(1, 11), _leaderboard_entry(1, 22)])
 
-        await reward_service.award_cycle_placements(event, conn=object())
+        await reward_service.award_cycle_placements(event, conn=MagicMock())
 
         assert mock_lootbox_service.grant_xp.await_count == 2
         for call in mock_lootbox_service.grant_xp.call_args_list:
@@ -169,7 +169,7 @@ class TestAwardCycleEndPlacement:
         mock_tournament_repo.fetch_cycle_participants.return_value = []
         event = _completed_event(standings=[_leaderboard_entry(1, 11), _leaderboard_entry(5, 55)])
 
-        await reward_service.award_cycle_placements(event, conn=object())
+        await reward_service.award_cycle_placements(event, conn=MagicMock())
 
         granted_users = [c.kwargs["user_id"] for c in mock_lootbox_service.grant_xp.call_args_list]
         assert granted_users == [11]
@@ -182,7 +182,7 @@ class TestAwardCycleEndPlacement:
         mock_tournament_repo.fetch_cycle_participants.return_value = []
         event = _completed_event(standings=[])
 
-        await reward_service.award_cycle_placements(event, conn=object())
+        await reward_service.award_cycle_placements(event, conn=MagicMock())
 
         mock_lootbox_service.grant_xp.assert_not_awaited()
 
@@ -205,7 +205,7 @@ class TestAwardEditionStreak:
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 3}
         event = _completed_event(standings=[])
 
-        await reward_service.award_edition_streaks([event], conn=object())
+        await reward_service.award_edition_streaks([event], conn=MagicMock())
 
         mock_lootbox_service.grant_xp.assert_awaited_once()
         kwargs = mock_lootbox_service.grant_xp.call_args.kwargs
@@ -224,7 +224,7 @@ class TestAwardEditionStreak:
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 2}
         event = _completed_event(standings=[])
 
-        await reward_service.award_edition_streaks([event], conn=object())
+        await reward_service.award_edition_streaks([event], conn=MagicMock())
 
         mock_lootbox_service.grant_xp.assert_not_awaited()
 
@@ -240,7 +240,7 @@ class TestAwardEditionStreak:
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 4}
         event = _completed_event(standings=[])
 
-        await reward_service.award_edition_streaks([event], conn=object())
+        await reward_service.award_edition_streaks([event], conn=MagicMock())
 
         mock_lootbox_service.grant_xp.assert_not_awaited()
 
@@ -254,7 +254,7 @@ class TestAwardEditionStreak:
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 1}
         event = _completed_event(standings=[])
 
-        await reward_service.award_edition_streaks([event], conn=object())
+        await reward_service.award_edition_streaks([event], conn=MagicMock())
 
         assert mock_tournament_repo.advance_streak.await_count == 3
         for call in mock_tournament_repo.advance_streak.call_args_list:
@@ -272,7 +272,7 @@ class TestAwardEditionStreak:
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 1}
         results = [_completed_event(cycle_id=7, category_id=1), _completed_event(cycle_id=8, category_id=2)]
 
-        await reward_service.award_edition_streaks(results, conn=object())
+        await reward_service.award_edition_streaks(results, conn=MagicMock())
 
         advanced = [c for c in mock_tournament_repo.advance_streak.call_args_list if c.args[2] is True]
         assert len(advanced) == 3  # one advance per distinct user, not 4
@@ -290,7 +290,7 @@ class TestAwardEditionStreak:
         mock_tournament_repo.advance_streak.return_value = {"current_streak": 1}
         results = [_completed_event(cycle_id=7, category_id=1), _completed_event(cycle_id=8, category_id=2)]
 
-        await reward_service.award_edition_streaks(results, conn=object())
+        await reward_service.award_edition_streaks(results, conn=MagicMock())
 
         resets = [c for c in mock_tournament_repo.advance_streak.call_args_list if c.args[2] is False]
         assert [c.args[0] for c in resets] == [9]  # only the true non-participant

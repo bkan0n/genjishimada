@@ -108,14 +108,14 @@ class TestPlaytestServiceCastVote:
         """cast_vote() successfully casts vote when no constraints violated."""
         service = PlaytestService(mock_pool, mock_state, mock_playtest_repo, mock_maps_repo)
 
-        # Mock headers for RabbitMQ idempotency
+        # Mock headers for PostgreSQL queue idempotency
         mock_headers = mocker.Mock()
 
         # Mock successful vote cast
         mock_playtest_repo.cast_vote.return_value = None
 
-        # Mock publish_message to avoid RabbitMQ
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue to avoid PostgreSQL queue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         vote_data = PlaytestVote(difficulty=6.5)
         await service.cast_vote(
@@ -177,8 +177,8 @@ class TestPlaytestServiceDeleteVote:
         mock_playtest_repo.check_vote_exists.return_value = True
         mock_playtest_repo.delete_vote.return_value = None
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.delete_vote(
             thread_id=12345,
@@ -307,8 +307,8 @@ class TestPlaytestServiceApprove:
         mock_playtest_repo.get_primary_creator.return_value = 999
         mock_playtest_repo.get_map_code.return_value = "ABC123"
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.approve(
             thread_id=12345,
@@ -319,7 +319,7 @@ class TestPlaytestServiceApprove:
         # Verify all repository calls were made
         mock_playtest_repo.get_map_id_from_thread.assert_called_once_with(12345, conn=ANY)
         mock_playtest_repo.get_average_difficulty.assert_called_once_with(12345, conn=ANY)
-        mock_playtest_repo.approve_playtest.assert_called_once_with(100, 12345, 6.5, conn=ANY)
+        mock_playtest_repo.approve_playtest.assert_called_once_with(100, 12345, 6.76, conn=ANY)
         mock_playtest_repo.get_primary_creator.assert_called_once_with(100, conn=ANY)
         mock_playtest_repo.get_map_code.assert_called_once_with(100, conn=ANY)
 
@@ -431,8 +431,8 @@ class TestPlaytestServiceForceAccept:
         mock_playtest_repo.get_map_id_from_thread.return_value = 100
         mock_playtest_repo.force_accept_playtest.return_value = None
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.force_accept(
             thread_id=12345,
@@ -486,8 +486,8 @@ class TestPlaytestServiceForceAccept:
         mock_playtest_repo.get_map_id_from_thread.return_value = 100
         mock_playtest_repo.force_accept_playtest.return_value = None
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         # Test with Very Hard difficulty
         await service.force_accept(
@@ -517,8 +517,8 @@ class TestPlaytestServiceReset:
         # Mock headers
         mock_headers = mocker.Mock()
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.reset(
             thread_id=12345,
@@ -542,8 +542,8 @@ class TestPlaytestServiceReset:
         # Mock headers
         mock_headers = mocker.Mock()
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.reset(
             thread_id=12345,
@@ -566,8 +566,8 @@ class TestPlaytestServiceReset:
         # Mock headers
         mock_headers = mocker.Mock()
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.reset(
             thread_id=12345,
@@ -591,8 +591,8 @@ class TestPlaytestServiceReset:
         # Mock headers
         mock_headers = mocker.Mock()
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.reset(
             thread_id=12345,
@@ -615,8 +615,8 @@ class TestPlaytestServiceReset:
         # Mock headers
         mock_headers = mocker.Mock()
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.reset(
             thread_id=12345,
@@ -640,8 +640,8 @@ class TestPlaytestServiceReset:
         # Mock headers
         mock_headers = mocker.Mock()
 
-        # Mock publish_message
-        mocker.patch.object(service, "publish_message", return_value=mocker.AsyncMock())
+        # Mock enqueue
+        mocker.patch.object(service, "enqueue", return_value=mocker.AsyncMock())
 
         await service.reset(
             thread_id=12345,

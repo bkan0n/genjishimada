@@ -1,48 +1,4 @@
-"""Outbox->RabbitMQ bridge for the combined tournament edition-rollover event.
-
-:meth:`TournamentService.bootstrap_edition` writes ONE
-``tournaments.pending_transitions`` row with ``event_type='edition_rollover'`` to
-announce a bootstrapped edition's START (payload ``{results: [], started, edition_id}``;
-migration 0025 stopped the pg_cron transition from writing rollover rows). This
-module's :func:`publish_pending_transitions` poll-publish-mark loop reads unpublished
-rows under ``FOR UPDATE SKIP LOCKED``, converts each into one
-:class:`TournamentRolloverEvent`, publishes it to ``api.tournament.rollover`` via
-:meth:`BaseService.publish_message` with the START-qualified idempotency key
-``tournament:rollover:{edition_id}:start``, and marks the row published in the SAME
-transaction. Publish happens BEFORE mark so a crash between the two re-publishes on
-the next poll (at-least-once, D-11); the stable idempotency key makes the duplicates
-harmless downstream. The edition END rollover is published separately and directly by
-:func:`process_awaiting_results_editions` under the un-suffixed
-``tournament:rollover:{edition_id}`` — the ``:start`` qualifier keeps the START claim
-from shadowing that same edition's END card (see :func:`_idempotency_key`).
-
-The reward side effects split by scope: placement (``award_cycle_placements``)
-runs once PER CHILD CYCLE, keyed on ``entry.cycle_id`` (Pattern 4); streaks
-(``award_edition_streaks``: advance, bonus, AND reset) run once PER EDITION over
-the union of every child cycle's participants, keyed on the edition's marker
-cycle. The XP grant ledger (``UNIQUE(cycle_id, user_id, reason)``) plus
-advance_streak's ``last_cycle_id IS DISTINCT FROM`` guard are the real double-grant
-guards, so a re-delivered rollover grants no duplicate XP and never re-advances.
-
-WHY THE GRANTS STAY INSIDE THE OUTBOX TRANSACTION (deliberate, not an oversight):
-the XP grant, the ``publish_message``, and ``mark_transition_published`` are
-coupled in ONE transaction on purpose. Decoupling the grants to a post-commit
-step would break the per-cycle grant-once guarantee: if the row were marked
-published (so it never re-polls) but the process died before a post-commit grant
-ran, the XP would be permanently lost with no replay. Keeping them transactional
-means a ``mark_transition_published`` rollback also rolls back the grant, and the
-next poll re-attempts the whole unit. The grant itself is idempotent via the
-ledger, so the at-least-once re-poll is harmless. Only the NON-idempotent
-``xp.grant`` notifications are deferred to after commit (``pending_xp_events``):
-a notification cannot be un-sent, so it must never fire for XP that rolled back.
-The transaction does hold the ``FOR UPDATE SKIP LOCKED`` locks for the duration
-of the grants (O(N categories x M participants) round-trips); this is bounded in
-practice by the small per-edition category/participant counts and is the accepted
-cost of the correctness coupling above. If participant counts ever grow large
-enough to threaten the poller's transaction window, the right fix is batching the
-grant queries (set-based INSERT ... SELECT into the ledger) — NOT moving them out
-of the transaction.
-"""
+"""Atomically drain tournament source rows, rewards, and PostgreSQL delivery jobs."""
 
 from __future__ import annotations
 
@@ -65,10 +21,10 @@ from repository.tournaments_repository import TournamentRepository
 from services.base import BaseService
 from services.lootbox_service import LootboxService
 from services.tournament_reward_service import TournamentRewardService
+from utilities.transactions import transaction
 
 if TYPE_CHECKING:
     from asyncpg import Connection
-    from genjishimada_sdk.xp import XpGrantEvent
 
 log = getLogger(__name__)
 
@@ -86,9 +42,9 @@ _EVENT_ROUTING: dict[str, tuple[str, type[msgspec.Struct]]] = {
 
 
 class TournamentOutboxService(BaseService):
-    """Service that bridges tournament outbox rows to RabbitMQ.
+    """Service that bridges tournament outbox rows to PostgreSQL queue.
 
-    Extends :class:`BaseService` purely to inherit ``publish_message`` (and its
+    Extends :class:`BaseService` purely to inherit ``enqueue`` (and its
     ``public.jobs`` record + idempotency handling). The poll loop lives in the
     module-level :func:`publish_pending_transitions` so it can be driven by the
     ``tournament_outbox_poller`` lifespan task in ``app.py``.
@@ -154,31 +110,7 @@ def _idempotency_key(event_type: str, edition_id: int) -> str:
 
 
 async def publish_pending_transitions(state: State) -> None:
-    """Publish all unpublished outbox transitions, marking each published.
-
-    Selects unpublished rows under ``FOR UPDATE SKIP LOCKED`` inside one
-    transaction (D-11, no multi-instance double-publish), GROUPS them by
-    ``(event_type, created_at)`` (one rotation), then for each group: builds ONE
-    combined batch event wrapping every per-cycle event, publishes it to the
-    plural ``api.tournament.cycles_*`` routing key with a rotation-scoped
-    idempotency key, and marks EVERY row in the group published in the SAME
-    transaction. Publish precedes mark so a crash between them re-publishes on the
-    next poll (at-least-once).
-
-    The reward side effects split by scope: placement (``award_cycle_placements``)
-    runs ONCE PER CHILD CYCLE, keyed on ``entry.cycle_id`` (Pattern 4); streak
-    advance/bonus/reset (``award_edition_streaks``) runs ONCE PER EDITION over the
-    union of every child cycle's participants.
-
-    Each ``publish_message`` writes a ``public.jobs`` row; a re-publish creates a
-    new one (acceptable for an outbox/at-least-once design). Failures propagate:
-    the ``tournament_outbox_poller`` lifespan loop logs and retries the whole
-    batch on the next tick, and the unmarked rows are re-attempted.
-
-    Args:
-        state: Application state holding ``db_pool`` (acquires its own connection,
-            never a request-scoped one) and ``mq_channel_pool``.
-    """
+    """Atomically grant rewards, enqueue deliveries, and acknowledge source rows."""
     pool: Pool | None = state.get("db_pool")
     if pool is None:
         # Defensive readiness guard: on a fresh cold start the asyncpg lifespan
@@ -197,13 +129,12 @@ async def publish_pending_transitions(state: State) -> None:
         lootbox_repo=lootbox_repo,
         lootbox_service=lootbox_service,
     )
-    pending_xp_events: list[XpGrantEvent] = []
-    async with pool.acquire() as conn, conn.transaction():
+    async with transaction(pool) as conn:
         # (1) Drain-aware results computation for awaiting_results editions (D-07).
         # This runs INSIDE the same transaction as the outbox drain below so the
         # edition flip + the edition_results outbox-row write (the deferred path)
         # + any grants are one atomic unit (Pitfall 3 — at-least-once preserved).
-        pending_xp_events += await process_awaiting_results_editions(
+        await process_awaiting_results_editions(
             conn,  # type: ignore[arg-type]
             repository,
             service,
@@ -223,23 +154,23 @@ async def publish_pending_transitions(state: State) -> None:
             # Placement is keyed on entry.cycle_id; streaks on the edition's marker
             # cycle. Both are replay-safe via the 08-01 ledger / advance_streak guard,
             # so a re-delivered edition_rollover grants no duplicate XP and never
-            # double-advances. The non-idempotent xp.grant NOTIFICATIONS are
-            # collected and published only AFTER this transaction commits (CR-02): a
-            # rollback (e.g. a mark_transition_published failure) must not notify the
-            # bot about XP that rolled back and will be re-granted on the next poll.
+            # double-advances. XP notifications enqueue on this same transaction,
+            # so acknowledgement failures also roll back grants and delivery work.
             for entry in event.results:
-                pending_xp_events += await reward_service.award_cycle_placements(entry, conn=conn)  # type: ignore[arg-type]
+                await reward_service.award_cycle_placements(entry, conn=conn)  # type: ignore[arg-type]
                 log.info("[✓] cycle-end rewards processed for cycle %s (edition %s)", entry.cycle_id, edition_id)
-            pending_xp_events += await reward_service.award_edition_streaks(list(event.results), conn=conn)  # type: ignore[arg-type]
+            await reward_service.award_edition_streaks(list(event.results), conn=conn)  # type: ignore[arg-type]
 
             # ONE combined publish per row, then mark it published — all inside this
             # transaction (publish-before-mark = at-least-once). The edition-scoped
             # idempotency key (rollover OR results) dedupes re-publishes downstream.
-            await service.publish_message(
+            await service.enqueue(
+                conn=conn,
                 routing_key=routing_key,
                 data=event,
                 headers=Headers({}),
                 idempotency_key=_idempotency_key(row["event_type"], edition_id),
+                entity_key="tournament:announcements",
             )
             await repository.mark_transition_published(row["id"], conn=conn)  # type: ignore[arg-type]
             log.info(
@@ -248,10 +179,6 @@ async def publish_pending_transitions(state: State) -> None:
                 edition_id,
                 len(event.results),
             )
-
-    # Transaction committed: publish the deferred, non-idempotent XP grant
-    # notifications. Best-effort (the XP is already durably persisted).
-    await reward_service.publish_xp_events(pending_xp_events)
 
 
 async def _build_cycle_completed_event(
@@ -345,40 +272,8 @@ async def process_awaiting_results_editions(
     repository: TournamentRepository,
     service: TournamentOutboxService,
     reward_service: TournamentRewardService,
-) -> list[XpGrantEvent]:
-    """Run the D-07 three-branch drain state machine for awaiting_results editions.
-
-    Called INSIDE :func:`publish_pending_transitions`' open transaction. For each
-    ``awaiting_results`` edition (locked ``FOR UPDATE SKIP LOCKED``, oldest first)
-    it counts in-flight verifications and branches:
-
-    * **first tick, pending == 0** (``start_announced`` is FALSE) — compute results
-      from the live leaderboard, grant XP, publish ONE combined
-      :class:`TournamentRolloverEvent` (``results_pending=False``) inline with the
-      edition-scoped idempotency key, and flip the edition + cycles to
-      ``completed``.
-    * **first tick, pending > 0** — publish a start-only
-      :class:`TournamentRolloverEvent` (``results_pending=True``, empty
-      ``results`` so the bot holds the champion role, D-05), set
-      ``start_announced``, and leave the edition ``awaiting_results`` (NO grants).
-    * **later tick, drained** (``start_announced`` is TRUE, pending == 0) — defer
-      to :func:`_publish_drained_results`: write an ``edition_results`` outbox row
-      (drained+published by the same loop on the next tick) and flip to
-      ``completed``.
-
-    A re-poll after completion finds no ``awaiting_results`` edition, so nothing
-    re-grants; the grant loop is itself ledger-idempotent as a second guard.
-
-    Args:
-        conn: Active outbox connection inside an open transaction.
-        repository: Tournament repository.
-        service: The outbox service (for the inline start/combined publish).
-        reward_service: Reward service (grant loop).
-
-    Returns:
-        Deferred Xp grant notifications to publish AFTER the caller commits.
-    """
-    pending_xp_events: list[XpGrantEvent] = []
+) -> None:
+    """Publish the start or drained results together with edition state and rewards."""
     editions = await repository.fetch_awaiting_results_editions(conn=conn)  # type: ignore[arg-type]
     for edition in editions:
         edition_id = edition["id"]
@@ -412,20 +307,15 @@ async def process_awaiting_results_editions(
                 started=started,
                 results_pending=True,
             )
-            # Mark FIRST (inside the transaction), then publish (CR-01/CR-02). publish_message
-            # opens its own channel and does NOT join this conn's transaction, so if it
-            # succeeded BEFORE the mark and the mark then raised, the transaction would roll
-            # back start_announced and the next tick would re-publish the start-only rollover
-            # with a fresh public.jobs UUID (new message_id), defeating the bot's idempotency
-            # claim and double-announcing the start. Marking first guarantees that once the
-            # transaction commits, start_announced is set; a publish failure after the mark
-            # simply rolls back the mark too, so the pair stays atomic.
+            # State and durable delivery either commit together or both roll back.
             await repository.mark_edition_start_announced(edition_id, conn=conn)  # type: ignore[arg-type]
-            await service.publish_message(
+            await service.enqueue(
+                conn=conn,
                 routing_key="api.tournament.rollover",
                 data=rollover,
                 headers=Headers({}),
                 idempotency_key=f"tournament:rollover:{edition_id}",
+                entity_key="tournament:announcements",
             )
             log.info("[→] start-only rollover (edition %s, results pending)", edition_id)
             continue
@@ -438,19 +328,21 @@ async def process_awaiting_results_editions(
             for child in children:
                 entry = await _build_cycle_completed_event(repository, child["id"], child["category_id"], conn=conn)
                 results.append(entry)
-                pending_xp_events += await reward_service.award_cycle_placements(entry, conn=conn)  # type: ignore[arg-type]
-            pending_xp_events += await reward_service.award_edition_streaks(results, conn=conn)
+                await reward_service.award_cycle_placements(entry, conn=conn)  # type: ignore[arg-type]
+            await reward_service.award_edition_streaks(results, conn=conn)
             rollover = TournamentRolloverEvent(
                 edition_id=edition_id,
                 results=results,
                 started=started,
                 results_pending=False,
             )
-            await service.publish_message(
+            await service.enqueue(
+                conn=conn,
                 routing_key="api.tournament.rollover",
                 data=rollover,
                 headers=Headers({}),
                 idempotency_key=f"tournament:rollover:{edition_id}",
+                entity_key="tournament:announcements",
             )
             await repository.complete_edition(edition_id, conn=conn)  # type: ignore[arg-type]
             log.info("[→] combined rollover (edition %s, %d results)", edition_id, len(results))
@@ -465,5 +357,3 @@ async def process_awaiting_results_editions(
 
         # start_announced AND pending > 0: still draining, nothing to do this tick.
         log.debug("[!] edition %s still draining (%d pending)", edition_id, inflight)
-
-    return pending_xp_events
