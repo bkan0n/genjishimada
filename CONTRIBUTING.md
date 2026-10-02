@@ -46,7 +46,8 @@ Before you begin, ensure you have:
 3. **Verify your setup**
    ```bash
    just lint-all  # Should pass without errors
-   just test-all  # Should pass all tests
+   just test-api
+   just test-queue
    ```
 
 4. **Read the documentation**
@@ -74,7 +75,8 @@ Always run these commands before committing:
 
 ```bash
 just lint-all  # Format, lint, and type-check all code
-just test-all  # Run all tests
+just test-api  # Run the feature-organized API suite
+just test-queue  # Run serial queue acceptance and fault recovery
 ```
 
 These checks are enforced in CI, so running them locally saves time.
@@ -153,7 +155,8 @@ If you're new to the project:
 ```bash
 just test-api      # Run API tests only
 just test-bot      # Run bot tests only (when implemented)
-just test-all      # Run all tests
+just test-api  # Run the feature-organized API suite
+just test-queue    # Run serial queue acceptance and fault recovery
 ```
 
 ### Documentation Updates
@@ -182,7 +185,8 @@ Documentation lives at [docs.genji.pk](https://docs.genji.pk) - not in this repo
 2. **Verify all checks pass**
    ```bash
    just lint-all
-   just test-all
+   just test-api
+   just test-queue
    ```
 
 3. **Review your changes**
@@ -258,7 +262,7 @@ All standards are enforced in CI and must pass before merge.
 
 - DI modules (`di/*.py`) contain business logic
 - Route handlers (`routes/*.py`) are thin wrappers
-- Use `BaseService` for RabbitMQ publishing
+- Use `BaseService` for PostgreSQL queue publishing
 - Repository pattern for database queries
 
 **Bot (apps/bot):**
@@ -283,12 +287,14 @@ See [docs.genji.pk/architecture](https://docs.genji.pk) for detailed patterns.
 
 - Use pytest with pytest-asyncio
 - Database fixtures provided by pytest-databases
-- Parallel execution with pytest-xdist (8 workers)
-- Set `X-PYTEST-ENABLED=1` header to skip queue publishing
+- Run the feature-organized suite with `just test-api` (two workers by default)
+- Run queue acceptance separately with `just test-queue`; `just test-queue-fast` omits process/container faults
+- Queue production uses real database transactions in tests; request headers cannot skip enqueue
 
 **Test organization:**
 
-- Mirror the source structure (test file per module)
+- Keep repository, service, and HTTP cases under `tests/<feature>/`, with shared fixtures in `tests/support/`
+- Queue acceptance lives in `tests/integration/queue/` and has its own isolated PostgreSQL fixtures
 - Group related tests in classes
 - Use descriptive test names: `test_<function>_<scenario>_<expected>`
 

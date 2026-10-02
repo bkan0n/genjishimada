@@ -7,14 +7,14 @@ The Genji Shimada API exposes REST endpoints under `/api/v3` for maps, users, co
 - Serves REST endpoints under `/api/v3`.
 - Validates input using typed models from [`genjishimada-sdk`](https://github.com/bkan0n/genjishimada-sdk).
 - Acts as the authoritative interface to PostgreSQL.
-- Publishes events to RabbitMQ (XP, playtests, completions, notifications).
+- Publishes events to the PostgreSQL queue (XP, playtests, completions, notifications).
 - Powers the Discord bot and other internal tools.
 
 ## Technologies used
 
 - **Litestar** for async HTTP routing
 - **asyncpg** for high-performance Postgres access
-- **aio-pika** + RabbitMQ for async job publishing
+- **PGQueuer 1.1.1** for transactional background work
 - **msgspec** for fast JSON serialization and request validation
 - **Sentry** for error tracking
 - **Docker** for local and production deployment
@@ -32,7 +32,7 @@ The Genji Shimada API exposes REST endpoints under `/api/v3` for maps, users, co
 ## Dependencies on other services
 
 - **Database (Postgres)** — persistent data store
-- **RabbitMQ** — async job queue for XP, completions, rank updates, notifications
+- **PostgreSQL queue** — async job queue for XP, completions, rank updates, notifications
 - **OCR** — used by completion submission flows
 - **Bot** — consumes API events and publishes some back into the system
 

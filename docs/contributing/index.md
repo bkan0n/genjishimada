@@ -40,7 +40,7 @@ See the [Installation Guide](../getting-started/installation.md) for detailed se
    # Edit .env.local with your Discord token
    ```
 
-3. **Start infrastructure** (PostgreSQL, RabbitMQ, MinIO):
+3. **Start infrastructure** (PostgreSQL, MinIO):
    ```bash
    docker compose -f docker-compose.local.yml up -d
    ```
@@ -81,7 +81,8 @@ See the [Installation Guide](../getting-started/installation.md) for detailed se
 
 4. **Run tests**:
    ```bash
-   just test-all
+   just test-api
+   just test-queue
    ```
 
 5. **Commit your changes**:
@@ -210,27 +211,27 @@ async def test_get_map(client: AsyncClient):
 
 ### Running Tests
 
-Run all tests:
-
-```bash
-just test-all
-```
-
-Run API tests only:
+Run the feature-organized API suite:
 
 ```bash
 just test-api
 ```
 
+Run queue acceptance separately, including process and database recovery:
+
+```bash
+just test-queue
+```
+
 Run specific test file:
 
 ```bash
-uv run --project apps/api pytest apps/api/tests/test_maps.py
+just test-api tests/maps/test_maps_api.py
 ```
 
 ### Test Database
 
-Tests use an isolated PostgreSQL database, automatically created and torn down by `pytest-databases`.
+The API runner defaults to two workers. Each worker owns an isolated PostgreSQL database whose captured baseline is restored before every database test. Queue acceptance has separate disposable PostgreSQL fixtures and runs serially. Unit tests do not connect to PostgreSQL.
 
 ### Mocking
 
@@ -238,7 +239,7 @@ Use `pytest` fixtures for mocking:
 
 ```python
 @pytest.fixture
-def mock_rabbitmq():
+def effect_recorder():
     return AsyncMock()
 ```
 
@@ -278,7 +279,7 @@ Migrations are **manual**. There is no migration runner in this repo.
 ### Before Submitting
 
 1. **Lint your code**: `just lint-all`
-2. **Run tests**: `just test-all`
+2. **Run tests**: `just test-api` and `just test-queue`
 3. **Update documentation** if needed
 4. **Write a clear commit message**
 

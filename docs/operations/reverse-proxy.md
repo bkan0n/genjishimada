@@ -14,7 +14,7 @@ networks so it can route traffic to:
 - **Monitoring stack** on `caddy-network`
 - Other stacks (bkan0n, doom, etc.)
 
-This means the Genji API, RabbitMQ UI, and monitoring endpoints are reachable
+This means the Genji API and monitoring endpoints are reachable
 through the same proxy and share TLS automation via Cloudflare DNS.
 
 ## Genji Routes
@@ -23,8 +23,6 @@ From `Caddyfile`:
 
 - `api.genji.pk` -> `genjishimada-api:8000`
 - `dev-api.genji.pk` -> `genjishimada-api-dev:8000`
-- `rabbitmq.genji.pk` -> `genjishimada-rabbitmq:15672`
-- `dev-rabbitmq.genji.pk` -> `genjishimada-rabbitmq-dev:15672`
 - `genji.pk` / `dev.genji.pk` -> web containers
 - `db.genji.pk` -> `visualdb:80`
 
@@ -61,7 +59,6 @@ These Genji services are routed through the proxy and need to be reachable on
 the `genji-network`:
 
 - API container (`genjishimada-api` / `genjishimada-api-dev`)
-- RabbitMQ management UI (`genjishimada-rabbitmq` / `genjishimada-rabbitmq-dev`)
 - Web container (`genjishimada-web` / `genjishimada-web-dev`)
 
 If you change service names or ports in your compose files, update the
@@ -71,3 +68,5 @@ If you change service names or ports in your compose files, update the
 
 - [Monitoring](monitoring.md) - Grafana Alloy stack details
 - [Docker Compose](docker-compose.md) - Genji service deployment
+
+Retired broker-specific remote resources must be reconciled through the [queue migration runbook](queue-migration.md). Documentation changes do not modify those deployed resources.

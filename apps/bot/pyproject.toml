@@ -5,7 +5,6 @@ description = "Genji Shimada, a Discord bot for the Genji Parkour community."
 requires-python = ">=3.13"
 dependencies = [
     "pgqueuer==1.1.1",
-    "aio-pika>=9.6.2",
     "asyncpg>=0.30.0",
     "discord-ext-menus",
     "discord-py",

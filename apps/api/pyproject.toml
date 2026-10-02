@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "pgqueuer==1.1.1",
-    "aio-pika>=9.6.2",
     "aiohttp>=3.12.14",
     "boto3>=1.40.25",
     "genjishimada-sdk",

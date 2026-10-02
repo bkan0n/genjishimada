@@ -72,13 +72,7 @@ jobs:
         run: docker info
 
       - name: Run complete backend queue acceptance
-        working-directory: apps/api
-        env:
-          QUEUE_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/queue
-        run: >-
-          uv run python -m pytest --no-testmon -n 0 -ra --strict-markers
-          --confcutdir=tests/integration/queue
-          --junitxml=../../artifacts/queue/acceptance.xml tests/integration/queue
+        run: just test-queue
 
       - name: Publish acceptance results and sanitized fault logs
         if: always()

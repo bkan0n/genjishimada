@@ -6,20 +6,19 @@ Deploy and run Genji Shimada using Docker Compose for local development and remo
 
 The project provides three Docker Compose configurations:
 
-- **`docker-compose.local.yml`** - Local development (infrastructure only: PostgreSQL, RabbitMQ, MinIO)
-- **`docker-compose.dev.yml`** - Remote staging server (full stack: API, bot, database, RabbitMQ)
-- **`docker-compose.prod.yml`** - Remote production server (full stack: API, bot, database, RabbitMQ)
+- **`docker-compose.local.yml`** - Local development (infrastructure only: PostgreSQL, MinIO)
+- **`docker-compose.dev.yml`** - Remote staging server (full stack: API, bot, PostgreSQL)
+- **`docker-compose.prod.yml`** - Remote production server (full stack: API, bot, PostgreSQL)
 
 ## Local Development
 
-For local development on your Mac/Linux machine, use `docker-compose.local.yml`. This runs **infrastructure only** (PostgreSQL, RabbitMQ, MinIO) while you run the API and bot natively for fast iteration.
+For local development on your Mac/Linux machine, use `docker-compose.local.yml`. This runs **infrastructure only** (PostgreSQL, MinIO) while you run the API and bot natively for fast iteration.
 
 ### Services
 
 ```yaml
 services:
   postgres-local:        # PostgreSQL 17
-  rabbitmq-local:        # RabbitMQ 4
   minio-local:           # MinIO (S3-compatible storage)
 ```
 
@@ -34,7 +33,6 @@ docker compose -f docker-compose.local.yml up -d
 | Service    | Ports          | Description                    |
 |------------|----------------|--------------------------------|
 | PostgreSQL | 5432           | Database (host: localhost)     |
-| RabbitMQ   | 5672, 15672    | Broker + Management UI         |
 | MinIO      | 9000, 9001     | S3 API + Console               |
 
 All services bind to `127.0.0.1` (localhost only).
@@ -46,7 +44,6 @@ Use `.env.local` (see `.env.local.example`):
 ```env
 APP_ENVIRONMENT=local
 POSTGRES_HOST=localhost
-RABBITMQ_HOST=localhost
 S3_ENDPOINT_URL=http://localhost:9000
 ```
 
@@ -79,7 +76,6 @@ services:
   genjishimada-api-dev:      # Litestar API
   genjishimada-bot-dev:      # Discord bot
   genjishimada-db-dev:       # PostgreSQL 17
-  genjishimada-rabbitmq-dev: # RabbitMQ
 ```
 
 ### Starting Staging Services
@@ -91,9 +87,7 @@ docker compose -f docker-compose.dev.yml up -d
 To run only infrastructure services on staging:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d \
-  genjishimada-db-dev \
-  genjishimada-rabbitmq-dev
+docker compose -f docker-compose.dev.yml up -d genjishimada-db-dev
 ```
 
 ### Ports
@@ -102,7 +96,7 @@ docker compose -f docker-compose.dev.yml up -d \
 |------------|-------|---------------------------|
 | PostgreSQL | 65432 | Database (host: 127.0.0.1)|
 
-RabbitMQ management UI is not exposed directly in this repo.
+Queue workers run inside the API and bot processes.
 
 ### Environment Variables
 
@@ -114,9 +108,9 @@ POSTGRES_USER=genjishimada
 POSTGRES_PASSWORD=dev_password
 POSTGRES_DB=genjishimada
 
-# RabbitMQ
-RABBITMQ_USER=admin
-RABBITMQ_PASS=dev_password
+# Queue worker (restricted PostgreSQL login)
+QUEUE_DATABASE_URL=postgresql://genjishimada_queue_worker:REPLACE_WITH_SECRET@genjishimada-db-dev:5432/genjishimada
+QUEUE_OPERATOR_IDS=141372217677053952
 
 # API/Bot
 APP_ENVIRONMENT=development
@@ -143,7 +137,6 @@ services:
   genjishimada-api:      # Litestar API
   genjishimada-bot:      # Discord bot
   genjishimada-db:       # PostgreSQL 17
-  genjishimada-rabbitmq: # RabbitMQ
 ```
 
 ### Starting Production Services
@@ -158,7 +151,7 @@ docker compose -f docker-compose.prod.yml up -d
 |------------|-------|---------------------------|
 | PostgreSQL | 55432 | Database (host: 127.0.0.1)|
 
-The API and RabbitMQ are not exposed directly; access is handled via your reverse proxy (e.g., Caddy).
+The API is not exposed directly; access is handled via your reverse proxy (e.g., Caddy).
 
 ### Environment Variables
 
@@ -176,9 +169,9 @@ POSTGRES_USER=genjishimada
 POSTGRES_PASSWORD=secure_production_password
 POSTGRES_DB=genjishimada
 
-# RabbitMQ
-RABBITMQ_USER=admin
-RABBITMQ_PASS=secure_production_password
+# Queue worker (restricted PostgreSQL login)
+QUEUE_DATABASE_URL=postgresql://genjishimada_queue_worker:REPLACE_WITH_SECRET@genjishimada-db:5432/genjishimada
+QUEUE_OPERATOR_IDS=141372217677053952
 
 # API Authentication
 API_KEY=secure_api_key_for_bot
@@ -240,7 +233,7 @@ docker network create genji-network
 
 ## Volumes
 
-The database and RabbitMQ use named volumes for persistence.
+The database uses a named volume for persistence.
 
 ## Next Steps
 

@@ -104,7 +104,7 @@ just --version
 
 ### 4. Install Docker
 
-Docker is required for running PostgreSQL and RabbitMQ:
+Docker is required for running PostgreSQL:
 
 - **macOS**: [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
 - **Linux**: [Docker Engine](https://docs.docker.com/engine/install/)
@@ -145,11 +145,11 @@ Copy the local environment template:
 cp .env.local.example .env.local
 ```
 
-Edit `.env.local` with your Discord bot token and other settings. The database, RabbitMQ, and MinIO settings are pre-configured for local development.
+Edit `.env.local` with your Discord bot token and other settings. The database and MinIO settings are pre-configured for local development.
 
 ### 8. Start Local Infrastructure
 
-Start PostgreSQL, RabbitMQ, and MinIO for local development:
+Start PostgreSQL and MinIO for local development:
 
 ```bash
 docker compose -f docker-compose.local.yml up -d

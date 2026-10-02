@@ -17,13 +17,12 @@ Required environment variables in `.env`:
 - `API_KEY` – Forwarded to the `APIService` for authenticated requests to the API.
 - API hostnames are derived from `APP_ENVIRONMENT` (`genjishimada-api-dev` for development, `genjishimada-api` for production).
 
-### RabbitMQ variables
+### Queue variables
 
-Required for message queue integration:
+- `QUEUE_DATABASE_URL` — PostgreSQL URL for the restricted `genjishimada_queue_worker` login. Local provisioning: `just queue-credentials-local` after applying migrations.
+- `QUEUE_OPERATOR_IDS` — comma-separated Discord user IDs authorized to recover failed jobs; default `141372217677053952`. Set the same allowlist on API and bot. The API is authoritative.
 
-- `RABBITMQ_USER` – RabbitMQ username
-- `RABBITMQ_PASS` – RabbitMQ password
-- `RABBITMQ_HOST` – RabbitMQ host (e.g., `localhost` or `genjishimada-rabbitmq` in Docker)
+Never use the API owner's PostgreSQL login for the bot. The queue migration installs storage and privileges; workers do not install schema at runtime.
 
 ### Optional observability variables
 
@@ -106,7 +105,7 @@ The `Genji` constructor reads the appropriate file on startup based on `APP_ENVI
    docker compose -f docker-compose.local.yml up -d
    ```
 
-   This starts PostgreSQL, RabbitMQ, and MinIO for local development.
+   This starts PostgreSQL and MinIO for local development.
 
 5. **Run the bot**:
    ```bash
@@ -144,7 +143,7 @@ Before deploying to production:
 
 - [ ] Update `configs/prod.toml` with production Discord IDs
 - [ ] Set all required environment variables in production `.env`
-- [ ] Ensure RabbitMQ and the Genji API are reachable
+- [ ] Ensure PostgreSQL queue and the Genji API are reachable
 - [ ] Build and deploy the container image (or restart the process)
 - [ ] Monitor Discord logs and Sentry events after rollout
 - [ ] Verify bot appears online in Discord
@@ -213,29 +212,7 @@ docker compose -f docker-compose.prod.yml logs genjishimada-bot
 
 ### Queue Messages Not Processing
 
-**For local development**:
-```bash
-# Check RabbitMQ is running
-docker compose -f docker-compose.local.yml ps rabbitmq-local
-
-# Check bot logs for connection errors (if running with just run-bot)
-# Logs will appear in your terminal
-
-# Check RabbitMQ management UI
-open http://localhost:15672
-```
-
-**For remote deployments**:
-```bash
-# Check RabbitMQ is running
-docker compose -f docker-compose.dev.yml ps genjishimada-rabbitmq-dev
-
-# Check bot logs
-docker compose -f docker-compose.dev.yml logs genjishimada-bot-dev | grep -i rabbitmq
-```
-
-**Check queue consumers**:
-- Inspect bot logs for queue bindings and errors
+Check local PostgreSQL health and bot worker logs. Confirm the queue migration is applied and the queue-only login is provisioned. Run `just queue-credentials-local` for local credentials, then restart the bot. For remote failures, inspect the job's current diagnostic state through the recovery API or its operator alert. See [Queue operations](../../services/queue.md).
 
 ### API Requests Failing
 

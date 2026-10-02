@@ -6,7 +6,7 @@ This page explains how the API is organized and why certain patterns were chosen
 
 The API is assembled in a single entry point:
 
-- **RabbitMQ connection pools** are created during lifespan startup and stored in app state.
+- **PGQueuer workers** start during lifespan startup and stop before database resources close.
 - **PostgreSQL** is configured with `litestar_asyncpg.AsyncpgPlugin` for pooled connections.
 - **OpenAPI** metadata is configured and served at `/docs`.
 - **Routing** mounts a router at `/api/v3` using `route_handlers` discovered from `apps/api/routes`.
@@ -37,8 +37,8 @@ Typical flow:
 Services inherit from `BaseService`, which provides:
 
 - Access to the `asyncpg` connection
-- A `publish_message` helper that inserts a job row and publishes to RabbitMQ
-- Optional idempotency tracking for queue messages
+- Transactional enqueue that inserts a public job identity and PGQueuer row through the business connection
+- Durable event identities and per-effect receipts for replay safety
 
 Queues follow the pattern: `api.<domain>.<action>`.
 

@@ -49,13 +49,11 @@ jobs:
 
       - name: Deploy full stack to Remote Prod Server
         run: |
-          echo "Deploying API + Bot + RabbitMQ + DB to Prod Server..."
+          echo "Deploying API + Bot + PostgreSQL to Prod Server..."
           docker compose -f docker-compose.prod.yml up -d --build --no-deps --force-recreate
         env:
           # Shared
-          RABBITMQ_USER: ${{ secrets.RABBITMQ_USER }}
-          RABBITMQ_PASS: ${{ secrets.RABBITMQ_PASS }}
-          RABBITMQ_HOST: ${{ secrets.RABBITMQ_HOST }}
+          QUEUE_OPERATOR_IDS: ${{ vars.QUEUE_OPERATOR_IDS || '141372217677053952' }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           APP_ENVIRONMENT: ${{ secrets.APP_ENVIRONMENT }}
 
@@ -66,16 +64,12 @@ jobs:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
 
           # Bot env
+          QUEUE_DATABASE_URL: ${{ secrets.QUEUE_DATABASE_URL }}
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_FEEDBACK_URL: ${{ secrets.SENTRY_FEEDBACK_URL }}
           API_KEY: ${{ secrets.API_KEY }}
-
-          # RabbitMQ env
-          RABBITMQ_ERLANG_COOKIE: ${{ secrets.RABBITMQ_ERLANG_COOKIE }}
-          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
-          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
 
           # DB env
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}

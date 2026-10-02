@@ -9,7 +9,7 @@ The API is built with:
 - **Litestar** - Modern, fast Python web framework
 - **AsyncPG** - High-performance PostgreSQL driver
 - **msgspec** - Fast JSON serialization
-- **RabbitMQ** - Asynchronous message passing to the bot
+- **PostgreSQL queue** - Asynchronous message passing to the bot
 
 ## Base URLs
 
@@ -66,10 +66,10 @@ All endpoints require an API key unless explicitly excluded. See the [Authentica
 
 ### Message Queue Integration
 
-The API publishes events to RabbitMQ for asynchronous processing by the bot:
+The API publishes events to the PostgreSQL queue for asynchronous processing by the bot:
 
 ```
-API → RabbitMQ → Bot
+API → PostgreSQL queue → Bot
 ```
 
 Examples:
@@ -108,9 +108,10 @@ Run the test suite:
 
 ```bash
 just test-api
+just test-queue
 ```
 
-Tests use pytest with parallel execution (8 workers).
+The feature-organized API suite uses two workers by default. Queue acceptance runs separately and serially with disposable PostgreSQL instances, including process and database recovery tests. See [API test instructions](https://github.com/bkan0n/genjishimada/blob/main/apps/api/README.md) for order, worker, and feature selection options.
 
 ## Architecture Highlights
 
@@ -131,7 +132,7 @@ Example flow:
 
 ### Idempotency
 
-Most message queue operations are idempotent, tracked via `message_id` headers and database claims.
+Queue operations use durable event identities and per-effect receipts. Replaying a job preserves completed effects; a claim alone never proves completion.
 
 ### Error Handling
 

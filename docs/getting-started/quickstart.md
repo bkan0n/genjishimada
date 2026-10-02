@@ -7,7 +7,7 @@ Get the API and bot running locally in minutes.
 
 ## Start Local Infrastructure
 
-Start PostgreSQL, RabbitMQ, and MinIO:
+Start PostgreSQL and MinIO:
 
 ```bash
 docker compose -f docker-compose.local.yml up -d
@@ -81,13 +81,9 @@ In Discord, send a command to test the bot:
 
 In the API terminal, you should see incoming requests from the bot.
 
-### 3. Check RabbitMQ Management UI
+### 3. Verify background work
 
-Visit [http://localhost:15672](http://localhost:15672):
-- Username: `genji`
-- Password: `local_dev_password`
-
-You can see queues, messages, and connections.
+Run `just test-queue-fast` for backend queue acceptance. Run `just test-queue` to include isolated process and database failure tests. The full suite does not connect to Discord or require live service credentials.
 
 ## Development Workflow
 
@@ -128,10 +124,6 @@ This formats code with Ruff and type-checks with BasedPyright.
 docker compose -f docker-compose.local.yml logs -f postgres-local
 ```
 
-**RabbitMQ logs**:
-```bash
-docker compose -f docker-compose.local.yml logs -f rabbitmq-local
-```
 
 **MinIO logs**:
 ```bash
@@ -199,19 +191,9 @@ lsof -ti:8000 | xargs kill -9
    POSTGRES_DB=genjishimada
    ```
 
-### RabbitMQ Connection Failed
+### Queue Connection Failed
 
-1. Verify RabbitMQ is healthy:
-   ```bash
-   docker compose -f docker-compose.local.yml ps rabbitmq-local
-   ```
-
-2. Check RabbitMQ logs:
-   ```bash
-   docker compose -f docker-compose.local.yml logs rabbitmq-local
-   ```
-
-3. Visit management UI: [http://localhost:15672](http://localhost:15672)
+Check PostgreSQL health and apply the queue migration. Run `just queue-credentials-local` to set the queue-only login and update `.env.local`, then restart the bot. See [Queue operations](../services/queue.md).
 
 ### MinIO Connection Failed
 

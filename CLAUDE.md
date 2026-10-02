@@ -13,7 +13,7 @@ Genji Shimada is a Discord bot and REST API for the Genji Parkour community. The
 
 **Three main components:**
 
-- `apps/api` - Litestar-based REST API with AsyncPG and RabbitMQ
+- `apps/api` - Litestar-based REST API with AsyncPG and the PostgreSQL queue
 - `apps/bot` - Discord.py bot with command/event handling
 - `libs/sdk` - Shared msgspec data models and types
 
@@ -27,7 +27,7 @@ For local development, run infrastructure services in Docker and API/bot nativel
 docker compose -f docker-compose.local.yml up -d
 ```
 
-This starts PostgreSQL (port 5432), RabbitMQ (ports 5672, 15672), and MinIO (ports 9000, 9001) on localhost.
+This starts PostgreSQL (port 5432) and MinIO (ports 9000, 9001) on localhost.
 
 ### 2. Import Database from VPS
 
@@ -71,7 +71,6 @@ just run-bot
 
 - API: http://localhost:8000
 - API Docs: http://localhost:8000/schema
-- RabbitMQ Management: http://localhost:15672 (user: genji, pass: local_dev_password)
 - MinIO Console: http://localhost:9001 (user: genji, pass: local_dev_password)
 
 ### 7. Stop Infrastructure
@@ -110,9 +109,9 @@ just lint-all   # Run all linters
 ### Testing
 
 ```bash
-just test-api   # Run API tests with pytest (parallel, 8 workers)
-just test-all   # Run all tests
-just ci         # Run full CI suite (lint + test)
+just test-api  # Feature-organized API suite (two workers)
+just test-queue       # Serial backend queue acceptance, including fault injection
+just test-queue-fast  # Queue acceptance without process/container faults
 ```
 
 ### Docker Compose
@@ -127,7 +126,6 @@ Services in Docker:
 - **genjishimada-api-dev** - API server (port exposed via healthcheck)
 - **genjishimada-bot-dev** - Discord bot
 - **genjishimada-db-dev** - PostgreSQL 17 (port 127.0.0.1:65432)
-- **genjishimada-rabbitmq-dev** - RabbitMQ message broker
 
 ## Architecture
 
@@ -152,40 +150,19 @@ The API uses a "DI module" pattern where business logic is separated from HTTP r
 - `di/maps.py` - Map CRUD, search, ratings
 - `di/completions.py` - User completion tracking
 - `di/notifications.py` - Notification delivery system
-- `di/base.py` - BaseService class with RabbitMQ publishing helpers
+- `di/base.py` - BaseService class with PostgreSQL queue publishing helpers
 
 ### Message Queue Architecture
 
-The API and bot communicate asynchronously via RabbitMQ using a producer-consumer pattern:
+The API persists PGQueuer work and `public.jobs` identities on the same connection and transaction as the business write. The API and bot each supervise a PGQueuer 1.1.1 worker inside their existing processes. Bot handlers receive a transport-neutral SDK job context and mutate domain data through authenticated API endpoints.
 
-**API Side (Producer):**
-
-- Uses `BaseService.publish_message()` in `apps/api/di/base.py`
-- Publishes msgspec-encoded messages to queues
-- Creates job status records in PostgreSQL for tracking
-- Supports idempotency via `message_id` header
-
-**Bot Side (Consumer):**
-
-- `apps/bot/extensions/rabbit.py` - RabbitHandler manages connections and consumers
-- `apps/bot/extensions/_queue_registry.py` - `@queue_consumer` decorator for handlers
-- Handlers decode msgspec structs and process events
-- Supports automatic DLQ (dead letter queue) processing with alerting
-
-**Queue naming convention:** `api.<domain>.<action>` (e.g., `api.completion.submission`, `api.notification.delivery`)
-
-**Idempotency:**
-
-- Most queues require idempotency (enforced by `IGNORE_IDEMPOTENCY` set in `di/base.py`)
-- Bot handlers use `@queue_consumer(idempotent=True)` to claim and track message processing
-- Claims are deleted on handler failure to allow retry
-
-**DLQ Processing:**
-
-- Failed messages go to `<queue_name>.dlq`
-- DLQ processor runs every 60 seconds
-- Posts alerts to Discord channel with message details
-- Marks messages with `dlq_notified` header to prevent duplicate alerts
+- Keep the 21 existing event names plus the three durable API continuations in the shared registry.
+- Persist effect receipts for additive mutations and bindings for external sends. A global pre-execution claim is not proof an effect completed.
+- Retrying preserves job/event identities and completed effects. Uncertain external effects require reconciliation.
+- Held jobs generate persistent operator alerts with restricted retry controls through the API.
+- `QUEUE_DATABASE_URL` is a queue-only bot credential; never grant the bot domain-table access.
+- Run `just test-queue` for mandatory backend acceptance; `just test-queue-fast` omits fault injection. No Discord-specific tests are required.
+- See `docs/services/queue.md` and `docs/operations/queue-migration.md` for operation and cutover.
 
 ### Database Schema
 
@@ -225,7 +202,7 @@ The bot uses a cog-like extension system:
 - **`apps/bot/extensions/*.py`** - Feature modules loaded on startup
 - Extensions can define queue consumers using `@queue_consumer` decorator
 - `api_service.py` - HTTP client wrapper for calling the API
-- `rabbit.py` - RabbitMQ service and queue management
+- `queue.py` - PostgreSQL queue service and queue management
 
 **Queue consumer pattern:**
 
@@ -235,7 +212,7 @@ from genjishimada_sdk.completions import CompletionCreatedEvent
 
 
 @queue_consumer("api.completion.submission", struct_type=CompletionCreatedEvent, idempotent=True)
-async def handle_completion(self, event: CompletionCreatedEvent, message: AbstractIncomingMessage) -> None:
+async def handle_completion(self, event: CompletionCreatedEvent, message: JobContext) -> None:
 # Handler logic here
 ```
 
@@ -335,7 +312,6 @@ Required in `.env`:
 
 - `DISCORD_TOKEN` - Bot token
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` - Database credentials
-- `RABBITMQ_USER`, `RABBITMQ_PASS`, `RABBITMQ_HOST` - Message broker
 - `SENTRY_DSN` - Error tracking
 - `APP_ENVIRONMENT` - `development` or `production`
 - `API_KEY` - Bot's API key for calling the API
@@ -347,12 +323,14 @@ Required in `.env`:
 **API tests:** `apps/api/tests/`
 
 - Uses pytest with pytest-asyncio and pytest-databases
-- Parallel execution with pytest-xdist (8 workers)
+- Feature-organized suite uses pytest-xdist (two workers by default; `--workers 0` runs serially)
 - Database fixtures provided by pytest-databases[postgres]
+- Repository, service, and HTTP cases live together under `tests/<feature>/`; shared fixtures live in `tests/support/`
+- Queue acceptance runs separately through `just test-queue`, serially with its own disposable PostgreSQL fixtures
 
-**Test database:** Automatically created and torn down per test
+**Test database:** One database per API worker, restored to its captured baseline before each database test
 
-**Pytest headers:** Set `X-PYTEST-ENABLED=1` header to skip queue publishing in tests
+**Queue writes:** Tests commit real queue work with the domain transaction; request headers never skip enqueue. Use the dedicated queue runner for its independent fixture lifecycle.
 
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
@@ -407,14 +385,14 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - Scalar - OpenAPI documentation renderer (in-app at `/docs`)
 ## Key Dependencies
 - asyncpg (via litestar-asyncpg `>=0.4.0`) - PostgreSQL async driver and connection pooling (`apps/api/app.py`)
-- aio-pika `>=9.5.5` - RabbitMQ async client for message publishing (`apps/api/services/base.py`)
+- pgqueuer `==1.1.1` - PostgreSQL queue async client for message publishing (`apps/api/services/base.py`)
 - boto3 `>=1.40.25` - S3-compatible object storage client for Cloudflare R2 (`apps/api/services/image_storage_service.py`)
 - httpx `>=0.27.0` - Async HTTP client for external API calls (Resend emails in `apps/api/events/auth.py`)
 - bcrypt `>=4.0.0` - Password hashing (`apps/api/services/auth_service.py`, `apps/api/repository/auth_repository.py`)
 - rapidfuzz `>=3.12.0` - Fuzzy string matching (dependency declared but not actively imported in source)
 - sqlspec `>=0.38.0` - SQL utilities (`apps/api/utilities/map_search.py`)
 - aiohttp `>=3.12.14` - HTTP client (used alongside httpx)
-- aio-pika `>=9.5.5` - RabbitMQ async client for message consuming (`apps/bot/extensions/rabbit.py`)
+- pgqueuer `==1.1.1` - PostgreSQL queue async client for message consuming (`apps/bot/extensions/queue.py`)
 - asyncpg `>=0.30.0` - PostgreSQL driver (bot-side DB access)
 - jishaku `>=2.6.0` - Discord bot debugging/development extension
 - truststore `>=0.10.4` - System CA certificate trust (`apps/bot/main.py`)
@@ -434,7 +412,8 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - `APP_ENVIRONMENT` - `local`, `development`, or `production`
 - `DISCORD_TOKEN` - Bot authentication
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST` - Database
-- `RABBITMQ_USER`, `RABBITMQ_PASS`, `RABBITMQ_HOST` - Message broker
+- `QUEUE_DATABASE_URL` - Queue-only bot database login
+- `QUEUE_OPERATOR_IDS` - Recovery operator allowlist, enforced by the API
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` - Object storage (production)
 - `S3_ENDPOINT_URL`, `S3_BUCKET_NAME`, `S3_PUBLIC_URL` - Object storage (local override for MinIO)
 - `SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_RELEASE` - Error tracking
@@ -456,15 +435,15 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - Custom Docker image with `pg_cron` extension (`infra/postgres/Dockerfile`)
 - Multiple schemas: `core`, `maps`, `completions`, `playtests`, `users`, `lootbox`, `rank_card`, `public`
 - Sequential migration files in `apps/api/migrations/*.sql`
-- Custom Docker image with management plugin (`infra/rabbitmq/Dockerfile`)
-- Durable queues with dead-letter queue (DLQ) pattern
-- Connection/channel pooling on both API and bot sides
+- PGQueuer 1.1.1 storage lives in the existing PostgreSQL instance
+- Persistent retries, held failures, and effect receipts support recovery
+- Bot queue login cannot access domain tables
 - S3-compatible object storage for image uploads
 - Local: MinIO container on ports 9000/9001
 - Production: Cloudflare R2 with `cdn.genji.pk` public URL
 ## Platform Requirements
 - macOS or Linux
-- Docker (for PostgreSQL, RabbitMQ, MinIO)
+- Docker (for PostgreSQL, MinIO)
 - `uv` package manager
 - `just` task runner
 - Python 3.13+
@@ -474,8 +453,8 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - External Docker network `genji-network`
 - GitHub Actions for CI/CD
 ## CI/CD Pipeline
-- `lint.yml` - Ruff + BasedPyright on PRs to main/dev
-- `tests.yml` - pytest with testmon caching, runs on PRs and pushes to main/dev
+- `lint.yml` - Ruff + BasedPyright on PRs to main/dev and queue stack branches
+- `tests.yml` - Feature-organized API tests plus serial queue acceptance; runs on all PRs and pushes to main/dev, without testmon filtering
 - `deploy-dev.yml` - Deploy to dev VPS via SSH + Docker context (manual or `.deploy` PR comment)
 - `deploy-prod.yml` - Deploy to production on push to main (after lint + test gates)
 - `docs.yml` - MkDocs deployment to GitHub Pages
@@ -513,7 +492,7 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - Domain exceptions: `{Description}Error` (e.g., `MapNotFoundError`, `DuplicateCreatorError`)
 - Repository exceptions: `{Constraint}ViolationError` (e.g., `UniqueConstraintViolationError`, `ForeignKeyViolationError`)
 - Literal types: `DifficultyTop`, `DifficultyAll`, `MapCategory`, `OverwatchMap` (defined as `Literal[...]` in SDK)
-- Use `UPPER_SNAKE_CASE`: `IGNORE_IDEMPOTENCY`, `DLQ_HEADER_KEY`, `BOT_USER_ID`
+- Use `UPPER_SNAKE_CASE`: `QUEUE_OPERATOR_IDS`, `BOT_USER_ID`
 - Module-level constants prefixed with underscore when private: `_PREVIEW_MAX_LENGTH`, `_ASSET_BANNER_PATH`
 ## Code Style
 - Tool: Ruff (format + lint)
@@ -549,7 +528,7 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - Use `%s` style formatting (not f-strings): `log.info("Processing map %s", code)`
 - Use `log.exception()` for caught exceptions (auto-includes traceback)
 - Use `log.debug()` for development/tracing messages
-- Emoji prefixes in log messages for RabbitMQ operations: `[->]`, `[x]`, `[!]`
+- Emoji prefixes in log messages for PostgreSQL queue operations: `[->]`, `[x]`, `[!]`
 - Sentry SDK integration for error tracking in both API and bot
 ## Database Query Patterns
 - Use `$1, $2, ...` positional parameters (asyncpg style)
@@ -566,7 +545,7 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - All shared data models use `msgspec.Struct`
 - Request models: `*Request` suffix
 - Response models: `*Response` suffix
-- Event models: `*Event` suffix (for RabbitMQ messages)
+- Event models: `*Event` suffix (for PostgreSQL queue messages)
 - Use `msgspec.UNSET` / `UnsetType` for optional PATCH fields
 ## Dependency Injection
 ## Route Conventions
@@ -582,17 +561,17 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 
 ## Pattern Overview
 - Three-layer API (Controller -> Service -> Repository) with Litestar DI
-- Asynchronous inter-service communication via RabbitMQ (API produces, Bot consumes)
+- Asynchronous inter-service communication via a PostgreSQL queue (API produces, Bot consumes)
 - Shared SDK library (`genjishimada_sdk`) provides type-safe msgspec structs across API and Bot
 - Domain-driven exception hierarchy (repository exceptions -> service exceptions -> HTTP exceptions)
 - PostgreSQL as single source of truth with raw SQL queries (no ORM)
 ## System Components
 - Litestar-based REST API serving `/api/v3/*` endpoints
-- Publishes events to RabbitMQ queues for the bot to consume
+- Publishes events to the PostgreSQL queue jobs for the bot to consume
 - Uses Litestar event system for in-process background tasks (email, OCR)
 - Connects to PostgreSQL via asyncpg connection pool
 - Discord.py bot with extension-based modular architecture
-- Consumes RabbitMQ messages and executes Discord-side actions
+- Consumes PostgreSQL queue messages and executes Discord-side actions
 - Calls the API over HTTP for data operations (via `APIService`)
 - Manages Discord interactions (slash commands, buttons, modals, embeds)
 - Shared msgspec `Struct` definitions used by both API and Bot
@@ -607,10 +586,10 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - Pattern: Controllers declare `dependencies` dict mapping names to `Provide(provide_*)` functions. Route handlers receive service/repo instances via parameter injection.
 ```python
 ```
-- Purpose: Business logic, transaction orchestration, RabbitMQ message publishing
+- Purpose: Business logic, transaction orchestration, PostgreSQL queue message publishing
 - Location: `apps/api/services/*.py`
 - Contains: Service classes extending `BaseService`, domain exception raising
-- Depends on: Repository layer, SDK structs, `BaseService.publish_message()`
+- Depends on: Repository layer, SDK structs, `transactional enqueue`
 - Used by: Controller layer
 ```python
 ```
@@ -635,46 +614,28 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 ```
 ## Data Flow
 - PostgreSQL is the single source of truth for all persistent state
-- RabbitMQ provides at-least-once delivery for async events
+- PostgreSQL queue provides at-least-once delivery for async events
 - Bot maintains in-memory state for Discord guild/channel references via `BaseHandler`
 - API connection pool managed by `litestar-asyncpg` plugin via `state.db_pool`
-- RabbitMQ channel pool managed by `state.mq_channel_pool`
+- Queue workers use dedicated supervised PostgreSQL connections
 ## Message Queue Architecture
-- `apps/api/services/base.py` `BaseService.publish_message()` publishes to RabbitMQ
-- Creates job tracking record in `public.jobs` table
-- Skips publishing when `X-PYTEST-ENABLED=1` header present
-- Requires `idempotency_key` for most queues (enforced by `IGNORE_IDEMPOTENCY` set)
-- `apps/bot/extensions/rabbit.py` `RabbitHandler` manages connection/channel pools
-- `apps/bot/extensions/_queue_registry.py` `@queue_consumer` decorator for handler registration
-- Queue handlers discovered at startup by scanning all bot-attached service instances
-- Extensions loaded before `rabbit.py` (enforced by `extensions/__init__.py` sort order)
-- `api.completion.submission` - New completion submitted
-- `api.completion.upvote` - Completion upvoted
-- `api.notification.delivery` - Notification to deliver
-- `api.playtest.creation` - New playtest created
-- `api.playtest.vote.cast` - Playtest vote submitted
-- `api.playtest.force_deny` - Playtest force-denied
-- `api.xp.grant` - XP grant requested
-- `api.completion.autoverification.failed` - Auto-verification failed
-- Messages carry `message_id` used as idempotency key
-- Bot claims idempotency via API call to `public.idempotency_claims` table
-- On handler failure, claim is deleted to allow retry
-- Queues in `IGNORE_IDEMPOTENCY` set skip idempotency enforcement
-- Each queue has a companion `<queue_name>.dlq`
-- Failed messages (unhandled exceptions) are rejected to DLQ automatically via RabbitMQ `x-dead-letter-exchange`
-- DLQ processor runs every 60 seconds, posting alerts to Discord channel
-- Messages marked with `dlq_notified` header to prevent duplicate alerts
-- Jobs tracked in `public.jobs` table with UUID
-- Status lifecycle: `queued` -> `processing` -> `succeeded` / `failed` / `timeout`
-- `BaseHandler._wrap_job_status()` wraps queue handlers to auto-update job status
-- API clients can poll job status via `/api/v3/jobs/{id}` endpoint
+- Transactional enqueue uses the business connection, durable event identity, and PGQueuer 1.1.1.
+- `public.jobs` preserves public UUIDs and status history after active queue rows are removed.
+- Queue handlers are registered by `extensions/_queue_registry.py` and receive SDK `JobContext` values.
+- Workers recover claimed work after process loss, preserve canceled work on graceful timeout, and fence stale queue owners.
+- Replay records per-effect completion. Additive mutations and their receipts share a transaction.
+- Queue status projects as `queued`, `processing`, `succeeded`, `failed`, or legacy `timeout` through `/api/v3/internal/jobs/{id}`.
+- Tests enqueue real database work; caller-controlled pytest headers never turn enqueue into a fake success.
+- Retry controls use an authenticated recovery service, operator allowlist, request key, and failure generation.
+- Queue acceptance tests live under `apps/api/tests/integration/queue/` and run in CI without testmon filtering.
+
 ## Litestar Event System (In-Process)
 - **Location:** `apps/api/events/*.py`
 - **Registration:** Auto-discovered by `events/__init__.py`
 - **Current events:**
 ## Bot Extension System
 - `apps/bot/extensions/__init__.py` discovers all modules via `pkgutil.iter_modules`
-- `rabbit.py` always loads last (sorted by lambda) to ensure all queue handlers are registered first
+- `queue.py` always loads last (sorted by lambda) to ensure all queue handlers are registered first
 - `jishaku` loaded as a debugging extension
 - Extensions loaded in `Genji.setup_hook()` during bot startup
 ```python
@@ -714,7 +675,7 @@ API routes and database schema for a movement techniques feature in the Genji Pa
 - Being superseded by the three-tier exception hierarchy
 - `apps/bot/utilities/errors.py` - `on_command_error` handles Discord command errors
 - Sentry integration captures unhandled exceptions
-- Queue handler errors caught by `RabbitHandler._wrap_handler`, messages go to DLQ
+- Queue handler failures persist retry/held state, with independent operator alert delivery
 ## Cross-Cutting Concerns
 - API: Litestar `LoggingConfig` with queue listener, healthcheck endpoint filtered out
 - Bot: Discord.py logging setup with noise filters for gateway/state warnings

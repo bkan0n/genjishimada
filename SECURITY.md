@@ -113,12 +113,12 @@ The following vulnerabilities are common in web applications. Please be mindful 
 - API endpoints and authentication
 - Discord bot commands and event handlers
 - Database queries and migrations
-- RabbitMQ message handling
+- PostgreSQL queue message handling
 - File uploads and storage (MinIO/S3)
 
 ### Out of Scope
 
-- Third-party services (Discord API, PostgreSQL, RabbitMQ, etc.)
+- Third-party services (Discord API, PostgreSQL, PostgreSQL queue, etc.)
 - Denial of Service (DoS) attacks
 - Social engineering attacks against users
 - Physical security of servers

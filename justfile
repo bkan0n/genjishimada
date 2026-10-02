@@ -50,6 +50,18 @@ test-api-all *args:
 test-api-v3 *args:
     uv run --project apps/api --group dev-api python scripts/run_api_tests.py "$@"
 
+# Queue acceptance, including isolated process and database faults; requires Docker
+test-queue:
+    uv run --project apps/api --group dev-api python scripts/run_queue_tests.py
+
+# Queue acceptance without process/container fault injection
+test-queue-fast:
+    uv run --project apps/api --group dev-api python scripts/run_queue_tests.py --fast
+
+# Set a random password on the local queue-only login and save its URL in .env.local
+queue-credentials-local:
+    uv run --project apps/api python scripts/provision_local_queue.py
+
 # ----------------------------
 # Bot app (genjishimada-bot)
 # ----------------------------
@@ -87,7 +99,7 @@ ci:
     just lint-all
     just test-all
 
-# Start local infrastructure (postgres, rabbitmq, minio) in Docker
+# Start local infrastructure (PostgreSQL and MinIO) in Docker
 infra-up:
     docker compose -f docker-compose.local.yml up -d
 

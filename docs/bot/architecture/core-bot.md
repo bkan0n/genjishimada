@@ -23,7 +23,7 @@ The bot starts in `apps/bot/main.py` inside the `main()` coroutine. The sequence
 
 `Genji.setup_hook` runs once the Discord connection is preparing. It loads every module under `extensions/` (discovered
 via `pkgutil` in `extensions.__init__.EXTENSIONS`) plus the debugging cog `jishaku`. After extensions are loaded, the
-method schedules `self.rabbit.start()` on the bot loop so that queue consumers begin once all handlers are registered.
+method schedules `self.queue.start()` on the bot loop so that queue consumers begin once all handlers are registered.
 
 Each extension exposes an async `setup(bot)` function that attaches services or cogs to the bot. Notable patterns
 include:
@@ -32,7 +32,7 @@ include:
 - `extensions.newsfeed.setup`, `extensions.completions.setup`, `extensions.playtest.setup`, and `extensions.xp.setup`
   create service classes that are stored on the bot for later access.
 - `extensions.notifications.setup` attaches `NotificationHandler` to `bot.notifications`.
-- `extensions.rabbit.setup` prepares the `RabbitHandler`, which `setup_hook` starts after all handlers are registered.
+- `extensions.queue.setup` prepares the queue supervisor, which starts after all handlers are registered.
 
 ## Service lifecycle
 
@@ -46,7 +46,7 @@ When adding a new feature module:
 
 1. Create an extension module under `extensions/` with an `async def setup(bot)` entry point.
 2. Attach any long-lived handler to the bot (optionally inheriting from `BaseHandler`).
-3. Register queue handlers with `queue_consumer` if the feature processes RabbitMQ events (
+3. Register queue handlers with `queue_consumer` if the feature processes PostgreSQL queue events (
    see [Messaging & Queues](messaging.md)).
 4. Ensure the module is importable so that `extensions.__init__` discovers it automatically during startup.
 
@@ -62,7 +62,7 @@ apps/bot/
 ├── extensions/           # Feature modules
 │   ├── __init__.py       # Extension discovery
 │   ├── api_service.py    # API client
-│   ├── rabbit.py         # RabbitMQ service
+│   ├── queue.py         # PostgreSQL queue service
 │   ├── newsfeed.py       # Newsfeed service
 │   ├── completions.py    # Completions service
 │   ├── playtest.py       # Playtest service

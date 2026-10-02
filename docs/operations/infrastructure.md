@@ -4,26 +4,16 @@ Detailed guide to the infrastructure services that power Genji Shimada.
 
 ## Architecture Overview
 
+```mermaid
+flowchart LR
+    Users[Discord users] --> Bot[Discord bot]
+    Bot --> API[REST API]
+    API --> DB[(PostgreSQL: domain data and queue)]
+    DB --> Bot
+    DB --> Worker[API background worker]
 ```
-┌─────────────────┐
-│  Discord Users  │
-└────────┬────────┘
-         │
-    ┌────▼────────────────┐
-    │   Discord Bot       │
-    │  (discord.py)       │
-    └─┬────────────────┬──┘
-      │                │
-      │                │
- ┌────▼─────┐    ┌────▼──────┐
- │ RabbitMQ │◄───┤  REST API │
- │          │    │ (Litestar)│
- └──────────┘    └─────┬─────┘
-                       │
-                 ┌─────▼──────┐
-                 │ PostgreSQL │
-                 └────────────┘
-```
+
+The bot's direct database login can access queue storage only. Domain access goes through the API.
 
 ## PostgreSQL
 
@@ -55,39 +45,15 @@ Create a full backup:
 pg_dump -U genjishimada -h localhost -p 65432 genjishimada > backup_$(date +%Y%m%d).sql
 ```
 
-## RabbitMQ
+## PostgreSQL background queue
 
-### Overview
+PGQueuer 1.1.1 stores accepted work in the existing PostgreSQL instance. Workers run inside the API and bot; no separate service is needed. Business writes and their queued work commit together. Jobs retain public UUIDs, replay receipts, and failure history.
 
-RabbitMQ is used for asynchronous message passing between the API and bot.
+See [Queue operations](../services/queue.md) for retries, alerts, credentials, and automated verification.
 
-**Key Features**:
-- **Queue-based messaging** for event processing
-- **Dead letter queues (DLQ)** for failed messages
-- **Message persistence** for reliability
-- **Idempotency tracking** to prevent duplicate processing
-
-### Queue Naming Convention
-
-Queues follow the pattern: `api.<domain>.<action>`
-
-Examples:
-- `api.completion.submission`
-- `api.notification.delivery`
-- `api.map_edit.created`
-
-### Monitoring
-
-**Local development:** Access management UI at http://localhost:15672 (genji/local_dev_password)
-
-**Remote deployments:** RabbitMQ is not exposed directly. Use container logs:
-
-```bash
 # Staging
-docker compose -f docker-compose.dev.yml logs -f genjishimada-rabbitmq-dev
 
 # Production
-docker compose -f docker-compose.prod.yml logs -f genjishimada-rabbitmq
 ```
 
 ## Cloudflare R2
