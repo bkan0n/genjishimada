@@ -160,6 +160,8 @@ CREATE UNIQUE INDEX jobs_event_identity ON public.jobs(action,event_key) WHERE e
 CREATE INDEX jobs_entity_order ON public.jobs(entity_key,event_sequence) WHERE entity_key IS NOT NULL;
 ALTER TABLE public.pgqueuer ADD COLUMN handler_failures integer NOT NULL DEFAULT 0,
     ADD COLUMN failure_code text, ADD COLUMN failure_message text;
+CREATE INDEX pgqueuer_failed_dependencies ON public.pgqueuer(entrypoint,id)
+    WHERE status='failed' AND failure_code='dependency_failed';
 
 CREATE TABLE public.job_effects (
     job_id uuid NOT NULL REFERENCES public.jobs(id), effect_key text NOT NULL,
@@ -217,15 +219,42 @@ BEGIN
         UPDATE public.jobs SET status='succeeded',finished_at=now(),error_code=NULL,error_msg=NULL
         WHERE queue_job_id=NEW.job_id RETURNING id INTO completed_id;
         UPDATE public.pgqueuer q SET status='queued',execute_after=now(),queue_manager_id=NULL,
-            handler_failures=0,failure_code=NULL,failure_message=NULL
+            failure_code=NULL,failure_message=NULL
         FROM public.jobs j WHERE j.queue_job_id=q.id AND j.depends_on=completed_id
-            AND q.status='failed' AND q.failure_code='dependency_failed';
+            AND q.status='failed' AND q.failure_code='dependency_failed'
+            AND j.error_code IS DISTINCT FROM 'discarded'
+            AND NOT EXISTS (SELECT 1 FROM public.job_effects e
+                WHERE e.job_id=j.id AND e.kind='external' AND e.state='started');
     END IF;
     RETURN NEW;
 END $$;
 REVOKE ALL ON FUNCTION public.project_queue_terminal() FROM PUBLIC;
 CREATE TRIGGER project_queue_terminal AFTER INSERT ON public.pgqueuer_log
 FOR EACH ROW EXECUTE FUNCTION public.project_queue_terminal();
+
+-- Terminal log writes can overlap: a parent may finish before its child's held
+-- failure is visible to the terminal trigger. Reconcile durable state on every
+-- worker poll so either commit ordering is eventually released. Restrict this
+-- definer to the one safe transition; workers still cannot read application jobs.
+CREATE FUNCTION public.release_ready_job_dependencies(entrypoints text[]) RETURNS void
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+    WITH ready AS (
+        SELECT q.id FROM public.pgqueuer q
+        JOIN public.jobs child ON child.queue_job_id=q.id
+        JOIN public.jobs parent ON parent.id=child.depends_on
+        WHERE q.entrypoint=ANY(entrypoints) AND q.status='failed'
+            AND q.failure_code='dependency_failed' AND parent.status='succeeded'
+            AND child.error_code IS DISTINCT FROM 'discarded'
+            AND NOT EXISTS (SELECT 1 FROM public.job_effects e
+                WHERE e.job_id=child.id AND e.kind='external' AND e.state='started')
+        ORDER BY q.id LIMIT 100 FOR UPDATE OF q SKIP LOCKED
+    )
+    UPDATE public.pgqueuer q SET status='queued',execute_after=now(),updated=now(),
+        queue_manager_id=NULL,failure_code=NULL,failure_message=NULL
+    FROM ready WHERE q.id=ready.id;
+$$;
+REVOKE ALL ON FUNCTION public.release_ready_job_dependencies(text[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.release_ready_job_dependencies(text[]) TO genjishimada_queue_worker;
 
 GRANT USAGE ON SCHEMA public TO genjishimada_queue_worker;
 GRANT SELECT, UPDATE, DELETE ON public.pgqueuer TO genjishimada_queue_worker;

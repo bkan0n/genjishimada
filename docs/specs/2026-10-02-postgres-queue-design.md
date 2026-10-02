@@ -204,10 +204,13 @@ Defaults:
 | Graceful job drain | 30 seconds |
 | Container stop grace | 45 seconds |
 | Reconnect backoff | 1 second doubling to 30 seconds, with jitter |
+| Queue database command timeout | 10 seconds, configurable through `QueueWorker.command_timeout_seconds` |
 | Ordinary handler retry delays | 5s, 15s, 1m, 5m, 15m; then hold |
 | Default handler timeout | 120 seconds, configurable for existing longer handlers |
 
 Treat these as explicit initial settings, not library defaults. PGQueuer remains responsible for heartbeat/reclaim and durable scheduling. A small policy executor classifies errors and requests persistent retries; do not build another leasing engine.
+
+The queue database deadline includes waiting for the shared driver connection. A timed-out command closes that connection and cancels its executions for recovery, without charging database contention to the handler failure budget. This prevents a blocked heartbeat or status write from indefinitely stalling unrelated work or shutdown.
 
 Expected database/API/Discord-wide outages do not consume the ordinary handler failure budget. Stop claiming when a required dependency is unavailable, reconnect with backoff, and persist a deferred retry if an already-started job encounters an outage. PGQueuer may increment its transport attempt counter on such deferral; store the bounded handler-failure count separately in queue job metadata so a long outage does not turn the entire backlog into terminal failures. Rate limits honor retry-after. Authentication/configuration failures are actionable operational errors, not an endless rapid reconnect loop.
 
