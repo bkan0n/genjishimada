@@ -160,7 +160,7 @@ The API persists PGQueuer work and `public.jobs` identities on the same connecti
 - Persist effect receipts for additive mutations and bindings for external sends. A global pre-execution claim is not proof an effect completed.
 - Retrying preserves job/event identities and completed effects. Uncertain external effects require reconciliation.
 - Held jobs generate persistent operator alerts with restricted retry controls through the API.
-- `QUEUE_DATABASE_URL` is a queue-only bot credential; never grant the bot domain-table access.
+- The bot reuses `POSTGRES_HOST`/`POSTGRES_DB` with `QUEUE_DATABASE_PASSWORD` for its queue-only login; `QUEUE_DATABASE_URL` overrides the complete connection. Never grant the bot domain-table access or fall back to API credentials.
 - Run `just test-queue` for mandatory backend acceptance; `just test-queue-fast` omits fault injection. No Discord-specific tests are required.
 - See `docs/services/queue.md` and `docs/operations/queue-migration.md` for operation and cutover.
 

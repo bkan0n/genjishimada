@@ -9,7 +9,8 @@ Jobs sharing an entity key run in enqueue sequence. Before checking for earlier 
 Apply the checked-in queue migration with the database migration owner before starting the new workers. Runtime worker credentials do not install or upgrade schema.
 
 - The API uses its existing database connection for transactional enqueue and its API-owned worker.
-- The bot uses `QUEUE_DATABASE_URL`, authenticating as `genjishimada_queue_worker`. This role can consume and maintain queue records but cannot read or mutate domain tables, create schema, or administer the database.
+- By default, the bot uses the API's `POSTGRES_HOST` and `POSTGRES_DB` on port 5432, authenticating as `genjishimada_queue_worker` with `QUEUE_DATABASE_PASSWORD`. This role can consume and maintain queue records but cannot read or mutate domain tables, create schema, or administer the database. The bot never falls back to `POSTGRES_USER` or `POSTGRES_PASSWORD`.
+- Set `QUEUE_DATABASE_URL` to override the complete connection for a different host, port, database, or connection options. A nonempty override takes precedence over the shared-location settings.
 - `QUEUE_OPERATOR_IDS` is a comma-separated operator allowlist, initially `141372217677053952`. Configure the same value for API and bot; the API enforces authorization.
 - The authenticated bot API key needs `jobs:manage` for internal job execution and recovery endpoints.
 
@@ -21,7 +22,7 @@ just queue-credentials-local
 
 The command targets only `postgres-local` in the local Compose file. It generates a random worker password, supplies it through standard input, and saves the queue URL to `.env.local` with owner-only permissions. It refuses remote Docker contexts and never prints the password. Restart a running local bot after rotating the login.
 
-For deployment, provision a distinct password through your normal database administration process and store the URL in the environment's `QUEUE_DATABASE_URL` secret. Use the relevant PostgreSQL service name (`genjishimada-db-dev` or `genjishimada-db`) as the host. Do not reuse the API database owner. Both deployed application containers have a 45-second stop grace period.
+For deployment, provision a distinct password through your normal database administration process and store it in the environment's `QUEUE_DATABASE_PASSWORD` secret. Leave `QUEUE_DATABASE_URL` unset unless you need the override. Compose supplies the same database host and name to both API and bot; the default host is `genjishimada-db-dev` in development and `genjishimada-db` in production. An optional `POSTGRES_HOST` environment variable (a GitHub environment variable for workflow deployments) overrides that shared host. Do not reuse the API database owner. Both deployed application containers have a 45-second stop grace period. See the [staging login setup](../operations/queue-migration.md#staging-login-setup) for exact commands and permission checks.
 
 ## Inspecting and retrying work
 

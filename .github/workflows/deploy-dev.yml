@@ -120,6 +120,7 @@ jobs:
 
           # Bot env
           QUEUE_DATABASE_URL: ${{ secrets.QUEUE_DATABASE_URL }}
+          QUEUE_DATABASE_PASSWORD: ${{ secrets.QUEUE_DATABASE_PASSWORD }}
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -127,6 +128,7 @@ jobs:
           API_KEY: ${{ secrets.API_KEY }}
 
           # DB env
+          POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}

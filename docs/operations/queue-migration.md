@@ -8,7 +8,7 @@ The review stack is one coordinated deployment. Production deploys automatically
 
 1. Run `just test-queue` and the affected feature tests (for example `just test-api tests/completions`), lint, and type checks against the candidate revision. The full existing API suite is `just test-api`; the dedicated queue runner supplies its own fixture boundary and runs faults serially. Verify local/dev/prod Compose configuration with placeholder credentials. Never exercise fault tests against deployed services.
 2. Take the normal database backup. Preserve the RabbitMQ volume, configuration, queue inventory, and previous deploy revision. The broker definitions export contains topology, **not message payloads**.
-3. Apply the additive queue migration as the database migration owner. The bot role is created without a password. Provision a distinct password and set the environment's `QUEUE_DATABASE_URL` secret. The bot role must have no domain-table grants; do not use the API login.
+3. Apply the additive queue migration as the database migration owner. The bot role is created without a password. Provision a distinct password and set the environment's `QUEUE_DATABASE_PASSWORD` secret. The bot defaults to the API's database location; `QUEUE_DATABASE_URL` remains an optional full connection override. The bot role must have no domain-table grants; do not use the API login.
 4. Set `QUEUE_OPERATOR_IDS` on both API and bot, initially `141372217677053952`. Provision `jobs:manage` on the bot API key for internal job execution and recovery endpoints. The existing operator channel IDs remain unchanged.
 5. Keep the old application/broker stack operational until the actual backlog inventory is available. Do not use `down -v`, volume pruning, or `--remove-orphans` as a migration shortcut.
 
@@ -36,6 +36,52 @@ WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
 ```
 
 The role flags and schema-create check must all be false; the membership and table queries must return no rows. The table check includes column grants and requires schema access: extensions such as `pg_cron` can grant `PUBLIC` table reads while keeping their schema inaccessible. The migration refuses unsafe existing grants instead of silently changing unrelated privileges. Resolve unexpected grants before starting the worker. Check whether a grant is inherited through `PUBLIC` before changing it, since that change can affect other logins. Do not give the bot domain access as a workaround for a missing queue permission.
+
+## Staging login setup
+
+The API and bot use the same database, but authenticate as different roles. The bot defaults to the database's internal Docker hostname and port 5432; it does not use the host's published port 65432. Both services already join `genji-network` in Compose.
+
+On the staging host, use a checkout of the tested stack and the existing `genjishimada-db-dev` container. After the backup and earlier migrations are complete, apply `0034` once if it has not already been applied:
+
+```bash
+docker exec -i genjishimada-db-dev sh -c 'exec psql -X -v ON_ERROR_STOP=1 --single-transaction -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < apps/api/migrations/0034_postgres_queue.sql
+```
+
+This creates `genjishimada_queue_worker` and grants only the queue operations it needs. It does not set a password. Open an administrator session:
+
+```bash
+docker exec -it genjishimada-db-dev sh -c 'exec psql -X -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+In that session, grant database connection access and set a new password for this login:
+
+```text
+SELECT format('GRANT CONNECT ON DATABASE %I TO genjishimada_queue_worker', current_database()) \gexec
+\password genjishimada_queue_worker
+```
+
+The interactive [`\password` command](https://www.postgresql.org/docs/17/app-psql.html) keeps the cleartext password out of command history and SQL logs. Run the privilege checks above in this administrator session; do not grant the queue role membership in the API owner role or access to all tables.
+
+In GitHub **Settings → Environments → development**, save that password as the `QUEUE_DATABASE_PASSWORD` secret. Leave `QUEUE_DATABASE_URL` absent or empty to use the shared database location. If an older URL secret is still set, it overrides the new password and location. The workflow forwards `POSTGRES_DB` and uses `genjishimada-db-dev` by default; the optional `POSTGRES_HOST` environment variable changes the host for both API and bot.
+
+Before starting the bot, verify the restricted login over TCP using the password prompt:
+
+```bash
+docker exec -it genjishimada-db-dev sh -c 'exec psql -X -h 127.0.0.1 -W -U genjishimada_queue_worker -d "$POSTGRES_DB"'
+```
+
+Run these separately in that session:
+
+```sql
+SELECT current_user, current_database();
+SELECT 1 FROM public.pgqueuer LIMIT 0;
+SELECT 1 FROM core.users LIMIT 0;
+SELECT 1 FROM public.jobs LIMIT 0;
+```
+
+The current user must be `genjishimada_queue_worker`, and the queue query must succeed. The final two queries must fail with permission denied. This smoke check complements the full privilege audit above; it does not replace it. The bot's existing API key also needs `jobs:manage` so its queue handlers can prepare work and request domain mutations through the API.
+
+Once backlog reconciliation is complete, deploy the full stack to development and confirm the bot's queue supervisor connects. For production, repeat the setup against `genjishimada-db` and the **production** GitHub environment with its own password. Local development can continue using `just queue-credentials-local`, which writes a complete URL override to `.env.local`.
 
 ## Quiesce and inventory
 

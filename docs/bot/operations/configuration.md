@@ -19,7 +19,8 @@ Required environment variables in `.env`:
 
 ### Queue variables
 
-- `QUEUE_DATABASE_URL` — PostgreSQL URL for the restricted `genjishimada_queue_worker` login. Local provisioning: `just queue-credentials-local` after applying migrations.
+- `QUEUE_DATABASE_PASSWORD` — password for the restricted `genjishimada_queue_worker` login. With no URL override, the bot reuses the API's `POSTGRES_HOST` and `POSTGRES_DB` on port 5432. It never uses the API's `POSTGRES_USER` or `POSTGRES_PASSWORD`.
+- `QUEUE_DATABASE_URL` — optional full PostgreSQL URL override; takes precedence over the shared database location and queue password. Local provisioning: `just queue-credentials-local` after applying migrations.
 - `QUEUE_OPERATOR_IDS` — comma-separated Discord user IDs authorized to recover failed jobs; default `141372217677053952`. Set the same allowlist on API and bot. The API is authoritative.
 
 Never use the API owner's PostgreSQL login for the bot. The queue migration installs storage and privileges; workers do not install schema at runtime.

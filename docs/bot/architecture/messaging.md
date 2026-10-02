@@ -4,7 +4,7 @@ The bot processes durable jobs stored by PGQueuer 1.1.1 in PostgreSQL. Queue han
 
 ## Worker lifecycle
 
-The queue supervisor starts after extensions register handlers. It connects using `QUEUE_DATABASE_URL`, a restricted queue-only PostgreSQL login. Its handlers receive a decoded SDK event and transport-neutral `JobContext`; they call the API for domain reads and writes. Persistent views restore independently of any backlog.
+The queue supervisor starts after extensions register handlers. It uses the API's database location with the separate `genjishimada_queue_worker` login and `QUEUE_DATABASE_PASSWORD`; `QUEUE_DATABASE_URL` can override that connection. Its handlers receive a decoded SDK event and transport-neutral `JobContext`; they call the API for domain reads and writes. Persistent views restore independently of any backlog.
 
 The worker stops accepting work on shutdown, allows handlers to finish, and leaves unfinished work recoverable if draining times out. PostgreSQL and API outages cause bounded reconnect delays without exhausting the ordinary handler failure budget. Claims are fenced so an old process cannot complete a job now owned by another worker.
 
