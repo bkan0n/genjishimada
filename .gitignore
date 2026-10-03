@@ -307,3 +307,6 @@ tmp/
 /.claude/
 /apps/bot/.bg-shell/manifest.json
 /skills-lock.json
+
+# Queue acceptance reports and sanitized worker logs
+/artifacts/queue/

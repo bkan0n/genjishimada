@@ -5,6 +5,7 @@ description = "Genji Shimada API"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "pgqueuer==1.1.1",
     "aio-pika>=9.6.2",
     "aiohttp>=3.12.14",
     "boto3>=1.40.25",
@@ -45,6 +46,8 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "unit: Tests that do not require a database or application server",
     "database: Tests using an isolated PostgreSQL database",
+    "queue: PostgreSQL queue acceptance tests",
+    "queue_fault: Queue acceptance tests using isolated process/container fault injection",
     "integration: Integration tests with real database and HTTP layer",
     "domain_auth: Auth domain tests",
     "domain_autocomplete: Autocomplete domain tests",
