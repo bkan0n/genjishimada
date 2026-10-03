@@ -672,6 +672,8 @@
       
         
       
+        
+      
     
     
     
@@ -933,14 +935,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../rabbitmq/" class="md-nav__link">
+      <a href="../queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1542,7 +1572,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -3074,10 +3104,10 @@
 
 <h1 id="bot-service">Bot Service<a class="headerlink" href="#bot-service" title="Anchor link to this section">&para;</a></h1>
 <p>The Genji bot is a Discord application that interacts with players, moderators, and developers.
-It integrates with the REST API and RabbitMQ to deliver real-time updates, handle completions and playtests, and manage user notifications.</p>
+It integrates with the REST API and the PostgreSQL queue to deliver real-time updates, handle completions and playtests, and manage user notifications.</p>
 <h2 id="what-the-bot-does">What the bot does<a class="headerlink" href="#what-the-bot-does" title="Anchor link to this section">&para;</a></h2>
 <ul>
-<li>Listens for events from RabbitMQ and processes them (newsfeed posts, completions, playtest updates, XP grants).</li>
+<li>Listens for events from the PostgreSQL queue and processes them (newsfeed posts, completions, playtest updates, XP grants).</li>
 <li>Provides slash commands and context menus for players and moderators on Discord.</li>
 <li>Posts embeds to channels and threads when new maps, records, guides, or announcements are created.</li>
 <li>Handles playtest voting and updates rank cards in real time.</li>
@@ -3101,8 +3131,8 @@ It integrates with the REST API and RabbitMQ to deliver real-time updates, handl
 <td>HTTP client used by the API service.</td>
 </tr>
 <tr>
-<td><code>aio-pika</code></td>
-<td>RabbitMQ client library for consuming and publishing.</td>
+<td><code>pgqueuer</code></td>
+<td>Pinned 1.1.1 background worker with durable retries.</td>
 </tr>
 <tr>
 <td><code>msgspec</code></td>
@@ -3136,8 +3166,12 @@ It integrates with the REST API and RabbitMQ to deliver real-time updates, handl
 <td><code>production</code> or <code>development</code>; affects logging and prefixes.</td>
 </tr>
 <tr>
-<td><code>RABBITMQ_USER</code> / <code>RABBITMQ_PASS</code> / <code>RABBITMQ_HOST</code></td>
-<td>Credentials for connecting to RabbitMQ.</td>
+<td><code>QUEUE_DATABASE_URL</code></td>
+<td>Restricted PostgreSQL worker login; provision after queue migration.</td>
+</tr>
+<tr>
+<td><code>QUEUE_OPERATOR_IDS</code></td>
+<td>Recovery operator allowlist, enforced by the API.</td>
 </tr>
 <tr>
 <td><code>SENTRY_DSN</code></td>
@@ -3149,7 +3183,7 @@ It integrates with the REST API and RabbitMQ to deliver real-time updates, handl
 <ul>
 <li><a href="../../bot/">Bot Overview</a></li>
 <li><a href="../../bot/ux/newsfeed-and-embeds/">Newsfeed Pattern</a></li>
-<li><a href="../../bot/architecture/messaging/">RabbitMQ Consumers</a></li>
+<li><a href="../../bot/architecture/messaging/">PostgreSQL queue Consumers</a></li>
 </ul>
 
 
@@ -3173,7 +3207,7 @@ It integrates with the REST API and RabbitMQ to deliver real-time updates, handl
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

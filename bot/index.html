@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../services/rabbitmq/" class="md-nav__link">
+      <a href="../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1432,7 +1462,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -2987,7 +3017,7 @@
 <li>
 <p><span class="twemoji lg middle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2"/></svg></span> <strong>Messaging</strong></p>
 <hr />
-<p>Understand RabbitMQ queue consumers</p>
+<p>Understand the PostgreSQL queue consumers</p>
 <p><a href="architecture/messaging/"><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13.22 19.03a.75.75 0 0 1 0-1.06L18.19 13H3.75a.75.75 0 0 1 0-1.5h14.44l-4.97-4.97a.749.749 0 0 1 .326-1.275.75.75 0 0 1 .734.215l6.25 6.25a.75.75 0 0 1 0 1.06l-6.25 6.25a.75.75 0 0 1-1.06 0"/></svg></span> Messaging</a></p>
 </li>
 <li>
@@ -3007,9 +3037,9 @@
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">...</span>
 </span></code></pre></div>
 <h3 id="queue-consumers">Queue Consumers<a class="headerlink" href="#queue-consumers" title="Anchor link to this section">&para;</a></h3>
-<p>The bot consumes events from RabbitMQ:</p>
+<p>The bot consumes events from the PostgreSQL queue:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@queue_consumer</span><span class="p">(</span><span class="s2">&quot;api.completion.submission&quot;</span><span class="p">,</span> <span class="n">struct_type</span><span class="o">=</span><span class="n">CompletionCreatedEvent</span><span class="p">)</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_completion</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">CompletionCreatedEvent</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">AbstractIncomingMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_completion</span><span class="p">(</span><span class="n">event</span><span class="p">:</span> <span class="n">CompletionCreatedEvent</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">JobContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="c1"># Send Discord notification</span>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="o">...</span>
 </span></code></pre></div>
@@ -3022,7 +3052,7 @@
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>├── core/
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>│   └── genji.py           # Main bot class
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>├── extensions/            # Feature modules
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>│   ├── rabbit.py          # RabbitMQ service
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>│   ├── queue.py          # PostgreSQL queue service
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>│   ├── api_service.py     # API client
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>│   ├── completions.py     # Completion handlers
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>│   └── ...
@@ -3075,7 +3105,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 23, 2026 21:09:27 UTC"><span class="timeago" datetime="2026-01-23T21:09:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 23, 2026 21:09:27 UTC">2026-01-23</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

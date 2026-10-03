@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1426,7 +1456,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -1912,10 +1942,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#rabbitmq-management" class="md-nav__link">
+  <a href="#background-work" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RabbitMQ Management
+        Background work
       
     </span>
   </a>
@@ -2084,10 +2114,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#rabbitmq-connection-errors" class="md-nav__link">
+  <a href="#queue-connection-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RabbitMQ Connection Errors
+        Queue Connection Errors
       
     </span>
   </a>
@@ -3382,7 +3412,7 @@
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Anchor link to this section">&para;</a></h2>
 <p>The recommended local development setup:</p>
 <ul>
-<li><strong>Infrastructure</strong> (PostgreSQL, RabbitMQ, MinIO) runs in Docker containers</li>
+<li><strong>Infrastructure</strong> (PostgreSQL, MinIO) runs in Docker containers</li>
 <li><strong>API and bot</strong> run natively on your machine for fast iteration and hot reload</li>
 <li><strong>Database</strong> can be imported from dev/prod VPS for real data</li>
 <li><strong>MinIO</strong> provides S3-compatible storage locally (ephemeral, no persistence needed)</li>
@@ -3409,7 +3439,7 @@
 <p>All other settings are pre-configured for local development.</p>
 <p><strong>Note</strong>: The <code>just run-api</code> and <code>just run-bot</code> commands automatically load <code>.env.local</code>.</p>
 <h3 id="3-start-infrastructure-services">3. Start Infrastructure Services<a class="headerlink" href="#3-start-infrastructure-services" title="Anchor link to this section">&para;</a></h3>
-<p>Start PostgreSQL, RabbitMQ, and MinIO:</p>
+<p>Start PostgreSQL and MinIO:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>up<span class="w"> </span>-d
 </span></code></pre></div>
 <p>Verify all services are healthy:</p>
@@ -3419,7 +3449,6 @@
 <div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>NAME                        STATUS
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>genjishimada-db-local       Up (healthy)
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>genjishimada-minio-local    Up (healthy)
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>genjishimada-rabbitmq-local Up (healthy)
 </span></code></pre></div></p>
 <h3 id="4-create-minio-bucket">4. Create MinIO Bucket<a class="headerlink" href="#4-create-minio-bucket" title="Anchor link to this section">&para;</a></h3>
 <p>First-time setup only:</p>
@@ -3465,12 +3494,8 @@
 <li><strong>Health Check</strong>: http://localhost:8000/healthcheck</li>
 <li><strong>API Docs</strong>: http://localhost:8000/schema (Swagger UI)</li>
 </ul>
-<h3 id="rabbitmq-management">RabbitMQ Management<a class="headerlink" href="#rabbitmq-management" title="Anchor link to this section">&para;</a></h3>
-<ul>
-<li><strong>URL</strong>: http://localhost:15672</li>
-<li><strong>Username</strong>: <code>genji</code></li>
-<li><strong>Password</strong>: <code>local_dev_password</code></li>
-</ul>
+<h3 id="background-work">Background work<a class="headerlink" href="#background-work" title="Anchor link to this section">&para;</a></h3>
+<p>Queue processing runs within the API and bot. After applying database migrations, run <code>just queue-credentials-local</code> to provision the restricted worker login. Inspect worker logs and use <code>just test-queue-fast</code> for backend verification.</p>
 <h3 id="minio-console">MinIO Console<a class="headerlink" href="#minio-console" title="Anchor link to this section">&para;</a></h3>
 <ul>
 <li><strong>URL</strong>: http://localhost:9001</li>
@@ -3492,14 +3517,14 @@
 <li>Test your changes</li>
 </ol>
 <h3 id="running-tests">Running Tests<a class="headerlink" href="#running-tests" title="Anchor link to this section">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Run all tests</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>just<span class="w"> </span>test-all
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Run the feature-organized API suite</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>just<span class="w"> </span>test-api
 </span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># Run API tests only</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>just<span class="w"> </span>test-api
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="c1"># Run serial queue acceptance, including fault recovery</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>just<span class="w"> </span>test-queue
 </span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
 </span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># Run specific test file</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>pytest<span class="w"> </span>apps/api/tests/test_maps.py<span class="w"> </span>-v
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>just<span class="w"> </span>test-api<span class="w"> </span>tests/maps/test_maps_api.py<span class="w"> </span>-v
 </span></code></pre></div>
 <h3 id="linting-and-type-checking">Linting and Type Checking<a class="headerlink" href="#linting-and-type-checking" title="Anchor link to this section">&para;</a></h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Lint everything</span>
@@ -3529,16 +3554,14 @@
 <p><strong>Local development</strong> (<code>.env.local</code>):
 <div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>APP_ENVIRONMENT=local
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>POSTGRES_HOST=localhost
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>RABBITMQ_HOST=localhost
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>S3_ENDPOINT_URL=http://localhost:9000
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>S3_BUCKET_NAME=genji-parkour-images
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>S3_PUBLIC_URL=http://localhost:9000/genji-parkour-images
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>S3_ENDPOINT_URL=http://localhost:9000
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>S3_BUCKET_NAME=genji-parkour-images
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>S3_PUBLIC_URL=http://localhost:9000/genji-parkour-images
 </span></code></pre></div></p>
 <p><strong>VPS deployment</strong> (automatic via Docker):
 <div class="language-text highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>APP_ENVIRONMENT=development  # or production
 </span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>POSTGRES_HOST=genjishimada-db-dev  # container name
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>RABBITMQ_HOST=genjishimada-rabbitmq-dev  # container name
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a># S3_ENDPOINT_URL not set (uses R2)
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a># S3_ENDPOINT_URL not set (uses R2)
 </span></code></pre></div></p>
 <h3 id="key-environment-variables">Key Environment Variables<a class="headerlink" href="#key-environment-variables" title="Anchor link to this section">&para;</a></h3>
 <table>
@@ -3564,10 +3587,16 @@
 <td>Database host</td>
 </tr>
 <tr>
-<td><code>RABBITMQ_HOST</code></td>
-<td><code>localhost</code></td>
-<td>Container name</td>
-<td>Message broker host</td>
+<td><code>QUEUE_DATABASE_URL</code></td>
+<td>Generated by local provisioner</td>
+<td>Environment secret</td>
+<td>Queue-only bot login</td>
+</tr>
+<tr>
+<td><code>QUEUE_OPERATOR_IDS</code></td>
+<td>Operator user IDs</td>
+<td>Same API/bot allowlist</td>
+<td>Recovery authorization</td>
 </tr>
 <tr>
 <td><code>S3_ENDPOINT_URL</code></td>
@@ -3600,49 +3629,42 @@
    <div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>postgres-local
 </span></code></pre></div>
 3. Ensure <code>POSTGRES_HOST=localhost</code> in <code>.env.local</code></p>
-<h3 id="rabbitmq-connection-errors">RabbitMQ Connection Errors<a class="headerlink" href="#rabbitmq-connection-errors" title="Anchor link to this section">&para;</a></h3>
-<p><strong>Symptom</strong>: <code>Connection to RabbitMQ failed</code></p>
-<p><strong>Solution</strong>:
-1. Verify RabbitMQ is healthy:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps<span class="w"> </span>rabbitmq-local
-</span></code></pre></div>
-2. Check management UI: http://localhost:15672
-3. Ensure <code>RABBITMQ_HOST=localhost</code> in <code>.env.local</code></p>
+<h3 id="queue-connection-errors">Queue Connection Errors<a class="headerlink" href="#queue-connection-errors" title="Anchor link to this section">&para;</a></h3>
+<p>Check local PostgreSQL health with <code>docker compose -f docker-compose.local.yml ps postgres-local</code>. Apply the queue migration, run <code>just queue-credentials-local</code>, and restart the bot so it reads the new <code>QUEUE_DATABASE_URL</code>. Do not substitute the API database-owner credential.</p>
 <h3 id="minio-bucket-not-found">MinIO Bucket Not Found<a class="headerlink" href="#minio-bucket-not-found" title="Anchor link to this section">&para;</a></h3>
 <p><strong>Symptom</strong>: <code>The specified bucket does not exist</code></p>
 <p><strong>Solution</strong>:
 Create the bucket:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>mc<span class="w"> </span><span class="nb">alias</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span><span class="nb">local</span><span class="w"> </span>http://localhost:9000<span class="w"> </span>genji<span class="w"> </span>local_dev_password
-</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>mc<span class="w"> </span>mb<span class="w"> </span>local/genji-parkour-images
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>mc<span class="w"> </span><span class="nb">alias</span><span class="w"> </span><span class="nb">set</span><span class="w"> </span><span class="nb">local</span><span class="w"> </span>http://localhost:9000<span class="w"> </span>genji<span class="w"> </span>local_dev_password
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>mc<span class="w"> </span>mb<span class="w"> </span>local/genji-parkour-images
 </span></code></pre></div></p>
 <h3 id="import-script-ssh-errors">Import Script SSH Errors<a class="headerlink" href="#import-script-ssh-errors" title="Anchor link to this section">&para;</a></h3>
 <p><strong>Symptom</strong>: <code>Cannot connect to genji-vps</code></p>
 <p><strong>Solution</strong>:
 1. Check SSH config exists: <code>~/.ssh/config</code>
 2. Ensure entry exists:
-   <div class="language-text highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>Host genji-vps
-</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>    HostName &lt;vps-ip&gt;
-</span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a>    User &lt;username&gt;
-</span><span id="__span-21-4"><a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>    IdentityFile ~/.ssh/your-key
+   <div class="language-text highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>Host genji-vps
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>    HostName &lt;vps-ip&gt;
+</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    User &lt;username&gt;
+</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>    IdentityFile ~/.ssh/your-key
 </span></code></pre></div>
 3. Test SSH connection:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>ssh<span class="w"> </span>genji-vps
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>ssh<span class="w"> </span>genji-vps
 </span></code></pre></div></p>
 <h3 id="port-already-in-use">Port Already in Use<a class="headerlink" href="#port-already-in-use" title="Anchor link to this section">&para;</a></h3>
 <p><strong>Symptom</strong>: <code>Bind for 0.0.0.0:5432 failed: port is already allocated</code></p>
 <p><strong>Solution</strong>:
 1. Check what's using the port:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>lsof<span class="w"> </span>-i<span class="w"> </span>:5432<span class="w">  </span><span class="c1"># PostgreSQL</span>
-</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>lsof<span class="w"> </span>-i<span class="w"> </span>:5672<span class="w">  </span><span class="c1"># RabbitMQ</span>
-</span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>lsof<span class="w"> </span>-i<span class="w"> </span>:9000<span class="w">  </span><span class="c1"># MinIO</span>
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>lsof<span class="w"> </span>-i<span class="w"> </span>:5432<span class="w">  </span><span class="c1"># PostgreSQL</span>
+</span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>lsof<span class="w"> </span>-i<span class="w"> </span>:9000<span class="w">  </span><span class="c1"># MinIO</span>
 </span></code></pre></div>
 2. Stop the conflicting service or change the port in <code>docker-compose.local.yml</code></p>
 <h2 id="stopping-services">Stopping Services<a class="headerlink" href="#stopping-services" title="Anchor link to this section">&para;</a></h2>
 <p>Stop all infrastructure services:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>down
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>down
 </span></code></pre></div>
 <p>Stop and remove volumes (fresh start):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>down<span class="w"> </span>-v
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>down<span class="w"> </span>-v
 </span></code></pre></div>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
 <ul>
@@ -3672,7 +3694,7 @@ Create the bucket:
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 23, 2026 21:09:27 UTC"><span class="timeago" datetime="2026-01-23T21:09:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 23, 2026 21:09:27 UTC">2026-01-23</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

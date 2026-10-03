@@ -781,10 +781,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-check-rabbitmq-management-ui" class="md-nav__link">
+  <a href="#3-verify-background-work" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Check RabbitMQ Management UI
+        3. Verify background work
       
     </span>
   </a>
@@ -953,10 +953,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#rabbitmq-connection-failed" class="md-nav__link">
+  <a href="#queue-connection-failed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RabbitMQ Connection Failed
+        Queue Connection Failed
       
     </span>
   </a>
@@ -1006,6 +1006,8 @@
       
         
           
+        
+      
         
       
         
@@ -1167,14 +1169,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1776,7 +1806,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -3313,7 +3343,7 @@
 <p>This guide assumes you've completed the <a href="../installation/">Installation</a> steps.</p>
 </div>
 <h2 id="start-local-infrastructure">Start Local Infrastructure<a class="headerlink" href="#start-local-infrastructure" title="Anchor link to this section">&para;</a></h2>
-<p>Start PostgreSQL, RabbitMQ, and MinIO:</p>
+<p>Start PostgreSQL and MinIO:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>up<span class="w"> </span>-d
 </span></code></pre></div>
 <p>Verify all services are healthy:</p>
@@ -3356,11 +3386,8 @@
 </span></code></pre></div>
 <h3 id="2-check-api-logs">2. Check API Logs<a class="headerlink" href="#2-check-api-logs" title="Anchor link to this section">&para;</a></h3>
 <p>In the API terminal, you should see incoming requests from the bot.</p>
-<h3 id="3-check-rabbitmq-management-ui">3. Check RabbitMQ Management UI<a class="headerlink" href="#3-check-rabbitmq-management-ui" title="Anchor link to this section">&para;</a></h3>
-<p>Visit <a href="http://localhost:15672">http://localhost:15672</a>:
-- Username: <code>genji</code>
-- Password: <code>local_dev_password</code></p>
-<p>You can see queues, messages, and connections.</p>
+<h3 id="3-verify-background-work">3. Verify background work<a class="headerlink" href="#3-verify-background-work" title="Anchor link to this section">&para;</a></h3>
+<p>Run <code>just test-queue-fast</code> for backend queue acceptance. Run <code>just test-queue</code> to include isolated process and database failure tests. The full suite does not connect to Discord or require live service credentials.</p>
 <h2 id="development-workflow">Development Workflow<a class="headerlink" href="#development-workflow" title="Anchor link to this section">&para;</a></h2>
 <h3 id="make-code-changes">Make Code Changes<a class="headerlink" href="#make-code-changes" title="Anchor link to this section">&para;</a></h3>
 <p>The API runs with <code>--reload</code>, so changes are automatically picked up. For the bot, you'll need to restart the process (Ctrl+C and run <code>just run-bot</code> again).</p>
@@ -3381,20 +3408,17 @@
 <p><strong>Database logs</strong>:
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>postgres-local
 </span></code></pre></div></p>
-<p><strong>RabbitMQ logs</strong>:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>rabbitmq-local
-</span></code></pre></div></p>
 <p><strong>MinIO logs</strong>:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>minio-local
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>minio-local
 </span></code></pre></div></p>
 <h3 id="stop-services">Stop Services<a class="headerlink" href="#stop-services" title="Anchor link to this section">&para;</a></h3>
 <p>Stop infrastructure services:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>down
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>down
 </span></code></pre></div>
 <p>Stop API/bot: Press <code>Ctrl+C</code> in their respective terminals.</p>
 <h3 id="re-sync-dependencies">Re-sync Dependencies<a class="headerlink" href="#re-sync-dependencies" title="Anchor link to this section">&para;</a></h3>
 <p>After pulling changes or switching branches:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>just<span class="w"> </span>sync
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>just<span class="w"> </span>sync
 </span></code></pre></div>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
 <ul>
@@ -3406,7 +3430,7 @@
 <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Anchor link to this section">&para;</a></h2>
 <h3 id="port-already-in-use">Port Already in Use<a class="headerlink" href="#port-already-in-use" title="Anchor link to this section">&para;</a></h3>
 <p>If port 8000 is already in use, find and kill the process:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>lsof<span class="w"> </span>-ti:8000<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span><span class="nb">kill</span><span class="w"> </span>-9
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>lsof<span class="w"> </span>-ti:8000<span class="w"> </span><span class="p">|</span><span class="w"> </span>xargs<span class="w"> </span><span class="nb">kill</span><span class="w"> </span>-9
 </span></code></pre></div>
 <h3 id="bot-wont-connect">Bot Won't Connect<a class="headerlink" href="#bot-wont-connect" title="Anchor link to this section">&para;</a></h3>
 <ol>
@@ -3418,44 +3442,30 @@
 <ol>
 <li>
 <p>Verify Docker services are running:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps
 </span></code></pre></div></p>
 </li>
 <li>
 <p>Check PostgreSQL logs:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>postgres-local
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>postgres-local
 </span></code></pre></div></p>
 </li>
 <li>
 <p>Verify database credentials in <code>.env.local</code>:
-   <div class="language-text highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>POSTGRES_HOST=localhost
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>POSTGRES_USER=genji
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>POSTGRES_PASSWORD=local_dev_password
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>POSTGRES_DB=genjishimada
+   <div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>POSTGRES_HOST=localhost
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>POSTGRES_USER=genji
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>POSTGRES_PASSWORD=local_dev_password
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>POSTGRES_DB=genjishimada
 </span></code></pre></div></p>
 </li>
 </ol>
-<h3 id="rabbitmq-connection-failed">RabbitMQ Connection Failed<a class="headerlink" href="#rabbitmq-connection-failed" title="Anchor link to this section">&para;</a></h3>
-<ol>
-<li>
-<p>Verify RabbitMQ is healthy:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps<span class="w"> </span>rabbitmq-local
-</span></code></pre></div></p>
-</li>
-<li>
-<p>Check RabbitMQ logs:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>rabbitmq-local
-</span></code></pre></div></p>
-</li>
-<li>
-<p>Visit management UI: <a href="http://localhost:15672">http://localhost:15672</a></p>
-</li>
-</ol>
+<h3 id="queue-connection-failed">Queue Connection Failed<a class="headerlink" href="#queue-connection-failed" title="Anchor link to this section">&para;</a></h3>
+<p>Check PostgreSQL health and apply the queue migration. Run <code>just queue-credentials-local</code> to set the queue-only login and update <code>.env.local</code>, then restart the bot. See <a href="../../services/queue/">Queue operations</a>.</p>
 <h3 id="minio-connection-failed">MinIO Connection Failed<a class="headerlink" href="#minio-connection-failed" title="Anchor link to this section">&para;</a></h3>
 <ol>
 <li>
 <p>Verify MinIO is healthy:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps<span class="w"> </span>minio-local
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>ps<span class="w"> </span>minio-local
 </span></code></pre></div></p>
 </li>
 <li>
@@ -3484,7 +3494,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 23, 2026 21:09:27 UTC"><span class="timeago" datetime="2026-01-23T21:09:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 23, 2026 21:09:27 UTC">2026-01-23</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

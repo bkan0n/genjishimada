@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1426,7 +1456,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -2588,10 +2618,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#publishing-events" class="md-nav__link">
+  <a href="#enqueueing-events" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Publishing Events
+        Enqueueing events
       
     </span>
   </a>
@@ -3252,67 +3282,47 @@
 </span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="c1"># Insert into database and return a UserResponse</span>
 </span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">create_user_in_db</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 </span></code></pre></div>
-<h3 id="publishing-events">Publishing Events<a class="headerlink" href="#publishing-events" title="Anchor link to this section">&para;</a></h3>
-<p>Publish SDK event models to RabbitMQ:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.completions</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompletionCreatedEvent</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">di.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseService</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">CompletionService</span><span class="p">(</span><span class="n">BaseService</span><span class="p">):</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">create_completion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">map_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>        <span class="n">completion_id</span> <span class="o">=</span> <span class="k">await</span> <span class="n">insert_completion</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        <span class="n">event</span> <span class="o">=</span> <span class="n">CompletionCreatedEvent</span><span class="p">(</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>            <span class="n">completion_id</span><span class="o">=</span><span class="n">completion_id</span><span class="p">,</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>        <span class="p">)</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">publish_message</span><span class="p">(</span>
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>            <span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;api.completion.submission&quot;</span><span class="p">,</span>
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>            <span class="n">message</span><span class="o">=</span><span class="n">event</span><span class="p">,</span>
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>        <span class="p">)</span>
-</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>
-</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>        <span class="k">return</span> <span class="n">completion_id</span>
-</span></code></pre></div>
+<h3 id="enqueueing-events">Enqueueing events<a class="headerlink" href="#enqueueing-events" title="Anchor link to this section">&para;</a></h3>
+<p>Construct the shared SDK payload in the service that owns the business transaction. Call the transactional <code>enqueue_job</code> helper with that same connection, a stable event key, and the entity identity. Do not acquire a second connection for enqueue or commit it separately. The durable job UUID is returned using the existing job status response.</p>
 <h2 id="bot-patterns">Bot Patterns<a class="headerlink" href="#bot-patterns" title="Anchor link to this section">&para;</a></h2>
 <h3 id="queue-consumers">Queue Consumers<a class="headerlink" href="#queue-consumers" title="Anchor link to this section">&para;</a></h3>
-<p>Consume SDK event models from RabbitMQ:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">extensions._queue_registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">queue_consumer</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.completions</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompletionCreatedEvent</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">aio_pika.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">AbstractIncomingMessage</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="nd">@queue_consumer</span><span class="p">(</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="s2">&quot;api.completion.submission&quot;</span><span class="p">,</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">struct_type</span><span class="o">=</span><span class="n">CompletionCreatedEvent</span><span class="p">,</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">idempotent</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="p">)</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_completion</span><span class="p">(</span>
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="bp">self</span><span class="p">,</span>
-</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="n">event</span><span class="p">:</span> <span class="n">CompletionCreatedEvent</span><span class="p">,</span>
-</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="n">message</span><span class="p">:</span> <span class="n">AbstractIncomingMessage</span><span class="p">,</span>
-</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Completion </span><span class="si">{</span><span class="n">event</span><span class="o">.</span><span class="n">completion_id</span><span class="si">}</span><span class="s2"> submitted&quot;</span><span class="p">)</span>
+<p>Consume SDK event models from the PostgreSQL queue:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">extensions._queue_registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">queue_consumer</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.completions</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompletionCreatedEvent</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">JobContext</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nd">@queue_consumer</span><span class="p">(</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="s2">&quot;api.completion.submission&quot;</span><span class="p">,</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">struct_type</span><span class="o">=</span><span class="n">CompletionCreatedEvent</span><span class="p">,</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="p">)</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_completion</span><span class="p">(</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="n">event</span><span class="p">:</span> <span class="n">CompletionCreatedEvent</span><span class="p">,</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="n">message</span><span class="p">:</span> <span class="n">JobContext</span><span class="p">,</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Completion </span><span class="si">{</span><span class="n">event</span><span class="o">.</span><span class="n">completion_id</span><span class="si">}</span><span class="s2"> submitted&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="validation">Validation<a class="headerlink" href="#validation" title="Anchor link to this section">&para;</a></h2>
 <h3 id="type-validation">Type Validation<a class="headerlink" href="#type-validation" title="Anchor link to this section">&para;</a></h3>
 <p><code>msgspec</code> validates types at runtime:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.users</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserCreateRequest</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># Valid</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">UserCreateRequest</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">global_name</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">,</span> <span class="n">nickname</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">)</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="c1"># Invalid - raises ValidationError</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">UserCreateRequest</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;not_an_int&quot;</span><span class="p">,</span> <span class="n">global_name</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">,</span> <span class="n">nickname</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.users</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserCreateRequest</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># Valid</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">UserCreateRequest</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">global_name</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">,</span> <span class="n">nickname</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">)</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># Invalid - raises ValidationError</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">payload</span> <span class="o">=</span> <span class="n">UserCreateRequest</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="s2">&quot;not_an_int&quot;</span><span class="p">,</span> <span class="n">global_name</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">,</span> <span class="n">nickname</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="advanced-patterns">Advanced Patterns<a class="headerlink" href="#advanced-patterns" title="Anchor link to this section">&para;</a></h2>
 <h3 id="partial-updates">Partial Updates<a class="headerlink" href="#partial-updates" title="Anchor link to this section">&para;</a></h3>
 <p>Use dictionaries for partial updates:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">msgspec</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.users</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserResponse</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">user</span> <span class="o">=</span> <span class="n">UserResponse</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">global_name</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">,</span> <span class="n">nickname</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">,</span> <span class="n">overwatch_usernames</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">updates</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;coins&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">}</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">updated_user</span> <span class="o">=</span> <span class="n">msgspec</span><span class="o">.</span><span class="n">structs</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="o">**</span><span class="n">updates</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">msgspec</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.users</span><span class="w"> </span><span class="kn">import</span> <span class="n">UserResponse</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">user</span> <span class="o">=</span> <span class="n">UserResponse</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">global_name</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">,</span> <span class="n">nickname</span><span class="o">=</span><span class="s2">&quot;Player&quot;</span><span class="p">,</span> <span class="n">overwatch_usernames</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">updates</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;coins&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">}</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">updated_user</span> <span class="o">=</span> <span class="n">msgspec</span><span class="o">.</span><span class="n">structs</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">user</span><span class="p">,</span> <span class="o">**</span><span class="n">updates</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
 <ul>
@@ -3341,7 +3351,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 24, 2026 17:49:06 UTC"><span class="timeago" datetime="2026-01-24T17:49:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 24, 2026 17:49:06 UTC">2026-01-24</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../services/rabbitmq/" class="md-nav__link">
+      <a href="../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1426,7 +1456,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -2967,7 +2997,7 @@
 <li><strong>Litestar</strong> - Modern, fast Python web framework</li>
 <li><strong>AsyncPG</strong> - High-performance PostgreSQL driver</li>
 <li><strong>msgspec</strong> - Fast JSON serialization</li>
-<li><strong>RabbitMQ</strong> - Asynchronous message passing to the bot</li>
+<li><strong>PostgreSQL queue</strong> - Asynchronous message passing to the bot</li>
 </ul>
 <h2 id="base-urls">Base URLs<a class="headerlink" href="#base-urls" title="Anchor link to this section">&para;</a></h2>
 <p>The API is served under the <code>/api/v3</code> prefix.</p>
@@ -3011,8 +3041,8 @@
 <h3 id="authentication">Authentication<a class="headerlink" href="#authentication" title="Anchor link to this section">&para;</a></h3>
 <p>All endpoints require an API key unless explicitly excluded. See the <a href="authentication/">Authentication Guide</a>.</p>
 <h3 id="message-queue-integration">Message Queue Integration<a class="headerlink" href="#message-queue-integration" title="Anchor link to this section">&para;</a></h3>
-<p>The API publishes events to RabbitMQ for asynchronous processing by the bot:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>API → RabbitMQ → Bot
+<p>The API publishes events to the PostgreSQL queue for asynchronous processing by the bot:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>API → PostgreSQL queue → Bot
 </span></code></pre></div>
 <p>Examples:
 - Completion submissions trigger Discord notifications
@@ -3037,8 +3067,9 @@
 <h3 id="testing">Testing<a class="headerlink" href="#testing" title="Anchor link to this section">&para;</a></h3>
 <p>Run the test suite:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>just<span class="w"> </span>test-api
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>just<span class="w"> </span>test-queue
 </span></code></pre></div>
-<p>Tests use pytest with parallel execution (8 workers).</p>
+<p>The feature-organized API suite uses two workers by default. Queue acceptance runs separately and serially with disposable PostgreSQL instances, including process and database recovery tests. See <a href="https://github.com/bkan0n/genjishimada/blob/main/apps/api/README.md">API test instructions</a> for order, worker, and feature selection options.</p>
 <h2 id="architecture-highlights">Architecture Highlights<a class="headerlink" href="#architecture-highlights" title="Anchor link to this section">&para;</a></h2>
 <h3 id="dependency-injection-pattern">Dependency Injection Pattern<a class="headerlink" href="#dependency-injection-pattern" title="Anchor link to this section">&para;</a></h3>
 <p>Business logic is separated from HTTP routing:</p>
@@ -3055,7 +3086,7 @@
 <li>Returns serialized response</li>
 </ol>
 <h3 id="idempotency">Idempotency<a class="headerlink" href="#idempotency" title="Anchor link to this section">&para;</a></h3>
-<p>Most message queue operations are idempotent, tracked via <code>message_id</code> headers and database claims.</p>
+<p>Queue operations use durable event identities and per-effect receipts. Replaying a job preserves completed effects; a claim alone never proves completion.</p>
 <h3 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Anchor link to this section">&para;</a></h3>
 <p>Custom exceptions in <code>utilities/errors.py</code> provide structured error responses:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">utilities.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">CustomHTTPException</span>
@@ -3095,7 +3126,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:23:15 UTC"><span class="timeago" datetime="2026-01-19T15:23:15+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:23:15 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

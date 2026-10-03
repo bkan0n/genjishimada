@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../services/rabbitmq/" class="md-nav__link">
+      <a href="../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1426,7 +1456,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -2995,7 +3025,7 @@
 </span></code></pre></div></p>
 </li>
 <li>
-<p><strong>Start infrastructure</strong> (PostgreSQL, RabbitMQ, MinIO):
+<p><strong>Start infrastructure</strong> (PostgreSQL, MinIO):
    <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>up<span class="w"> </span>-d
 </span></code></pre></div></p>
 </li>
@@ -3037,7 +3067,8 @@
 </li>
 <li>
 <p><strong>Run tests</strong>:
-   <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>just<span class="w"> </span>test-all
+   <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>just<span class="w"> </span>test-api
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>just<span class="w"> </span>test-queue
 </span></code></pre></div></p>
 </li>
 <li>
@@ -3140,21 +3171,21 @@
 </span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>    <span class="k">assert</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;Test Map&quot;</span>
 </span></code></pre></div>
 <h3 id="running-tests">Running Tests<a class="headerlink" href="#running-tests" title="Anchor link to this section">&para;</a></h3>
-<p>Run all tests:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>just<span class="w"> </span>test-all
+<p>Run the feature-organized API suite:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>just<span class="w"> </span>test-api
 </span></code></pre></div>
-<p>Run API tests only:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>just<span class="w"> </span>test-api
+<p>Run queue acceptance separately, including process and database recovery:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>just<span class="w"> </span>test-queue
 </span></code></pre></div>
 <p>Run specific test file:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>pytest<span class="w"> </span>apps/api/tests/test_maps.py
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>just<span class="w"> </span>test-api<span class="w"> </span>tests/maps/test_maps_api.py
 </span></code></pre></div>
 <h3 id="test-database">Test Database<a class="headerlink" href="#test-database" title="Anchor link to this section">&para;</a></h3>
-<p>Tests use an isolated PostgreSQL database, automatically created and torn down by <code>pytest-databases</code>.</p>
+<p>The API runner defaults to two workers. Each worker owns an isolated PostgreSQL database whose captured baseline is restored before every database test. Queue acceptance has separate disposable PostgreSQL fixtures and runs serially. Unit tests do not connect to PostgreSQL.</p>
 <h3 id="mocking">Mocking<a class="headerlink" href="#mocking" title="Anchor link to this section">&para;</a></h3>
 <p>Use <code>pytest</code> fixtures for mocking:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
-</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">mock_rabbitmq</span><span class="p">():</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">effect_recorder</span><span class="p">():</span>
 </span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    <span class="k">return</span> <span class="n">AsyncMock</span><span class="p">()</span>
 </span></code></pre></div>
 <h2 id="database-migrations">Database Migrations<a class="headerlink" href="#database-migrations" title="Anchor link to this section">&para;</a></h2>
@@ -3191,7 +3222,7 @@
 <h3 id="before-submitting">Before Submitting<a class="headerlink" href="#before-submitting" title="Anchor link to this section">&para;</a></h3>
 <ol>
 <li><strong>Lint your code</strong>: <code>just lint-all</code></li>
-<li><strong>Run tests</strong>: <code>just test-all</code></li>
+<li><strong>Run tests</strong>: <code>just test-api</code> and <code>just test-queue</code></li>
 <li><strong>Update documentation</strong> if needed</li>
 <li><strong>Write a clear commit message</strong></li>
 </ol>
@@ -3260,7 +3291,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="February 26, 2026 14:50:45 UTC"><span class="timeago" datetime="2026-02-26T14:50:45+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="February 26, 2026 14:50:45 UTC">2026-02-26</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1534,7 +1564,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -3104,9 +3134,9 @@ those services and any associated cogs.</p>
 <td>Maintains an authenticated <code>aiohttp</code> session to the API and exposes helpers for maps, completions, playtests, and notifications. Stored on <code>bot.api</code>.</td>
 </tr>
 <tr>
-<td>RabbitMQ</td>
-<td><code>extensions/rabbit.py</code> → <code>RabbitHandler</code></td>
-<td>Connects to RabbitMQ using pooled channels, declares queues (and DLQs), wraps handlers registered through <code>queue_consumer</code>, and exposes helpers such as <code>publish</code> and <code>wait_until_drained</code>. Stored on <code>bot.rabbit</code>.</td>
+<td>Queue worker</td>
+<td><code>extensions/queue.py</code></td>
+<td>Supervises PGQueuer workers, registers event handlers, and recovers interrupted work using a queue-only database login.</td>
 </tr>
 <tr>
 <td>Notifications</td>
@@ -3154,7 +3184,7 @@ instance.</p>
 <li><strong>Setup hook:</strong> Each extension defines <code>async def setup(bot)</code> and attaches services, cogs, or background tasks.</li>
 <li><strong>Shared state:</strong> Handlers either use property setters on <code>Genji</code> (for example <code>bot.api</code>) or inherit from
    <code>utilities.base.BaseHandler</code> to gain guild/channel resolution helpers.</li>
-<li><strong>Queue registration:</strong> Background work is tied to RabbitMQ queues by decorating handler coroutines with
+<li><strong>Queue registration:</strong> Background work is tied to the PostgreSQL queue jobs by decorating handler coroutines with
    <code>@queue_consumer("queue-name")</code>.</li>
 <li><strong>Cross-extension collaboration:</strong> Handlers call into one another via the properties on <code>bot</code>. For example, the
    completions flow calls <code>bot.api</code> to fetch payloads, uses <code>bot.notifications</code> to determine DM preferences, and
@@ -3208,11 +3238,12 @@ instance.</p>
 <li>
 <p><strong>Register queue handlers</strong> (if needed):
    <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">extensions._queue_registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">queue_consumer</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nd">@queue_consumer</span><span class="p">(</span><span class="s2">&quot;api.my_feature.event&quot;</span><span class="p">,</span> <span class="n">struct_type</span><span class="o">=</span><span class="n">MyEvent</span><span class="p">)</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">MyEvent</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">AbstractIncomingMessage</span><span class="p">):</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="c1"># Process the event</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="k">pass</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">genjishimada_sdk.queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">JobContext</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nd">@queue_consumer</span><span class="p">(</span><span class="s2">&quot;api.my_feature.event&quot;</span><span class="p">,</span> <span class="n">struct_type</span><span class="o">=</span><span class="n">MyEvent</span><span class="p">)</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_event</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">MyEvent</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">JobContext</span><span class="p">):</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="c1"># Process the event</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="k">pass</span>
 </span></code></pre></div></p>
 </li>
 <li>
@@ -3255,7 +3286,7 @@ contributors can follow the established patterns.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 24, 2026 17:49:06 UTC"><span class="timeago" datetime="2026-01-24T17:49:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 24, 2026 17:49:06 UTC">2026-01-24</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     
@@ -3319,13 +3350,13 @@ contributors can follow the established patterns.</p>
         
         
           
-          <a href="../messaging/" class="md-footer__link md-footer__link--next" aria-label="Next: Messaging &amp;amp; Queues">
+          <a href="../messaging/" class="md-footer__link md-footer__link--next" aria-label="Next: Messaging and queues">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Messaging &amp; Queues
+                Messaging and queues
               </div>
             </div>
             <div class="md-footer__button md-icon">

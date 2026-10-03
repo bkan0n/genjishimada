@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1426,7 +1456,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -2680,52 +2710,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rabbitmq" class="md-nav__link">
+  <a href="#postgresql-background-queue" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RabbitMQ
+        PostgreSQL background queue
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="RabbitMQ">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#overview_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Overview
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#queue-naming-convention" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Queue Naming Convention
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#monitoring" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Monitoring
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -2742,7 +2733,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#overview_2" class="md-nav__link">
+  <a href="#overview_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Overview
@@ -2792,7 +2783,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#overview_3" class="md-nav__link">
+  <a href="#overview_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Overview
@@ -2842,7 +2833,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#overview_4" class="md-nav__link">
+  <a href="#overview_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Overview
@@ -3270,69 +3261,37 @@
 <h1 id="infrastructure">Infrastructure<a class="headerlink" href="#infrastructure" title="Anchor link to this section">&para;</a></h1>
 <p>Detailed guide to the infrastructure services that power Genji Shimada.</p>
 <h2 id="architecture-overview">Architecture Overview<a class="headerlink" href="#architecture-overview" title="Anchor link to this section">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────┐
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│  Discord Users  │
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>└────────┬────────┘
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>         │
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    ┌────▼────────────────┐
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    │   Discord Bot       │
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    │  (discord.py)       │
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    └─┬────────────────┬──┘
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>      │                │
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>      │                │
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a> ┌────▼─────┐    ┌────▼──────┐
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a> │ RabbitMQ │◄───┤  REST API │
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a> │          │    │ (Litestar)│
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a> └──────────┘    └─────┬─────┘
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                       │
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>                 ┌─────▼──────┐
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>                 │ PostgreSQL │
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>                 └────────────┘
-</span></code></pre></div>
+<pre class="mermaid"><code>flowchart LR
+    Users[Discord users] --&gt; Bot[Discord bot]
+    Bot --&gt; API[REST API]
+    API --&gt; DB[(PostgreSQL: domain data and queue)]
+    DB --&gt; Bot
+    DB --&gt; Worker[API background worker]</code></pre>
+<p>The bot's direct database login can access queue storage only. Domain access goes through the API.</p>
 <h2 id="postgresql">PostgreSQL<a class="headerlink" href="#postgresql" title="Anchor link to this section">&para;</a></h2>
 <h3 id="overview">Overview<a class="headerlink" href="#overview" title="Anchor link to this section">&para;</a></h3>
 <p>PostgreSQL 17 is the primary data store for all persistent data.</p>
 <h3 id="schema-organization">Schema Organization<a class="headerlink" href="#schema-organization" title="Anchor link to this section">&para;</a></h3>
 <p>The database uses multiple schemas for logical separation:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>genjishimada (database)
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── core              # Users, maps, permissions
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>├── maps              # Map metadata, ratings
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>├── completions       # User completion records
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── playtests         # Map playtesting data
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>├── users             # Profiles, XP, rank cards
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>├── lootbox           # Lootbox system
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>├── rank_card         # Rank card customization
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>└── public            # Jobs, sessions, idempotency
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>genjishimada (database)
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>├── core              # Users, maps, permissions
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>├── maps              # Map metadata, ratings
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>├── completions       # User completion records
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>├── playtests         # Map playtesting data
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>├── users             # Profiles, XP, rank cards
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>├── lootbox           # Lootbox system
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>├── rank_card         # Rank card customization
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>└── public            # Jobs, sessions, idempotency
 </span></code></pre></div>
 <h3 id="backups">Backups<a class="headerlink" href="#backups" title="Anchor link to this section">&para;</a></h3>
 <p>Create a full backup:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pg_dump<span class="w"> </span>-U<span class="w"> </span>genjishimada<span class="w"> </span>-h<span class="w"> </span>localhost<span class="w"> </span>-p<span class="w"> </span><span class="m">65432</span><span class="w"> </span>genjishimada<span class="w"> </span>&gt;<span class="w"> </span>backup_<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d<span class="k">)</span>.sql
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pg_dump<span class="w"> </span>-U<span class="w"> </span>genjishimada<span class="w"> </span>-h<span class="w"> </span>localhost<span class="w"> </span>-p<span class="w"> </span><span class="m">65432</span><span class="w"> </span>genjishimada<span class="w"> </span>&gt;<span class="w"> </span>backup_<span class="k">$(</span>date<span class="w"> </span>+%Y%m%d<span class="k">)</span>.sql
 </span></code></pre></div>
-<h2 id="rabbitmq">RabbitMQ<a class="headerlink" href="#rabbitmq" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview_1">Overview<a class="headerlink" href="#overview_1" title="Anchor link to this section">&para;</a></h3>
-<p>RabbitMQ is used for asynchronous message passing between the API and bot.</p>
-<p><strong>Key Features</strong>:
-- <strong>Queue-based messaging</strong> for event processing
-- <strong>Dead letter queues (DLQ)</strong> for failed messages
-- <strong>Message persistence</strong> for reliability
-- <strong>Idempotency tracking</strong> to prevent duplicate processing</p>
-<h3 id="queue-naming-convention">Queue Naming Convention<a class="headerlink" href="#queue-naming-convention" title="Anchor link to this section">&para;</a></h3>
-<p>Queues follow the pattern: <code>api.&lt;domain&gt;.&lt;action&gt;</code></p>
-<p>Examples:
-- <code>api.completion.submission</code>
-- <code>api.notification.delivery</code>
-- <code>api.map_edit.created</code></p>
-<h3 id="monitoring">Monitoring<a class="headerlink" href="#monitoring" title="Anchor link to this section">&para;</a></h3>
-<p><strong>Local development:</strong> Access management UI at http://localhost:15672 (genji/local_dev_password)</p>
-<p><strong>Remote deployments:</strong> RabbitMQ is not exposed directly. Use container logs:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Staging</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>genjishimada-rabbitmq-dev
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Production</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.prod.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>genjishimada-rabbitmq
-</span></code></pre></div>
+<h2 id="postgresql-background-queue">PostgreSQL background queue<a class="headerlink" href="#postgresql-background-queue" title="Anchor link to this section">&para;</a></h2>
+<p>PGQueuer 1.1.1 stores accepted work in the existing PostgreSQL instance. Workers run inside the API and bot; no separate service is needed. Business writes and their queued work commit together. Jobs retain public UUIDs, replay receipts, and failure history.</p>
+<p>See <a href="../../services/queue/">Queue operations</a> for retries, alerts, credentials, and automated verification.</p>
 <h2 id="cloudflare-r2">Cloudflare R2<a class="headerlink" href="#cloudflare-r2" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview_2">Overview<a class="headerlink" href="#overview_2" title="Anchor link to this section">&para;</a></h3>
+<h3 id="overview_1">Overview<a class="headerlink" href="#overview_1" title="Anchor link to this section">&para;</a></h3>
 <p>Cloudflare R2 is used for S3-compatible object storage.</p>
 <p><strong>Use cases</strong>:
 - Completion videos and screenshots
@@ -3340,45 +3299,45 @@
 - Map thumbnails</p>
 <h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Anchor link to this section">&para;</a></h3>
 <p>Set environment variables:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>AWS_ACCESS_KEY_ID=your_key
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>AWS_SECRET_ACCESS_KEY=your_secret
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>R2_ACCOUNT_ID=your_account_id
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>AWS_ACCESS_KEY_ID=your_key
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>AWS_SECRET_ACCESS_KEY=your_secret
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>R2_ACCOUNT_ID=your_account_id
 </span></code></pre></div>
 <h3 id="bucket-details">Bucket Details<a class="headerlink" href="#bucket-details" title="Anchor link to this section">&para;</a></h3>
 <p>The API uploads screenshots to the <code>genji-parkour-images</code> bucket and returns public URLs via the <code>cdn.bkan0n.com</code> domain.</p>
 <h2 id="sentry">Sentry<a class="headerlink" href="#sentry" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview_3">Overview<a class="headerlink" href="#overview_3" title="Anchor link to this section">&para;</a></h3>
+<h3 id="overview_2">Overview<a class="headerlink" href="#overview_2" title="Anchor link to this section">&para;</a></h3>
 <p>Sentry provides error tracking and performance monitoring.</p>
 <h3 id="configuration_1">Configuration<a class="headerlink" href="#configuration_1" title="Anchor link to this section">&para;</a></h3>
 <p>Set the DSN in <code>.env</code>:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>SENTRY_DSN=https://your_key@sentry.io/your_project
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>SENTRY_DSN=https://your_key@sentry.io/your_project
 </span></code></pre></div>
 <h3 id="integration">Integration<a class="headerlink" href="#integration" title="Anchor link to this section">&para;</a></h3>
 <p><strong>API</strong> (<code>apps/api/app.py</code>):
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sentry_sdk</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">sentry_sdk</span><span class="o">.</span><span class="n">init</span><span class="p">(</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">dsn</span><span class="o">=</span><span class="n">SENTRY_DSN</span><span class="p">,</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">environment</span><span class="o">=</span><span class="n">APP_ENVIRONMENT</span><span class="p">,</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">traces_sample_rate</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sentry_sdk</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">sentry_sdk</span><span class="o">.</span><span class="n">init</span><span class="p">(</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">dsn</span><span class="o">=</span><span class="n">SENTRY_DSN</span><span class="p">,</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">environment</span><span class="o">=</span><span class="n">APP_ENVIRONMENT</span><span class="p">,</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">traces_sample_rate</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">)</span>
 </span></code></pre></div></p>
 <p><strong>Bot</strong> (<code>apps/bot/main.py</code>):
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sentry_sdk</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sentry_sdk.integrations.asyncio</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncioIntegration</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">sentry_sdk</span><span class="o">.</span><span class="n">init</span><span class="p">(</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">dsn</span><span class="o">=</span><span class="n">SENTRY_DSN</span><span class="p">,</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">environment</span><span class="o">=</span><span class="n">APP_ENVIRONMENT</span><span class="p">,</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">integrations</span><span class="o">=</span><span class="p">[</span><span class="n">AsyncioIntegration</span><span class="p">()],</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sentry_sdk</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sentry_sdk.integrations.asyncio</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsyncioIntegration</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">sentry_sdk</span><span class="o">.</span><span class="n">init</span><span class="p">(</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">dsn</span><span class="o">=</span><span class="n">SENTRY_DSN</span><span class="p">,</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">environment</span><span class="o">=</span><span class="n">APP_ENVIRONMENT</span><span class="p">,</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">integrations</span><span class="o">=</span><span class="p">[</span><span class="n">AsyncioIntegration</span><span class="p">()],</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="p">)</span>
 </span></code></pre></div></p>
 <h2 id="email-resend">Email (Resend)<a class="headerlink" href="#email-resend" title="Anchor link to this section">&para;</a></h2>
-<h3 id="overview_4">Overview<a class="headerlink" href="#overview_4" title="Anchor link to this section">&para;</a></h3>
+<h3 id="overview_3">Overview<a class="headerlink" href="#overview_3" title="Anchor link to this section">&para;</a></h3>
 <p>Resend is used for transactional email delivery.</p>
 <h3 id="configuration_2">Configuration<a class="headerlink" href="#configuration_2" title="Anchor link to this section">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>RESEND_API_KEY=your_resend_api_key
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>RESEND_FROM_EMAIL=noreply@genji.pk
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>RESEND_API_KEY=your_resend_api_key
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>RESEND_FROM_EMAIL=noreply@genji.pk
 </span></code></pre></div>
 <h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
 <ul>
@@ -3409,7 +3368,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 23, 2026 21:09:27 UTC"><span class="timeago" datetime="2026-01-23T21:09:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 23, 2026 21:09:27 UTC">2026-01-23</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

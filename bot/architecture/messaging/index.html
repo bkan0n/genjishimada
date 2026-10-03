@@ -29,7 +29,7 @@
     
     
       
-        <title>Messaging & Queues - Genji Shimada Documentation</title>
+        <title>Messaging and queues - Genji Shimada Documentation</title>
       
     
     
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#messaging-queues" class="md-skip">
+        <a href="#messaging-and-queues" class="md-skip">
           Skip to content
         </a>
       
@@ -126,7 +126,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Messaging &amp; Queues
+              Messaging and queues
             
           </span>
         </div>
@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1441,7 +1471,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -1459,7 +1489,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -1485,10 +1515,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#rabbitmq-integration" class="md-nav__link">
+  <a href="#worker-lifecycle" class="md-nav__link">
     <span class="md-ellipsis">
       
-        RabbitMQ integration
+        Worker lifecycle
       
     </span>
   </a>
@@ -1496,10 +1526,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#queue-handler-lifecycle" class="md-nav__link">
+  <a href="#event-ownership" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Queue handler lifecycle
+        Event ownership
       
     </span>
   </a>
@@ -1507,10 +1537,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#queue-naming-convention" class="md-nav__link">
+  <a href="#replay-and-effects" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Queue naming convention
+        Replay and effects
       
     </span>
   </a>
@@ -1518,10 +1548,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#queue-catalog" class="md-nav__link">
+  <a href="#failure-recovery" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Queue catalog
+        Failure recovery
       
     </span>
   </a>
@@ -1529,43 +1559,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#idempotency" class="md-nav__link">
+  <a href="#verification" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Idempotency
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#pytest-short-circuit" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pytest short-circuit
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dead-letter-queue-dlq" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dead Letter Queue (DLQ)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Next Steps
+        Verification
       
     </span>
   </a>
@@ -3118,162 +3115,22 @@
   
 
 
-<h1 id="messaging-queues">Messaging &amp; Queues<a class="headerlink" href="#messaging-queues" title="Anchor link to this section">&para;</a></h1>
-<p>The bot consumes RabbitMQ queues to react to events emitted by the Genji Parkour API. Queue handlers live alongside
-their feature modules and are registered through a shared decorator.</p>
-<h2 id="rabbitmq-integration">RabbitMQ integration<a class="headerlink" href="#rabbitmq-integration" title="Anchor link to this section">&para;</a></h2>
-<ul>
-<li><code>extensions/_queue_registry.py</code> provides <code>queue_consumer</code>, which wraps handlers with decoding, idempotency, and pytest
-  short-circuit logic.</li>
-<li><code>extensions/rabbit.RabbitHandler</code> opens pooled connections to RabbitMQ, declares queues (and matching dead-letter
-  queues), wraps handlers for error handling, and tracks startup drain state. The client is created during the
-  <code>extensions.rabbit</code> setup hook and started from <code>Genji.setup_hook</code>.</li>
-<li>Services can call <code>await bot.rabbit.wait_until_drained()</code> when they need to delay work until any startup backlog has
-  been processed (for example, before sending verification embeds or playtest updates).</li>
-</ul>
-<h2 id="queue-handler-lifecycle">Queue handler lifecycle<a class="headerlink" href="#queue-handler-lifecycle" title="Anchor link to this section">&para;</a></h2>
-<ol>
-<li>Decorate an async function or method with <code>@queue_consumer("queue-name", struct_type=...)</code> inside the relevant
-   extension module.</li>
-<li>Parse the message body with <code>msgspec</code> models before touching Discord state.</li>
-<li>Perform the required Discord or API calls. The wrapper created by <code>RabbitHandler</code> manages acknowledgements and
-   ensures failures are logged before the message is dead-lettered.</li>
-</ol>
-<h2 id="queue-naming-convention">Queue naming convention<a class="headerlink" href="#queue-naming-convention" title="Anchor link to this section">&para;</a></h2>
-<p>Queues follow the pattern: <code>api.&lt;domain&gt;.&lt;action&gt;</code></p>
-<p>Examples:</p>
-<ul>
-<li><code>api.newsfeed.create</code></li>
-<li><code>api.completion.submission</code></li>
-<li><code>api.playtest.create</code></li>
-</ul>
-<h2 id="queue-catalog">Queue catalog<a class="headerlink" href="#queue-catalog" title="Anchor link to this section">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Queue</th>
-<th>Handler</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>api.newsfeed.create</code></td>
-<td><code>NewsfeedHandler._process_newsfeed_create</code></td>
-<td>Fetches the new event and posts it to the configured newsfeed channel.</td>
-</tr>
-<tr>
-<td><code>api.notification.delivery</code></td>
-<td><code>NotificationHandler._process_notification_delivery</code></td>
-<td>Sends DMs or channel notifications based on user settings.</td>
-</tr>
-<tr>
-<td><code>api.completion.autoverification.failed</code></td>
-<td><code>CompletionHandler._process_autoverification_failed</code></td>
-<td>Handles failed autoverification results.</td>
-</tr>
-<tr>
-<td><code>api.completion.upvote</code></td>
-<td><code>CompletionHandler._process_update_upvote_message</code></td>
-<td>Forwards completion submissions into the upvote channel.</td>
-</tr>
-<tr>
-<td><code>api.completion.submission</code></td>
-<td><code>CompletionHandler._process_create_submission_message</code></td>
-<td>Builds the verification queue embed for a new completion submission.</td>
-</tr>
-<tr>
-<td><code>api.completion.verification</code></td>
-<td><code>CompletionHandler._process_verification_status_change</code></td>
-<td>Updates verification state and notifies users.</td>
-</tr>
-<tr>
-<td><code>api.playtest.create</code></td>
-<td><code>PlaytestHandler._process_create_playtest_message</code></td>
-<td>Creates playtest threads and posts the intake embed.</td>
-</tr>
-<tr>
-<td><code>api.playtest.vote.cast</code></td>
-<td><code>PlaytestHandler._process_vote_cast_message</code></td>
-<td>Records a new playtest vote and grants XP.</td>
-</tr>
-<tr>
-<td><code>api.playtest.vote.remove</code></td>
-<td><code>PlaytestHandler._process_vote_remove_message</code></td>
-<td>Handles vote removal events.</td>
-</tr>
-<tr>
-<td><code>api.playtest.approve</code></td>
-<td><code>PlaytestHandler._process_playtest_approve_message</code></td>
-<td>Posts approval summaries and cleans up playtest state.</td>
-</tr>
-<tr>
-<td><code>api.playtest.force_accept</code></td>
-<td><code>PlaytestHandler._process_playtest_force_accept_message</code></td>
-<td>Mirrors force-accept commands issued upstream.</td>
-</tr>
-<tr>
-<td><code>api.playtest.force_deny</code></td>
-<td><code>PlaytestHandler._process_playtest_force_deny_message</code></td>
-<td>Mirrors force-deny commands issued upstream.</td>
-</tr>
-<tr>
-<td><code>api.playtest.reset</code></td>
-<td><code>PlaytestHandler._process_playtest_reset_message</code></td>
-<td>Resets playtest runs and refreshes Discord embeds.</td>
-</tr>
-<tr>
-<td><code>api.xp.grant</code></td>
-<td><code>XPHandler._process_grant_message</code></td>
-<td>Applies XP rewards announced by the API.</td>
-</tr>
-<tr>
-<td><code>api.map_edit.created</code></td>
-<td><code>MapEditHandler._process_edit_created</code></td>
-<td>Creates a verification view for new map edit requests.</td>
-</tr>
-<tr>
-<td><code>api.map_edit.resolved</code></td>
-<td><code>MapEditHandler._process_edit_resolved</code></td>
-<td>Cleans up the verification queue message once resolved.</td>
-</tr>
-</tbody>
-</table>
-<p>Keep this table current as new queues are introduced so on-call maintainers can trace message flow quickly.</p>
-<h2 id="idempotency">Idempotency<a class="headerlink" href="#idempotency" title="Anchor link to this section">&para;</a></h2>
-<p>Most queues enforce idempotency using <code>message_id</code> headers:</p>
-<p><strong>API side</strong> (publishing):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">publish_message</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;api.completion.submission&quot;</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">message</span><span class="o">=</span><span class="n">event</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">message_id</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;completion-</span><span class="si">{</span><span class="n">completion_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>  <span class="c1"># Unique ID</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
-</span></code></pre></div>
-<p><strong>Bot side</strong> (consuming):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nd">@queue_consumer</span><span class="p">(</span><span class="s2">&quot;api.completion.submission&quot;</span><span class="p">,</span> <span class="n">struct_type</span><span class="o">=</span><span class="n">CompletionCreatedEvent</span><span class="p">,</span> <span class="n">idempotent</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">handle_completion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">event</span><span class="p">:</span> <span class="n">CompletionCreatedEvent</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">AbstractIncomingMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="c1"># Handler only runs once per message_id</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="o">...</span>
-</span></code></pre></div>
-<p>Claims are tracked in the database to prevent duplicate processing.</p>
-<h2 id="pytest-short-circuit">Pytest short-circuit<a class="headerlink" href="#pytest-short-circuit" title="Anchor link to this section">&para;</a></h2>
-<p>Queue consumers skip processing when a message header includes <code>x-pytest-enabled: 1</code>. This is used in integration tests
-to avoid side effects.</p>
-<h2 id="dead-letter-queue-dlq">Dead Letter Queue (DLQ)<a class="headerlink" href="#dead-letter-queue-dlq" title="Anchor link to this section">&para;</a></h2>
-<p>Failed messages are moved to a dead letter queue (e.g., <code>api.completion.submission.dlq</code>) after exhausting retries.</p>
-<p><strong>DLQ Processor</strong> (runs every 60 seconds):</p>
-<ol>
-<li>Checks DLQ for messages</li>
-<li>Posts alert to Discord with message details</li>
-<li>Marks message with <code>dlq_notified</code> header</li>
-<li>Prevents duplicate alerts</li>
-</ol>
-<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Anchor link to this section">&para;</a></h2>
-<ul>
-<li><a href="../core-bot/">Core Bot Lifecycle</a> - Understand how the bot starts</li>
-<li><a href="../services/">Services &amp; Extensions</a> - Learn about service architecture</li>
-<li><a href="../../../sdk/">SDK Documentation</a> - See the msgspec event models</li>
-</ul>
+<h1 id="messaging-and-queues">Messaging and queues<a class="headerlink" href="#messaging-and-queues" title="Anchor link to this section">&para;</a></h1>
+<p>The bot processes durable jobs stored by PGQueuer 1.1.1 in PostgreSQL. Queue handlers live alongside their feature modules and use the shared <code>queue_consumer</code> decorator. The API owns business data and enqueues jobs in the same transaction as the change that requires them.</p>
+<h2 id="worker-lifecycle">Worker lifecycle<a class="headerlink" href="#worker-lifecycle" title="Anchor link to this section">&para;</a></h2>
+<p>The queue supervisor starts after extensions register handlers. It uses the API's database location with the separate <code>genjishimada_queue_worker</code> login and <code>QUEUE_DATABASE_PASSWORD</code>; <code>QUEUE_DATABASE_URL</code> can override that connection. Its handlers receive a decoded SDK event and transport-neutral <code>JobContext</code>; they call the API for domain reads and writes. Persistent views restore independently of any backlog.</p>
+<p>The worker stops accepting work on shutdown, allows handlers to finish, and leaves unfinished work recoverable if draining times out. PostgreSQL and API outages cause bounded reconnect delays without exhausting the ordinary handler failure budget. Claims are fenced so an old process cannot complete a job now owned by another worker.</p>
+<h2 id="event-ownership">Event ownership<a class="headerlink" href="#event-ownership" title="Anchor link to this section">&para;</a></h2>
+<p>The shared SDK registry defines all supported event names and payloads. The bot owns 21 existing <code>api.*</code> events for completions, map edits, newsfeed, notifications, playtests, tournaments, and XP. The API owns the <code>completion.ocr.requested</code>, <code>tournament.ocr.requested</code>, and <code>map.linked.newsfeed.requested</code> continuations.</p>
+<p>To add an event, register its payload and owner, add the matching worker handler, and enqueue through the business transaction. Contract tests must cover the new producer and consumer together.</p>
+<h2 id="replay-and-effects">Replay and effects<a class="headerlink" href="#replay-and-effects" title="Anchor link to this section">&para;</a></h2>
+<p>A durable <code>(action, event_key)</code> identifies the business operation. Reusing a key with different payload content is an error. Distinct legitimate transitions, such as verify → reject → verify, use different persisted transition identities.</p>
+<p>A claimed job may execute more than once. A handler must record additive mutations and their receipts atomically through the API, and bind external sends to their destination and effect key. Completed effects are reused on retry. If a send might have succeeded but its result was not saved, the effect remains uncertain until reconciled; blindly replaying it can duplicate a message.</p>
+<h2 id="failure-recovery">Failure recovery<a class="headerlink" href="#failure-recovery" title="Anchor link to this section">&para;</a></h2>
+<p>After the ordinary retry budget is exhausted, the job remains held with its payload, failure generation, and diagnostic state. The alert supervisor independently reads failure state through the API and posts to the configured operator channel. Persistent <strong>Retry job</strong> and <strong>Details</strong> controls survive bot restarts.</p>
+<p>Retries go through the API's authorized recovery service and preserve the logical job and completed effects. Stale controls, concurrent retries, successful jobs, and unresolved external effects cannot trigger a second execution incorrectly. See <a href="../../../services/queue/">Queue operations</a>.</p>
+<h2 id="verification">Verification<a class="headerlink" href="#verification" title="Anchor link to this section">&para;</a></h2>
+<p><code>just test-queue</code> runs backend acceptance against real PostgreSQL, including process death, stale claims, database restart, atomic enqueue, effect replay, and retry authorization. <code>just test-queue-fast</code> omits fault injection. External effects use a transport-independent recorder; this suite does not test Discord components or connect to Discord.</p>
 
 
 
@@ -3296,7 +3153,7 @@ to avoid side effects.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 24, 2026 17:49:06 UTC"><span class="timeago" datetime="2026-01-24T17:49:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 24, 2026 17:49:06 UTC">2026-01-24</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

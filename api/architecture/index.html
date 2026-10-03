@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -817,14 +819,42 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/rabbitmq/" class="md-nav__link">
+      <a href="../../services/queue/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
   
 
     
@@ -1426,7 +1456,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -3088,7 +3118,7 @@
 <h2 id="entry-point-appsapiapppy">Entry point (<code>apps/api/app.py</code>)<a class="headerlink" href="#entry-point-appsapiapppy" title="Anchor link to this section">&para;</a></h2>
 <p>The API is assembled in a single entry point:</p>
 <ul>
-<li><strong>RabbitMQ connection pools</strong> are created during lifespan startup and stored in app state.</li>
+<li><strong>PGQueuer workers</strong> start during lifespan startup and stop before database resources close.</li>
 <li><strong>PostgreSQL</strong> is configured with <code>litestar_asyncpg.AsyncpgPlugin</code> for pooled connections.</li>
 <li><strong>OpenAPI</strong> metadata is configured and served at <code>/docs</code>.</li>
 <li><strong>Routing</strong> mounts a router at <code>/api/v3</code> using <code>route_handlers</code> discovered from <code>apps/api/routes</code>.</li>
@@ -3114,8 +3144,8 @@
 <p>Services inherit from <code>BaseService</code>, which provides:</p>
 <ul>
 <li>Access to the <code>asyncpg</code> connection</li>
-<li>A <code>publish_message</code> helper that inserts a job row and publishes to RabbitMQ</li>
-<li>Optional idempotency tracking for queue messages</li>
+<li>Transactional enqueue that inserts a public job identity and PGQueuer row through the business connection</li>
+<li>Durable event identities and per-effect receipts for replay safety</li>
 </ul>
 <p>Queues follow the pattern: <code>api.&lt;domain&gt;.&lt;action&gt;</code>.</p>
 <h2 id="authentication-and-guards">Authentication and guards<a class="headerlink" href="#authentication-and-guards" title="Anchor link to this section">&para;</a></h2>
@@ -3153,7 +3183,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     

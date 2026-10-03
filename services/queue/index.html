@@ -12,13 +12,13 @@
         <meta name="author" content="Genji Parkour Team">
       
       
-        <link rel="canonical" href="https://docs.genji.pk/services/rabbitmq/">
+        <link rel="canonical" href="https://docs.genji.pk/services/queue/">
       
       
         <link rel="prev" href="../database/">
       
       
-        <link rel="next" href="../ocr/">
+        <link rel="next" href="../../operations/queue-migration/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>RabbitMQ - Genji Shimada Documentation</title>
+        <title>Background queue - Genji Shimada Documentation</title>
       
     
     
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#rabbitmq-service" class="md-skip">
+        <a href="#background-queue" class="md-skip">
           Skip to content
         </a>
       
@@ -126,7 +126,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              RabbitMQ
+              Background queue
             
           </span>
         </div>
@@ -672,6 +672,8 @@
       
         
       
+        
+      
     
     
     
@@ -836,7 +838,7 @@
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
   
 
     
@@ -854,7 +856,7 @@
   <span class="md-ellipsis">
     
   
-    RabbitMQ
+    Background queue
   
 
     
@@ -880,10 +882,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#responsibilities" class="md-nav__link">
+  <a href="#credentials-and-startup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Responsibilities
+        Credentials and startup
       
     </span>
   </a>
@@ -891,10 +893,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#queue-naming" class="md-nav__link">
+  <a href="#inspecting-and-retrying-work" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Queue naming
+        Inspecting and retrying work
       
     </span>
   </a>
@@ -902,41 +904,35 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#access" class="md-nav__link">
+  <a href="#operator-command-line" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Access
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Access">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#local-development" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Local Development
+        Operator command line
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#remote-deployments" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#retention" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Remote Deployments
+        Retention
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification
+      
+    </span>
+  </a>
   
 </li>
       
@@ -944,6 +940,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/queue-migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1537,7 +1561,7 @@
   <span class="md-ellipsis">
     
   
-    Messaging &amp; Queues
+    Messaging and queues
   
 
     
@@ -3067,40 +3091,52 @@
   
 
 
-<h1 id="rabbitmq-service">RabbitMQ Service<a class="headerlink" href="#rabbitmq-service" title="Anchor link to this section">&para;</a></h1>
-<p>RabbitMQ provides message brokering for asynchronous workflows. It enables decoupling between producers and consumers while enforcing delivery guarantees.</p>
-<h2 id="responsibilities">Responsibilities<a class="headerlink" href="#responsibilities" title="Anchor link to this section">&para;</a></h2>
+<h1 id="background-queue">Background queue<a class="headerlink" href="#background-queue" title="Anchor link to this section">&para;</a></h1>
+<p>PGQueuer 1.1.1 stores background work in the existing PostgreSQL database. Workers run inside the API and bot processes. A business change, its public job UUID, and its queue row commit together, so accepted work remains available after services restart.</p>
+<p>Jobs sharing an entity key run in enqueue sequence. Before checking for earlier unfinished work, a worker waits for pending enqueue transactions for that entity to finish. Unrelated entities can continue. Legacy jobs receive their sequence when first imported into the PostgreSQL queue; their public UUID and that sequence remain stable on retries.</p>
+<h2 id="credentials-and-startup">Credentials and startup<a class="headerlink" href="#credentials-and-startup" title="Anchor link to this section">&para;</a></h2>
+<p>Apply the checked-in queue migration with the database migration owner before starting the new workers. Runtime worker credentials do not install or upgrade schema.</p>
 <ul>
-<li>Define exchanges, queues, and bindings that reflect business domains.</li>
-<li>Apply dead-lettering and retry policies for resilient processing.</li>
-<li>Monitor queue depth, consumer lag, and connection health.</li>
+<li>The API uses its existing database connection for transactional enqueue and its API-owned worker.</li>
+<li>By default, the bot uses the API's <code>POSTGRES_HOST</code> and <code>POSTGRES_DB</code> on port 5432, authenticating as <code>genjishimada_queue_worker</code> with <code>QUEUE_DATABASE_PASSWORD</code>. This role can consume and maintain queue records but cannot read or mutate domain tables, create schema, or administer the database. The bot never falls back to <code>POSTGRES_USER</code> or <code>POSTGRES_PASSWORD</code>.</li>
+<li>Set <code>QUEUE_DATABASE_URL</code> to override the complete connection for a different host, port, database, or connection options. A nonempty override takes precedence over the shared-location settings.</li>
+<li><code>QUEUE_OPERATOR_IDS</code> is a comma-separated operator allowlist, initially <code>141372217677053952</code>. Configure the same value for API and bot; the API enforces authorization.</li>
+<li>The authenticated bot API key needs <code>jobs:manage</code> for internal job execution and recovery endpoints.</li>
 </ul>
-<h2 id="queue-naming">Queue naming<a class="headerlink" href="#queue-naming" title="Anchor link to this section">&para;</a></h2>
-<p>Queues follow the pattern: <code>api.&lt;domain&gt;.&lt;action&gt;</code>.</p>
-<p>Examples:</p>
-<ul>
-<li><code>api.completion.submission</code></li>
-<li><code>api.notification.delivery</code></li>
-<li><code>api.map_edit.created</code></li>
-</ul>
-<h2 id="access">Access<a class="headerlink" href="#access" title="Anchor link to this section">&para;</a></h2>
-<h3 id="local-development">Local Development<a class="headerlink" href="#local-development" title="Anchor link to this section">&para;</a></h3>
-<p>For local development, RabbitMQ management UI is available at:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>http://localhost:15672
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Username: genji
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Password: local_dev_password
+<p>For local development, copy <code>.env.local.example</code> to <code>.env.local</code>, start <code>just infra-up</code>, and apply the migrations. Then run:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>just<span class="w"> </span>queue-credentials-local
 </span></code></pre></div>
-<p>View logs:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.local.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>rabbitmq-local
-</span></code></pre></div></p>
-<h3 id="remote-deployments">Remote Deployments<a class="headerlink" href="#remote-deployments" title="Anchor link to this section">&para;</a></h3>
-<p>RabbitMQ is not exposed directly on remote servers. Production access is handled via your reverse proxy (e.g., Caddy).</p>
-<p>View staging logs:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.dev.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>genjishimada-rabbitmq-dev
-</span></code></pre></div></p>
-<p>View production logs:
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.prod.yml<span class="w"> </span>logs<span class="w"> </span>-f<span class="w"> </span>genjishimada-rabbitmq
-</span></code></pre></div></p>
+<p>The command targets only <code>postgres-local</code> in the local Compose file. It generates a random worker password, supplies it through standard input, and saves the queue URL to <code>.env.local</code> with owner-only permissions. It refuses remote Docker contexts and never prints the password. Restart a running local bot after rotating the login.</p>
+<p>For deployment, provision a distinct password through your normal database administration process and store it in the environment's <code>QUEUE_DATABASE_PASSWORD</code> secret. Leave <code>QUEUE_DATABASE_URL</code> unset unless you need the override. Compose supplies the same database host and name to both API and bot; the default host is <code>genjishimada-db-dev</code> in development and <code>genjishimada-db</code> in production. An optional <code>POSTGRES_HOST</code> environment variable (a GitHub environment variable for workflow deployments) overrides that shared host. Do not reuse the API database owner. Both deployed application containers have a 45-second stop grace period. See the <a href="../../operations/queue-migration/#staging-login-setup">staging login setup</a> for exact commands and permission checks.</p>
+<h2 id="inspecting-and-retrying-work">Inspecting and retrying work<a class="headerlink" href="#inspecting-and-retrying-work" title="Anchor link to this section">&para;</a></h2>
+<p>Existing <code>/api/v3/internal/jobs/{uuid}</code> responses retain their public UUID/status contract. A pending retry is <code>queued</code>, a claimed job is <code>processing</code>, a completed job is <code>succeeded</code>, and a held/discarded job is <code>failed</code>.</p>
+<p>Terminal failures appear in the existing operator Discord channel and retain the existing recipient. <strong>Details</strong> shows current diagnostic state; <strong>Retry job</strong> invokes the same authenticated API recovery service used by operational tools. The controls survive restarts. Automatic retry attempts do not create new logical jobs or a new alert on every poll.</p>
+<p>After diagnosing and fixing a failure, retry the existing job. A retry increments its generation, resets the ordinary failure budget, and retains event identity, payload, public UUID, completed effect receipts, and message bindings. Duplicate requests resolve the existing audited action. Old controls cannot act on a later failure generation. The original alert updates as work progresses.</p>
+<p>An uncertain external effect requires a recorded reconciliation decision before retry. Inspect the actual result and record whether it completed or can safely run again. A failed job must not be treated as evidence that every earlier step failed.</p>
+<h2 id="operator-command-line">Operator command line<a class="headerlink" href="#operator-command-line" title="Anchor link to this section">&para;</a></h2>
+<p><code>scripts/queue_jobs.py</code> uses the same authenticated API recovery routes as the operator controls. Set <code>QUEUE_API_URL</code> to the API origin (for example <code>http://localhost:8000</code> locally), provide <code>API_KEY</code> through your secret environment, and set <code>QUEUE_OPERATOR_ID</code> to your allowlisted Discord user ID. Remote access should use the HTTPS API origin. The key needs <code>jobs:manage</code>; the API validates the operator for every command. Credentials never appear in command arguments.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/queue_jobs.py<span class="w"> </span>stats
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/queue_jobs.py<span class="w"> </span>list<span class="w"> </span>--status<span class="w"> </span>failed
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/queue_jobs.py<span class="w"> </span>inspect<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/queue_jobs.py<span class="w"> </span>retry<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span><span class="w"> </span>--generation<span class="w"> </span><span class="m">0</span><span class="w"> </span>--request-id<span class="w"> </span>diagnose-and-retry-001
+</span></code></pre></div>
+<p>Set <code>JOB_ID</code> to the job being investigated and use its actual <code>retry_generation</code> from inspection. A mutating command prints its request ID before contacting the API. If the response is lost, inspect the job and reuse that same request ID, generation, and arguments when repeating the request. The client never automatically retries a mutation or fetches a newer generation to override a stale decision.</p>
+<p>Reconcile an uncertain effect by supplying evidence of its completed result as a JSON object, or by explicitly permitting a repeat after checking the destination:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/queue_jobs.py<span class="w"> </span>reconcile<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$EFFECT_KEY</span><span class="s2">&quot;</span><span class="w"> </span>--generation<span class="w"> </span><span class="m">0</span><span class="w"> </span>--result-file<span class="w"> </span>/path/to/completed-result.json<span class="w"> </span>--reason<span class="w"> </span><span class="s2">&quot;Confirmed existing delivery&quot;</span><span class="w"> </span>--request-id<span class="w"> </span>reconcile-001
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/queue_jobs.py<span class="w"> </span>reconcile<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$EFFECT_KEY</span><span class="s2">&quot;</span><span class="w"> </span>--generation<span class="w"> </span><span class="m">0</span><span class="w"> </span>--resend<span class="w"> </span>--reason<span class="w"> </span><span class="s2">&quot;Confirmed no delivery exists&quot;</span><span class="w"> </span>--request-id<span class="w"> </span>reconcile-002
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/queue_jobs.py<span class="w"> </span>discard<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$JOB_ID</span><span class="s2">&quot;</span><span class="w"> </span>--generation<span class="w"> </span><span class="m">0</span><span class="w"> </span>--reason<span class="w"> </span><span class="s2">&quot;Source operation was canceled&quot;</span><span class="w"> </span>--request-id<span class="w"> </span>discard-001
+</span></code></pre></div>
+<p>All recovery commands require the inspected generation so an older diagnosis cannot change a newer failure. Reconciliation does not retry the whole job; inspect the result and then request retry when appropriate. A completed-result object must describe the actual effect's known result, such as its message binding; do not invent a success record.</p>
+<p><code>stats</code> returns ready, delayed, processing, and held counts, oldest ready age in seconds, and the number of uncertain effects. <code>list</code> defaults to actionable work and accepts <code>--limit</code> from 1 to 100.</p>
+<h2 id="retention">Retention<a class="headerlink" href="#retention" title="Anchor link to this section">&para;</a></h2>
+<p>The API runs queue-log maintenance hourly in batches of at most 1,000 successful jobs. It uses PostgreSQL's clock for the 30-day cutoff, verifies the latest terminal record, and persists the final summary in the same transaction that removes old detailed logs. Jobs with an active queue row, a held/retrying/dependency-blocked status, or an uncertain effect are preserved. Public UUIDs, event identities, effect receipts, operational actions, alert bindings, and import evidence are retained.</p>
+<h2 id="verification">Verification<a class="headerlink" href="#verification" title="Anchor link to this section">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>just<span class="w"> </span>test-queue<span class="w">       </span><span class="c1"># All Q01–Q28 backend acceptance groups, including fault injection</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>just<span class="w"> </span>test-queue-fast<span class="w">  </span><span class="c1"># Excludes isolated process/container failure cases</span>
+</span></code></pre></div>
+<p>A running Docker engine and repository dependencies are sufficient. The suite owns disposable PostgreSQL instances, uses a transport-independent effect recorder, and does not require production credentials or contact Discord, Sentry, or OCR services. The full run is mandatory in CI, disables testmon selection, and runs serially. Empty collection, skipped/xfail required scenarios, or missing acceptance IDs fail the run. Results and sanitized worker logs are written under <code>artifacts/queue/</code>.</p>
+<p>Queue tests remain under <code>apps/api/tests/integration/queue/</code> with an independent fixture boundary. Run the existing feature-organized API tests separately with <code>just test-api</code>; add a feature path such as <code>tests/completions</code> to narrow that suite. The ordinary API runner defaults to two workers and supports <code>--workers 0</code> for serial diagnosis.</p>
+<p>See <a href="../../operations/queue-migration/">Migration runbook</a> for backlog reconciliation and deployment preparation. Updating the repository does not deploy the migration or delete old service data.</p>
 
 
 
@@ -3123,7 +3159,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 23, 2026 21:09:27 UTC"><span class="timeago" datetime="2026-01-23T21:09:27+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 23, 2026 21:09:27 UTC">2026-01-23</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     
@@ -3133,7 +3169,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 18, 2026 22:11:55 UTC"><span class="timeago" datetime="2026-01-18T22:11:55+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 18, 2026 22:11:55 UTC">2026-01-18</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     
@@ -3187,13 +3223,13 @@
         
         
           
-          <a href="../ocr/" class="md-footer__link md-footer__link--next" aria-label="Next: OCR">
+          <a href="../../operations/queue-migration/" class="md-footer__link md-footer__link--next" aria-label="Next: Queue migration">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                OCR
+                Queue migration
               </div>
             </div>
             <div class="md-footer__button md-icon">

@@ -12,31 +12,31 @@
         <meta name="author" content="Genji Parkour Team">
       
       
-        <link rel="canonical" href="https://docs.genji.pk/web/">
+        <link rel="canonical" href="https://docs.genji.pk/operations/queue-migration/">
       
       
-        <link rel="prev" href="../services/translate/">
+        <link rel="prev" href="../../services/queue/">
       
       
-        <link rel="next" href="repository-layout/">
+        <link rel="next" href="../../services/ocr/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Website Overview - Genji Shimada Documentation</title>
+        <title>Queue migration - Genji Shimada Documentation</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,13 +55,13 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../css/timeago.css">
+      <link rel="stylesheet" href="../../css/timeago.css">
     
-      <link rel="stylesheet" href="../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -86,7 +86,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#website-overview" class="md-skip">
+        <a href="#postgresql-queue-migration-runbook" class="md-skip">
           Skip to content
         </a>
       
@@ -106,7 +106,7 @@
 
 <header class="md-header md-header--shadow md-header--lifted" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="Genji Shimada Documentation" class="md-header__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
+    <a href="../.." title="Genji Shimada Documentation" class="md-header__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -126,7 +126,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Website Overview
+              Queue migration
             
           </span>
         </div>
@@ -238,7 +238,7 @@
   
   
     <li class="md-tabs__item">
-      <a href=".." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -259,7 +259,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../getting-started/" class="md-tabs__link">
+        <a href="../../getting-started/" class="md-tabs__link">
           
   
   
@@ -277,11 +277,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../services/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../services/" class="md-tabs__link">
           
   
   
@@ -299,13 +301,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../web/" class="md-tabs__link">
           
   
   
@@ -327,7 +327,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../bot/" class="md-tabs__link">
+        <a href="../../bot/" class="md-tabs__link">
           
   
   
@@ -349,7 +349,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../api/" class="md-tabs__link">
+        <a href="../../api/" class="md-tabs__link">
           
   
   
@@ -371,7 +371,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../sdk/" class="md-tabs__link">
+        <a href="../../sdk/" class="md-tabs__link">
           
   
   
@@ -393,7 +393,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../operations/" class="md-tabs__link">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -415,7 +415,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../contributing/" class="md-tabs__link">
+        <a href="../../contributing/" class="md-tabs__link">
           
   
   
@@ -459,7 +459,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="Genji Shimada Documentation" class="md-nav__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
+    <a href="../.." title="Genji Shimada Documentation" class="md-nav__button md-logo" aria-label="Genji Shimada Documentation" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -489,7 +489,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -545,7 +545,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../getting-started/" class="md-nav__link ">
+            <a href="../../getting-started/" class="md-nav__link ">
               
   
   
@@ -589,7 +589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/installation/" class="md-nav__link">
+      <a href="../../getting-started/installation/" class="md-nav__link">
         
   
   
@@ -617,7 +617,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../getting-started/quickstart/" class="md-nav__link">
+      <a href="../../getting-started/quickstart/" class="md-nav__link">
         
   
   
@@ -649,292 +649,6 @@
       
   
   
-  
-  
-    
-    
-      
-        
-          
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
-        
-          
-          <div class="md-nav__link md-nav__container">
-            <a href="../services/" class="md-nav__link ">
-              
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Services
-  
-
-    
-  </span>
-  
-  
-
-            </a>
-            
-              
-              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
-                <span class="md-nav__icon md-icon"></span>
-              </label>
-            
-          </div>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Services
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../services/bot/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Bot
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../services/api/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    API
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../services/database/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Database
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../services/queue/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Background queue
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../operations/queue-migration/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Queue migration
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../services/ocr/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    OCR
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../services/translate/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Translate
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
     
   
   
@@ -944,8 +658,6 @@
       
         
           
-        
-      
         
       
         
@@ -978,11 +690,434 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="./" class="md-nav__link md-nav__link--active">
+            <a href="../../services/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Services
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Services
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../services/bot/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bot
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../services/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../services/database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Database
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../services/queue/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Background queue
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue migration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prepare" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prepare
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-existing-database-privileges" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check existing database privileges
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#staging-login-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Staging login setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quiesce-and-inventory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quiesce and inventory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reviewable-import-manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reviewable import manifest
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#start-and-retire" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Start and retire
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ongoing-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ongoing recovery
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rollback-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rollback boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../services/ocr/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OCR
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../services/translate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Translate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../web/" class="md-nav__link ">
               
   
   
@@ -1000,13 +1135,13 @@
             </a>
             
               
-              <label class="md-nav__link md-nav__link--active" for="__nav_4" id="__nav_4_label" tabindex="">
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1026,7 +1161,7 @@
   
   
     <li class="md-nav__item">
-      <a href="repository-layout/" class="md-nav__link">
+      <a href="../../web/repository-layout/" class="md-nav__link">
         
   
   
@@ -1054,7 +1189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="runtime-container/" class="md-nav__link">
+      <a href="../../web/runtime-container/" class="md-nav__link">
         
   
   
@@ -1082,7 +1217,7 @@
   
   
     <li class="md-nav__item">
-      <a href="deployment/" class="md-nav__link">
+      <a href="../../web/deployment/" class="md-nav__link">
         
   
   
@@ -1110,7 +1245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="frontend/" class="md-nav__link">
+      <a href="../../web/frontend/" class="md-nav__link">
         
   
   
@@ -1138,7 +1273,7 @@
   
   
     <li class="md-nav__item">
-      <a href="backend/" class="md-nav__link">
+      <a href="../../web/backend/" class="md-nav__link">
         
   
   
@@ -1166,7 +1301,7 @@
   
   
     <li class="md-nav__item">
-      <a href="integrations/" class="md-nav__link">
+      <a href="../../web/integrations/" class="md-nav__link">
         
   
   
@@ -1194,7 +1329,7 @@
   
   
     <li class="md-nav__item">
-      <a href="security-and-sessions/" class="md-nav__link">
+      <a href="../../web/security-and-sessions/" class="md-nav__link">
         
   
   
@@ -1222,7 +1357,7 @@
   
   
     <li class="md-nav__item">
-      <a href="localization/" class="md-nav__link">
+      <a href="../../web/localization/" class="md-nav__link">
         
   
   
@@ -1290,7 +1425,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../bot/" class="md-nav__link ">
+            <a href="../../bot/" class="md-nav__link ">
               
   
   
@@ -1396,7 +1531,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../bot/architecture/core-bot/" class="md-nav__link">
+      <a href="../../bot/architecture/core-bot/" class="md-nav__link">
         
   
   
@@ -1424,7 +1559,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../bot/architecture/services/" class="md-nav__link">
+      <a href="../../bot/architecture/services/" class="md-nav__link">
         
   
   
@@ -1452,7 +1587,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../bot/architecture/messaging/" class="md-nav__link">
+      <a href="../../bot/architecture/messaging/" class="md-nav__link">
         
   
   
@@ -1488,7 +1623,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../bot/ux/newsfeed-and-embeds/" class="md-nav__link">
+      <a href="../../bot/ux/newsfeed-and-embeds/" class="md-nav__link">
         
   
   
@@ -1516,7 +1651,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../bot/ux/map-search-sqlspec/" class="md-nav__link">
+      <a href="../../bot/ux/map-search-sqlspec/" class="md-nav__link">
         
   
   
@@ -1602,7 +1737,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../bot/operations/configuration/" class="md-nav__link">
+      <a href="../../bot/operations/configuration/" class="md-nav__link">
         
   
   
@@ -1682,7 +1817,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../api/" class="md-nav__link ">
+            <a href="../../api/" class="md-nav__link ">
               
   
   
@@ -1726,7 +1861,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/architecture/" class="md-nav__link">
+      <a href="../../api/architecture/" class="md-nav__link">
         
   
   
@@ -1754,7 +1889,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/local-development/" class="md-nav__link">
+      <a href="../../api/local-development/" class="md-nav__link">
         
   
   
@@ -1782,7 +1917,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/deployment/" class="md-nav__link">
+      <a href="../../api/deployment/" class="md-nav__link">
         
   
   
@@ -1810,7 +1945,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/openapi/" class="md-nav__link">
+      <a href="../../api/openapi/" class="md-nav__link">
         
   
   
@@ -1838,7 +1973,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/authentication/" class="md-nav__link">
+      <a href="../../api/authentication/" class="md-nav__link">
         
   
   
@@ -1930,7 +2065,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../sdk/" class="md-nav__link ">
+            <a href="../../sdk/" class="md-nav__link ">
               
   
   
@@ -2027,7 +2162,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../sdk/reference/" class="md-nav__link ">
+            <a href="../../sdk/reference/" class="md-nav__link ">
               
   
   
@@ -2071,7 +2206,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/auth/" class="md-nav__link">
+      <a href="../../sdk/reference/auth/" class="md-nav__link">
         
   
   
@@ -2099,7 +2234,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/change-requests/" class="md-nav__link">
+      <a href="../../sdk/reference/change-requests/" class="md-nav__link">
         
   
   
@@ -2127,7 +2262,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/completions/" class="md-nav__link">
+      <a href="../../sdk/reference/completions/" class="md-nav__link">
         
   
   
@@ -2155,7 +2290,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/difficulties/" class="md-nav__link">
+      <a href="../../sdk/reference/difficulties/" class="md-nav__link">
         
   
   
@@ -2183,7 +2318,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/internal/" class="md-nav__link">
+      <a href="../../sdk/reference/internal/" class="md-nav__link">
         
   
   
@@ -2211,7 +2346,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/logs/" class="md-nav__link">
+      <a href="../../sdk/reference/logs/" class="md-nav__link">
         
   
   
@@ -2239,7 +2374,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/lootbox/" class="md-nav__link">
+      <a href="../../sdk/reference/lootbox/" class="md-nav__link">
         
   
   
@@ -2267,7 +2402,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/maps/" class="md-nav__link">
+      <a href="../../sdk/reference/maps/" class="md-nav__link">
         
   
   
@@ -2295,7 +2430,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/newsfeed/" class="md-nav__link">
+      <a href="../../sdk/reference/newsfeed/" class="md-nav__link">
         
   
   
@@ -2323,7 +2458,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/notifications/" class="md-nav__link">
+      <a href="../../sdk/reference/notifications/" class="md-nav__link">
         
   
   
@@ -2351,7 +2486,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/rank-card/" class="md-nav__link">
+      <a href="../../sdk/reference/rank-card/" class="md-nav__link">
         
   
   
@@ -2379,7 +2514,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/tags/" class="md-nav__link">
+      <a href="../../sdk/reference/tags/" class="md-nav__link">
         
   
   
@@ -2407,7 +2542,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/users/" class="md-nav__link">
+      <a href="../../sdk/reference/users/" class="md-nav__link">
         
   
   
@@ -2435,7 +2570,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/reference/xp/" class="md-nav__link">
+      <a href="../../sdk/reference/xp/" class="md-nav__link">
         
   
   
@@ -2471,7 +2606,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sdk/usage/" class="md-nav__link">
+      <a href="../../sdk/usage/" class="md-nav__link">
         
   
   
@@ -2545,7 +2680,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../operations/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -2589,7 +2724,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/infrastructure/" class="md-nav__link">
+      <a href="../infrastructure/" class="md-nav__link">
         
   
   
@@ -2617,7 +2752,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/docker-compose/" class="md-nav__link">
+      <a href="../docker-compose/" class="md-nav__link">
         
   
   
@@ -2645,7 +2780,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/backups/" class="md-nav__link">
+      <a href="../backups/" class="md-nav__link">
         
   
   
@@ -2673,7 +2808,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/reverse-proxy/" class="md-nav__link">
+      <a href="../reverse-proxy/" class="md-nav__link">
         
   
   
@@ -2701,7 +2836,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/identity-and-auth/" class="md-nav__link">
+      <a href="../identity-and-auth/" class="md-nav__link">
         
   
   
@@ -2729,7 +2864,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/cloudflare/" class="md-nav__link">
+      <a href="../cloudflare/" class="md-nav__link">
         
   
   
@@ -2757,7 +2892,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../operations/monitoring/" class="md-nav__link">
+      <a href="../monitoring/" class="md-nav__link">
         
   
   
@@ -2821,7 +2956,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../contributing/" class="md-nav__link ">
+            <a href="../../contributing/" class="md-nav__link ">
               
   
   
@@ -2865,7 +3000,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/workflow/" class="md-nav__link">
+      <a href="../../contributing/workflow/" class="md-nav__link">
         
   
   
@@ -2893,7 +3028,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/documentation/" class="md-nav__link">
+      <a href="../../contributing/documentation/" class="md-nav__link">
         
   
   
@@ -2946,7 +3081,7 @@
   
   
     <li class="md-path__item">
-      <a href=".." class="md-path__link">
+      <a href="../.." class="md-path__link">
         
   <span class="md-ellipsis">
     Home
@@ -2964,10 +3099,10 @@
     
     
       <li class="md-path__item">
-        <a href="./" class="md-path__link">
+        <a href="../../services/" class="md-path__link">
           
   <span class="md-ellipsis">
-    Web
+    Services
   </span>
 
         </a>
@@ -2989,26 +3124,118 @@
   
 
 
-<h1 id="website-overview">Website Overview<a class="headerlink" href="#website-overview" title="Anchor link to this section">&para;</a></h1>
-<p>The Genji website code lives in <a href="https://github.com/bkan0n/genji.pk"><code>bkan0n/genji.pk</code></a> and serves the public site at <code>genji.pk</code> (with <code>dev.genji.pk</code> for development). This section documents how the Laravel app is structured, built, and deployed, plus how it connects to the rest of the Genji stack.</p>
-<h2 id="key-facts">Key Facts<a class="headerlink" href="#key-facts" title="Anchor link to this section">&para;</a></h2>
-<ul>
-<li>Laravel app served by Nginx Unit (<code>serversideup/php:8.3-unit</code>).</li>
-<li>Uses the same database as the bot and API, and relies on the Genji API for auth and session data.</li>
-<li>Frontend built with Vite and Tailwind, with per-page JS bundles.</li>
-<li>Integrates Discord OAuth, OCR, Translation API, Tenor GIFs, Sentry, and GitHub releases.</li>
-</ul>
-<h2 id="pages-in-this-section">Pages In This Section<a class="headerlink" href="#pages-in-this-section" title="Anchor link to this section">&para;</a></h2>
-<ul>
-<li><a href="repository-layout/">Repository Layout</a></li>
-<li><a href="runtime-container/">Runtime Container</a></li>
-<li><a href="deployment/">Deployment</a></li>
-<li><a href="frontend/">Frontend Build</a></li>
-<li><a href="backend/">Backend Application</a></li>
-<li><a href="integrations/">Integrations</a></li>
-<li><a href="security-and-sessions/">Security And Sessions</a></li>
-<li><a href="localization/">Localization And Translations</a></li>
-</ul>
+<h1 id="postgresql-queue-migration-runbook">PostgreSQL queue migration runbook<a class="headerlink" href="#postgresql-queue-migration-runbook" title="Anchor link to this section">&para;</a></h1>
+<p>This runbook prepares the replacement of RabbitMQ with the PostgreSQL queue. Repository changes do not apply database migrations, change remote credentials, send messages, or delete broker data. Keep the source export and old volume until every outstanding message has an audited disposition.</p>
+<p>The review stack is one coordinated deployment. Production deploys automatically on a push to <code>main</code>; merge the upper review layers into their parent branches first, then merge the completed foundation branch into <code>main</code>. Do not deploy an intermediate API/bot/infrastructure combination.</p>
+<h2 id="prepare">Prepare<a class="headerlink" href="#prepare" title="Anchor link to this section">&para;</a></h2>
+<ol>
+<li>Run <code>just test-queue</code> and the affected feature tests (for example <code>just test-api tests/completions</code>), lint, and type checks against the candidate revision. The full existing API suite is <code>just test-api</code>; the dedicated queue runner supplies its own fixture boundary and runs faults serially. Verify local/dev/prod Compose configuration with placeholder credentials. Never exercise fault tests against deployed services.</li>
+<li>Take the normal database backup. Preserve the RabbitMQ volume, configuration, queue inventory, and previous deploy revision. The broker definitions export contains topology, <strong>not message payloads</strong>.</li>
+<li>Apply the additive queue migration as the database migration owner. The bot role is created without a password. Provision a distinct password and set the environment's <code>QUEUE_DATABASE_PASSWORD</code> secret. The bot defaults to the API's database location; <code>QUEUE_DATABASE_URL</code> remains an optional full connection override. The bot role must have no domain-table grants; do not use the API login.</li>
+<li>Set <code>QUEUE_OPERATOR_IDS</code> on both API and bot, initially <code>141372217677053952</code>. Provision <code>jobs:manage</code> on the bot API key for internal job execution and recovery endpoints. The existing operator channel IDs remain unchanged.</li>
+<li>Keep the old application/broker stack operational until the actual backlog inventory is available. Do not use <code>down -v</code>, volume pruning, or <code>--remove-orphans</code> as a migration shortcut.</li>
+</ol>
+<h2 id="check-existing-database-privileges">Check existing database privileges<a class="headerlink" href="#check-existing-database-privileges" title="Anchor link to this section">&para;</a></h2>
+<p>Before supplying the worker credential, inspect the target database's actual permissions as the migration owner. Old or manually granted <code>PUBLIC</code> privileges can apply to a new role even with <code>NOINHERIT</code>; the fresh-schema acceptance test cannot inspect production ACLs.</p>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">SELECT</span><span class="w"> </span><span class="n">rolsuper</span><span class="p">,</span><span class="w"> </span><span class="n">rolcreatedb</span><span class="p">,</span><span class="w"> </span><span class="n">rolcreaterole</span><span class="p">,</span><span class="w"> </span><span class="n">rolinherit</span><span class="p">,</span><span class="w"> </span><span class="n">rolreplication</span><span class="p">,</span><span class="w"> </span><span class="n">rolbypassrls</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="k">FROM</span><span class="w"> </span><span class="n">pg_roles</span><span class="w"> </span><span class="k">WHERE</span><span class="w"> </span><span class="n">rolname</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;genjishimada_queue_worker&#39;</span><span class="p">;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="k">SELECT</span><span class="w"> </span><span class="n">has_schema_privilege</span><span class="p">(</span><span class="s1">&#39;genjishimada_queue_worker&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;public&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;CREATE&#39;</span><span class="p">);</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">SELECT</span><span class="w"> </span><span class="n">parent</span><span class="p">.</span><span class="n">rolname</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">FROM</span><span class="w"> </span><span class="n">pg_auth_members</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="k">JOIN</span><span class="w"> </span><span class="n">pg_roles</span><span class="w"> </span><span class="n">member</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">member</span><span class="p">.</span><span class="n">oid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">member</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="k">JOIN</span><span class="w"> </span><span class="n">pg_roles</span><span class="w"> </span><span class="n">parent</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">parent</span><span class="p">.</span><span class="n">oid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">m</span><span class="p">.</span><span class="n">roleid</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">member</span><span class="p">.</span><span class="n">rolname</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;genjishimada_queue_worker&#39;</span><span class="p">;</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">SELECT</span><span class="w"> </span><span class="n">n</span><span class="p">.</span><span class="n">nspname</span><span class="p">,</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">relname</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="k">FROM</span><span class="w"> </span><span class="n">pg_class</span><span class="w"> </span><span class="k">c</span><span class="w"> </span><span class="k">JOIN</span><span class="w"> </span><span class="n">pg_namespace</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">n</span><span class="p">.</span><span class="n">oid</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">relnamespace</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">n</span><span class="p">.</span><span class="n">nspname</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="p">(</span><span class="s1">&#39;pg_catalog&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;information_schema&#39;</span><span class="p">)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">n</span><span class="p">.</span><span class="n">nspname</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">LIKE</span><span class="w"> </span><span class="s1">&#39;pg_%&#39;</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">relkind</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="p">(</span><span class="s1">&#39;r&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;p&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;v&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;m&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;f&#39;</span><span class="p">)</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="p">(</span><span class="n">n</span><span class="p">.</span><span class="n">nspname</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;public&#39;</span><span class="w"> </span><span class="k">AND</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">relname</span><span class="w"> </span><span class="k">IN</span><span class="w"> </span><span class="p">(</span><span class="s1">&#39;pgqueuer&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;pgqueuer_log&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;pgqueuer_statistics&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;pgqueuer_schedules&#39;</span><span class="p">))</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="n">has_schema_privilege</span><span class="p">(</span><span class="s1">&#39;genjishimada_queue_worker&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">.</span><span class="n">oid</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;USAGE&#39;</span><span class="p">)</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">  </span><span class="k">AND</span><span class="w"> </span><span class="p">(</span><span class="n">has_table_privilege</span><span class="p">(</span><span class="s1">&#39;genjishimada_queue_worker&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">oid</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER&#39;</span><span class="p">)</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">       </span><span class="k">OR</span><span class="w"> </span><span class="n">has_any_column_privilege</span><span class="p">(</span><span class="s1">&#39;genjishimada_queue_worker&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">c</span><span class="p">.</span><span class="n">oid</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;SELECT,INSERT,UPDATE,REFERENCES&#39;</span><span class="p">));</span>
+</span></code></pre></div>
+<p>The role flags and schema-create check must all be false; the membership and table queries must return no rows. The table check includes column grants and requires schema access: extensions such as <code>pg_cron</code> can grant <code>PUBLIC</code> table reads while keeping their schema inaccessible. The migration refuses unsafe existing grants instead of silently changing unrelated privileges. Resolve unexpected grants before starting the worker. Check whether a grant is inherited through <code>PUBLIC</code> before changing it, since that change can affect other logins. Do not give the bot domain access as a workaround for a missing queue permission.</p>
+<h2 id="staging-login-setup">Staging login setup<a class="headerlink" href="#staging-login-setup" title="Anchor link to this section">&para;</a></h2>
+<p>The API and bot use the same database, but authenticate as different roles. The bot defaults to the database's internal Docker hostname and port 5432; it does not use the host's published port 65432. Both services already join <code>genji-network</code> in Compose.</p>
+<p>On the staging host, use a checkout of the tested stack and the existing <code>genjishimada-db-dev</code> container. After the backup and earlier migrations are complete, apply <code>0034</code> once if it has not already been applied:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-i<span class="w"> </span>genjishimada-db-dev<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;exec psql -X -v ON_ERROR_STOP=1 --single-transaction -U &quot;$POSTGRES_USER&quot; -d &quot;$POSTGRES_DB&quot;&#39;</span><span class="w"> </span>&lt;<span class="w"> </span>apps/api/migrations/0034_postgres_queue.sql
+</span></code></pre></div>
+<p>This creates <code>genjishimada_queue_worker</code> and grants only the queue operations it needs. It does not set a password. Open an administrator session:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>genjishimada-db-dev<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;exec psql -X -U &quot;$POSTGRES_USER&quot; -d &quot;$POSTGRES_DB&quot;&#39;</span>
+</span></code></pre></div>
+<p>In that session, grant database connection access and set a new password for this login:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>SELECT format(&#39;GRANT CONNECT ON DATABASE %I TO genjishimada_queue_worker&#39;, current_database()) \gexec
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>\password genjishimada_queue_worker
+</span></code></pre></div>
+<p>The interactive <a href="https://www.postgresql.org/docs/17/app-psql.html"><code>\password</code> command</a> keeps the cleartext password out of command history and SQL logs. Run the privilege checks above in this administrator session; do not grant the queue role membership in the API owner role or access to all tables.</p>
+<p>In GitHub <strong>Settings → Environments → development</strong>, save that password as the <code>QUEUE_DATABASE_PASSWORD</code> secret. Leave <code>QUEUE_DATABASE_URL</code> absent or empty to use the shared database location. If an older URL secret is still set, it overrides the new password and location. The workflow forwards <code>POSTGRES_DB</code> and uses <code>genjishimada-db-dev</code> by default; the optional <code>POSTGRES_HOST</code> environment variable changes the host for both API and bot.</p>
+<p>Before starting the bot, verify the restricted login over TCP using the password prompt:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>genjishimada-db-dev<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;exec psql -X -h 127.0.0.1 -W -U genjishimada_queue_worker -d &quot;$POSTGRES_DB&quot;&#39;</span>
+</span></code></pre></div>
+<p>Run these separately in that session:</p>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">SELECT</span><span class="w"> </span><span class="k">current_user</span><span class="p">,</span><span class="w"> </span><span class="n">current_database</span><span class="p">();</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="k">public</span><span class="p">.</span><span class="n">pgqueuer</span><span class="w"> </span><span class="k">LIMIT</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">core</span><span class="p">.</span><span class="n">users</span><span class="w"> </span><span class="k">LIMIT</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="k">SELECT</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="k">public</span><span class="p">.</span><span class="n">jobs</span><span class="w"> </span><span class="k">LIMIT</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</span></code></pre></div>
+<p>The current user must be <code>genjishimada_queue_worker</code>, and the queue query must succeed. The final two queries must fail with permission denied. This smoke check complements the full privilege audit above; it does not replace it. The bot's existing API key also needs <code>jobs:manage</code> so its queue handlers can prepare work and request domain mutations through the API.</p>
+<p>Once backlog reconciliation is complete, deploy the full stack to development and confirm the bot's queue supervisor connects. For production, repeat the setup against <code>genjishimada-db</code> and the <strong>production</strong> GitHub environment with its own password. Local development can continue using <code>just queue-credentials-local</code>, which writes a complete URL override to <code>.env.local</code>.</p>
+<h2 id="quiesce-and-inventory">Quiesce and inventory<a class="headerlink" href="#quiesce-and-inventory" title="Anchor link to this section">&para;</a></h2>
+<p>Pause mutation traffic and every producer, including the tournament poller and scheduled producers. Drain ordinary queues with the old consumer while dependencies are healthy, then stop that consumer. Let unacknowledged deliveries return to a stable queue and record counts before exporting.</p>
+<p>Inventory <strong>runtime</strong> queues and DLQs, not just the former checked-in definitions. Include <code>api.tournament.rollover</code>, <code>api.tournament.results</code>, and the retired <code>api.tournament.cycle_started</code>/<code>api.tournament.cycle_completed</code> names. Export complete message bodies and properties using broker tools that retain messages until the export is verified. Do not acknowledge/delete messages merely to inspect them. Preserve the raw export read-only with a checksum and queue counts.</p>
+<p>Reconcile each message against current domain state, public job UUID, stored external bindings, and the old <code>processed_messages</code> claim. A pre-execution claim is ambiguous and never proves completion. Inspect already-performed effects before approving replay. Unknown or obsolete tournament payloads require an explicit decision; the importer does not guess a conversion.</p>
+<h2 id="reviewable-import-manifest">Reviewable import manifest<a class="headerlink" href="#reviewable-import-manifest" title="Anchor link to this section">&para;</a></h2>
+<p>Create a JSON Lines manifest from the retained export. Each nonempty line represents one source message. Give it a stable <code>source_id</code> (export identity plus queue/message identity), the original <code>queue</code>, decoded JSON <code>payload</code>, optional original public <code>job_id</code>, and a reviewed disposition. Preserve the original raw export separately; omit credentials/authorization headers from the review manifest.</p>
+<p>Supported dispositions:</p>
+<table>
+<thead>
+<tr>
+<th>Input disposition</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enqueue</code> with nonempty <code>evidence</code> and <code>effects_started: false</code></td>
+<td>Validate a supported payload and enqueue work confirmed never to have started. Prior claims or completed effects keep it in reconciliation.</td>
+</tr>
+<tr>
+<td><code>completed</code> with <code>evidence</code></td>
+<td>Record the evidence of completed work without enqueueing.</td>
+</tr>
+<tr>
+<td><code>discarded</code> with <code>evidence</code></td>
+<td>Record the explicit decision and reason without enqueueing.</td>
+</tr>
+<tr>
+<td>Missing, unsupported, malformed, or ambiguous</td>
+<td>Preserve as <code>needs_reconciliation</code>; do not execute.</td>
+</tr>
+</tbody>
+</table>
+<p>An example using illustrative IDs:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span><span class="nt">&quot;source_id&quot;</span><span class="p">:</span><span class="s2">&quot;export-2026-10-02:api.newsfeed.create:42&quot;</span><span class="p">,</span><span class="nt">&quot;queue&quot;</span><span class="p">:</span><span class="s2">&quot;api.newsfeed.create&quot;</span><span class="p">,</span><span class="nt">&quot;payload&quot;</span><span class="p">:{</span><span class="nt">&quot;newsfeed_id&quot;</span><span class="p">:</span><span class="mi">42</span><span class="p">},</span><span class="nt">&quot;event_key&quot;</span><span class="p">:</span><span class="s2">&quot;legacy-newsfeed:42&quot;</span><span class="p">,</span><span class="nt">&quot;disposition&quot;</span><span class="p">:</span><span class="s2">&quot;enqueue&quot;</span><span class="p">,</span><span class="nt">&quot;effects_started&quot;</span><span class="p">:</span><span class="kc">false</span><span class="p">,</span><span class="nt">&quot;evidence&quot;</span><span class="p">:</span><span class="s2">&quot;Reviewed source, domain row, and destinations; no effect was attempted.&quot;</span><span class="p">}</span>
+</span></code></pre></div>
+<p>The exact payload must match its shared SDK event model; the example is not production data. Supply the original <code>job_id</code> when it can be identified. Use the same <code>event_key</code> for duplicate copies of the same business event; different legitimate transitions need different keys.</p>
+<p>Only explicitly unstarted work can be imported for execution. Missing or non-boolean <code>effects_started</code>, a truthy <code>legacy_claim</code>, or nonempty <code>completed_effects</code> keeps a record in <code>needs_reconciliation</code>, even if <code>effects_reconciled: true</code> is supplied. This importer does not reconstruct effect receipts or external bindings. Partially executed work must remain preserved until its completed effects can be retained through an explicit, event-specific recovery; restarting its full handler could send duplicate messages or award XP twice.</p>
+<p>Copies sharing a public job UUID or event name/key are reviewed together before any enqueue. If one copy is unresolved, completed, or discarded, conflicting enqueue requests for that logical work also remain in reconciliation, regardless of source order. Apply includes previously recorded dispositions and stored job history in this check. Prepare the complete manifest before resuming workers; an unstarted assertion on a duplicate cannot override known prior execution.</p>
+<p>Run the default dry-run without any database connection:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/import_queue_backlog.py<span class="w"> </span>/path/to/reviewed-manifest.jsonl
+</span></code></pre></div>
+<p>Review the disposition counts, then use the migration-owner connection through a secret environment variable for the explicit apply:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>uv<span class="w"> </span>run<span class="w"> </span>--project<span class="w"> </span>apps/api<span class="w"> </span>python<span class="w"> </span>scripts/import_queue_backlog.py<span class="w"> </span>/path/to/reviewed-manifest.jsonl<span class="w"> </span>--apply
+</span></code></pre></div>
+<p><code>--apply</code> reads <code>QUEUE_IMPORT_DATABASE_URL</code> by default; <code>--dsn-env</code> selects another environment variable. Never put a live password in a command argument, checked-in file, or report. The importer writes <code>public.job_imports</code> and accepted queue work in one transaction. Apply also locks any original public job: execution history (including attempts, start/finish timestamps, or a processing/failed state) overrides an unstarted assertion and holds the record without altering that job. Dry-run only checks the manifest, so apply may report additional reconciliation items. Rerunning the same manifest does not create another job. Reusing a <code>source_id</code> with changed content fails the transaction, so a later reconciliation must be an explicit audited operation rather than silently editing an already-imported disposition. Malformed lines are retained with a generated export/line identity.</p>
+<p>Confirm every source line has a disposition, count the source messages and imported records, inspect all <code>needs_reconciliation</code> items, and check that no job lost its completed-effect evidence. Keep unresolved items preserved; do not treat a successful importer exit as proof they were completed.</p>
+<h2 id="start-and-retire">Start and retire<a class="headerlink" href="#start-and-retire" title="Anchor link to this section">&para;</a></h2>
+<p>Start the migrated API and bot with the prepared credentials, confirm their workers connect, then resume mutation traffic. The existing job UUID/status contracts and community wording remain unchanged. Persistent retries and operator controls use the same logical jobs and completed effects.</p>
+<p>Once the backlog and new workers are reconciled, stop/remove only the old broker container to release its RAM. Retain its named volume and exports. Deleting that volume is a separate, explicit cleanup action after verification.</p>
+<p>Review broker-specific resources outside this repository: Caddy routes for <code>rabbitmq.genji.pk</code> and <code>dev-rabbitmq.genji.pk</code>, their Cloudflare records, Keycloak <code>rabbitmq-prod</code>/<code>rabbitmq-dev</code> clients, broker roles/groups/audience mappers, management OAuth credentials, and RabbitMQ GitHub/environment secrets. Remove only resources confirmed to belong exclusively to the retired broker. Shared Keycloak, proxy, networking, and monitoring remain needed. None of these remote changes is performed by this code change.</p>
+<h2 id="ongoing-recovery">Ongoing recovery<a class="headerlink" href="#ongoing-recovery" title="Anchor link to this section">&para;</a></h2>
+<p>Use the <a href="../../services/queue/#operator-command-line">operator CLI</a> to inspect current state, see queue counts, retry a diagnosed failure, reconcile an uncertain result, or record a discard. These commands require the API and use its authorization/audit service; they do not bypass recovery checks through direct database updates.</p>
+<p>The API retains compact job summaries and effect evidence while pruning old successful-job logs after 30 days. Held or uncertain work remains available for recovery. Database maintenance is automatic and does not remove preserved broker exports or volumes.</p>
+<h2 id="rollback-boundary">Rollback boundary<a class="headerlink" href="#rollback-boundary" title="Anchor link to this section">&para;</a></h2>
+<p>Before the new workers execute work, the old revision and preserved broker data remain available for a coordinated rollback. After either system has executed new work, stop producers/workers and reconcile effect receipts, queued rows, and the export before choosing which work to resume. Do not run old and new consumers against duplicate logical work or restore an old database over newly accepted submissions.</p>
 
 
 
@@ -3031,7 +3258,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 15:23:15 UTC"><span class="timeago" datetime="2026-01-19T15:23:15+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 15:23:15 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     
@@ -3041,7 +3268,7 @@
     <span class="md-icon" title="Created">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 19, 2026 04:49:43 UTC"><span class="timeago" datetime="2026-01-19T04:49:43+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 19, 2026 04:49:43 UTC">2026-01-19</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 3, 2026 02:43:39 UTC"><span class="timeago" datetime="2026-10-03T02:43:39+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 3, 2026 02:43:39 UTC">2026-10-03</span>
   </span>
 
     
@@ -3078,7 +3305,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../services/translate/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Translate">
+          <a href="../../services/queue/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Background queue">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3088,20 +3315,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                Translate
+                Background queue
               </div>
             </div>
           </a>
         
         
           
-          <a href="repository-layout/" class="md-footer__link md-footer__link--next" aria-label="Next: Repository Layout">
+          <a href="../../services/ocr/" class="md-footer__link md-footer__link--next" aria-label="Next: OCR">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Repository Layout
+                OCR
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -3161,14 +3388,14 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "toc.integrate", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.indexes", "navigation.top", "navigation.footer", "toc.follow", "toc.integrate", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../js/timeago.min.js"></script>
+        <script src="../../js/timeago.min.js"></script>
       
-        <script src="../js/timeago_mkdocs_material.js"></script>
+        <script src="../../js/timeago_mkdocs_material.js"></script>
       
     
   </body>
