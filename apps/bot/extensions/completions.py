@@ -46,10 +46,11 @@ from genjishimada_sdk.completions import (
     VerificationMessageDeleteEvent,
 )
 from genjishimada_sdk.difficulties import DIFFICULTY_TO_RANK_MAP, DifficultyTop
-from genjishimada_sdk.maps import MapMasteryCreateRequest, OverwatchCode
+from genjishimada_sdk.maps import MapMasteryCreateRequest, MapMasteryResponse, OverwatchCode
 from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedRecord, NewsfeedRole
 from genjishimada_sdk.notifications import NotificationEventType
 from genjishimada_sdk.users import RankDetailResponse
+from genjishimada_sdk.xp import XP_AMOUNTS, XpGrantRequest
 
 from extensions._queue_registry import queue_consumer
 from utilities import transformers
@@ -71,10 +72,11 @@ from utilities.emojis import REJECTED, generate_all_star_rating_strings
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.extra import poll_job_until_complete
 from utilities.formatter import FilteredFormatter
+from utilities.job_effects import forward_once, send_once
 from utilities.paginator import ApiPaginatorView, PaginatorView
 
 if TYPE_CHECKING:
-    from aio_pika.abc import AbstractIncomingMessage
+    from genjishimada_sdk.queue import JobContext
 
     from core.genji import Genji
     from utilities._types import GenjiItx
@@ -541,9 +543,9 @@ class CompletionHandler(BaseHandler):
         self.upvote_channel = upvote_channel
 
     @queue_consumer("api.completion.autoverification.failed", struct_type=FailedAutoverifyEvent)
-    async def _process_autoverification_failed(self, event: FailedAutoverifyEvent, _: AbstractIncomingMessage) -> None:
-        log.debug("[x] [RabbitMQ] Processing failed autoverify message")
-        channel_id = self.bot.config.channels.updates.dlq_alerts
+    async def _process_autoverification_failed(self, event: FailedAutoverifyEvent, _: JobContext) -> None:
+        log.debug("[x] [Queue] Processing failed autoverify message")
+        channel_id = self.bot.config.channels.updates.job_alerts
         guild_id = self.bot.config.guild
         guild = self.bot.get_guild(guild_id)
         assert guild
@@ -562,11 +564,11 @@ class CompletionHandler(BaseHandler):
             "```json\n"
             f"{formatted_json}\n"
         )
-        await channel.send(content[:1996] + "```")
+        await send_once(self.bot, channel, "autoverification-diagnostic", content[:1996] + "```")
 
     @queue_consumer("api.completion.upvote", struct_type=UpvoteUpdateEvent)
-    async def _process_update_upvote_message(self, event: UpvoteUpdateEvent, _: AbstractIncomingMessage) -> None:
-        log.debug(f"[x] [RabbitMQ] Processing upvote event: {event.message_id}")
+    async def _process_update_upvote_message(self, event: UpvoteUpdateEvent, _: JobContext) -> None:
+        log.debug(f"[x] [Queue] Processing upvote event: {event.message_id}")
         partial_message = self.submission_channel.get_partial_message(event.message_id)
         message = await partial_message.fetch()
         view = ui.LayoutView.from_message(message)
@@ -578,25 +580,24 @@ class CompletionHandler(BaseHandler):
                 c.label = new_count
 
         await message.edit(view=view)
-        await partial_message.forward(self.upvote_channel)
+        await forward_once(self.bot, partial_message, self.upvote_channel, "upvote-forward")
 
-    @queue_consumer("api.completion.submission", struct_type=CompletionCreatedEvent, idempotent=True)
-    async def _process_create_submission_message(
-        self, event: CompletionCreatedEvent, _: AbstractIncomingMessage
-    ) -> None:
-        log.debug(f"[x] [RabbitMQ] Processing completion submission event: {event.completion_id}")
+    @queue_consumer("api.completion.submission", struct_type=CompletionCreatedEvent)
+    async def _process_create_submission_message(self, event: CompletionCreatedEvent, _: JobContext) -> None:
+        log.debug(f"[x] [Queue] Processing completion submission event: {event.completion_id}")
         data = await self.bot.api.get_completion_submission(event.completion_id)
         view = CompletionVerificationView(data, self.bot)
-        message = await self.verification_channel.send(view=view)
+        message = await send_once(self.bot, self.verification_channel, "completion-review", view=view)
         await self.bot.api.edit_completion(event.completion_id, data=CompletionPatchRequest(verification_id=message.id))
         self.verification_views[message.id] = view
 
-    @queue_consumer("api.completion.verification", struct_type=VerificationChangedEvent, idempotent=True)
-    async def _process_verification_status_change(
-        self, event: VerificationChangedEvent, _: AbstractIncomingMessage
-    ) -> None:
-        log.debug(f"[x] [RabbitMQ] Processing message: {event.completion_id}")
-        _data = await self.bot.api.get_completion_submission(event.completion_id)
+    @queue_consumer("api.completion.verification", struct_type=VerificationChangedEvent)
+    async def _process_verification_status_change(self, event: VerificationChangedEvent, _: JobContext) -> None:
+        log.debug(f"[x] [Queue] Processing message: {event.completion_id}")
+        _data = await self.bot.api.job_snapshot(
+            "completion-state",
+            await self.bot.api.get_completion_submission(event.completion_id),
+        )
         completion_data = msgspec.convert(_data, CompletionPostVerificationModel, from_attributes=True)
 
         guild = self.bot.get_guild(self.bot.config.guild)
@@ -605,14 +606,13 @@ class CompletionHandler(BaseHandler):
         verifier = await self.bot.api.get_user(event.verified_by)
         verifier_name = verifier.coalesced_name if verifier and verifier.coalesced_name else "Unknown User"
 
-        map_data = await self.bot.api.get_map(code=_data.code)
+        map_data = await self.bot.api.job_snapshot("completion-map", await self.bot.api.get_map(code=_data.code))
         view = CompletionView(completion_data, verifier_name=verifier_name, official_map=map_data.official)
 
         if event.verified:
-            message = await self.submission_channel.send(view=view)
+            message = await send_once(self.bot, self.submission_channel, "completion-published", view=view)
             await self.bot.api.edit_completion(event.completion_id, data=CompletionPatchRequest(message_id=message.id))
 
-            completion_data = await self.bot.api.get_completion_submission(event.completion_id)
             await self.bot.notifications.notify_dm_only(
                 user_id=completion_data.user_id,
                 event_type=NotificationEventType.VERIFICATION_APPROVED,
@@ -636,14 +636,10 @@ class CompletionHandler(BaseHandler):
                 await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "Completion")
             # World Record XP
             if not completion_data.completion and completion_data.hypothetical_rank == 1 and map_data.official:
-                previously_granted = await self.bot.api.check_for_previous_world_record_xp(
-                    completion_data.code, completion_data.user_id
+                await self.bot.api.grant_world_record_reward(
+                    event.completion_id,
+                    XpGrantRequest(XP_AMOUNTS["World Record"], "World Record"),
                 )
-                if not previously_granted:
-                    await self.bot.xp.grant_user_xp_of_type(completion_data.user_id, "World Record")
-                    await self.bot.api.edit_completion(
-                        event.completion_id, data=CompletionPatchRequest(wr_xp_check=True)
-                    )
                 await self._emit_newsfeed_for_record(completion_data)
             # Record XP
             if (
@@ -659,7 +655,6 @@ class CompletionHandler(BaseHandler):
                 await self._process_map_mastery(completion_data.user_id)
 
         else:
-            completion_data = await self.bot.api.get_completion_submission(event.completion_id)
             await self.bot.notifications.notify_dm_only(
                 user_id=completion_data.user_id,
                 event_type=NotificationEventType.VERIFICATION_REJECTED,
@@ -679,22 +674,23 @@ class CompletionHandler(BaseHandler):
             )
 
         if completion_data.verification_id:
-            with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
+            with contextlib.suppress(discord.NotFound):
                 await (self.verification_channel.get_partial_message(completion_data.verification_id)).delete()
         if member:
             await self.auto_skill_role(member)
-        assert completion_data.verification_id
-        stoppable_view = self.verification_views.pop(completion_data.verification_id, None)
+        stoppable_view = (
+            self.verification_views.pop(completion_data.verification_id, None)
+            if completion_data.verification_id
+            else None
+        )
         if stoppable_view:
             stoppable_view.stop()
 
     @queue_consumer("api.completion.verification.delete", struct_type=VerificationMessageDeleteEvent)
-    async def _process_delete_verification_message(
-        self, event: VerificationMessageDeleteEvent, _: AbstractIncomingMessage
-    ) -> None:
+    async def _process_delete_verification_message(self, event: VerificationMessageDeleteEvent, _: JobContext) -> None:
         """Delete a verification queue message when a faster submission replaces it."""
-        log.debug(f"[x] [RabbitMQ] Deleting verification message: {event.verification_id}")
-        with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
+        log.debug(f"[x] [Queue] Deleting verification message: {event.verification_id}")
+        with contextlib.suppress(discord.NotFound):
             await (self.verification_channel.get_partial_message(event.verification_id)).delete()
 
         stoppable_view = self.verification_views.pop(event.verification_id, None)
@@ -731,7 +727,11 @@ class CompletionHandler(BaseHandler):
         Raises:
             ValueError: If the user cannot be found in the API.
         """
-        mastery_data = await self.bot.api.get_map_mastery_data(user_id)
+        mastery_data = await self.bot.api.job_snapshot(
+            f"mastery-plan:{user_id}",
+            await self.bot.api.get_map_mastery_data(user_id),
+            model=list[MapMasteryResponse],
+        )
         user_data = await self.bot.api.get_user(user_id)
         if not user_data:
             raise ValueError("User doesn't exist?")
@@ -812,22 +812,24 @@ class CompletionHandler(BaseHandler):
         roles_to_remove: list[Role],
     ) -> None:
         """Grant skill rank roles to a Discord server Member."""
-        new_roles = member.roles
-        _actual_added_roles: list[Role] = []
-        _actual_removed_roles: list[Role] = []
-        for a in roles_to_grant:
-            if a not in new_roles:
-                new_roles.append(a)
-                _actual_added_roles.append(a)
-        for r in roles_to_remove:
-            if r in new_roles:
-                new_roles.remove(r)
-                _actual_removed_roles.append(r)
-
-        if set(new_roles) == set(member.roles):
+        planned = await self.bot.api.job_snapshot(
+            f"skill-role-plan:{member.id}",
+            {
+                "added": [role.id for role in roles_to_grant if role not in member.roles],
+                "removed": [role.id for role in roles_to_remove if role in member.roles],
+            },
+            model=dict[str, list[int]],
+        )
+        # The receipt freezes announcement details only. Actual membership always
+        # follows the fresh API plan so an old retry cannot restore an old rank.
+        new_roles = set(member.roles) | set(roles_to_grant)
+        new_roles.difference_update(roles_to_remove)
+        if new_roles != set(member.roles):
+            await member.edit(roles=list(new_roles))
+        _actual_added_roles = [role for role_id in planned["added"] if (role := self.guild.get_role(role_id))]
+        _actual_removed_roles = [role for role_id in planned["removed"] if (role := self.guild.get_role(role_id))]
+        if not _actual_added_roles and not _actual_removed_roles:
             return
-
-        await member.edit(roles=new_roles)
         response = (
             "🚨***ALERT!***🚨\nYour roles have been updated! If roles have been removed, "
             "it's because a map that you have completed has changed difficulty.\n"
@@ -1104,7 +1106,9 @@ class CompletionsCog(BaseCog):
 
     async def cog_load(self) -> None:
         """Start the task to restore pending verification views after cog load."""
-        self._pending_verification_view_task = asyncio.create_task(self._add_pending_verification_views())
+        self._pending_verification_view_task = asyncio.create_task(
+            self.bot.api.restore_when_available(self._add_pending_verification_views)
+        )
         self.bot.tree.add_command(
             app_commands.ContextMenu(
                 name="Mark Suspicious",
@@ -1115,13 +1119,20 @@ class CompletionsCog(BaseCog):
         )
         self.bot.add_dynamic_items(CompletionLikeButton)
 
+    async def cog_unload(self) -> None:
+        """Stop pending view restoration before its dependencies close."""
+        self._pending_verification_view_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._pending_verification_view_task
+
     async def _add_pending_verification_views(self) -> None:
         """Restore persistent views for any completions still awaiting verification.
 
         Args:
             bot (Genji): The bot instance with access to the API and Discord.
         """
-        await self.bot.rabbit.wait_until_drained()
+        await self.bot.wait_until_ready()
+        await self.bot.api.wait_until_available()
         pending = await self.bot.api.get_pending_verifications()
         for p in pending:
             data = await self.bot.api.get_completion_submission(p.id)

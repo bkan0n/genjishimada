@@ -4,6 +4,7 @@ import os
 import aiohttp
 import discord
 from discord.ext import commands
+from discord.ui.view import BaseView
 
 import extensions
 import utilities.config
@@ -13,7 +14,7 @@ from extensions.moderator import MapEditHandler
 from extensions.newsfeed import NewsfeedHandler
 from extensions.notifications import NotificationHandler
 from extensions.playtest import PlaytestHandler
-from extensions.rabbit import RabbitHandler
+from extensions.queue import QueueHandlerService
 from extensions.tournaments import TournamentHandler
 from extensions.video_thumbnail import VideoThumbnailHandler
 from extensions.xp import XPHandler
@@ -37,7 +38,7 @@ intents = discord.Intents(
 
 class Genji(commands.Bot):
     _notification_service: NotificationHandler
-    _rabbit_client: RabbitHandler
+    _queue_client: QueueHandlerService
     _playtest_manager: PlaytestHandler
     _newsfeed_client: NewsfeedHandler
     _api_service: APIService
@@ -61,6 +62,7 @@ class Genji(commands.Bot):
             description="Genji Shimada, a Discord bot for the Genji Parkour community.",
         )
         self.session = session
+        self._services_closed = False
         config = "prod" if os.getenv("APP_ENVIRONMENT") == "production" else "dev"
         with open(f"configs/{config}.toml", "rb") as f:
             self.config = utilities.config.decode(f.read())
@@ -69,13 +71,40 @@ class Genji(commands.Bot):
         """Log when the bot is ready."""
         log.info(f"Logged in as {self.user}")
 
+    def add_view(self, view: BaseView, *, message_id: int | None = None) -> None:
+        """Replace a message's restored view when durable send replay resumes it."""
+        if message_id is not None and view.is_persistent() and not view.is_finished():
+            for existing in self.persistent_views:
+                # discord.py stores the message binding on every registered view.
+                if existing is not view and existing._cache_key == message_id:  # noqa: SLF001
+                    existing.stop()
+        super().add_view(view, message_id=message_id)
+
     async def setup_hook(self) -> None:
         """Execute code during the initial setup."""
         for ext in ["jishaku", *extensions.EXTENSIONS]:
             log.info(f"Loading {ext}...")
             await self.load_extension(ext)
-        log.debug("[Genji.setup_hook] Scheduling rabbit.start()")
-        self.loop.call_soon(self.rabbit.start)
+        self.queue.start()
+
+    async def close(self) -> None:
+        """Stop jobs before their API client, then disconnect from Discord."""
+        if self._services_closed:
+            await super().close()
+            return
+        self._services_closed = True
+        try:
+            if hasattr(self, "_queue_client"):
+                await self.queue.close()
+        finally:
+            try:
+                for name in ("JobOperationsCog", "CompletionsCog", "MapEditorCog", "PlaytestCog"):
+                    if self.get_cog(name):
+                        await self.remove_cog(name)
+                if hasattr(self, "_api_service"):
+                    await self.api.close()
+            finally:
+                await super().close()
 
     @property
     def notifications(self) -> NotificationHandler:
@@ -89,15 +118,15 @@ class Genji(commands.Bot):
         self._notification_service = service
 
     @property
-    def rabbit(self) -> RabbitHandler:
-        """Return the notification service."""
-        if self._rabbit_client is None:
+    def queue(self) -> QueueHandlerService:
+        """Return the durable work queue service."""
+        if self._queue_client is None:
             raise AttributeError("Notification service not initialized.")
-        return self._rabbit_client
+        return self._queue_client
 
-    @rabbit.setter
-    def rabbit(self, service: RabbitHandler) -> None:
-        self._rabbit_client = service
+    @queue.setter
+    def queue(self, service: QueueHandlerService) -> None:
+        self._queue_client = service
 
     @property
     def playtest(self) -> PlaytestHandler:

@@ -45,9 +45,10 @@ from genjishimada_sdk.newsfeed import (
 from extensions._queue_registry import queue_consumer
 from utilities.completions import get_completion_icon_url
 from utilities.formatter import FilteredFormatter, FormattableProtocol
+from utilities.job_effects import send_once
 
 if TYPE_CHECKING:
-    from aio_pika.abc import AbstractIncomingMessage
+    from genjishimada_sdk.queue import JobContext
 
     import core
     from extensions.playtest import PlaytestCog
@@ -819,12 +820,12 @@ class NewsfeedHandler:
         target = channel or self.bot.get_channel(self.bot.config.channels.updates.newsfeed)
         if not isinstance(target, (discord.TextChannel, discord.Thread)):
             raise RuntimeError("Resolved channel is not a TextChannel or Thread.")
-        await target.send(view=view, allowed_mentions=discord.AllowedMentions.none())
+        await send_once(self.bot, target, "newsfeed", view=view, allowed_mentions=discord.AllowedMentions.none())
         view.stop()
 
-    @queue_consumer("api.newsfeed.create", struct_type=NewsfeedDispatchEvent, idempotent=True)
-    async def _process_newsfeed_create(self, event: NewsfeedDispatchEvent, _: AbstractIncomingMessage) -> None:
-        log.debug(f"[RabbitMQ] Processing newsfeed id: {event.newsfeed_id}")
+    @queue_consumer("api.newsfeed.create", struct_type=NewsfeedDispatchEvent)
+    async def _process_newsfeed_create(self, event: NewsfeedDispatchEvent, _: JobContext) -> None:
+        log.debug(f"[Queue] Processing newsfeed id: {event.newsfeed_id}")
 
         newsfeed_event = await self.bot.api.get_newsfeed_event(event.newsfeed_id)
         if newsfeed_event is None:

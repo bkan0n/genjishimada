@@ -18,7 +18,6 @@ from genjishimada_sdk.difficulties import (
 )
 from genjishimada_sdk.maps import (
     MapPartialResponse,
-    MapPatchRequest,
     PlaytestApprovedEvent,
     PlaytestApproveRequest,
     PlaytestCreatedEvent,
@@ -29,7 +28,6 @@ from genjishimada_sdk.maps import (
     PlaytestPatchRequest,
     PlaytestResetEvent,
     PlaytestResetRequest,
-    PlaytestStatus,
     PlaytestThreadAssociateRequest,
     PlaytestVote,
     PlaytestVoteCastEvent,
@@ -43,10 +41,11 @@ from utilities import BaseCog, BaseHandler
 from utilities.base import ConfirmationView
 from utilities.errors import APIHTTPError, UserFacingError
 from utilities.formatter import FilteredFormatter
+from utilities.job_effects import create_thread_once, send_once
 from utilities.maps import MapModel
 
 if TYPE_CHECKING:
-    from aio_pika.abc import AbstractIncomingMessage
+    from genjishimada_sdk.queue import JobContext
 
     import core
     from utilities._types import GenjiItx
@@ -115,7 +114,10 @@ class PlaytestHandler(BaseHandler):
 
         tag = self._get_forum_tag(convert_extended_difficulty_to_top_level(partial_data.difficulty))
         open_tag = self._get_forum_tag("Open")
-        thread, message = await self.playtest_channel.create_thread(
+        thread, message = await create_thread_once(
+            self.bot,
+            self.playtest_channel,
+            "playtest-thread",
             name=partial_data.thread_name,
             content="Loading...",
             reason="Playtest test created",
@@ -127,7 +129,6 @@ class PlaytestHandler(BaseHandler):
             thread_id=thread.id,
         )
         await self.bot.api.associate_playtest_meta(metadata)
-        await self.bot.api.edit_map(code=partial_data.code, data=MapPatchRequest(hidden=False))
         playtest_data = await self.bot.api.get_map(playtest_thread_id=thread.id)
         file = await self.bot.api.get_plot_file(code=playtest_data.code)
 
@@ -141,31 +142,13 @@ class PlaytestHandler(BaseHandler):
         cog.playtest_views[thread.id] = view
 
         await message.edit(content=None, view=view, attachments=[file])
-        await thread.send(f"<@{playtest_data.primary_creator_id}>")
+        await send_once(self.bot, thread, "playtest-creator-mention", f"<@{playtest_data.primary_creator_id}>")
 
-    @queue_consumer("api.playtest.create", struct_type=PlaytestCreatedEvent, idempotent=True)
-    async def _process_create_playtest_message(self, event: PlaytestCreatedEvent, _: AbstractIncomingMessage) -> None:
-        log.debug(f"[x] [RabbitMQ] Processing message: {event.code}")
+    @queue_consumer("api.playtest.create", struct_type=PlaytestCreatedEvent)
+    async def _process_create_playtest_message(self, event: PlaytestCreatedEvent, _: JobContext) -> None:
+        log.debug(f"[x] [Queue] Processing message: {event.code}")
         model = await self.bot.api.get_partial_map(event.code)
         await self._add_playtest(model, event.playtest_id)
-
-    async def _set_playtesting_status(self, *, code: str, status: PlaytestStatus) -> None:
-        """Set the map's playtesting status via API.
-
-        Args:
-            code: Map code.
-            status: New playtest status.
-        """
-        await self.bot.api.edit_map(code, MapPatchRequest(playtesting=status))
-
-    async def _update_map_difficulty(self, *, code: str, difficulty: DifficultyAll) -> None:
-        """Update a map's difficulty via API.
-
-        Args:
-            code: Map code.
-            difficulty: Difficulty value to set.
-        """
-        await self.bot.api.edit_map(code, MapPatchRequest(difficulty=difficulty))
 
     async def _alert_creator(
         self,
@@ -179,7 +162,7 @@ class PlaytestHandler(BaseHandler):
 
         Creates a notification via the new system which:
         1. Stores in DB for web notification tray
-        2. Triggers DM delivery via RabbitMQ (if preference enabled)
+        2. Triggers DM delivery via the work queue (if preference enabled)
 
         Args:
             creator_user_id: Discord user ID of the creator.
@@ -189,7 +172,7 @@ class PlaytestHandler(BaseHandler):
 
         Returns:
             True if user has DM notifications enabled, False otherwise.
-            Note: Actual delivery is async via RabbitMQ.
+            Note: Actual delivery is async via the work queue.
         """
         await self.bot.notifications.notify_dm_only(
             user_id=creator_user_id,
@@ -269,7 +252,7 @@ class PlaytestHandler(BaseHandler):
             return
 
         msg = self.verification_channel.get_partial_message(playtest.verification_id)
-        with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
+        with contextlib.suppress(discord.NotFound):
             await msg.delete()
 
     async def _update_plot_image_on_playtest_message(self, *, thread_id: int) -> None:
@@ -290,11 +273,19 @@ class PlaytestHandler(BaseHandler):
     async def _grant_xp_upon_successful_playtest(self, thread_id: int) -> None:
         pt = await self.bot.api.get_playtest(thread_id)
         map_data = await self.bot.api.get_map(code=pt.code)
-        for creator in map_data.creators:
-            await self.bot.xp.grant_user_xp_of_type(creator.id, "Map Submission")
         votes = await self.bot.api.get_all_votes(thread_id)
-        for vote in votes.votes:
-            await self.bot.xp.grant_user_xp_of_type(vote.user_id, "Playtest")
+        rewards = await self.bot.api.job_snapshot(
+            "playtest-rewards",
+            {
+                "creators": [creator.id for creator in map_data.creators],
+                "voters": [vote.user_id for vote in votes.votes],
+            },
+            model=dict[str, list[int]],
+        )
+        for user_id in rewards["creators"]:
+            await self.bot.xp.grant_user_xp_of_type(user_id, "Map Submission")
+        for user_id in rewards["voters"]:
+            await self.bot.xp.grant_user_xp_of_type(user_id, "Playtest")
 
     async def _approve_playtest(
         self,
@@ -330,9 +321,8 @@ class PlaytestHandler(BaseHandler):
                 thread = await self._fetch_thread(thread_id)
                 if thread.archived or thread.locked:
                     await thread.edit(locked=False, archived=False)
-                await thread.send(msg)
+                await send_once(self.bot, thread, "playtest-creator-update", msg)
 
-        await self.bot.api.edit_map(code, MapPatchRequest(difficulty=difficulty))
         await self._grant_xp_upon_successful_playtest(thread_id)
         await self._post_newsfeed_new_map(code=code)
         await self._edit_thread_tags_close(thread_id=thread_id, cancelled=False)
@@ -370,8 +360,7 @@ class PlaytestHandler(BaseHandler):
                 thread = await self._fetch_thread(thread_id)
                 if thread.archived or thread.locked:
                     await thread.edit(locked=False, archived=False)
-                await thread.send(msg)
-        await self.bot.api.edit_map(code, MapPatchRequest(difficulty=difficulty))
+                await send_once(self.bot, thread, "playtest-creator-update", msg)
         await self._grant_xp_upon_successful_playtest(thread_id)
         await self._post_newsfeed_new_map(code=code)
         await self._edit_thread_tags_close(thread_id=thread_id, cancelled=False)
@@ -407,7 +396,7 @@ class PlaytestHandler(BaseHandler):
                 thread = await self._fetch_thread(thread_id)
                 if thread.archived or thread.locked:
                     await thread.edit(locked=False, archived=False)
-                await thread.send(msg)
+                await send_once(self.bot, thread, "playtest-creator-update", msg)
         await self._edit_thread_tags_close(thread_id=thread_id, cancelled=True)
         await self._delete_verification_message_if_any(thread_id=thread_id)
 
@@ -462,11 +451,11 @@ class PlaytestHandler(BaseHandler):
                 },
             )
             if not delivered:
-                await thread.send(full_msg)
-                await thread.send("@here")
+                await send_once(self.bot, thread, "playtest-reset", full_msg)
+                await send_once(self.bot, thread, "playtest-reset-mention", "@here")
         else:
-            await thread.send(full_msg)
-            await thread.send("@here")
+            await send_once(self.bot, thread, "playtest-reset", full_msg)
+            await send_once(self.bot, thread, "playtest-reset-mention", "@here")
 
         await self._delete_verification_message_if_any(thread_id=thread_id)
 
@@ -482,9 +471,9 @@ class PlaytestHandler(BaseHandler):
         if thread.archived or thread.locked:
             await thread.edit(locked=False, archived=False)
         if label:
-            await thread.send(f"<@{voter_id}> voted **{label}**")
+            await send_once(self.bot, thread, "playtest-vote", f"<@{voter_id}> voted **{label}**")
         else:
-            await thread.send(f"<@{voter_id}> removed their vote")
+            await send_once(self.bot, thread, "playtest-vote", f"<@{voter_id}> removed their vote")
 
     async def _rebuild_view_and_plot(self, *, thread_id: int) -> None:
         """Refresh the playtest view and replace the plot attachment.
@@ -522,9 +511,12 @@ class PlaytestHandler(BaseHandler):
             for c in playtest_data.creators:
                 m = guild.get_member(c.id)
                 mentions.append(m.mention if m else c.name)
-            await thread.send(
+            await send_once(
+                self.bot,
+                thread,
+                "playtest-vote-update",
                 f"{', '.join(mentions)} — The finalize submission button has been activated. "
-                "Please ensure your map is ready to be verified."
+                "Please ensure your map is ready to be verified.",
             )
 
     async def _apply_vote_discord_side(self, *, thread_id: int, voter_id: int, difficulty_value: float) -> None:
@@ -551,9 +543,9 @@ class PlaytestHandler(BaseHandler):
         await self._announce_vote_in_thread(thread_id=thread_id, voter_id=voter_id, label=None)
 
     @queue_consumer("api.playtest.vote.cast", struct_type=PlaytestVoteCastEvent)
-    async def _process_vote_cast(self, event: PlaytestVoteCastEvent, _: AbstractIncomingMessage) -> None:
+    async def _process_vote_cast(self, event: PlaytestVoteCastEvent, _: JobContext) -> None:
         log.debug(
-            f"[RabbitMQ] Processing playest vote event {event.thread_id=} {event.voter_id=} {event.difficulty_value=}"
+            f"[Queue] Processing playest vote event {event.thread_id=} {event.voter_id=} {event.difficulty_value=}"
         )
         await self._apply_vote_discord_side(
             thread_id=event.thread_id,
@@ -562,16 +554,16 @@ class PlaytestHandler(BaseHandler):
         )
 
     @queue_consumer("api.playtest.vote.remove", struct_type=PlaytestVoteRemovedEvent)
-    async def _process_vote_remove(self, event: PlaytestVoteRemovedEvent, _: AbstractIncomingMessage) -> None:
-        log.debug(f"[RabbitMQ] Processing playest vote remove event {event.thread_id=} {event.voter_id=}")
+    async def _process_vote_remove(self, event: PlaytestVoteRemovedEvent, _: JobContext) -> None:
+        log.debug(f"[Queue] Processing playest vote remove event {event.thread_id=} {event.voter_id=}")
         await self._remove_vote_discord_side(
             thread_id=event.thread_id,
             voter_id=event.voter_id,
         )
 
-    @queue_consumer("api.playtest.approve", struct_type=PlaytestApprovedEvent, idempotent=True)
-    async def _process_approve_playtest(self, event: PlaytestApprovedEvent, _: AbstractIncomingMessage) -> None:
-        log.debug(f"[RabbitMQ] Processing playest approved event {event.code=} {event.thread_id=}")
+    @queue_consumer("api.playtest.approve", struct_type=PlaytestApprovedEvent)
+    async def _process_approve_playtest(self, event: PlaytestApprovedEvent, _: JobContext) -> None:
+        log.debug(f"[Queue] Processing playest approved event {event.code=} {event.thread_id=}")
         await self._approve_playtest(
             code=event.code,
             thread_id=event.thread_id,
@@ -580,11 +572,9 @@ class PlaytestHandler(BaseHandler):
             primary_creator_id=event.primary_creator_id,
         )
 
-    @queue_consumer("api.playtest.force_accept", struct_type=PlaytestForceAcceptedEvent, idempotent=True)
-    async def _process_force_accept_playtest(
-        self, event: PlaytestForceAcceptedEvent, _: AbstractIncomingMessage
-    ) -> None:
-        log.debug(f"[RabbitMQ] Processing playest force accept event {event.thread_id=}")
+    @queue_consumer("api.playtest.force_accept", struct_type=PlaytestForceAcceptedEvent)
+    async def _process_force_accept_playtest(self, event: PlaytestForceAcceptedEvent, _: JobContext) -> None:
+        log.debug(f"[Queue] Processing playest force accept event {event.thread_id=}")
         playtest_data = await self.bot.api.get_playtest(event.thread_id)
         map_data = await self.bot.api.get_map(code=playtest_data.code)
         await self._force_accept_playtest(
@@ -595,9 +585,9 @@ class PlaytestHandler(BaseHandler):
             notify_primary_creator_id=map_data.primary_creator_id,
         )
 
-    @queue_consumer("api.playtest.force_deny", struct_type=PlaytestForceDeniedEvent, idempotent=True)
-    async def _process_force_deny_playtest(self, event: PlaytestForceDeniedEvent, _: AbstractIncomingMessage) -> None:
-        log.debug(f"[RabbitMQ] Processing playest force deny event {event.thread_id=}")
+    @queue_consumer("api.playtest.force_deny", struct_type=PlaytestForceDeniedEvent)
+    async def _process_force_deny_playtest(self, event: PlaytestForceDeniedEvent, _: JobContext) -> None:
+        log.debug(f"[Queue] Processing playest force deny event {event.thread_id=}")
         playtest_data = await self.bot.api.get_playtest(event.thread_id)
         map_data = await self.bot.api.get_map(code=playtest_data.code)
         await self._force_deny_playtest(
@@ -608,9 +598,9 @@ class PlaytestHandler(BaseHandler):
             notify_primary_creator_id=map_data.primary_creator_id,
         )
 
-    @queue_consumer("api.playtest.reset", struct_type=PlaytestResetEvent, idempotent=True)
-    async def _process_reset_playtest(self, event: PlaytestResetEvent, _: AbstractIncomingMessage) -> None:
-        log.debug(f"[RabbitMQ] Processing playest reset event {event.thread_id=}")
+    @queue_consumer("api.playtest.reset", struct_type=PlaytestResetEvent)
+    async def _process_reset_playtest(self, event: PlaytestResetEvent, _: JobContext) -> None:
+        log.debug(f"[Queue] Processing playest reset event {event.thread_id=}")
         playtest_data = await self.bot.api.get_playtest(event.thread_id)
         map_data = await self.bot.api.get_map(code=playtest_data.code)
         await self._reset_playtest_votes_and_completions(
@@ -1297,11 +1287,17 @@ class PlaytestCog(BaseCog):
     _task: asyncio.Task
 
     async def cog_load(self) -> None:
-        """Start post-RabbitMQ initialization when the cog loads."""
-        self._task = asyncio.create_task(self.post_rabbit_load())
+        """Start view restoration independently of queued work."""
+        self._task = asyncio.create_task(self.bot.api.restore_when_available(self.restore_playtest_views))
 
-    async def post_rabbit_load(self) -> None:
-        """Attach persistent views after MQ drains and data is available.
+    async def cog_unload(self) -> None:
+        """Stop pending view restoration before its dependencies close."""
+        self._task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._task
+
+    async def restore_playtest_views(self) -> None:
+        """Attach persistent views when the API is available.
 
         Fetches in-progress playtests, reattaches verification/playtest views
         to their messages, and populates in-memory registries.
@@ -1309,8 +1305,9 @@ class PlaytestCog(BaseCog):
         Raises:
             AttributeError: If a fetched map lacks playtest meta.
         """
-        await self.bot.rabbit.wait_until_drained()
-        log.debug("Rabbit has been drained, moving on with PlaytestCog load.")
+        await self.bot.wait_until_ready()
+        await self.bot.api.wait_until_available()
+        log.debug("Restoring saved playtest views.")
         _maps = await self.bot.api.get_maps(playtesting="In Progress")
         log.debug(f"{len(_maps)=}")
         for _map in _maps:
@@ -1324,7 +1321,7 @@ class PlaytestCog(BaseCog):
                 self.bot.add_view(view, message_id=_map.playtest.verification_id)
                 self.verification_views[_map.playtest.verification_id] = view
 
-            if _map.playtest.thread_id not in self.playtest_views:
+            if _map.playtest.thread_id and _map.playtest.thread_id not in self.playtest_views:
                 log.debug(f"{_map.code=} adding playtest view now.")
                 view = PlaytestComponentsV2View(thread_id=_map.playtest.thread_id, data=_map)
                 self.bot.add_view(view, message_id=_map.playtest.thread_id)

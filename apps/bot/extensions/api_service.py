@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
+import hashlib
 import json
 import mimetypes
 import os
+from collections.abc import Awaitable, Callable
 from functools import lru_cache
 from http import HTTPStatus
 from io import BytesIO
@@ -42,7 +45,7 @@ from genjishimada_sdk.completions import (
     UpvoteSubmissionJobResponse,
 )
 from genjishimada_sdk.difficulties import DifficultyAll, DifficultyTop
-from genjishimada_sdk.internal import ClaimCreateRequest, ClaimResponse, JobStatusResponse, JobStatusUpdateRequest
+from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.logs import LogCreateRequest
 from genjishimada_sdk.lootbox import LootboxKeyType
 from genjishimada_sdk.maps import (
@@ -92,6 +95,7 @@ from genjishimada_sdk.notifications import (
     NotificationPreferencesResponse,
     ShouldDeliverResponse,
 )
+from genjishimada_sdk.queue import current_job
 from genjishimada_sdk.tags import (
     TagsAutocompleteRequest,
     TagsAutocompleteResponse,
@@ -195,8 +199,58 @@ class APIService:
         self._encoder = msgspec.json.Encoder(decimal_format="number")
         self.__session: aiohttp.ClientSession = aiohttp.ClientSession(headers={"X-API-KEY": self.api_key})
         self._is_available = False
+        self._available = asyncio.Event()
         self._lock = asyncio.Lock()
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+    async def wait_until_available(self) -> None:
+        """Wait for API recovery before restoring persistent interaction views."""
+        await self._available.wait()
+
+    async def restore_when_available(self, restore: Callable[[], Awaitable[None]]) -> None:
+        """Retry startup restoration if the API disappears during a paged read."""
+        while True:
+            await self.wait_until_available()
+            try:
+                await restore()
+                return
+            except (APIUnavailableError, aiohttp.ClientConnectionError, TimeoutError):
+                pass
+            except APIHTTPError as exc:
+                if exc.status < HTTPStatus.INTERNAL_SERVER_ERROR:
+                    raise
+            await asyncio.sleep(5)
+
+    async def close(self) -> None:
+        """Close the heartbeat and HTTP client after queue workers have drained."""
+        self._heartbeat_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._heartbeat_task
+        await self.__session.close()
+
+    async def job_operation(
+        self,
+        method: str,
+        path: str,
+        *,
+        data: dict | None = None,
+        params: dict | None = None,
+    ) -> Any:  # noqa: ANN401
+        """Call an authenticated queue operations endpoint with JSON results."""
+        raw = await self._request(Route(method, "/internal/jobs" + path), data=data, params=params)
+        return msgspec.json.decode(raw) if raw else None
+
+    async def job_snapshot(self, key: str, value: T, *, model: Any = None) -> T:  # noqa: ANN401
+        """Retain the first decision input so a retry cannot choose a different reward."""
+        context = current_job.get()
+        if context is None:
+            return value
+        saved = await self.job_operation(
+            "POST",
+            f"/{context.job_id}/snapshots/{quote(key, safe='')}",
+            data={"value": msgspec.to_builtins(value)},
+        )
+        return msgspec.convert(saved["value"], type=model or type(value))
 
     async def _heartbeat_loop(self) -> None:
         """Continuously ping the API to determine availability and update internal state."""
@@ -207,8 +261,13 @@ class APIService:
                     retry_after = await self._check_availability()
                     if retry_after is not None:
                         interval = retry_after
+                    if self._is_available:
+                        self._available.set()
+                    else:
+                        self._available.clear()
             except Exception:
                 self._is_available = False
+                self._available.clear()
                 log.warning("Genji Shimada APIService Heartbeat blocked.")
             await asyncio.sleep(interval)
 
@@ -315,8 +374,9 @@ class APIService:
                     return raw.decode()
                 return get_decoder(response_model).decode(raw)
 
-        except aiohttp.ClientConnectorError:
+        except aiohttp.ClientConnectionError:
             self._is_available = False
+            self._available.clear()
             raise APIUnavailableError("Connection error; API marked unavailable.")
 
     async def _request(  # noqa: PLR0912
@@ -324,7 +384,8 @@ class APIService:
         route: Route,
         *,
         response_model: Type[T] | T | None = None,
-        data: msgspec.Struct | None = None,
+        data: msgspec.Struct | dict | None = None,
+        job_effect: str | None = None,
         params: Mapping[str, Any] | None = None,
         **kwargs: Any,  # noqa: ANN401
     ) -> Any:  # noqa: ANN401
@@ -334,6 +395,7 @@ class APIService:
             route (Route): The route to call.
             response_model (Type[T] | T | None): Optional type to decode the response as.
             data (msgspec.Struct | None): Optional body data to encode as JSON.
+            job_effect: Stable semantic identity for a mutation performed by a queue job.
             params (Mapping[str, Any] | None): Optional query parameters.
             **kwargs (Any): Additional aiohttp request parameters.
 
@@ -349,6 +411,22 @@ class APIService:
             "X-API-KEY": self.api_key,
             "Content-Type": "application/json",
         }
+
+        context = current_job.get()
+        if context is not None:
+            headers.update(
+                {
+                    "X-Job-ID": str(context.job_id),
+                    "X-Job-Manager": str(context.manager_id),
+                    "X-Job-Claimed-At": context.claimed_at.isoformat(),
+                }
+            )
+            if route.method not in {"GET", "HEAD"} and not route.path.startswith("/internal/jobs"):
+                # Field names distinguish separate patches of the same resource; values
+                # fetched afresh on a retry must never create a new additive effect.
+                fields = sorted(msgspec.to_builtins(data)) if isinstance(data, msgspec.Struct) else []
+                identity = job_effect or f"{route.method}:{route.url}:{','.join(fields)}"
+                headers["X-Job-Effect"] = hashlib.sha256(identity.encode()).hexdigest()
 
         if data is not None:
             kwargs["data"] = self._encoder.encode(data)
@@ -374,7 +452,12 @@ class APIService:
                 try:
                     resp.raise_for_status()
                 except Exception:
-                    decoded = json.loads(raw) if raw else {}
+                    try:
+                        decoded = json.loads(raw) if raw else {}
+                    except (ValueError, UnicodeDecodeError):
+                        decoded = {}
+                    if not isinstance(decoded, dict):
+                        decoded = {}
                     error = decoded.get("error")
                     extra = decoded.get("extra")
                     raise APIHTTPError(resp.status, resp.reason, error, extra)
@@ -389,8 +472,9 @@ class APIService:
                     return None
                 return get_decoder(response_model).decode(raw)
 
-        except aiohttp.ClientConnectorError:
+        except aiohttp.ClientConnectionError:
             self._is_available = False
+            self._available.clear()
             raise APIUnavailableError("Connection error; API marked unavailable.")
 
     def submit_map(self, data: MapCreateModel) -> Response[MapCreationJobResponse]:
@@ -1314,7 +1398,12 @@ class APIService:
             (int): Newsfeed event ID.
         """
         r = Route("POST", "/newsfeed")
-        return self._request(r, response_model=PublishNewsfeedJobResponse, data=event)
+        return self._request(
+            r,
+            response_model=PublishNewsfeedJobResponse,
+            data=event,
+            job_effect=f"newsfeed:{event.event_type}:{getattr(event.payload, 'user_id', '')}",
+        )
 
     def get_suspicious_flags(self, user_id: int) -> Response[list[SuspiciousCompletionModel]]:
         """Fetch suspicious completion flags for a user.
@@ -1421,17 +1510,18 @@ class APIService:
         r = Route("POST", "/lootbox/users/{user_id}/keys/{key_type}", user_id=user_id, key_type=key_type)
         return self._request(r)
 
-    def grant_active_key_to_user(self, user_id: int) -> Response[None]:
+    def grant_active_key_to_user(self, user_id: int, *, effect_key: str = "rank") -> Response[None]:
         """Grant an active lootbox key to a user.
 
         Args:
             user_id: ID of the user to receive the active key.
+            effect_key: Distinguishes rank rewards from individual prestige rewards.
 
         Returns:
             Response[None]: API response object.
         """
         r = Route("POST", "/lootbox/users/{user_id}/keys", user_id=user_id)
-        return self._request(r)
+        return self._request(r, job_effect=f"key:{user_id}:{effect_key}")
 
     def set_active_key(self, key_type: LootboxKeyType) -> Response[None]:
         """Set the globally active lootbox key type.
@@ -1456,7 +1546,7 @@ class APIService:
             Response[XpGrantResponse]: Resulting XP grant details.
         """
         r = Route("POST", "/lootbox/users/{user_id}/xp", user_id=user_id)
-        return self._request(r, response_model=XpGrantResponse, data=data)
+        return self._request(r, response_model=XpGrantResponse, data=data, job_effect=f"xp:{user_id}:{data.type}")
 
     def get_xp_tier_change(self, old_xp: int, new_xp: int) -> Response[TierChangeResponse]:
         """Get XP tier changes between old and new XP values.
@@ -1498,7 +1588,12 @@ class APIService:
             Response[MapMasteryCreateResponse | None]: Updated mastery data, or None if not applicable.
         """
         r = Route("POST", "/maps/mastery")
-        return self._request(r, response_model=MapMasteryCreateResponse | None, data=data)
+        return self._request(
+            r,
+            response_model=MapMasteryCreateResponse | None,
+            data=data,
+            job_effect=f"mastery:{data.user_id}:{data.map_name}",
+        )
 
     def check_permission_for_change_request(self, thread_id: int, user_id: int, code: OverwatchCode) -> Response[bool]:
         """Check whether a user has permission to create a change request.
@@ -1675,18 +1770,19 @@ class APIService:
         r = Route("GET", "/lootbox/xp/multiplier")
         return self._request(r, response_model=float)
 
-    def check_for_previous_world_record_xp(self, code: OverwatchCode, user_id: int) -> Response[bool]:
-        """Check whether XP has already been granted for a world record.
-
-        Args:
-            code: The map code to check.
-            user_id: The user id to check.
-
-        Returns:
-            Response[bool]: True if XP was previously granted, False otherwise.
-        """
-        r = Route("GET", "/completions/{code}/wr-xp-check", code=code)
-        return self._request(r, response_model=bool, params={"user_id": user_id})
+    def grant_world_record_reward(
+        self,
+        completion_id: int,
+        data: XpGrantRequest,
+    ) -> Response[XpGrantResponse | None]:
+        """Atomically check and grant the completion's one world-record reward."""
+        r = Route("POST", "/completions/{completion_id}/world-record-reward", completion_id=completion_id)
+        return self._request(
+            r,
+            response_model=XpGrantResponse | None,
+            data=data,
+            job_effect=f"world-record-reward:{completion_id}",
+        )
 
     def log_analytics(
         self,
@@ -1711,18 +1807,6 @@ class APIService:
         """Get an active job."""
         r = Route("GET", "/internal/jobs/{job_id}", job_id=job_id)
         return self._request(r, response_model=JobStatusResponse)
-
-    def update_job(
-        self,
-        job_id: UUID,
-        status: Literal["processing", "succeeded", "failed", "timeout", "queued"],
-        error_code: str | None = None,
-        error_msg: str | None = None,
-    ) -> Response[None]:
-        """Update a job status."""
-        r = Route("PATCH", "/internal/jobs/{job_id}", job_id=job_id)
-        data = JobStatusUpdateRequest(status, error_code, error_msg)
-        return self._request(r, data=data)
 
     def search_tags(self, data: TagsSearchFilters) -> Response[TagsSearchResponse]:
         """Search / fetch tags via flexible filters (aliases, fuzzy, rank, random, paging)."""
@@ -1889,16 +1973,6 @@ class APIService:
         r = Route("PATCH", "/tournaments/categories/{category_id}/next-cycle", category_id=category_id)
         return self._request(r, response_model=TournamentNextCycleResponse, data=data)
 
-    def claim_idempotency(self, data: ClaimCreateRequest) -> Response[ClaimResponse]:
-        """Claim an idempotency key for a queue message action."""
-        r = Route("POST", "/internal/idempotency/claim")
-        return self._request(r, response_model=ClaimResponse, data=data)
-
-    def delete_claimed_idempotency(self, data: ClaimCreateRequest) -> Response[None]:
-        """Delete a claimed idempotency key for a queue message action."""
-        r = Route("DELETE", "/internal/idempotency/claim")
-        return self._request(r, data=data)
-
     def send_map_to_playtest(self, code: OverwatchCode, data: SendToPlaytestRequest) -> Response[JobStatusResponse]:
         """Send a map to playtest."""
         r = Route("POST", "/maps/{code}/playtest", code=code)
@@ -1925,7 +1999,7 @@ class APIService:
     ) -> Response[NotificationEventResponse]:
         """Create a notification event via API.
 
-        The API will store the notification and dispatch it to RabbitMQ
+        The API will store the notification and dispatch it to the work queue
         for Discord delivery if applicable.
 
         Args:
@@ -1948,7 +2022,12 @@ class APIService:
             discord_message=discord_message,
             metadata=metadata,
         )
-        return self._request(r, response_model=NotificationEventResponse, data=data)
+        return self._request(
+            r,
+            response_model=NotificationEventResponse,
+            data=data,
+            job_effect=f"notification:{user_id}:{event_type}:{title}:{(metadata or {}).get('map_name', '')}",
+        )
 
     def should_deliver_notification(
         self,
@@ -2002,7 +2081,7 @@ class APIService:
             status=status,
             error_message=error_message,
         )
-        return self._request(r, data=data)
+        return self._request(r, data=data, job_effect=f"delivery:{event_id}:{channel}")
 
     def get_notification_preferences(self, user_id: int) -> Response[list]:
         """Get all notification preferences for a user.

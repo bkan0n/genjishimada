@@ -1,7 +1,7 @@
 """Notification service for processing and delivering notifications.
 
 This service:
-1. Consumes notification delivery events from RabbitMQ
+1. Consumes notification delivery events from the work queue
 2. Delivers notifications via Discord (DM or channel ping)
 3. Reports delivery status back to the API
 4. Maintains backwards compatibility with legacy notification methods
@@ -9,21 +9,21 @@ This service:
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from typing import TYPE_CHECKING, Literal
 
 import discord
-from aio_pika.abc import AbstractIncomingMessage
 from genjishimada_sdk.notifications import (
     NOTIFICATION_CHANNEL,
     NotificationChannel,
     NotificationDeliveryEvent,
     NotificationEventType,
 )
+from genjishimada_sdk.queue import JobContext
 
 from extensions._queue_registry import queue_consumer
 from utilities.base import BaseHandler
+from utilities.job_effects import send_once
 
 if TYPE_CHECKING:
     import core
@@ -36,7 +36,7 @@ DISCORD_USER_ID_LOWER_LIMIT = 1_000_000_000_000_000
 class NotificationHandler(BaseHandler):
     """Service for processing and delivering notifications.
 
-    This service handles both the new RabbitMQ-based notification system
+    This service handles both the new durable notification system
     and maintains backwards compatibility with legacy methods.
     """
 
@@ -54,15 +54,15 @@ class NotificationHandler(BaseHandler):
     async def _process_notification_delivery(
         self,
         event: NotificationDeliveryEvent,
-        _: AbstractIncomingMessage,
+        _: JobContext,
     ) -> None:
-        """Process a notification delivery event from RabbitMQ.
+        """Process a notification delivery event from the work queue.
 
         This is triggered when the API creates a notification that needs
         Discord delivery.
         """
         logger.debug(
-            "[x] [RabbitMQ] Processing notification delivery: "
+            "[x] [Queue] Processing notification delivery: "
             f"event_id={event.event_id}, user_id={event.user_id}, type={event.event_type}"
         )
 
@@ -90,8 +90,8 @@ class NotificationHandler(BaseHandler):
                         status = "skipped"
                         error = "Channel pings handled at trigger site"
 
-            except Exception as e:
-                logger.exception(f"Error delivering notification {event.event_id}: {e}")
+            except (discord.Forbidden, discord.NotFound) as e:
+                logger.warning("Notification %s was rejected by its destination: %s", event.event_id, e)
                 status = "failed"
                 error = str(e)
 
@@ -109,7 +109,7 @@ class NotificationHandler(BaseHandler):
             Tuple of (status, error_message).
         """
         if not self.xp_channel:
-            return "failed", "XP channel not configured"
+            raise RuntimeError("XP channel not configured")
 
         metadata = event.metadata or {}
         quest_name = metadata.get("quest_name", "a quest")
@@ -162,12 +162,8 @@ class NotificationHandler(BaseHandler):
                 f"quest **{quest_name}**{desc_part}!"
             )
 
-        try:
-            await self.xp_channel.send(ping_message)
-            return "delivered", None
-        except Exception as e:
-            logger.exception("Failed to send quest completion ping: %s", e)
-            return "failed", str(e)
+        await send_once(self.bot, self.xp_channel, "notification-quest-ping", ping_message)
+        return "delivered", None
 
     async def _report_delivery_result(
         self,
@@ -177,31 +173,22 @@ class NotificationHandler(BaseHandler):
         error_message: str | None,
     ) -> None:
         """Report delivery result back to the API."""
-        try:
-            await self.bot.api.record_notification_delivery_result(
-                event_id=event_id,
-                channel=channel,
-                status=status,
-                error_message=error_message,
-            )
-        except Exception as e:
-            logger.exception(f"Failed to report delivery result: {e}")
+        await self.bot.api.record_notification_delivery_result(
+            event_id=event_id,
+            channel=channel,
+            status=status,
+            error_message=error_message,
+        )
 
     async def _send_dm(self, user_id: int, message: str) -> bool:
-        """Send a DM to a user."""
+        """Send a durable DM; only a definite destination rejection is permanent."""
+        user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
         try:
-            user = self.bot.get_user(user_id)
-            if not user:
-                user = await self.bot.fetch_user(user_id)
-            if not user:
-                return False
-            with contextlib.suppress(discord.Forbidden, discord.NotFound, discord.HTTPException):
-                await user.send(message)
-                logger.debug("Sent DM to user %s", user_id)
-            return True
-        except Exception as e:
-            logger.error("Failed to send DM to user %s: %s", user_id, e)
+            await send_once(self.bot, user, "notification-dm", message)
+        except (discord.Forbidden, discord.NotFound):
+            logger.info("Cannot deliver DM to user %s", user_id)
             return False
+        return True
 
     async def should_deliver_new(
         self,
@@ -231,7 +218,7 @@ class NotificationHandler(BaseHandler):
         """Create notification via API and optionally ping in channel.
 
         Use this for notifications that need channel pings (XP gain, rank up, etc.)
-        The API will store the notification and handle DM delivery via RabbitMQ.
+        The API will store the notification and handle DM delivery via the work queue.
         This method handles the channel ping directly since it needs the channel object.
 
         Args:
@@ -253,19 +240,14 @@ class NotificationHandler(BaseHandler):
             metadata=metadata,
         )
 
+        effect_key = f"notification-ping:{user_id}:{event_type.value}:{title}:{(metadata or {}).get('map_name', '')}"
         if user_id < DISCORD_USER_ID_LOWER_LIMIT:
-            await channel.send(fallback_message, **kwargs)
+            await send_once(self.bot, channel, effect_key, fallback_message, **kwargs)
             return
 
         should_ping = await self.should_deliver_new(user_id, event_type, NotificationChannel.DISCORD_PING)
-
-        try:
-            if should_ping:
-                await channel.send(f"<@{user_id}> {ping_message}", **kwargs)
-            else:
-                await channel.send(fallback_message, **kwargs)
-        except Exception as e:
-            logger.exception("Failed to send channel notification: %s", e)
+        content = f"<@{user_id}> {ping_message}" if should_ping else fallback_message
+        await send_once(self.bot, channel, effect_key, content, **kwargs)
 
     async def notify_dm_only(  # noqa: PLR0913
         self,
@@ -282,7 +264,7 @@ class NotificationHandler(BaseHandler):
         Use this for notifications like verification results, skill role updates,
         lootbox gains, etc. that don't need a channel ping.
 
-        The API will store the notification and trigger DM delivery via RabbitMQ.
+        The API will store the notification and trigger DM delivery via the work queue.
         """
         await self.bot.api.create_notification(
             user_id=user_id,

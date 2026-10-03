@@ -18,7 +18,7 @@ unit-coverable (the live Discord paths are Manual-Only):
 The command callbacks are invoked directly with an injected fake ``itx`` (mock
 ``itx.client.api`` wrappers, ``itx.user.get_role`` + ``itx.client.config.roles.admin``);
 no live Discord runtime is required. The bot's real ``utilities``/``extensions`` modules
-are loaded from the apps/bot tree (they import cleanly without aio_pika/core).
+are loaded from the apps/bot tree (they import cleanly without importing the running bot).
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def _load_tournaments_module() -> tuple[ModuleType, type, type]:
 
     To avoid cross-test pollution we snapshot the ``utilities``/``extensions`` package
     trees, evict them, prepend apps/bot to ``sys.path`` so the bot modules resolve (they
-    import cleanly without aio_pika/core), load tournaments.py, capture the symbols we
+    import cleanly without importing the running bot), load tournaments.py, capture the symbols we
     need (including the REAL ``APIHTTPError``/``UserFacingError`` so the streak ``except``
     actually catches), then RESTORE the snapshot so sibling tests see a clean slate.
     """

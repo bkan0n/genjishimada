@@ -3,13 +3,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from datetime import timedelta
-from functools import wraps
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, TypeAlias, cast
-from uuid import UUID
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, cast
 
 import discord
-from aio_pika.abc import AbstractIncomingMessage
 from discord import ButtonStyle, HTTPException, MediaGalleryItem, NotFound, ui
 from discord.app_commands import AppCommandError
 from discord.ext import commands
@@ -22,9 +19,6 @@ if TYPE_CHECKING:
 __all__ = ("BaseCog", "BaseHandler", "BaseView", "ConfirmationButton", "ConfirmationCancelButton", "ConfirmationView")
 
 log = getLogger(__name__)
-
-
-QueueHandler: TypeAlias = Callable[[AbstractIncomingMessage], Awaitable[None]]
 
 
 class BaseCog(commands.Cog):
@@ -220,43 +214,6 @@ class BaseHandler:
             NotImplementedError: If not implemented by the subclass.
         """
         raise NotImplementedError("Subclasses must implement _resolve_channels")
-
-    async def _job_patch(self, job_id: UUID, payload: dict) -> None:
-        """Best-effort: never raise so queue flow isn't blocked."""
-        try:
-            await self.bot.api.update_job(job_id=job_id, **payload)
-        except Exception as e:
-            log.warning(f"[jobs] PATCH failed for {job_id}: {e}")
-
-    def _wrap_job_status(self, fn: QueueHandler) -> QueueHandler:
-        """Wrap a queue handler to report job status using message.correlation_id.
-
-        - Does NOT touch ack/nack or `message.process()`.
-        - Re-raises exceptions so your existing retry/nack semantics stay intact.
-        """
-
-        @wraps(fn)
-        async def _inner(message: AbstractIncomingMessage) -> None:
-            job_id = UUID(message.correlation_id or "")
-            if job_id:
-                await self._job_patch(job_id, {"status": "processing"})
-            try:
-                await fn(message)
-                if job_id:
-                    await self._job_patch(job_id, {"status": "succeeded"})
-            except Exception as e:
-                if job_id:
-                    await self._job_patch(
-                        job_id,
-                        {
-                            "status": "failed",
-                            "error_code": str(getattr(e, "code", "BOT_ERROR")),
-                            "error_msg": str(e)[:300],
-                        },
-                    )
-                raise
-
-        return cast(QueueHandler, _inner)
 
 
 class BaseLoadingView(ui.LayoutView):

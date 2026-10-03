@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 from typing import TYPE_CHECKING
 
@@ -24,11 +25,18 @@ class MapEditorCog(BaseCog):
 
     async def cog_load(self) -> None:
         """Load pending verification views on startup."""
-        self._startup_task = asyncio.create_task(self._restore_views())
+        self._startup_task = asyncio.create_task(self.bot.api.restore_when_available(self._restore_views))
+
+    async def cog_unload(self) -> None:
+        """Stop pending view restoration before its dependencies close."""
+        self._startup_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._startup_task
 
     async def _restore_views(self) -> None:
         """Restore persistent views for pending edit requests."""
-        await self.bot.rabbit.wait_until_drained()
+        await self.bot.wait_until_ready()
+        await self.bot.api.wait_until_available()
 
         pending = await self.bot.api.get_pending_map_edit_requests()
         for edit in pending:
