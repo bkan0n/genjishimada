@@ -8,7 +8,7 @@ Before you begin, ensure you have the following installed:
 
 - **Python 3.13+** - [Download Python](https://www.python.org/downloads/)
 - **uv** - Fast Python package manager ([Installation Guide](https://github.com/astral-sh/uv))
-- **Docker** - Required for PostgreSQL and RabbitMQ ([Get Docker](https://docs.docker.com/get-docker/))
+- **Docker** - Required for PostgreSQL ([Get Docker](https://docs.docker.com/get-docker/))
 - **just** - Command runner ([Installation Guide](https://github.com/casey/just))
 - **Git** - Version control
 
@@ -56,10 +56,9 @@ POSTGRES_USER=genji
 POSTGRES_PASSWORD=local_dev_password
 POSTGRES_DB=genjishimada
 
-# RabbitMQ (already configured for local Docker services)
-RABBITMQ_HOST=localhost
-RABBITMQ_USER=genji
-RABBITMQ_PASS=local_dev_password
+# Queue login: populated by just queue-credentials-local after migrations
+QUEUE_DATABASE_URL=
+QUEUE_OPERATOR_IDS=141372217677053952
 
 # MinIO (S3-compatible local storage)
 S3_ENDPOINT_URL=http://localhost:9000
@@ -77,7 +76,7 @@ APP_ENVIRONMENT=local
 
 ### 4. Start Local Infrastructure
 
-Start PostgreSQL, RabbitMQ, and MinIO for local development:
+Start PostgreSQL and MinIO for local development:
 
 ```bash
 docker compose -f docker-compose.local.yml up -d
@@ -85,7 +84,6 @@ docker compose -f docker-compose.local.yml up -d
 
 This starts:
 - **PostgreSQL** on port 5432
-- **RabbitMQ** on ports 5672 (AMQP) and 15672 (Management UI)
 - **MinIO** on ports 9000 (API) and 9001 (Console)
 
 ### 5. Import Database from VPS (Optional)

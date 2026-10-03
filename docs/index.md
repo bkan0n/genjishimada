@@ -87,7 +87,7 @@ genjishimada/
 - **Litestar** for the REST API
 - **Discord.py** for the Discord bot
 - **PostgreSQL 17** for data persistence
-- **RabbitMQ** for async message passing
+- **PostgreSQL queue** for async message passing
 - **msgspec** for fast serialization and validation
 
 ## Community

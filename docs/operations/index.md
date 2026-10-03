@@ -6,7 +6,7 @@ Guides for deploying, configuring, and maintaining Genji Shimada in production a
 
 This section covers:
 
-- **Infrastructure** - PostgreSQL, RabbitMQ, and cloud services
+- **Infrastructure** - PostgreSQL, PostgreSQL queue, and cloud services
 - **Docker Compose** - Local and production deployments
 - **Backups** - Nightly prod backups and weekly dev refresh
 - **Configuration** - Environment variables and config files
@@ -82,20 +82,18 @@ This section covers:
 Create a `.env` file in the repo root with the variables required by your services. At minimum:
 
 ```env
+QUEUE_DATABASE_URL=postgresql://genjishimada_queue_worker:REPLACE_WITH_SECRET@localhost:5432/genjishimada
+QUEUE_OPERATOR_IDS=141372217677053952
 APP_ENVIRONMENT=development
 DISCORD_TOKEN=your_bot_token
 POSTGRES_USER=genjishimada
 POSTGRES_PASSWORD=secure_password
 POSTGRES_DB=genjishimada
-RABBITMQ_USER=admin
-RABBITMQ_PASS=secure_password
-RABBITMQ_HOST=localhost
 API_KEY=secure_api_key_for_bot
 ```
 
 Add optional values for Sentry, R2, and Resend as needed.
 
-If you run the API/bot in Docker, set `RABBITMQ_HOST` to the service name (`genjishimada-rabbitmq-dev` or `genjishimada-rabbitmq`).
 
 ## Health Checks
 
@@ -125,11 +123,9 @@ docker compose -f docker-compose.dev.yml exec genjishimada-db-dev pg_isready
 docker compose -f docker-compose.prod.yml exec genjishimada-db pg_isready
 ```
 
-### RabbitMQ Health
+### Queue Health
 
-**Local development:** Access management UI at http://localhost:15672
-
-**Remote deployments:** Use container logs or your reverse proxy setup.
+Inspect API and bot worker logs and the recovery API's durable job state. Held jobs generate operator alerts. Run `just test-queue` to exercise persistence, recovery, and authorization against isolated PostgreSQL instances.
 
 ## Next Steps
 

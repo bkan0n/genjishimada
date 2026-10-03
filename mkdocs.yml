@@ -171,7 +171,8 @@ nav:
     - Bot: services/bot.md
     - API: services/api.md
     - Database: services/database.md
-    - RabbitMQ: services/rabbitmq.md
+    - Background queue: services/queue.md
+    - Queue migration: operations/queue-migration.md
     - OCR: services/ocr.md
     - Translate: services/translate.md
 

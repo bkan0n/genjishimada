@@ -68,52 +68,30 @@ async def create_user(data: UserCreateRequest) -> UserResponse:
     return await create_user_in_db(data)
 ```
 
-### Publishing Events
+### Enqueueing events
 
-Publish SDK event models to RabbitMQ:
-
-```python
-from genjishimada_sdk.completions import CompletionCreatedEvent
-from di.base import BaseService
-
-
-class CompletionService(BaseService):
-    async def create_completion(self, user_id: int, map_id: int) -> int:
-        completion_id = await insert_completion(...)
-
-        event = CompletionCreatedEvent(
-            completion_id=completion_id,
-        )
-
-        await self.publish_message(
-            queue_name="api.completion.submission",
-            message=event,
-        )
-
-        return completion_id
-```
+Construct the shared SDK payload in the service that owns the business transaction. Call the transactional `enqueue_job` helper with that same connection, a stable event key, and the entity identity. Do not acquire a second connection for enqueue or commit it separately. The durable job UUID is returned using the existing job status response.
 
 ## Bot Patterns
 
 ### Queue Consumers
 
-Consume SDK event models from RabbitMQ:
+Consume SDK event models from the PostgreSQL queue:
 
 ```python
 from extensions._queue_registry import queue_consumer
 from genjishimada_sdk.completions import CompletionCreatedEvent
-from aio_pika.abc import AbstractIncomingMessage
+from genjishimada_sdk.queue import JobContext
 
 
 @queue_consumer(
     "api.completion.submission",
     struct_type=CompletionCreatedEvent,
-    idempotent=True,
 )
 async def handle_completion(
     self,
     event: CompletionCreatedEvent,
-    message: AbstractIncomingMessage,
+    message: JobContext,
 ) -> None:
     print(f"Completion {event.completion_id} submitted")
 ```

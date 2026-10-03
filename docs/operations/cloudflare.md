@@ -36,8 +36,6 @@ Only records used by Genji Shimada and related infrastructure are listed below.
 - `api.genji.pk` (CNAME, proxied) -> `genji.pk`
 - `dev-api.genji.pk` (CNAME, proxied) -> `genji.pk`
 - `dev.genji.pk` (CNAME, proxied) -> `genji.pk`
-- `rabbitmq.genji.pk` (CNAME, proxied) -> `genji.pk`
-- `dev-rabbitmq.genji.pk` (CNAME, proxied) -> `genji.pk`
 - `db.genji.pk` (CNAME, proxied) -> `genji.pk`
 - `docs.genji.pk` (CNAME, proxied) -> `genjishimada.github.io`
 - `cdn.genji.pk` (CNAME, proxied) -> `public.r2.dev`
@@ -81,3 +79,5 @@ For wildcard hostnames `*.bkan0n.com` and `*.genji.pk`:
 
 - [Reverse Proxy](reverse-proxy.md) - Caddy routing and TLS automation
 - [Monitoring](monitoring.md) - Grafana/Prometheus/Loki endpoints
+
+Retired broker-specific remote resources must be reconciled through the [queue migration runbook](queue-migration.md). Documentation changes do not modify those deployed resources.

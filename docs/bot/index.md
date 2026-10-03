@@ -27,7 +27,7 @@ The bot handles:
 
     ---
 
-    Understand RabbitMQ queue consumers
+    Understand the PostgreSQL queue consumers
 
     [:octicons-arrow-right-24: Messaging](architecture/messaging.md)
 
@@ -56,11 +56,11 @@ async def map_command(interaction: discord.Interaction, map_code: str):
 
 ### Queue Consumers
 
-The bot consumes events from RabbitMQ:
+The bot consumes events from the PostgreSQL queue:
 
 ```python
 @queue_consumer("api.completion.submission", struct_type=CompletionCreatedEvent)
-async def handle_completion(event: CompletionCreatedEvent, message: AbstractIncomingMessage) -> None:
+async def handle_completion(event: CompletionCreatedEvent, message: JobContext) -> None:
     # Send Discord notification
     ...
 ```
@@ -80,7 +80,7 @@ apps/bot/
 ├── core/
 │   └── genji.py           # Main bot class
 ├── extensions/            # Feature modules
-│   ├── rabbit.py          # RabbitMQ service
+│   ├── queue.py          # PostgreSQL queue service
 │   ├── api_service.py     # API client
 │   ├── completions.py     # Completion handlers
 │   └── ...

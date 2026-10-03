@@ -62,13 +62,9 @@ From the export (master realm):
 - **Realm roles**:
     - Built-ins: `offline_access`, `uma_authorization`, `default-roles-master`, `admin`, `create-realm`.
     - Grafana roles: `grafana-admin`, `grafana-editor`, `grafana-viewer` (used by Grafana role mapping).
-    - RabbitMQ roles:
-        - `rabbitmq.tag:administrator`, `rabbitmq.tag:management`
-        - `rabbitmq.configure:*/*/*`, `rabbitmq.write:*/*/*`, `rabbitmq.read:*/*/*`
 - **Client roles**: standard roles for `master-realm`, `account`, and `broker`.
 - **Groups**:
     - `monitoring` (for Grafana/Prometheus/Loki/cAdvisor access)
-    - `RabbitMQ` (grants RabbitMQ tag roles)
 
 If you are using oauth2-proxy group gating (for example `--allowed-group=monitoring`),
 make sure a `monitoring` group exists in the realm and that users are assigned to it.
@@ -86,14 +82,6 @@ apps. The notable custom clients are below:
     - Root/Admin URL: `https://grafana.bkan0n.com`
     - Redirect: `https://grafana.bkan0n.com/login/generic_oauth`
     - Protocol mappers: realm roles + hardcoded `aud=grafana-oauth`
-- **rabbitmq-prod**
-    - Root/Admin URL: `https://rabbitmq.genji.pk`
-    - Redirect: `https://rabbitmq.genji.pk/*`
-    - Protocol mapper: hardcoded `aud=rabbitmq`
-- **rabbitmq-dev**
-    - Root/Admin URL: `https://dev-rabbitmq.genji.pk`
-    - Redirect: `https://dev-rabbitmq.genji.pk/*`
-    - Protocol mapper: hardcoded `aud=rabbitmq`
 
 Built-in clients also exist: `account`, `account-console`, `admin-cli`,
 `broker`, `master-realm`, `security-admin-console`.
@@ -103,9 +91,10 @@ Built-in clients also exist: `account`, `account-console`, `admin-cli`,
 - **groups** client scope adds a `groups` claim via
   `oidc-group-membership-mapper` (used by oauth2-proxy).
 - **grafana-oauth** uses realm-role mapping and a hardcoded audience claim.
-- **rabbitmq** clients include a hardcoded `aud` claim of `rabbitmq`.
 
 ## Related Docs
 
 - [Reverse Proxy](reverse-proxy.md) - Caddy routes and auth wiring
 - [Monitoring](monitoring.md) - Grafana OAuth config
+
+Retired broker-specific remote resources must be reconciled through the [queue migration runbook](queue-migration.md). Documentation changes do not modify those deployed resources.

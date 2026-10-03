@@ -105,7 +105,7 @@ EVENT_TYPE_DEFAULT_CHANNELS: dict[NotificationEventType, list[NotificationChanne
 
 
 class NotificationDeliveryEvent(Struct):
-    """Event published to RabbitMQ when a notification needs Discord delivery.
+    """Durable event queued when a notification needs Discord delivery.
 
     Routing key: api.notification.delivery
     """

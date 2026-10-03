@@ -52,14 +52,14 @@ jobs:
       - name: Ruff format (check)
         id: ruff-format
         continue-on-error: true
-        run: uv run ruff format --check apps/api apps/bot libs/sdk
+        run: uv run ruff format --check apps/api apps/bot libs/sdk scripts/import_queue_backlog.py scripts/provision_local_queue.py scripts/run_queue_tests.py scripts/queue_jobs.py
 
       - name: Ruff check
         id: ruff-check
         continue-on-error: true
         env:
           RUFF_OUTPUT_FORMAT: github
-        run: uv run ruff check apps/api apps/bot libs/sdk
+        run: uv run ruff check apps/api apps/bot libs/sdk scripts/import_queue_backlog.py scripts/provision_local_queue.py scripts/run_queue_tests.py scripts/queue_jobs.py
 
       - name: Basedpyright API
         id: pyright-api
@@ -77,6 +77,11 @@ jobs:
         continue-on-error: true
         run: uv run basedpyright libs/sdk
 
+      - name: Basedpyright queue operations
+        id: pyright-queue-operations
+        continue-on-error: true
+        run: uv run basedpyright scripts/import_queue_backlog.py scripts/provision_local_queue.py scripts/run_queue_tests.py scripts/queue_jobs.py
+
       - name: Fail if any lint step failed
         if: ${{ always() }}
         run: |
@@ -86,6 +91,7 @@ jobs:
             "${{ steps.pyright-api.outcome }}"
             "${{ steps.pyright-bot.outcome }}"
             "${{ steps.pyright-sdk.outcome }}"
+            "${{ steps.pyright-queue-operations.outcome }}"
           )
           for r in "${results[@]}"; do
             if [[ "$r" != "success" ]]; then

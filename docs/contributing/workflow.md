@@ -47,7 +47,7 @@ Edit `.env.local` with your Discord bot token and other settings.
 docker compose -f docker-compose.local.yml up -d
 ```
 
-This starts PostgreSQL, RabbitMQ, and MinIO for local development.
+This starts PostgreSQL and MinIO for local development.
 
 ## Daily Workflow
 
@@ -104,7 +104,8 @@ uv run ruff check --fix .
 ### 5. Run Tests
 
 ```bash
-just test-all
+just test-api
+just test-queue
 ```
 
 For faster iteration, run specific tests:
@@ -114,10 +115,10 @@ For faster iteration, run specific tests:
 just test-api
 
 # Specific test file
-uv run pytest apps/api/tests/test_maps.py
+just test-api tests/maps/test_maps_api.py
 
 # Specific test function
-uv run pytest apps/api/tests/test_maps.py::test_get_map
+just test-api tests/maps/test_maps_api.py::TestSearchMaps::test_happy_path
 ```
 
 ### 6. Commit Changes
@@ -173,7 +174,7 @@ git push origin feature/your-feature-name
 ```
 apps/api/
 ├── di/                # Business logic (DI modules)
-│   ├── base.py        # BaseService with RabbitMQ publishing
+│   ├── base.py        # BaseService with PostgreSQL queue publishing
 │   ├── auth.py        # Authentication logic
 │   ├── maps.py        # Map CRUD operations
 │   └── completions.py # Completion tracking
@@ -253,32 +254,11 @@ row = await conn.fetchrow(
 )
 ```
 
-### Publishing Messages
+### Enqueueing background work
 
-Use `BaseService.publish_message()`:
+Persist domain changes and their queue jobs on one connection within one transaction. Construct shared SDK events and call `genjishimada_sdk.queue_store.enqueue_job` with a durable business `event_key` and entity identity. A helper must not open or commit a separate connection for publication.
 
-```python
-from di.base import BaseService
-from genjishimada_sdk.completions import CompletionCreatedEvent
-
-
-class CompletionHandler(BaseService):
-    async def create_completion(self, user_id: int, map_id: int) -> int:
-        # Create in database
-        completion_id = await insert_completion(...)
-
-        # Publish event
-        event = CompletionCreatedEvent(
-            completion_id=completion_id,
-        )
-        await self.publish_message(
-            queue_name="api.completion.submission",
-            message=event,
-            message_id=f"completion-{completion_id}",
-        )
-
-        return completion_id
-```
+A retry of the same operation resolves the existing public job. Distinct legitimate transitions use new persisted operation identities. Worker handlers receive `JobContext`, record effects individually, and keep completed receipts when retrying. See [queue operations](../services/queue.md) and the [SDK examples](../sdk/usage.md).
 
 ## Working on the Bot
 
@@ -289,7 +269,7 @@ apps/bot/
 ├── core/
 │   └── genji.py       # Main bot class
 ├── extensions/        # Feature modules (cogs)
-│   ├── rabbit.py      # RabbitMQ service
+│   ├── queue.py      # PostgreSQL queue service
 │   ├── api_service.py # API client
 │   └── completions.py # Completion handlers
 └── configs/           # Configuration files
@@ -313,7 +293,7 @@ apps/bot/
    async def handle_completion(
        self,
        event: CompletionCreatedEvent,
-       message: AbstractIncomingMessage,
+       message: JobContext,
    ) -> None:
        # Send Discord notification
        channel = self.bot.get_channel(COMPLETION_CHANNEL_ID)
@@ -460,7 +440,7 @@ docker compose -f docker-compose.local.yml ps
 Run tests with verbose output:
 
 ```bash
-uv run pytest -vv apps/api/tests/
+just test-api --workers 0 -vv
 ```
 
 ### Type Errors

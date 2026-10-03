@@ -8,7 +8,7 @@ those services and any associated cogs.
 | Service       | Module / Class                                            | Responsibilities                                                                                                                                                                                                    |
 |---------------|-----------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | API client    | `extensions/api_service.py` → `APIService`                | Maintains an authenticated `aiohttp` session to the API and exposes helpers for maps, completions, playtests, and notifications. Stored on `bot.api`.                                                               |
-| RabbitMQ      | `extensions/rabbit.py` → `RabbitHandler`                  | Connects to RabbitMQ using pooled channels, declares queues (and DLQs), wraps handlers registered through `queue_consumer`, and exposes helpers such as `publish` and `wait_until_drained`. Stored on `bot.rabbit`. |
+| Queue worker | `extensions/queue.py` | Supervises PGQueuer workers, registers event handlers, and recovers interrupted work using a queue-only database login. |
 | Notifications | `extensions/notifications.py` → `NotificationHandler`     | Determines whether a user has opted into specific notification bitmasks and sends DMs or channel pings accordingly. Stored on `bot.notifications`.                                                                  |
 | Newsfeed      | `extensions/newsfeed.py` → `NewsfeedHandler`              | Registers builders for each newsfeed payload type, publishes events into the configured channel, and consumes `api.newsfeed.create` messages. Stored on `bot.newsfeed`.                                             |
 | Completions   | `extensions/completions.py` → `CompletionHandler`         | Resolves verification channels, renders verification views, emits follow-up newsfeed events, and handles completion-related queues. Stored on `bot.completions`.                                                    |
@@ -25,7 +25,7 @@ those services and any associated cogs.
 1. **Setup hook:** Each extension defines `async def setup(bot)` and attaches services, cogs, or background tasks.
 2. **Shared state:** Handlers either use property setters on `Genji` (for example `bot.api`) or inherit from
    `utilities.base.BaseHandler` to gain guild/channel resolution helpers.
-3. **Queue registration:** Background work is tied to RabbitMQ queues by decorating handler coroutines with
+3. **Queue registration:** Background work is tied to the PostgreSQL queue jobs by decorating handler coroutines with
    `@queue_consumer("queue-name")`.
 4. **Cross-extension collaboration:** Handlers call into one another via the properties on `bot`. For example, the
    completions flow calls `bot.api` to fetch payloads, uses `bot.notifications` to determine DM preferences, and
@@ -84,9 +84,10 @@ To add a new feature to the bot:
 4. **Register queue handlers** (if needed):
    ```python
    from extensions._queue_registry import queue_consumer
+   from genjishimada_sdk.queue import JobContext
 
    @queue_consumer("api.my_feature.event", struct_type=MyEvent)
-   async def handle_event(self, event: MyEvent, message: AbstractIncomingMessage):
+   async def handle_event(self, event: MyEvent, message: JobContext):
        # Process the event
        pass
    ```

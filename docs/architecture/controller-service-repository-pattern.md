@@ -45,7 +45,7 @@ async def register_endpoint(data: EmailRegisterRequest, auth_service: AuthServic
 - Orchestrates repository calls
 - Manages transaction boundaries
 - Translates repository exceptions to domain exceptions
-- Can publish messages to RabbitMQ
+- Can publish messages to the PostgreSQL queue
 
 **What it does NOT do:**
 - Direct SQL queries (uses repository)
@@ -210,8 +210,9 @@ class BaseService:
         self._pool = pool
         self._state = state
 
-    async def publish_message(self, routing_key: str, data: msgspec.Struct, ...) -> JobStatusResponse:
-        # RabbitMQ publishing logic
+    # Service methods pass their active business transaction connection to
+    # genjishimada_sdk.queue_store.enqueue_job. Queue insertion must not
+    # commit independently of the associated domain mutation.
 ```
 
 ## Migrating a New Domain

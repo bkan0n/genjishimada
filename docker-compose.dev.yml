@@ -3,19 +3,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+    stop_grace_period: 45s
     container_name: genjishimada-api-dev
     environment:
       SENTRY_RELEASE: ${SENTRY_RELEASE}
       APP_ENVIRONMENT: ${APP_ENVIRONMENT}
-      RABBITMQ_USER: ${RABBITMQ_USER}
-      RABBITMQ_PASS: ${RABBITMQ_PASS}
-      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      QUEUE_OPERATOR_IDS: ${QUEUE_OPERATOR_IDS:-141372217677053952}
       SENTRY_DSN: ${SENTRY_DSN}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
       PYTHONUNBUFFERED: 1
       PYTHONOPTIMIZE: TRUE
+      POSTGRES_HOST: ${POSTGRES_HOST:-genjishimada-db-dev}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
@@ -24,9 +24,6 @@ services:
     restart: unless-stopped
     depends_on:
       genjishimada-db-dev:
-        condition: service_healthy
-        restart: true
-      genjishimada-rabbitmq-dev:
         condition: service_healthy
         restart: true
     healthcheck:
@@ -42,60 +39,27 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.bot
+    stop_grace_period: 45s
     container_name: genjishimada-bot-dev
     environment:
       SENTRY_RELEASE: ${SENTRY_RELEASE}
       SENTRY_DSN: ${SENTRY_DSN}
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       APP_ENVIRONMENT: ${APP_ENVIRONMENT}
+      QUEUE_OPERATOR_IDS: ${QUEUE_OPERATOR_IDS:-141372217677053952}
       SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN}
       SENTRY_FEEDBACK_URL: ${SENTRY_FEEDBACK_URL}
       API_KEY: ${API_KEY}
-      RABBITMQ_USER: ${RABBITMQ_USER}
-      RABBITMQ_PASS: ${RABBITMQ_PASS}
-      RABBITMQ_HOST: ${RABBITMQ_HOST}
+      QUEUE_DATABASE_URL: ${QUEUE_DATABASE_URL:-}
+      QUEUE_DATABASE_PASSWORD: ${QUEUE_DATABASE_PASSWORD:-}
+      POSTGRES_HOST: ${POSTGRES_HOST:-genjishimada-db-dev}
+      POSTGRES_DB: ${POSTGRES_DB}
       DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
     depends_on:
       genjishimada-api-dev:
         condition: service_healthy
         restart: true
-      genjishimada-rabbitmq-dev:
-        condition: service_healthy
-        restart: true
     restart: unless-stopped
-    networks:
-      - genji-network
-
-  genjishimada-rabbitmq-dev:
-    container_name: genjishimada-rabbitmq-dev
-    hostname: genjishimada-rabbitmq-dev
-    build:
-      context: ./infra/rabbitmq
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      RABBITMQ_USER: ${RABBITMQ_USER}
-      RABBITMQ_PASS: ${RABBITMQ_PASS}
-      RABBITMQ_NODENAME: rabbit@genjishimada-rabbitmq-dev
-      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
-      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: >
-        -rabbitmq_management load_definitions "/etc/rabbitmq/definitions.json"
-      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
-      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
-    command: >
-      bash -lc "exec rabbitmq-server & /usr/local/bin/rabbit-init.sh; wait -n"
-    volumes:
-      - genjishimada_rabbitmq_dev_data:/var/lib/rabbitmq
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          'rabbitmq-diagnostics --quiet check_running --erlang-cookie "$RABBITMQ_ERLANG_COOKIE" && rabbitmq-diagnostics --quiet check_local_alarms --erlang-cookie "$RABBITMQ_ERLANG_COOKIE"',
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
     networks:
       - genji-network
 
@@ -124,7 +88,6 @@ services:
 
 volumes:
   genjishimada_db_dev_data:
-  genjishimada_rabbitmq_dev_data:
 networks:
   genji-network:
     external: true

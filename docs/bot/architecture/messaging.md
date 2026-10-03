@@ -1,102 +1,31 @@
-# Messaging & Queues
+# Messaging and queues
 
-The bot consumes RabbitMQ queues to react to events emitted by the Genji Parkour API. Queue handlers live alongside
-their feature modules and are registered through a shared decorator.
+The bot processes durable jobs stored by PGQueuer 1.1.1 in PostgreSQL. Queue handlers live alongside their feature modules and use the shared `queue_consumer` decorator. The API owns business data and enqueues jobs in the same transaction as the change that requires them.
 
-## RabbitMQ integration
+## Worker lifecycle
 
-- `extensions/_queue_registry.py` provides `queue_consumer`, which wraps handlers with decoding, idempotency, and pytest
-  short-circuit logic.
-- `extensions/rabbit.RabbitHandler` opens pooled connections to RabbitMQ, declares queues (and matching dead-letter
-  queues), wraps handlers for error handling, and tracks startup drain state. The client is created during the
-  `extensions.rabbit` setup hook and started from `Genji.setup_hook`.
-- Services can call `await bot.rabbit.wait_until_drained()` when they need to delay work until any startup backlog has
-  been processed (for example, before sending verification embeds or playtest updates).
+The queue supervisor starts after extensions register handlers. It uses the API's database location with the separate `genjishimada_queue_worker` login and `QUEUE_DATABASE_PASSWORD`; `QUEUE_DATABASE_URL` can override that connection. Its handlers receive a decoded SDK event and transport-neutral `JobContext`; they call the API for domain reads and writes. Persistent views restore independently of any backlog.
 
-## Queue handler lifecycle
+The worker stops accepting work on shutdown, allows handlers to finish, and leaves unfinished work recoverable if draining times out. PostgreSQL and API outages cause bounded reconnect delays without exhausting the ordinary handler failure budget. Claims are fenced so an old process cannot complete a job now owned by another worker.
 
-1. Decorate an async function or method with `@queue_consumer("queue-name", struct_type=...)` inside the relevant
-   extension module.
-2. Parse the message body with `msgspec` models before touching Discord state.
-3. Perform the required Discord or API calls. The wrapper created by `RabbitHandler` manages acknowledgements and
-   ensures failures are logged before the message is dead-lettered.
+## Event ownership
 
-## Queue naming convention
+The shared SDK registry defines all supported event names and payloads. The bot owns 21 existing `api.*` events for completions, map edits, newsfeed, notifications, playtests, tournaments, and XP. The API owns the `completion.ocr.requested`, `tournament.ocr.requested`, and `map.linked.newsfeed.requested` continuations.
 
-Queues follow the pattern: `api.<domain>.<action>`
+To add an event, register its payload and owner, add the matching worker handler, and enqueue through the business transaction. Contract tests must cover the new producer and consumer together.
 
-Examples:
+## Replay and effects
 
-- `api.newsfeed.create`
-- `api.completion.submission`
-- `api.playtest.create`
+A durable `(action, event_key)` identifies the business operation. Reusing a key with different payload content is an error. Distinct legitimate transitions, such as verify → reject → verify, use different persisted transition identities.
 
-## Queue catalog
+A claimed job may execute more than once. A handler must record additive mutations and their receipts atomically through the API, and bind external sends to their destination and effect key. Completed effects are reused on retry. If a send might have succeeded but its result was not saved, the effect remains uncertain until reconciled; blindly replaying it can duplicate a message.
 
-| Queue                                    | Handler                                                  | Notes                                                                  |
-|------------------------------------------|----------------------------------------------------------|------------------------------------------------------------------------|
-| `api.newsfeed.create`                    | `NewsfeedHandler._process_newsfeed_create`               | Fetches the new event and posts it to the configured newsfeed channel. |
-| `api.notification.delivery`              | `NotificationHandler._process_notification_delivery`     | Sends DMs or channel notifications based on user settings.             |
-| `api.completion.autoverification.failed` | `CompletionHandler._process_autoverification_failed`     | Handles failed autoverification results.                               |
-| `api.completion.upvote`                  | `CompletionHandler._process_update_upvote_message`       | Forwards completion submissions into the upvote channel.               |
-| `api.completion.submission`              | `CompletionHandler._process_create_submission_message`   | Builds the verification queue embed for a new completion submission.   |
-| `api.completion.verification`            | `CompletionHandler._process_verification_status_change`  | Updates verification state and notifies users.                         |
-| `api.playtest.create`                    | `PlaytestHandler._process_create_playtest_message`       | Creates playtest threads and posts the intake embed.                   |
-| `api.playtest.vote.cast`                 | `PlaytestHandler._process_vote_cast_message`             | Records a new playtest vote and grants XP.                             |
-| `api.playtest.vote.remove`               | `PlaytestHandler._process_vote_remove_message`           | Handles vote removal events.                                           |
-| `api.playtest.approve`                   | `PlaytestHandler._process_playtest_approve_message`      | Posts approval summaries and cleans up playtest state.                 |
-| `api.playtest.force_accept`              | `PlaytestHandler._process_playtest_force_accept_message` | Mirrors force-accept commands issued upstream.                         |
-| `api.playtest.force_deny`                | `PlaytestHandler._process_playtest_force_deny_message`   | Mirrors force-deny commands issued upstream.                           |
-| `api.playtest.reset`                     | `PlaytestHandler._process_playtest_reset_message`        | Resets playtest runs and refreshes Discord embeds.                     |
-| `api.xp.grant`                           | `XPHandler._process_grant_message`                       | Applies XP rewards announced by the API.                               |
-| `api.map_edit.created`                   | `MapEditHandler._process_edit_created`                   | Creates a verification view for new map edit requests.                 |
-| `api.map_edit.resolved`                  | `MapEditHandler._process_edit_resolved`                  | Cleans up the verification queue message once resolved.                |
+## Failure recovery
 
-Keep this table current as new queues are introduced so on-call maintainers can trace message flow quickly.
+After the ordinary retry budget is exhausted, the job remains held with its payload, failure generation, and diagnostic state. The alert supervisor independently reads failure state through the API and posts to the configured operator channel. Persistent **Retry job** and **Details** controls survive bot restarts.
 
-## Idempotency
+Retries go through the API's authorized recovery service and preserve the logical job and completed effects. Stale controls, concurrent retries, successful jobs, and unresolved external effects cannot trigger a second execution incorrectly. See [Queue operations](../../services/queue.md).
 
-Most queues enforce idempotency using `message_id` headers:
+## Verification
 
-**API side** (publishing):
-
-```python
-await self.publish_message(
-    queue_name="api.completion.submission",
-    message=event,
-    message_id=f"completion-{completion_id}",  # Unique ID
-)
-```
-
-**Bot side** (consuming):
-
-```python
-@queue_consumer("api.completion.submission", struct_type=CompletionCreatedEvent, idempotent=True)
-async def handle_completion(self, event: CompletionCreatedEvent, message: AbstractIncomingMessage) -> None:
-    # Handler only runs once per message_id
-    ...
-```
-
-Claims are tracked in the database to prevent duplicate processing.
-
-## Pytest short-circuit
-
-Queue consumers skip processing when a message header includes `x-pytest-enabled: 1`. This is used in integration tests
-to avoid side effects.
-
-## Dead Letter Queue (DLQ)
-
-Failed messages are moved to a dead letter queue (e.g., `api.completion.submission.dlq`) after exhausting retries.
-
-**DLQ Processor** (runs every 60 seconds):
-
-1. Checks DLQ for messages
-2. Posts alert to Discord with message details
-3. Marks message with `dlq_notified` header
-4. Prevents duplicate alerts
-
-## Next Steps
-
-- [Core Bot Lifecycle](core-bot.md) - Understand how the bot starts
-- [Services & Extensions](services.md) - Learn about service architecture
-- [SDK Documentation](../../sdk/index.md) - See the msgspec event models
+`just test-queue` runs backend acceptance against real PostgreSQL, including process death, stale claims, database restart, atomic enqueue, effect replay, and retry authorization. `just test-queue-fast` omits fault injection. External effects use a transport-independent recorder; this suite does not test Discord components or connect to Discord.

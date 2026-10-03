@@ -9,7 +9,6 @@ The production compose file defines these services:
 - `genjishimada-api`
 - `genjishimada-bot`
 - `genjishimada-db`
-- `genjishimada-rabbitmq`
 
 Start them with:
 
@@ -22,13 +21,12 @@ docker compose -f docker-compose.prod.yml up -d
 Create a production `.env` with the values required by the API and bot:
 
 ```env
+QUEUE_DATABASE_URL=postgresql://genjishimada_queue_worker:REPLACE_WITH_SECRET@genjishimada-db:5432/genjishimada
+QUEUE_OPERATOR_IDS=141372217677053952
 APP_ENVIRONMENT=production
 POSTGRES_USER=genjishimada
 POSTGRES_PASSWORD=your_password
 POSTGRES_DB=genjishimada
-RABBITMQ_USER=admin
-RABBITMQ_PASS=your_password
-RABBITMQ_HOST=genjishimada-rabbitmq
 API_KEY=your_api_key_for_bot
 ```
 
@@ -46,4 +44,4 @@ docker compose -f docker-compose.prod.yml logs -f genjishimada-api
 
 ## Notes
 
-RabbitMQ and Postgres are attached to the external `genji-network`. Ensure that network exists in your environment.
+Postgres is attached to the external `genji-network`. Ensure that network exists in your environment.

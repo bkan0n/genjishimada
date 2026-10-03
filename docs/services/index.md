@@ -7,6 +7,6 @@ This section lists the services documented in this repo.
 - [Bot](bot.md)
 - [API](api.md)
 - [Database](database.md)
-- [RabbitMQ](rabbitmq.md)
+- [PostgreSQL queue](queue.md)
 - [OCR](ocr.md)
 - [Translate](translate.md)
