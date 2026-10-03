@@ -19,8 +19,8 @@ async def handle_skill_recompute(event: SkillRecomputeRequestedEvent, skill_serv
 
     Fired in-process after a verification-state change commits (D-01/D-02). Runs the
     single full-rebuild routine shared with the nightly poller and the PATCH path
-    (D-04). This is NOT a RabbitMQ publish, so ``X-PYTEST-ENABLED=1`` does not gate
-    it — tests can emit and assert a recompute deterministically.
+    (D-04). This remains an in-process task; tests can emit and assert a recompute
+    deterministically.
 
     The ``recompute_all`` call is wrapped so a failed recompute (e.g. a transient
     DB error or the app pool drained at shutdown) is logged rather than silently

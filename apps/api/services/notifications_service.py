@@ -25,6 +25,7 @@ from repository.users_repository import UsersRepository
 from services.base import BaseService
 from services.exceptions.notifications import NotificationEventNotFoundError
 from services.exceptions.users import UserNotFoundError
+from utilities.transactions import transactional
 
 if TYPE_CHECKING:
     from asyncpg import Pool
@@ -52,6 +53,7 @@ class NotificationsService(BaseService):
         self._notifications_repo = notifications_repo
         self._users_repo = users_repo
 
+    @transactional
     async def create_and_dispatch(
         self,
         data: NotificationCreateRequest,
@@ -62,11 +64,11 @@ class NotificationsService(BaseService):
         This is the primary method for creating notifications. It:
         1. Stores the notification in the database (for web tray)
         2. Determines which channels should receive it based on preferences
-        3. Publishes a RabbitMQ message for Discord delivery (if applicable)
+        3. Publishes a PostgreSQL queue message for Discord delivery (if applicable)
 
         Args:
             data: The notification to create.
-            headers: Request headers for RabbitMQ publishing.
+            headers: Request headers for PostgreSQL queue publishing.
 
         Returns:
             The created notification event.
@@ -112,8 +114,9 @@ class NotificationsService(BaseService):
                 channels_to_deliver=discord_channels,
             )
 
-            await self.publish_message(
+            await self.enqueue(
                 routing_key="api.notification.delivery",
+                idempotency_key=f"notification:{event.id}",
                 data=delivery_event,
                 headers=headers,
             )

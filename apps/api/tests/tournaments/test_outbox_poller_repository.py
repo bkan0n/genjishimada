@@ -13,10 +13,8 @@ The reward side-effects (``award_cycle_placements`` per cycle + ``award_edition_
 run ONCE PER CHILD CYCLE — i.e. once per ``event.results`` entry, keyed on
 ``entry.cycle_id`` (Pattern 4) — not once per edition.
 
-The poller passes ``Headers({})`` to ``publish_message`` (production path), so to
-exercise it in tests without a live RabbitMQ broker we stub
-``TournamentOutboxService.publish_message`` -- the same effect as the documented
-``X-PYTEST-ENABLED=1`` publish skip (base.py), but lets us assert call counts.
+The enqueue recorder isolates event shape assertions. The queue producer acceptance suite
+separately verifies actual persisted jobs, reward rollback, and atomic source acknowledgement.
 """
 
 import datetime as dt
@@ -98,14 +96,14 @@ async def _published(pool: asyncpg.Pool, transition_id: int) -> bool:
 
 
 def _stub_publish(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
-    """Replace publish_message with a recorder; returns the list of recorded calls."""
+    """Replace enqueue with a recorder; returns the list of recorded calls."""
     calls: list[dict] = []
 
-    async def _fake_publish(self, *, routing_key, data, headers, idempotency_key=None):  # noqa: ANN001
+    async def _fake_publish(self, *, routing_key, data, headers, idempotency_key=None, conn=None, entity_key=None):  # noqa: ANN001
         calls.append({"routing_key": routing_key, "data": data, "idempotency_key": idempotency_key})
         return JobStatusResponse(uuid4(), "succeeded")
 
-    monkeypatch.setattr(outbox_module.TournamentOutboxService, "publish_message", _fake_publish)
+    monkeypatch.setattr(outbox_module.TournamentOutboxService, "enqueue", _fake_publish)
     return calls
 
 

@@ -21,6 +21,7 @@ from litestar.datastructures import Headers, State
 
 from repository.newsfeed_repository import NewsfeedRepository
 from services.base import BaseService
+from utilities.transactions import transactional
 
 log = logging.getLogger(__name__)
 
@@ -240,13 +241,14 @@ class NewsfeedService(BaseService):
         super().__init__(pool, state)
         self._newsfeed_repo = newsfeed_repo
 
+    @transactional
     async def create_and_publish(
         self,
         *,
         event: NewsfeedEvent,
         headers: Headers,
     ) -> PublishNewsfeedJobResponse:
-        """Insert a newsfeed event and publish its ID to RabbitMQ.
+        """Insert a newsfeed event and publish its ID to PostgreSQL queue.
 
         Args:
             event: The event payload to persist.
@@ -263,7 +265,7 @@ class NewsfeedService(BaseService):
         )
 
         idempotency_key = f"newsfeed:create:{new_id}"
-        job_status = await self.publish_message(
+        job_status = await self.enqueue(
             routing_key="api.newsfeed.create",
             data=NewsfeedDispatchEvent(newsfeed_id=new_id),
             headers=headers,
@@ -316,6 +318,7 @@ class NewsfeedService(BaseService):
         log.debug(rows)
         return msgspec.convert(rows, list[NewsfeedEvent])
 
+    @transactional
     async def generate_map_edit_newsfeed(
         self,
         old_data: MapResponse,

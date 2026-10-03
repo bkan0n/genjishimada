@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from asyncpg import Connection, Pool
 
+from utilities.transactions import ContextPool, active_connection
+
 
 class BaseRepository:
     """Base class for all repositories.
@@ -18,7 +20,7 @@ class BaseRepository:
         Args:
             pool: AsyncPG connection pool.
         """
-        self._pool = pool
+        self._pool = ContextPool(pool)
 
     def _get_connection(self, conn: Connection | None = None) -> Connection | Pool:
         """Get connection for query execution.
@@ -29,4 +31,4 @@ class BaseRepository:
         Returns:
             Connection if provided (for transactions), otherwise pool.
         """
-        return conn or self._pool
+        return conn or active_connection() or self._pool.pool

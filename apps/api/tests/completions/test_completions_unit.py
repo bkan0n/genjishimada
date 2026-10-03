@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock, MagicMock
 """Unit tests for CompletionsService."""
 
 import msgspec
@@ -175,8 +176,8 @@ class TestCompletionsServiceSubmitCompletion:
         mock_autocomplete = mocker.AsyncMock()
         mock_users = mocker.AsyncMock()
 
-        # Mock publish_message to skip RabbitMQ
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "job123"})
+        # Mock enqueue to skip PostgreSQL queue
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "job123"})
 
         result = await service.submit_completion(data, mock_request, mock_autocomplete, mock_users)
 
@@ -194,11 +195,11 @@ class TestCompletionsServiceSubmitCompletion:
         )
 
         # Verify deletion message was published
-        delete_calls = [call for call in service.publish_message.call_args_list if "delete" in call[1]["routing_key"]]
+        delete_calls = [call for call in service.enqueue.call_args_list if "delete" in call[1]["routing_key"]]
         assert len(delete_calls) == 1
 
         # Verify submission message was published
-        submission_calls = [call for call in service.publish_message.call_args_list if "submission" in call[1]["routing_key"]]
+        submission_calls = [call for call in service.enqueue.call_args_list if "submission" in call[1]["routing_key"]]
         assert len(submission_calls) == 1
 
         assert result.completion_id == 2
@@ -244,7 +245,7 @@ class TestCompletionsServiceSubmitCompletion:
         mock_notifications = mocker.AsyncMock()
         mock_users = mocker.AsyncMock()
 
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "job123"})
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "job123"})
 
         await service.submit_completion(data, mock_request, mock_notifications, mock_users)
 
@@ -272,8 +273,8 @@ class TestCompletionsServiceSubmitCompletion:
         mock_autocomplete = mocker.AsyncMock()
         mock_users = mocker.AsyncMock()
 
-        # Mock publish_message and get_suspicious_flags
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "job123"})
+        # Mock enqueue and get_suspicious_flags
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "job123"})
         service.get_suspicious_flags = mocker.AsyncMock(return_value=[])
 
         result = await service.submit_completion(data, mock_request, mock_autocomplete, mock_users)
@@ -285,11 +286,11 @@ class TestCompletionsServiceSubmitCompletion:
         mock_completions_repo.insert_completion.assert_called_once()
 
         # Verify no deletion message was published
-        delete_calls = [call for call in service.publish_message.call_args_list if "delete" in call[1]["routing_key"]]
+        delete_calls = [call for call in service.enqueue.call_args_list if "delete" in call[1]["routing_key"]]
         assert len(delete_calls) == 0
 
         # Verify submission message was published
-        submission_calls = [call for call in service.publish_message.call_args_list if "submission" in call[1]["routing_key"]]
+        submission_calls = [call for call in service.enqueue.call_args_list if "submission" in call[1]["routing_key"]]
         assert len(submission_calls) == 1
 
         assert result.completion_id == 2
@@ -336,7 +337,7 @@ class TestCompletionsServiceVerifyCompletion:
         mock_users_repo.fetch_user.return_value = {"coalesced_name": "TestPlayer"}
         mocker.patch("services.completions_service.UsersRepository", return_value=mock_users_repo)
 
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "job123"})
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "job123"})
 
         data = CompletionVerificationUpdateRequest(
             verified_by=123456789,
@@ -395,7 +396,7 @@ class TestCompletionsServiceVerifyCompletion:
         mock_store_service.revert_quest_progress = mocker.AsyncMock()
         mocker.patch("services.completions_service.StoreService", return_value=mock_store_service)
 
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "job123"})
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "job123"})
 
         data = CompletionVerificationUpdateRequest(
             verified_by=123456789,
@@ -1531,7 +1532,7 @@ class TestSubmitTournamentAutoDetect:
         mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
         mock_completions_repo.insert_completion.return_value = 5001
         service.get_suspicious_flags = mocker.AsyncMock(return_value=[])
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "j"})
         tournament_repo.get_active_cycle_by_map_id.return_value = {
             "id": 42,
             "category_id": 3,
@@ -1570,7 +1571,7 @@ class TestSubmitTournamentAutoDetect:
         mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
         mock_completions_repo.insert_completion.return_value = 5001
         service.get_suspicious_flags = mocker.AsyncMock(return_value=[])
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "j"})
         tournament_repo.get_active_cycle_by_map_id.return_value = None
 
         data = CompletionCreateRequest(
@@ -1626,6 +1627,7 @@ class TestSubmitTournamentSlowerRelax:
         mock_request = mocker.Mock()
         mock_request.headers = {}
 
+        mocker.patch.object(service, "enqueue", new_callable=mocker.AsyncMock)
         # Must NOT raise (D-07).
         await service.submit_completion(data, mock_request, mocker.AsyncMock(), mocker.AsyncMock())
 
@@ -1712,7 +1714,7 @@ class TestVerifyCompletionTournamentSideEffect:
         # quest-progress branch; stub that helper so the test isolates tournament
         # propagation rather than the unrelated quest/medal/lootbox chain.
         mocker.patch.object(service, "_update_quest_progress_for_completion", mocker.AsyncMock())
-        conn = mocker.AsyncMock()
+        conn = mocker.MagicMock()
         mock_completions_repo.check_completion_exists.return_value = True
         mock_completions_repo.fetch_completion_for_moderation.return_value = {
             "user_id": 123,
@@ -1745,7 +1747,7 @@ class TestVerifyCompletionTournamentSideEffect:
             "time": 8.0,
         }
         reward_service.award_participation.return_value = ["xp-event"]
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "j"})
 
         data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
         mock_request = mocker.Mock()
@@ -1755,15 +1757,14 @@ class TestVerifyCompletionTournamentSideEffect:
 
         tournament_repo.set_tournament_verified.assert_awaited_once_with(9001, verified=True, conn=conn)
         reward_service.award_participation.assert_awaited_once()
-        reward_service.publish_xp_events.assert_awaited_once_with(["xp-event"])
         tournament_repo.get_active_cycle_by_map_id.assert_not_awaited()
         tournament_publishes = [
             c
-            for c in service.publish_message.call_args_list
+            for c in service.enqueue.call_args_list
             if c.kwargs.get("routing_key") == "api.tournament.verification.changed"
         ]
         assert len(tournament_publishes) == 1
-        assert tournament_publishes[0].kwargs["idempotency_key"] == "tournament:verify:9001"
+        assert tournament_publishes[0].kwargs["idempotency_key"].startswith("tournament:verify:9001:")
 
     async def test_verify_no_tournament_link_no_side_effect(
         self, mock_pool, mock_state, mock_completions_repo, mocker
@@ -1772,7 +1773,7 @@ class TestVerifyCompletionTournamentSideEffect:
         service, tournament_repo, reward_service = _tournament_service(
             mocker, mock_pool, mock_state, mock_completions_repo
         )
-        conn = mocker.AsyncMock()
+        conn = mocker.MagicMock()
         mock_completions_repo.check_completion_exists.return_value = True
         mock_completions_repo.fetch_completion_for_moderation.return_value = {
             "user_id": 123,
@@ -1781,7 +1782,7 @@ class TestVerifyCompletionTournamentSideEffect:
             "old_verified": False,
             "tournament_completion_id": None,
         }
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "j"})
 
         data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
         mock_request = mocker.Mock()
@@ -1809,7 +1810,7 @@ class TestVerifyCompletionTournamentSideEffect:
         # quest-progress branch; stub that helper so the test isolates the
         # no-side-effect assertion rather than the unrelated quest chain.
         mocker.patch.object(service, "_update_quest_progress_for_completion", mocker.AsyncMock())
-        conn = mocker.AsyncMock()
+        conn = mocker.MagicMock()
         mock_completions_repo.check_completion_exists.return_value = True
         mock_completions_repo.fetch_completion_for_moderation.return_value = {
             "user_id": 123,
@@ -1821,7 +1822,7 @@ class TestVerifyCompletionTournamentSideEffect:
         mock_completions_repo.fetch_map_metadata_by_code.return_value = {"map_id": 777}
         # The linked tournament row no longer resolves -> propagation no-ops.
         tournament_repo.fetch_tournament_completion.return_value = None
-        service.publish_message = mocker.AsyncMock(return_value={"job_id": "j"})
+        service.enqueue = mocker.AsyncMock(return_value={"job_id": "j"})
 
         data = CompletionVerificationUpdateRequest(verified=True, verified_by=456, reason=None)
         mock_request = mocker.Mock()

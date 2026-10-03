@@ -388,7 +388,7 @@ class TestNewsfeedServiceCreateAndPublish:
         """create_and_publish inserts event into repository."""
         service = NewsfeedService(mock_pool, mock_state, mock_newsfeed_repo)
 
-        mocker.patch.object(service, "publish_message", return_value={"status": "pending", "id": "job-1"})
+        mocker.patch.object(service, "enqueue", return_value={"status": "pending", "id": "job-1"})
 
         mock_newsfeed_repo.insert_event.return_value = 123
 
@@ -413,14 +413,14 @@ class TestNewsfeedServiceCreateAndPublish:
         # Verify response contains new ID
         assert result.newsfeed_id == 123
 
-    async def test_create_and_publish_publishes_to_rabbitmq(
+    async def test_create_and_publish_publishes_to_queue(
         self, mock_pool, mock_state, mock_newsfeed_repo, mocker
     ):
-        """create_and_publish publishes event to RabbitMQ."""
+        """create_and_publish publishes event to PostgreSQL queue."""
         service = NewsfeedService(mock_pool, mock_state, mock_newsfeed_repo)
 
         mock_publish = mocker.patch.object(
-            service, "publish_message", return_value={"status": "pending", "id": "job-1"}
+            service, "enqueue", return_value={"status": "pending", "id": "job-1"}
         )
 
         mock_newsfeed_repo.insert_event.return_value = 456
@@ -437,7 +437,7 @@ class TestNewsfeedServiceCreateAndPublish:
 
         await service.create_and_publish(event=event, headers=headers)
 
-        # Verify publish_message called with correct routing key and event
+        # Verify enqueue called with correct routing key and event
         mock_publish.assert_called_once()
         call_args = mock_publish.call_args[1]
         assert call_args["routing_key"] == "api.newsfeed.create"
@@ -451,7 +451,7 @@ class TestNewsfeedServiceCreateAndPublish:
         """create_and_publish converts msgspec payload to builtins for storage."""
         service = NewsfeedService(mock_pool, mock_state, mock_newsfeed_repo)
 
-        mocker.patch.object(service, "publish_message", return_value={"status": "pending", "id": "job-1"})
+        mocker.patch.object(service, "enqueue", return_value={"status": "pending", "id": "job-1"})
         mock_newsfeed_repo.insert_event.return_value = 789
 
         timestamp = dt.datetime.now(dt.timezone.utc)

@@ -57,6 +57,7 @@ from services.exceptions.store import (
     RotationExpiredError,
 )
 from services.lootbox_service import LootboxService
+from utilities.transactions import transactional
 
 log = logging.getLogger(__name__)
 
@@ -318,6 +319,7 @@ class StoreService(BaseService):
             remaining_coins=remaining_coins,
         )
 
+    @transactional
     async def purchase_item(
         self,
         user_id: int,
@@ -1147,6 +1149,7 @@ class StoreService(BaseService):
                     conn=conn,  # type: ignore[arg-type]
                 )
 
+    @transactional
     async def claim_quest(self, *, user_id: int, progress_id: int, headers: Headers) -> ClaimQuestResponse:
         """Claim a completed quest and grant rewards.
 
@@ -1204,7 +1207,7 @@ class StoreService(BaseService):
             )
 
         # Grant XP outside the transaction — grant_user_xp acquires its own connection
-        # and publishes to RabbitMQ, so it can't share the outer transaction.
+        # and publishes to PostgreSQL queue, so it can't share the outer transaction.
         if xp_reward > 0:
             xp_response = await self._lootbox_service.grant_user_xp(
                 headers,

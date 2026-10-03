@@ -5,7 +5,7 @@ integration DB (the ``skill.*`` schema exists only there). It exercises the real
 verify / reject / suspicious-flag HTTP endpoints (which emit
 ``skill.recompute.requested`` post-commit, plan 13-06 Task 1) and the community
 leaderboard ``skill_score`` column (Task 2), driving the deterministic snapshot
-rebuild via the in-process ``SkillService.recompute_all`` (D-04, NOT RabbitMQ-gated,
+rebuild via the in-process ``SkillService.recompute_all`` (D-04, independent of queue processing,
 so ``X-PYTEST-ENABLED=1`` does not gate it).
 
 Each assertion is mapped to its SPEC acceptance criterion (req 6/7/8/9) in a comment.

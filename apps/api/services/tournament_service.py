@@ -52,10 +52,10 @@ from services.exceptions.tournaments import (
 )
 from services.tournament_outbox_service import _write_drained_results_row
 from services.tournament_reward_service import TournamentRewardService
+from utilities.transactions import transactional
 
 if TYPE_CHECKING:
     from asyncpg import Connection
-    from genjishimada_sdk.xp import XpGrantEvent
 
 log = getLogger(__name__)
 
@@ -752,6 +752,7 @@ class TournamentService(BaseService):
 
         return msgspec.convert(result, TournamentNextCycleResponse)
 
+    @transactional
     async def reroll_active_cycle(
         self,
         category_id: int,
@@ -772,8 +773,7 @@ class TournamentService(BaseService):
 
         Args:
             category_id: Category whose active cycle is rerolled.
-            headers: Request headers forwarded to the post-commit publish (carries
-                ``X-PYTEST-ENABLED`` so the publish no-ops under tests).
+            headers: Request headers retained for call compatibility; credentials are not persisted.
 
         Returns:
             The new active cycle with joined map details.
@@ -875,10 +875,7 @@ class TournamentService(BaseService):
                 conn=conn,  # type: ignore[arg-type]
             )
 
-        # Transaction committed: announce the new map via the existing rollover
-        # pipeline (results empty -> no results section/champion transfer; started
-        # populated -> the bot renders the "new cycle" card). A publish failure must
-        # not be swallowed — the DB is already committed (mirrors _set_verified).
+        # Enqueue on the enclosing transaction; delivery failures roll back domain writes.
         started_event = TournamentCycleStartedEvent(
             cycle_id=new_cycle_id,
             category_id=category_id,
@@ -895,16 +892,17 @@ class TournamentService(BaseService):
             results_pending=False,
         )
         try:
-            await self.publish_message(
+            await self.enqueue(
                 routing_key="api.tournament.rollover",
                 data=rollover,
                 headers=headers or Headers(),
                 idempotency_key=f"tournament:active-reroll:{new_cycle_id}",
+                entity_key="tournament:announcements",
             )
         except Exception:
             log.exception(
-                "Failed to publish active-cycle reroll rollover event after commit "
-                "(category_id=%s, new_cycle_id=%s) — DB is committed but the live "
+                "Failed to publish active-cycle reroll rollover event before commit "
+                "(category_id=%s, new_cycle_id=%s) — transaction is rolling back; the live "
                 "channel was not notified; reconcile manually.",
                 category_id,
                 new_cycle_id,
@@ -979,6 +977,7 @@ class TournamentService(BaseService):
 
         return msgspec.convert(result, TournamentNextCycleResponse)
 
+    @transactional
     async def verify_tournament_completion(
         self,
         tournament_completion_id: int,
@@ -986,30 +985,7 @@ class TournamentService(BaseService):
         headers: Headers | None = None,
         conn: Connection | None = None,
     ) -> JobStatusResponse:
-        """Verify a non-PB tournament completion and award participation XP.
-
-        This is the tournament row's OWN verification (D-04): a slower-than-PB run
-        has no core completion, so it never fires a core verification event. The
-        verdict flips ``tournaments.completions.verified`` TRUE, the first verified
-        run auto-enrolls the player by granting participation XP (D-02/D-06,
-        idempotent via the 08-01 ledger), and a verified=True
-        TournamentVerificationChangedEvent is published. When ``conn`` is None a
-        fresh connection + transaction is acquired so the flip + XP grant are
-        atomic (mirrors verify_completion_with_pool); the deferred XP notification
-        is flushed only after the transaction commits (CR-02).
-
-        Args:
-            tournament_completion_id: ID of the tournament completion row to verify.
-            headers: Optional request headers forwarded to the publish call
-                (carries X-PYTEST-ENABLED in tests so the broker is skipped).
-            conn: Optional connection for transaction support.
-
-        Returns:
-            Job status of the published verification-changed event.
-
-        Raises:
-            TournamentCompletionNotFoundError: If no tournament completion row matches.
-        """
+        """Verify the tournament submission and enqueue its reward and verdict atomically."""
         return await self._set_verified(
             tournament_completion_id,
             verified=True,
@@ -1019,6 +995,7 @@ class TournamentService(BaseService):
             conn=conn,
         )
 
+    @transactional
     async def reject_tournament_completion(
         self,
         tournament_completion_id: int,
@@ -1037,7 +1014,7 @@ class TournamentService(BaseService):
         Args:
             tournament_completion_id: ID of the tournament completion row to reject.
             headers: Optional request headers forwarded to the publish call
-                (carries X-PYTEST-ENABLED in tests so the broker is skipped).
+                (credentials are never copied into persisted work).
             conn: Optional connection for transaction support.
 
         Returns:
@@ -1055,6 +1032,7 @@ class TournamentService(BaseService):
             conn=conn,
         )
 
+    @transactional
     async def _set_verified(  # noqa: PLR0913
         self,
         tournament_completion_id: int,
@@ -1065,25 +1043,7 @@ class TournamentService(BaseService):
         headers: Headers | None = None,
         conn: Connection | None = None,
     ) -> JobStatusResponse:
-        """Shared verify/reject body: flip the row, optionally award XP, publish.
-
-        Args:
-            tournament_completion_id: Tournament completion row ID.
-            verified: Target verified value (True verify, False reject).
-            idempotency_key: Publish idempotency key for the changed event.
-            award_xp: Whether to award participation XP (verify only).
-            headers: Optional request headers forwarded to the publish call.
-            conn: Optional connection for transaction support.
-
-        Returns:
-            Job status of the published verification-changed event.
-
-        Raises:
-            TournamentCompletionNotFoundError: If no tournament completion row matches.
-            AlreadyVerifiedError: If a reject is attempted on an already-verified run
-                (the participation XP grant is not reversible, so the verdict is
-                terminal once verified — CR-01).
-        """
+        """Apply a tournament verdict, reward, and durable queue event in one transaction."""
         existing = await self._tournament_repo.fetch_tournament_completion(
             tournament_completion_id,
             conn=conn,  # type: ignore[arg-type]
@@ -1114,10 +1074,7 @@ class TournamentService(BaseService):
                 idempotency_key=idempotency_key,
             )
 
-        pending_xp_events: list[XpGrantEvent] = []
-
         async def _do(active_conn: Connection) -> dict | None:
-            nonlocal pending_xp_events
             row = await self._tournament_repo.set_tournament_verified(
                 tournament_completion_id,
                 verified,
@@ -1126,7 +1083,7 @@ class TournamentService(BaseService):
             if award_xp and self._reward_service is not None and row is not None:
                 cycle = await self._tournament_repo.fetch_cycle(row["cycle_id"], conn=active_conn)
                 if cycle is not None:
-                    pending_xp_events = await self._reward_service.award_participation(
+                    await self._reward_service.award_participation(
                         cycle=cycle,
                         user_id=row["user_id"],
                         conn=active_conn,
@@ -1170,8 +1127,6 @@ class TournamentService(BaseService):
             updated = current
 
         # Transaction committed: now safe to publish the deferred XP notification.
-        if pending_xp_events and self._reward_service is not None:
-            await self._reward_service.publish_xp_events(pending_xp_events)
 
         event = TournamentVerificationChangedEvent(
             tournament_completion_id=tournament_completion_id,
@@ -1180,11 +1135,9 @@ class TournamentService(BaseService):
             verified=verified,
             time=float(updated["time"]),
         )
-        # WR-01: the DB txn is already committed. A publish failure must not be
-        # silently swallowed — log it at exception level with the completion id
-        # so a dropped verification-changed event is reconcilable.
+        # Enqueue on the enclosing transaction; delivery failures roll back domain writes.
         try:
-            return await self.publish_message(
+            return await self.enqueue(
                 routing_key="api.tournament.verification.changed",
                 data=event,
                 headers=headers or Headers(),
@@ -1192,14 +1145,15 @@ class TournamentService(BaseService):
             )
         except Exception:
             log.exception(
-                "Failed to publish tournament verification-changed event after commit "
-                "(tournament_completion_id=%s, verified=%s) — DB is committed but the bot "
+                "Failed to publish tournament verification-changed event before commit "
+                "(tournament_completion_id=%s, verified=%s) — transaction is rolling back; the bot "
                 "was not notified; reconcile manually.",
                 tournament_completion_id,
                 verified,
             )
             raise
 
+    @transactional
     async def _noop_verdict_job(
         self,
         tournament_completion_id: int,
@@ -1236,7 +1190,7 @@ class TournamentService(BaseService):
             verified=existing["status"] == "verified",
             time=float(existing["time"]),
         )
-        return await self.publish_message(
+        return await self.enqueue(
             routing_key="api.tournament.verification.changed",
             data=event,
             headers=Headers(),

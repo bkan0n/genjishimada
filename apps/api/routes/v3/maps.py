@@ -36,8 +36,7 @@ from genjishimada_sdk.maps import (
     TrendingMapResponse,
     UnlinkMapsCreateRequest,
 )
-from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedGuide, NewsfeedLegacyRecord
-from genjishimada_sdk.xp import XP_AMOUNTS, XpGrantRequest
+from genjishimada_sdk.newsfeed import NewsfeedEvent, NewsfeedLegacyRecord
 from litestar import Controller, delete, get, patch, post
 from litestar.connection import Request
 from litestar.di import Provide
@@ -73,6 +72,7 @@ from services.newsfeed_service import NewsfeedService, provide_newsfeed_service
 from services.users_service import UsersService, provide_users_service
 from utilities.errors import CustomHTTPException
 from utilities.map_search import CompletionFilter, MapSearchFilters, MedalFilter, PlaytestFilter
+from utilities.transactions import transaction
 
 log = logging.getLogger(__name__)
 
@@ -320,23 +320,24 @@ class MapsController(Controller):
             CustomHTTPException: On validation or business rule errors.
         """
         try:
-            updated_map, original_map = await maps_service.update_map(code, data)
+            async with transaction(request.app.state.db_pool):
+                updated_map, original_map = await maps_service.update_map(code, data)
 
-            async def _get_user_coalesced_name(user_id: int) -> str:
-                user = await users_service.get_user(user_id)
-                if user:
-                    return user.coalesced_name or "Unknown User"
-                return "Unknown User"
+                async def _get_user_coalesced_name(user_id: int) -> str:
+                    user = await users_service.get_user(user_id)
+                    if user:
+                        return user.coalesced_name or "Unknown User"
+                    return "Unknown User"
 
-            await newsfeed_service.generate_map_edit_newsfeed(
-                original_map,
-                data,
-                "",
-                request.headers,
-                get_creator_name=_get_user_coalesced_name,
-            )
+                await newsfeed_service.generate_map_edit_newsfeed(
+                    original_map,
+                    data,
+                    "",
+                    request.headers,
+                    get_creator_name=_get_user_coalesced_name,
+                )
 
-            return updated_map
+                return updated_map
 
         except MapNotFoundError as e:
             raise CustomHTTPException(
@@ -503,32 +504,9 @@ class MapsController(Controller):
             CustomHTTPException: On error.
         """
         try:
-            guide, context = await maps_service.create_guide(code, data)
-
-            map_data = context["map_data"]
-            if map_data.official:
-                xp_amount = XP_AMOUNTS["Guide"]
-                await lootbox_service.grant_user_xp(
-                    request.headers,
-                    data.user_id,
-                    XpGrantRequest(amount=xp_amount, type="Guide"),
-                )
-
-            user = await users_service.get_user(user_id=data.user_id)
-            user_name = (user.coalesced_name or "Unknown User") if user else "Unknown User"
-
-            event_payload = NewsfeedGuide(
-                code=code,
-                guide_url=data.url,
-                name=user_name,
+            guide = await maps_service.submit_guide(
+                code, data, request.headers, lootbox_service, newsfeed_service, users_service
             )
-            event = NewsfeedEvent(
-                id=None,
-                timestamp=dt.datetime.now(dt.timezone.utc),
-                payload=event_payload,
-                event_type="guide",
-            )
-            await newsfeed_service.create_and_publish(event=event, headers=request.headers)
 
             return Response(guide, status_code=HTTP_201_CREATED)
 
@@ -730,22 +708,23 @@ class MapsController(Controller):
             CustomHTTPException: If map not found.
         """
         try:
-            affected_count, _context = await maps_service.convert_to_legacy(code, reason)
+            async with transaction(request.app.state.db_pool):
+                affected_count, _context = await maps_service.convert_to_legacy(code, reason)
 
-            event_payload = NewsfeedLegacyRecord(
-                code=code,
-                affected_count=affected_count,
-                reason=reason,
-            )
-            event = NewsfeedEvent(
-                id=None,
-                timestamp=dt.datetime.now(dt.timezone.utc),
-                payload=event_payload,
-                event_type="legacy_record",
-            )
-            await newsfeed_service.create_and_publish(event=event, headers=request.headers)
+                event_payload = NewsfeedLegacyRecord(
+                    code=code,
+                    affected_count=affected_count,
+                    reason=reason,
+                )
+                event = NewsfeedEvent(
+                    id=None,
+                    timestamp=dt.datetime.now(dt.timezone.utc),
+                    payload=event_payload,
+                    event_type="legacy_record",
+                )
+                await newsfeed_service.create_and_publish(event=event, headers=request.headers)
 
-            return Response(None, status_code=HTTP_204_NO_CONTENT)
+                return Response(None, status_code=HTTP_204_NO_CONTENT)
 
         except MapNotFoundError as e:
             raise CustomHTTPException(

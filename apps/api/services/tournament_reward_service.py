@@ -15,11 +15,11 @@ from repository.lootbox_repository import LootboxRepository
 from repository.tournaments_repository import TournamentRepository
 from services.base import BaseService
 from services.lootbox_service import LootboxService
+from utilities.transactions import transactional
 
 if TYPE_CHECKING:
     from asyncpg import Connection
     from genjishimada_sdk.tournaments import TournamentCycleCompletedEvent
-    from genjishimada_sdk.xp import XpGrantEvent
 
 log = getLogger(__name__)
 
@@ -62,6 +62,7 @@ class TournamentRewardService(BaseService):
         self._lootbox_repo = lootbox_repo
         self._lootbox_service = lootbox_service
 
+    @transactional
     async def _grant_xp(  # noqa: PLR0913
         self,
         user_id: int,
@@ -69,7 +70,6 @@ class TournamentRewardService(BaseService):
         reason: str,
         cycle_id: int,
         grant_reason_key: str,
-        pending_events: list[XpGrantEvent],
         *,
         conn: Connection,
     ) -> None:
@@ -78,10 +78,7 @@ class TournamentRewardService(BaseService):
         Claims the (cycle_id, user_id, grant_reason_key) ledger row first; a
         replay (claim returns False) is a no-op. On a fresh claim, delegates to
         LootboxService.grant_xp so the lootbox.xp write joins ``conn``'s
-        transaction. The generic XpGrantEvent (type="Tournament") is NOT published
-        here — it is appended to ``pending_events`` so the caller publishes it only
-        after the transaction commits (CR-02: never notify the bot about XP a
-        rollback would erase).
+        transaction, including its durable XP notification.
 
         Args:
             user_id: User receiving XP.
@@ -89,8 +86,6 @@ class TournamentRewardService(BaseService):
             reason: Human-readable grant reason (carried on the event).
             cycle_id: Cycle the grant belongs to.
             grant_reason_key: Ledger reason category (participation/placement/streak).
-            pending_events: Collector for the deferred XpGrantEvent (published
-                post-commit by the caller via publish_xp_events).
             conn: Active connection for transactional participation.
         """
         claimed = await self._tournament_repo.claim_xp_grant(
@@ -116,23 +111,8 @@ class TournamentRewardService(BaseService):
             type="Tournament",
             reason=reason,
             conn=conn,
-            pending_events=pending_events,
         )
         log.debug("[✓] Granted %s XP to user %s (%s)", amount, user_id, grant_reason_key)
-
-    async def publish_xp_events(self, events: list[XpGrantEvent]) -> None:
-        """Publish deferred tournament XP grant events after the caller commits.
-
-        Thin pass-through to :meth:`LootboxService.publish_xp_events`. Callers
-        invoke this only AFTER the transaction that produced ``events`` has
-        committed, so a notification is never sent for XP a rollback erased.
-
-        Args:
-            events: Deferred XpGrantEvents returned by award_participation /
-                award_cycle_placements / award_edition_streaks.
-        """
-        if events:
-            await self._lootbox_service.publish_xp_events(events)
 
     async def award_participation(
         self,
@@ -140,7 +120,7 @@ class TournamentRewardService(BaseService):
         user_id: int,
         *,
         conn: Connection,
-    ) -> list[XpGrantEvent]:
+    ) -> None:
         """Grant the category's participation_xp once per (cycle, user).
 
         A participation_xp of 0 is a no-op (no ledger claim, no grant). A second
@@ -152,19 +132,15 @@ class TournamentRewardService(BaseService):
             user_id: Participating user ID.
             conn: Active connection for transactional participation.
 
-        Returns:
-            Deferred XpGrantEvents to publish AFTER the caller commits (empty when
-            nothing was granted). Publish via :meth:`publish_xp_events`.
         """
-        pending_events: list[XpGrantEvent] = []
         category = await self._tournament_repo.fetch_category(cycle["category_id"], conn=conn)
         if not category:
             log.debug("[!] No category %s for participation grant — skipping", cycle["category_id"])
-            return pending_events
+            return
 
         participation_xp = category["participation_xp"]
         if not participation_xp:
-            return pending_events
+            return
 
         await self._grant_xp(
             user_id=user_id,
@@ -172,17 +148,16 @@ class TournamentRewardService(BaseService):
             reason="Tournament Participation",
             cycle_id=cycle["id"],
             grant_reason_key="participation",
-            pending_events=pending_events,
             conn=conn,
         )
-        return pending_events
+        return
 
     async def award_cycle_placements(
         self,
         event: TournamentCycleCompletedEvent,
         *,
         conn: Connection,
-    ) -> list[XpGrantEvent]:
+    ) -> None:
         """Grant placement rewards for one finalized cycle.
 
         Placement: builds ``{place: xp}`` from the category's placement_xp tiers
@@ -203,15 +178,11 @@ class TournamentRewardService(BaseService):
             event: Cycle-completed event with snapshotted standings.
             conn: Active connection for transactional participation.
 
-        Returns:
-            Deferred XpGrantEvents to publish AFTER the caller commits (empty when
-            nothing was granted). Publish via :meth:`publish_xp_events`.
         """
-        pending_events: list[XpGrantEvent] = []
         category = await self._tournament_repo.fetch_category(event.category_id, conn=conn)
         if not category:
             log.debug("[!] No category %s for cycle-end rewards — skipping", event.category_id)
-            return pending_events
+            return
 
         # PLACEMENT: dict[place -> xp] from configured tiers. place == leaderboard
         # rank (both 1-based; decision A3).
@@ -228,7 +199,6 @@ class TournamentRewardService(BaseService):
                 reason=f"Tournament Placement #{entry.rank}",
                 cycle_id=event.cycle_id,
                 grant_reason_key="placement",
-                pending_events=pending_events,
                 conn=conn,
             )
             placement_granted += 1
@@ -242,14 +212,14 @@ class TournamentRewardService(BaseService):
                 len(event.standings),
             )
 
-        return pending_events
+        return
 
     async def award_edition_streaks(
         self,
         results: list[TournamentCycleCompletedEvent],
         *,
         conn: Connection,
-    ) -> list[XpGrantEvent]:
+    ) -> None:
         """Advance, bonus, and reset participation streaks ONCE per edition.
 
         Streaks are per-EDITION, not per-category (decision: +1 per tournament). A
@@ -275,13 +245,9 @@ class TournamentRewardService(BaseService):
             results: Every child-cycle completed event for the finalizing edition.
             conn: Active connection for transactional participation.
 
-        Returns:
-            Deferred XpGrantEvents to publish AFTER the caller commits (empty when
-            nothing was granted). Publish via :meth:`publish_xp_events`.
         """
-        pending_events: list[XpGrantEvent] = []
         if not results:
-            return pending_events
+            return
 
         # Stable marker cycle keys the advance dedupe guard and the streak-bonus
         # ledger claim, so a replay is a no-op and the next edition still advances.
@@ -323,7 +289,6 @@ class TournamentRewardService(BaseService):
                 reason=f"Tournament Streak x{current_streak}",
                 cycle_id=marker_cycle,
                 grant_reason_key="streak",
-                pending_events=pending_events,
                 conn=conn,
             )
 
@@ -333,7 +298,7 @@ class TournamentRewardService(BaseService):
             await self._tournament_repo.advance_streak(user_id, marker_cycle, False, conn=conn)
             log.debug("[!] streak reset to 0 for edition non-participant %s (marker cycle %s)", user_id, marker_cycle)
 
-        return pending_events
+        return
 
 
 async def provide_tournament_reward_service(

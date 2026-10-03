@@ -51,7 +51,7 @@ class NotificationsController(Controller):
     ) -> NotificationEventResponse:
         """Create a notification event.
 
-        This endpoint stores the notification and dispatches it to RabbitMQ
+        This endpoint stores the notification and dispatches it to PostgreSQL queue
         for Discord delivery if the user is a Discord user.
 
         Args:

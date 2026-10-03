@@ -1,6 +1,6 @@
 """Unit tests for LootboxService."""
 
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 from genjishimada_sdk.xp import XpGrantEvent, XpGrantRequest
@@ -451,7 +451,7 @@ class TestGrantUserXpReason:
             "new_amount": 150,
         }
 
-        mock_publish = mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+        mock_publish = mocker.patch.object(service, "enqueue", new_callable=AsyncMock)
 
         data = XpGrantRequest(amount=50, type="Other", reason="Won community event")
         await service.grant_user_xp(headers={}, user_id=123, data=data)
@@ -473,7 +473,7 @@ class TestGrantUserXpReason:
             "new_amount": 150,
         }
 
-        mock_publish = mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+        mock_publish = mocker.patch.object(service, "enqueue", new_callable=AsyncMock)
 
         data = XpGrantRequest(amount=50, type="Other")
         await service.grant_user_xp(headers={}, user_id=123, data=data)
@@ -496,9 +496,9 @@ class TestGrantXpConnHelper:
             "previous_amount": 100,
             "new_amount": 175,
         }
-        mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+        mocker.patch.object(service, "enqueue", new_callable=AsyncMock)
 
-        sentinel_conn = object()
+        sentinel_conn = MagicMock()
         response = await service.grant_xp(
             headers={},
             user_id=123,
@@ -524,7 +524,7 @@ class TestGrantXpConnHelper:
             "previous_amount": 200,
             "new_amount": 350,
         }
-        mock_publish = mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+        mock_publish = mocker.patch.object(service, "enqueue", new_callable=AsyncMock)
 
         await service.grant_xp(
             headers={},
@@ -556,7 +556,7 @@ class TestGrantXpConnHelper:
             "previous_amount": 10,
             "new_amount": 60,
         }
-        mocker.patch.object(service, "publish_message", new_callable=AsyncMock)
+        mocker.patch.object(service, "enqueue", new_callable=AsyncMock)
 
         data = XpGrantRequest(amount=50, type="Other", reason="legacy path")
         response = await service.grant_user_xp(headers={}, user_id=5, data=data)

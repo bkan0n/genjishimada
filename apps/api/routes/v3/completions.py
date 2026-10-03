@@ -26,6 +26,7 @@ from genjishimada_sdk.completions import (
 from genjishimada_sdk.difficulties import DifficultyTop
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
+from genjishimada_sdk.xp import XpGrantRequest, XpGrantResponse
 from litestar import Controller, Request, Response, delete, get, patch, post, put
 from litestar.datastructures import State
 from litestar.di import Provide
@@ -80,6 +81,24 @@ class CompletionsController(Controller):
         "skill_repo": Provide(provide_skill_repository),
         "skill_service": Provide(provide_skill_service),
     }
+
+    @post(
+        "/{completion_id:int}/world-record-reward",
+        opt={"required_scopes": {"completions:write", "lootbox:write"}},
+        status_code=200,
+    )
+    async def grant_world_record_reward(
+        self,
+        completion_id: int,
+        data: XpGrantRequest,
+        request: Request,
+        svc: CompletionsService,
+    ) -> XpGrantResponse | None:
+        """Grant a world-record reward and its guard in one transaction."""
+        try:
+            return await svc.grant_world_record_reward(completion_id, data, request.headers)
+        except CompletionNotFoundError as exc:
+            raise CustomHTTPException(detail=str(exc), status_code=HTTP_404_NOT_FOUND) from exc
 
     @get(
         path="/",

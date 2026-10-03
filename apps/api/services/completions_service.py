@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Awaitable, Callable
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, cast
+from uuid import uuid4
 
-import aiohttp
 import msgspec
-import sentry_sdk
 from asyncpg import Connection, Pool
 from asyncpg.exceptions import CheckViolationError
 from genjishimada_sdk.completions import (
@@ -23,8 +21,6 @@ from genjishimada_sdk.completions import (
     CompletionSubmissionResponse,
     CompletionVerificationUpdateRequest,
     DashboardCompletionResponse,
-    FailedAutoverifyEvent,
-    OcrResponse,
     PendingVerificationResponse,
     SuspiciousCompletionCreateRequest,
     SuspiciousCompletionDeleteRequest,
@@ -39,10 +35,12 @@ from genjishimada_sdk.difficulties import DifficultyTop, convert_extended_diffic
 from genjishimada_sdk.internal import JobStatusResponse
 from genjishimada_sdk.maps import OverwatchCode
 from genjishimada_sdk.notifications import NotificationCreateRequest, NotificationEventType
+from genjishimada_sdk.queue_store import get_job
 from genjishimada_sdk.tournaments import (
     TournamentCompletionCreatedEvent,
     TournamentVerificationChangedEvent,
 )
+from genjishimada_sdk.xp import XpGrantRequest, XpGrantResponse
 from litestar import Request
 from litestar.datastructures import Headers, State
 
@@ -71,6 +69,7 @@ from services.exceptions.completions import (
     SlowerThanPendingError,
     SlowerThanVerifiedError,
 )
+from utilities.transactions import active_connection, on_commit, transactional
 
 from .base import BaseService
 from .lootbox_service import LootboxService
@@ -130,6 +129,7 @@ class CompletionsService(BaseService):
             return "Bronze"
         return None
 
+    @transactional
     async def _update_quest_progress_for_completion(
         self,
         *,
@@ -312,273 +312,7 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
-    async def attempt_auto_verify_async(  # noqa: PLR0913
-        self,
-        completion_id: int,
-        user_id: int,
-        code: str,
-        time: float,
-        screenshot: str,
-        users: UsersService,
-        notifications: NotificationsService | None = None,
-    ) -> None:
-        """Attempt to auto-verify a completion using OCR.
-
-        Runs asynchronously in response to completion.ocr.requested event.
-        Always falls back to manual verification on any failure.
-
-        Args:
-            completion_id: Completion record ID.
-            user_id: User who submitted the completion.
-            code: Map code.
-            time: Completion time.
-            screenshot: Screenshot URL.
-            users: Users service for fetching user names.
-            notifications: Notifications service for sending failure notifications.
-        """
-        idempotency_key = f"completion:submission:{user_id}:{completion_id}"
-
-        try:
-            hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
-            user_name_response = await users.fetch_all_user_names(user_id)
-            user_names = [x.upper() for x in user_name_response]
-
-            async with (
-                aiohttp.ClientSession() as session,
-                session.post(
-                    f"http://{hostname}:8000/extract",
-                    json={
-                        "image_url": screenshot,
-                        "code": code,
-                        "time": time,
-                        "names": user_names,
-                    },
-                ) as resp,
-            ):
-                resp.raise_for_status()
-                raw_ocr_data = await resp.read()
-                ocr_data = msgspec.json.decode(raw_ocr_data, type=OcrResponse)
-
-            extracted = ocr_data.extracted
-
-            code_match = code == extracted.code
-            time_match = time == extracted.time
-            user_match = extracted.name in user_names
-
-            if code_match and time_match and user_match:
-                verification_data = CompletionVerificationUpdateRequest(
-                    verified_by=BOT_USER_ID,
-                    verified=True,
-                    reason="Auto Verified by Genji Shimada.",
-                )
-                await self.verify_completion_with_pool(
-                    None, completion_id, verification_data, notifications=notifications
-                )
-                return
-
-            await self.publish_message(
-                routing_key="api.completion.autoverification.failed",
-                data=FailedAutoverifyEvent(
-                    submitted_code=code,
-                    submitted_time=time,
-                    submitted_user_names=user_names,
-                    user_id=user_id,
-                    extracted=extracted,
-                    code_match=code_match,
-                    time_match=time_match,
-                    user_match=user_match,
-                    screenshot=screenshot,
-                ),
-                headers=Headers(),
-                idempotency_key=None,
-            )
-            await self.publish_message(
-                routing_key="api.completion.submission",
-                data=CompletionCreatedEvent(completion_id),
-                headers=Headers(),
-                idempotency_key=idempotency_key,
-            )
-
-            if notifications:
-                await notifications.create_and_dispatch(
-                    data=NotificationCreateRequest(
-                        user_id=user_id,
-                        event_type=NotificationEventType.AUTO_VERIFY_FAILED,  # type: ignore
-                        title="Auto-Verification Failed",
-                        body=(
-                            f"Auto-verification failed for your completion on {code}. "
-                            "Your submission is now awaiting manual verification."
-                        ),
-                        metadata={"completion_id": completion_id, "map_code": code},
-                    ),
-                    headers=Headers(),
-                )
-
-        except Exception as e:
-            log.exception(
-                "OCR auto-verification failed for completion_id=%s: %s",
-                completion_id,
-                e,
-            )
-            sentry_sdk.capture_exception(e)
-
-            await self.publish_message(
-                routing_key="api.completion.submission",
-                data=CompletionCreatedEvent(completion_id),
-                headers=Headers(),
-                idempotency_key=idempotency_key,
-            )
-
-            if notifications:
-                await notifications.create_and_dispatch(
-                    data=NotificationCreateRequest(
-                        user_id=user_id,
-                        event_type=NotificationEventType.AUTO_VERIFY_FAILED,  # type: ignore
-                        title="Auto-Verification Failed",
-                        body=(
-                            f"Auto-verification encountered an error for your completion on {code}. "
-                            "Your submission is now awaiting manual verification."
-                        ),
-                        metadata={"completion_id": completion_id, "map_code": code},
-                    ),
-                    headers=Headers(),
-                )
-
-    async def attempt_tournament_auto_verify_async(  # noqa: PLR0913
-        self,
-        tournament_completion_id: int,
-        cycle_id: int,
-        user_id: int,
-        code: str,
-        time: float,
-        screenshot: str,
-        *,
-        users: UsersService,
-        notifications: NotificationsService | None = None,
-    ) -> None:
-        """Attempt to OCR-auto-verify a non-PB tournament completion (D-04).
-
-        Mirrors :meth:`attempt_auto_verify_async` 1:1 — same hostname switch,
-        ``/extract`` POST, and three-way code/time/name match — but the terminal
-        differs (P4): there is NO core completion row for a non-PB run, so on a
-        match this verifies the TOURNAMENT row via
-        :meth:`TournamentService.verify_tournament_completion` (NOT
-        ``verify_completion_with_pool``), and on a mismatch it escalates to bot mod
-        review by publishing a TournamentCompletionCreatedEvent (NOT
-        ``CompletionCreatedEvent``). Any failure falls back to mod review.
-
-        Args:
-            tournament_completion_id: Tournament completion row ID.
-            cycle_id: Active cycle ID (carried to the mod-review event).
-            user_id: User who submitted the completion.
-            code: Map code.
-            time: Completion time.
-            screenshot: Screenshot URL.
-            users: Users service for fetching user names.
-            notifications: Notifications service for failure notifications.
-        """
-        _ = cycle_id  # reserved for the mod-review embed enrichment (11-05)
-        idempotency_key = f"tournament:submission:{user_id}:{tournament_completion_id}"
-
-        # WR-02: narrow the broad try to the OCR HTTP call + match decision ONLY.
-        # The actual verify (which runs its own DB txn + XP grant + publish) must
-        # happen OUTSIDE this try, otherwise a post-commit publish failure inside
-        # verify_tournament_completion would fall through to the mod-review
-        # fallback below and double-surface the run (auto-verified in the DB AND
-        # queued for manual review).
-        ocr_matched = False
-        try:
-            hostname = "genjishimada-ocr" if os.getenv("APP_ENVIRONMENT") == "production" else "genjishimada-ocr-dev"
-            user_name_response = await users.fetch_all_user_names(user_id)
-            user_names = [x.upper() for x in user_name_response]
-
-            async with (
-                aiohttp.ClientSession() as session,
-                session.post(
-                    f"http://{hostname}:8000/extract",
-                    json={
-                        "image_url": screenshot,
-                        "code": code,
-                        "time": time,
-                        "names": user_names,
-                    },
-                ) as resp,
-            ):
-                resp.raise_for_status()
-                raw_ocr_data = await resp.read()
-                ocr_data = msgspec.json.decode(raw_ocr_data, type=OcrResponse)
-
-            extracted = ocr_data.extracted
-
-            code_match = code == extracted.code
-            time_match = time == extracted.time
-            user_match = extracted.name in user_names
-            ocr_matched = code_match and time_match and user_match
-
-        except Exception as e:
-            log.exception(
-                "Tournament OCR auto-verification failed for tournament_completion_id=%s: %s",
-                tournament_completion_id,
-                e,
-            )
-            sentry_sdk.capture_exception(e)
-
-            await self._publish_tournament_mod_review(
-                tournament_completion_id=tournament_completion_id,
-                cycle_id=cycle_id,
-                user_id=user_id,
-                time=time,
-                screenshot=screenshot,
-                idempotency_key=idempotency_key,
-            )
-
-            if notifications:
-                await notifications.create_and_dispatch(
-                    data=NotificationCreateRequest(
-                        user_id=user_id,
-                        event_type=NotificationEventType.AUTO_VERIFY_FAILED,  # type: ignore
-                        title="Auto-Verification Failed",
-                        body=(
-                            f"Auto-verification encountered an error for your tournament completion on {code}. "
-                            "Your submission is now awaiting manual verification."
-                        ),
-                        metadata={"tournament_completion_id": tournament_completion_id, "map_code": code},
-                    ),
-                    headers=Headers(),
-                )
-            return
-
-        # OCR succeeded. Act on the decision OUTSIDE the broad except so a
-        # verify-side failure surfaces normally instead of triggering a
-        # contradictory mod-review fallback (WR-02).
-        if ocr_matched:
-            await self.verify_tournament_completion(tournament_completion_id)
-            return
-
-        await self._publish_tournament_mod_review(
-            tournament_completion_id=tournament_completion_id,
-            cycle_id=cycle_id,
-            user_id=user_id,
-            time=time,
-            screenshot=screenshot,
-            idempotency_key=idempotency_key,
-        )
-
-        if notifications:
-            await notifications.create_and_dispatch(
-                data=NotificationCreateRequest(
-                    user_id=user_id,
-                    event_type=NotificationEventType.AUTO_VERIFY_FAILED,  # type: ignore
-                    title="Auto-Verification Failed",
-                    body=(
-                        f"Auto-verification failed for your tournament completion on {code}. "
-                        "Your submission is now awaiting manual verification."
-                    ),
-                    metadata={"tournament_completion_id": tournament_completion_id, "map_code": code},
-                ),
-                headers=Headers(),
-            )
-
+    @transactional
     async def _publish_tournament_mod_review(  # noqa: PLR0913
         self,
         *,
@@ -599,7 +333,7 @@ class CompletionsService(BaseService):
             screenshot: Screenshot URL.
             idempotency_key: Publish idempotency key.
         """
-        await self.publish_message(
+        await self.enqueue(
             routing_key="api.tournament.completion.created",
             data=TournamentCompletionCreatedEvent(
                 completion_id=tournament_completion_id,
@@ -611,6 +345,7 @@ class CompletionsService(BaseService):
             ),
             headers=Headers(),
             idempotency_key=idempotency_key,
+            entity_key=f"tournament-completion:{tournament_completion_id}",
         )
 
     async def verify_tournament_completion(self, tournament_completion_id: int) -> None:
@@ -641,7 +376,8 @@ class CompletionsService(BaseService):
         )
         await tournament_service.verify_tournament_completion(tournament_completion_id)
 
-    async def submit_completion(  # noqa: PLR0912
+    @transactional
+    async def submit_completion(  # noqa: PLR0912, PLR0915
         self, data: CompletionCreateRequest, request: Request, notifications: NotificationsService, users: UsersService
     ) -> CompletionSubmissionJobResponse:
         """Submit a new completion record and publish an event.
@@ -691,14 +427,16 @@ class CompletionsService(BaseService):
                     verification_id_to_delete = pending["verification_id"]
 
             try:
-                completion_id = await self._completions_repo.insert_completion(
-                    code=data.code,
-                    user_id=data.user_id,
-                    time=data.time,
-                    screenshot=data.screenshot,
-                    video=data.video,
-                    conn=conn,  # type: ignore
-                )
+                # Recover the expected tournament non-PB constraint at a savepoint.
+                async with conn.transaction():
+                    completion_id = await self._completions_repo.insert_completion(
+                        code=data.code,
+                        user_id=data.user_id,
+                        time=data.time,
+                        screenshot=data.screenshot,
+                        video=data.video,
+                        conn=conn,  # type: ignore
+                    )
             except CheckViolationError as e:
                 # The 0017 speed trigger (ERRCODE 23514) rejected a slower-than-PB
                 # run. D-07: ONLY relax on a tournament map — record a tournament
@@ -736,7 +474,7 @@ class CompletionsService(BaseService):
 
         if verification_id_to_delete:
             delete_event = VerificationMessageDeleteEvent(verification_id_to_delete)
-            await self.publish_message(
+            await self.enqueue(
                 routing_key="api.completion.verification.delete",
                 data=delete_event,
                 headers=request.headers,
@@ -765,23 +503,22 @@ class CompletionsService(BaseService):
         suspicious_flags = await self.get_suspicious_flags(data.user_id)
 
         if not (data.video or suspicious_flags):
-            request.app.emit(
-                "completion.ocr.requested",
-                OcrVerificationRequestedEvent(
+            await self.enqueue(
+                routing_key="completion.ocr.requested",
+                data=OcrVerificationRequestedEvent(
                     completion_id=completion_id,
                     user_id=data.user_id,
                     code=data.code,
                     time=data.time,
                     screenshot=data.screenshot,
                 ),
-                svc=self,
-                users=users,
-                notifications=notifications,
+                idempotency_key=f"completion:ocr:{completion_id}",
+                entity_key=f"completion:{completion_id}",
             )
             return CompletionSubmissionJobResponse(None, completion_id)
 
         idempotency_key = f"completion:submission:{data.user_id}:{completion_id}"
-        job_status = await self.publish_message(
+        job_status = await self.enqueue(
             routing_key="api.completion.submission",
             data=CompletionCreatedEvent(completion_id),
             headers=request.headers,
@@ -855,6 +592,7 @@ class CompletionsService(BaseService):
             raise MapNotFoundError(data.code) from e
         return row.get("id") if row else None
 
+    @transactional
     async def _dispatch_non_pb_tournament(  # noqa: PLR0913
         self,
         *,
@@ -865,30 +603,11 @@ class CompletionsService(BaseService):
         users: UsersService,
         notifications: NotificationsService,
     ) -> CompletionSubmissionJobResponse:
-        """Route a committed non-PB tournament row to OCR or mod review (D-04).
-
-        A slower-than-PB run has no core completion, so it gets its OWN tournament
-        verification. No-video runs emit ``tournament.ocr.requested`` for OCR
-        auto-verify against the tournament row; video runs publish a
-        TournamentCompletionCreatedEvent on ``api.tournament.completion.created``
-        for bot mod review (the bot view lands in 11-05). Returns a job response
-        with ``completion_id=0`` (there is no core completion id).
-
-        Args:
-            tc_id: The new tournament completion row id.
-            cycle: The active cycle dict (id, category_id, map_id, status).
-            data: The completion submission request.
-            request: HTTP request (for the app emit + publish headers).
-            users: Users service (passed to the OCR listener).
-            notifications: Notifications service (passed to the OCR listener).
-
-        Returns:
-            Job response (no core completion, so completion_id is 0).
-        """
+        """Persist durable OCR or manual-review work for a non-PB tournament submission."""
         if not data.video:
-            request.app.emit(
-                "tournament.ocr.requested",
-                TournamentOcrVerificationRequestedEvent(
+            await self.enqueue(
+                routing_key="tournament.ocr.requested",
+                data=TournamentOcrVerificationRequestedEvent(
                     tournament_completion_id=tc_id,
                     cycle_id=cycle["id"],
                     user_id=data.user_id,
@@ -896,13 +615,12 @@ class CompletionsService(BaseService):
                     time=data.time,
                     screenshot=data.screenshot,
                 ),
-                svc=self,
-                users=users,
-                notifications=notifications,
+                idempotency_key=f"tournament:ocr:{tc_id}",
+                entity_key=f"tournament-completion:{tc_id}",
             )
             return CompletionSubmissionJobResponse(job_status=None, completion_id=0)
 
-        job_status = await self.publish_message(
+        job_status = await self.enqueue(
             routing_key="api.tournament.completion.created",
             data=TournamentCompletionCreatedEvent(
                 completion_id=tc_id,
@@ -914,6 +632,7 @@ class CompletionsService(BaseService):
             ),
             headers=request.headers,
             idempotency_key=f"tournament:submission:{data.user_id}:{tc_id}",
+            entity_key=f"tournament-completion:{tc_id}",
         )
         return CompletionSubmissionJobResponse(job_status=job_status, completion_id=0)
 
@@ -968,6 +687,40 @@ class CompletionsService(BaseService):
             raise DuplicateCompletionError(user_id=0, map_code="unknown")
         except ForeignKeyViolationError:
             raise CompletionNotFoundError(record_id)
+
+    @transactional
+    async def grant_world_record_reward(
+        self,
+        completion_id: int,
+        data: XpGrantRequest,
+        headers: Headers,
+    ) -> XpGrantResponse | None:
+        """Atomically guard, grant and mark a world-record reward."""
+        conn = active_connection()
+        assert conn is not None
+        row = await conn.fetchrow(
+            "SELECT id,user_id,map_id FROM core.completions WHERE id=$1 FOR UPDATE", completion_id
+        )
+        if row is None:
+            raise CompletionNotFoundError(completion_id)
+        await conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", f"world-record:{row['user_id']}:{row['map_id']}"
+        )
+        awarded = await conn.fetchval(
+            """SELECT EXISTS(SELECT 1 FROM core.completions
+            WHERE user_id=$1 AND map_id=$2 AND NOT legacy AND wr_xp_check)""",
+            row["user_id"],
+            row["map_id"],
+        )
+        if awarded:
+            return None
+        result = await LootboxService(self._pool, self._state, LootboxRepository(self._pool)).grant_user_xp(
+            headers,
+            row["user_id"],
+            data,
+        )
+        await conn.execute("UPDATE core.completions SET wr_xp_check=true WHERE id=$1", completion_id)
+        return result
 
     async def check_for_previous_world_record(self, code: OverwatchCode, user_id: int) -> bool:
         """Check if a record submitted by this user has ever received World Record XP."""
@@ -1024,16 +777,19 @@ class CompletionsService(BaseService):
         """
         if request is None or skill_service is None:
             return
-        request.app.emit(
-            "skill.recompute.requested",
-            SkillRecomputeRequestedEvent(
-                reason=reason,
-                cause_category=cause_category,
-                actor_user_id=actor_user_id,
-            ),
-            skill_service=skill_service,
+        on_commit(
+            lambda: request.app.emit(
+                "skill.recompute.requested",
+                SkillRecomputeRequestedEvent(
+                    reason=reason,
+                    cause_category=cause_category,
+                    actor_user_id=actor_user_id,
+                ),
+                skill_service=skill_service,
+            )
         )
 
+    @transactional
     async def verify_completion(  # noqa: PLR0913
         self,
         request: Request | None,
@@ -1072,6 +828,17 @@ class CompletionsService(BaseService):
         )
         if not completion_info:
             raise CompletionNotFoundError(record_id)
+
+        if completion_info["old_verified"] == data.verified and completion_info.get("old_verified_by") is not None:
+            active = active_connection()
+            assert active is not None
+            previous_job = await active.fetchval(
+                """SELECT id FROM public.jobs WHERE action='api.completion.verification'
+                AND entity_key=$1 ORDER BY event_sequence DESC LIMIT 1""",
+                f"completion:{record_id}",
+            )
+            if previous_job is not None:
+                return await get_job(active, previous_job)
 
         try:
             await self._completions_repo.update_verification(
@@ -1141,8 +908,8 @@ class CompletionsService(BaseService):
             verified_by=data.verified_by,
             reason=data.reason,
         )
-        idempotency_key = f"completion:verify:{record_id}"
-        job_status = await self.publish_message(
+        idempotency_key = f"completion:verify:{record_id}:{uuid4()}"
+        job_status = await self.enqueue(
             routing_key="api.completion.verification",
             data=message_data,
             headers=request.headers if request else Headers(),
@@ -1150,6 +917,7 @@ class CompletionsService(BaseService):
         )
         return job_status
 
+    @transactional
     async def verify_completion_with_pool(
         self,
         request: Request | None,
@@ -1169,6 +937,7 @@ class CompletionsService(BaseService):
                 skill_service=skill_service,
             )
 
+    @transactional
     async def _propagate_tournament_verdict(
         self,
         *,
@@ -1177,75 +946,43 @@ class CompletionsService(BaseService):
         headers: Headers,
         conn: Connection | None,
     ) -> None:
-        """Propagate a core completion verdict to its linked tournament row (D-04a).
-
-        Runs when the core row links a tournament row.
-
-        * **verify** (``verified=True``): flips the tournament row to
-          ``status='verified'`` and awards participation XP.
-        * **reject** (``verified=False``): flips it to ``status='rejected'`` —
-          removing it from the tournament standings and releasing the edition drain
-          gate (``count_inflight_verifications`` counts only ``'pending'`` rows). It
-          awards NO XP and deliberately does NOT claw back a participation XP from a
-          prior verify (rare/niche; CR-01 keeps grants terminal — product decision).
-
-        ``set_tournament_verified`` (and ``award_participation`` on verify) are
-        atomic on a single connection: when ``conn`` is None (the common pooled
-        route call), a fresh connection + transaction is acquired (mirrors
-        ``verify_completion_with_pool``). XP is idempotent (the 08-01 ledger), so
-        verify is replay-safe — verifying twice grants once. The cycle is resolved
-        from the completion's OWN cycle_id (status-agnostic), so a reject on a
-        ``finalizing`` child cycle still propagates and unblocks the drain. The
-        tournament verification-changed event is published only on a REAL status
-        transition (``set_tournament_verified`` returns None for a no-op), AFTER the
-        transaction commits.
-
-        Args:
-            completion_info: Moderation row (user_id, code, tournament_completion_id).
-            verified: The core verdict — True verifies, False rejects.
-            headers: Request headers for the publish call.
-            conn: Active connection (may be None for pooled route calls).
-        """
+        """Apply the linked tournament verdict and reward on the current transaction."""
         if self._tournament_repo is None:
             return
         tournament_completion_id = completion_info.get("tournament_completion_id")
         if tournament_completion_id is None:
             return
 
-        async def _do(active_conn: Connection) -> tuple[dict | None, list[Any], dict | None]:
+        async def _do(active_conn: Connection) -> tuple[dict | None, dict | None]:
             row = await self._tournament_repo.fetch_tournament_completion(  # type: ignore[union-attr]
                 tournament_completion_id, conn=active_conn
             )
             if row is None:
-                return None, [], None
+                return None, None
             cycle = await self._tournament_repo.fetch_cycle(row["cycle_id"], conn=active_conn)  # type: ignore[union-attr]
             if cycle is None:
-                return None, [], None
+                return None, None
             updated = await self._tournament_repo.set_tournament_verified(  # type: ignore[union-attr]
                 tournament_completion_id, verified=verified, conn=active_conn
             )
-            events: list[Any] = []
             # Participation XP is granted on verify only; reject grants none and does
             # not reverse a prior grant (no clawback by design).
             if verified and self._tournament_reward_service is not None:
-                events = await self._tournament_reward_service.award_participation(
+                await self._tournament_reward_service.award_participation(
                     cycle, completion_info["user_id"], conn=active_conn
                 )
-            return cycle, events, updated
+            return cycle, updated
 
         if conn is None:
             async with self._pool.acquire() as fresh_conn, fresh_conn.transaction():
-                active_cycle, pending_events, updated_row = await _do(cast("Connection", fresh_conn))
+                active_cycle, updated_row = await _do(cast("Connection", fresh_conn))
         else:
-            active_cycle, pending_events, updated_row = await _do(conn)
+            active_cycle, updated_row = await _do(conn)
 
         # No real transition (row/cycle missing, or already in the target state) ->
         # nothing to publish.
         if active_cycle is None or updated_row is None:
             return
-
-        if verified and self._tournament_reward_service is not None and pending_events:
-            await self._tournament_reward_service.publish_xp_events(pending_events)
 
         event = TournamentVerificationChangedEvent(
             tournament_completion_id=tournament_completion_id,
@@ -1255,20 +992,18 @@ class CompletionsService(BaseService):
             time=float(updated_row["time"]),
         )
         verdict = "verify" if verified else "reject"
-        # WR-01: DB txn is already committed; a publish failure must be logged at
-        # exception level (not silently dropped) so a missing verification-changed
-        # event is reconcilable.
+        # Enqueue on the enclosing transaction; delivery failures roll back domain writes.
         try:
-            await self.publish_message(
+            await self.enqueue(
                 routing_key="api.tournament.verification.changed",
                 data=event,
                 headers=headers,
-                idempotency_key=f"tournament:{verdict}:{tournament_completion_id}",
+                idempotency_key=f"tournament:{verdict}:{tournament_completion_id}:{uuid4()}",
             )
         except Exception:
             log.exception(
-                "Failed to publish tournament verification-changed event after commit "
-                "(tournament_completion_id=%s, verdict=%s) — DB is committed but the bot "
+                "Failed to publish tournament verification-changed event before commit "
+                "(tournament_completion_id=%s, verdict=%s) — transaction is rolling back; the bot "
                 "was not notified; reconcile manually.",
                 tournament_completion_id,
                 verdict,
@@ -1408,6 +1143,7 @@ class CompletionsService(BaseService):
         """Get the upvotes for a particular completion by message_id."""
         return await self._completions_repo.fetch_upvote_count(message_id)
 
+    @transactional
     async def upvote_submission(self, request: Request, data: UpvoteCreateRequest) -> UpvoteSubmissionJobResponse:
         """Upvote a completion submission.
 
@@ -1430,7 +1166,7 @@ class CompletionsService(BaseService):
                 data.user_id,
                 data.message_id,
             )
-            job_status = await self.publish_message(
+            job_status = await self.enqueue(
                 routing_key="api.completion.upvote",
                 data=message_data,
                 headers=request.headers,
@@ -1491,6 +1227,7 @@ class CompletionsService(BaseService):
         )
         return msgspec.convert(rows, list[CompletionResponse])
 
+    @transactional
     async def moderate_completion(  # noqa: PLR0912, PLR0913, PLR0915
         self,
         completion_id: int,

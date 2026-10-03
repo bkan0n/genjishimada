@@ -774,8 +774,8 @@ class TestCreateGuide:
 
         assert response.status_code == 404
 
-    async def test_duplicate_guide_returns_409(self, test_client, create_test_map, unique_map_code, create_test_user):
-        """Creating duplicate guide returns 409."""
+    async def test_same_guide_replay_succeeds_and_different_url_conflicts(self, test_client, create_test_map, unique_map_code, create_test_user):
+        """Lost-response replay is idempotent; a conflicting replacement still returns 409."""
         code = unique_map_code
         user_id = await create_test_user()
         await create_test_map(code=code)
@@ -789,10 +789,12 @@ class TestCreateGuide:
         response1 = await test_client.post(f"/api/v3/maps/{code}/guides", json=payload)
         assert response1.status_code == 201
 
-        # Duplicate guide (same user + map)
         response2 = await test_client.post(f"/api/v3/maps/{code}/guides", json=payload)
-
-        assert response2.status_code == 409
+        assert response2.status_code == 201
+        assert response2.json() == response1.json()
+        conflicting = {**payload, "url": "https://youtube.com/watch?v=different"}
+        response3 = await test_client.post(f"/api/v3/maps/{code}/guides", json=conflicting)
+        assert response3.status_code == 409
 
 
 class TestUpdateGuide:

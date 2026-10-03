@@ -9,7 +9,7 @@ the suite is green today and flips to real coverage as the surface lands.
 
 Conventions (CLAUDE.md / project MEMORY):
 - pytest-asyncio is in ``auto`` mode.
-- ``X-PYTEST-ENABLED=1`` makes ``BaseService.publish_message`` skip RabbitMQ,
+- The enqueue boundary is replaced explicitly in isolated unit tests,
   so integration assertions target DB/job state, not the broker.
 - Do NOT assert ``is True``/``is False`` against ``check_active_cycle_for_category``;
   it returns ``int | None`` (a cycle id), not a bool (Phase-4 contract).
@@ -26,7 +26,7 @@ Fixtures (described, wired in 11-02/11-03):
 """
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, MagicMock
 
 import pytest
 
@@ -53,7 +53,7 @@ def _make_tournament_service() -> tuple[TournamentService, Any, Any]:
     no-op async CM (mirroring _make_service).
     """
     pool = MagicMock()
-    conn = AsyncMock()
+    conn = MagicMock()
 
     acquire_cm = MagicMock()
     acquire_cm.__aenter__ = AsyncMock(return_value=conn)
@@ -70,7 +70,7 @@ def _make_tournament_service() -> tuple[TournamentService, Any, Any]:
     reward_service.award_participation.return_value = []
 
     service = TournamentService(pool, MagicMock(), tournament_repo, reward_service=reward_service)
-    service.publish_message = AsyncMock(return_value={"job_id": "j"})  # type: ignore[method-assign]
+    service.enqueue = AsyncMock(return_value={"job_id": "j"})  # type: ignore[method-assign]
     return service, tournament_repo, reward_service
 
 
@@ -82,7 +82,7 @@ def _make_service() -> tuple[CompletionsService, Any, Any, Any]:
     yields a single shared connection whose transaction() is a no-op async CM.
     """
     pool = MagicMock()
-    conn = AsyncMock()
+    conn = MagicMock()
 
     acquire_cm = MagicMock()
     acquire_cm.__aenter__ = AsyncMock(return_value=conn)
@@ -109,7 +109,7 @@ def _make_service() -> tuple[CompletionsService, Any, Any, Any]:
         tournament_repo=tournament_repo,
         tournament_reward_service=reward_service,
     )
-    service.publish_message = AsyncMock(return_value={"job_id": "j"})  # type: ignore[method-assign]
+    service.enqueue = AsyncMock(return_value={"job_id": "j"})  # type: ignore[method-assign]
     return service, completions_repo, tournament_repo, reward_service
 
 
@@ -213,7 +213,7 @@ async def test_pb_path_verify_propagates_to_both_rows() -> None:
     so a ``finalizing`` cycle still propagates (UI4-FINALIZING-PROPAGATION).
     """
     service, completions_repo, tournament_repo, reward_service = _make_service()
-    conn = AsyncMock()
+    conn = MagicMock()
     completions_repo.check_completion_exists.return_value = True
     completions_repo.fetch_completion_for_moderation.return_value = {
         "user_id": 123,
@@ -264,10 +264,10 @@ async def test_pb_path_verify_idempotent_award_via_ledger() -> None:
     """Verifying twice grants participation once (SC-7 — ledger is the guard).
 
     ``award_participation`` is called unconditionally each verify; the 08-01
-    ledger returns no events on replay so ``publish_xp_events`` flushes nothing.
+    ledger returns no events on replay so ``transactional notification enqueue`` flushes nothing.
     """
     service, completions_repo, tournament_repo, reward_service = _make_service()
-    conn = AsyncMock()
+    conn = MagicMock()
     completions_repo.check_completion_exists.return_value = True
     completions_repo.fetch_completion_for_moderation.return_value = {
         "user_id": 123,
@@ -308,7 +308,6 @@ async def test_pb_path_verify_idempotent_award_via_ledger() -> None:
     )
 
     reward_service.award_participation.assert_awaited_once()
-    reward_service.publish_xp_events.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -469,8 +468,7 @@ async def test_verify_tournament_completion_flips_row_and_awards_xp() -> None:
     tournament_repo.set_tournament_verified.assert_awaited_once()
     assert tournament_repo.set_tournament_verified.await_args.args[0] == 9002
     reward_service.award_participation.assert_awaited_once()
-    reward_service.publish_xp_events.assert_awaited_once_with(["xp"])
-    publish_kwargs = service.publish_message.await_args.kwargs  # type: ignore[union-attr]
+    publish_kwargs = service.enqueue.await_args.kwargs  # type: ignore[union-attr]
     assert publish_kwargs["routing_key"] == "api.tournament.verification.changed"
     assert publish_kwargs["idempotency_key"] == "tournament:verify:9002"
     assert publish_kwargs["data"].verified is True
@@ -491,7 +489,7 @@ async def test_verify_tournament_completion_twice_awards_xp_once() -> None:
     """Two verifies grant participation once (D-02/D-06 idempotency via the ledger).
 
     award_participation is called each time but the 08-01 ledger returns no events
-    on replay, so publish_xp_events flushes nothing the second time.
+    on replay, so transactional notification enqueue flushes nothing the second time.
     """
     service, tournament_repo, reward_service = _make_tournament_service()
     tournament_repo.fetch_tournament_completion.return_value = {
@@ -520,7 +518,6 @@ async def test_verify_tournament_completion_twice_awards_xp_once() -> None:
     await service.verify_tournament_completion(9002)
 
     assert reward_service.award_participation.await_count == 2
-    reward_service.publish_xp_events.assert_awaited_once_with(["xp"])
 
 
 async def test_reject_tournament_completion_writes_rejected_no_xp() -> None:
@@ -553,7 +550,7 @@ async def test_reject_tournament_completion_writes_rejected_no_xp() -> None:
     # Reject drives the repo verdict toward status='rejected' (verified=False arg).
     assert set_args.args[0] == 9002
     assert set_args.kwargs.get("verified", set_args.args[1] if len(set_args.args) > 1 else None) is False
-    publish_kwargs = service.publish_message.await_args.kwargs  # type: ignore[union-attr]
+    publish_kwargs = service.enqueue.await_args.kwargs  # type: ignore[union-attr]
     assert publish_kwargs["routing_key"] == "api.tournament.verification.changed"
     assert publish_kwargs["idempotency_key"] == "tournament:reject:9002"
     assert publish_kwargs["data"].verified is False
@@ -638,56 +635,3 @@ def _mock_ocr_session(monkeypatch: pytest.MonkeyPatch, body: bytes) -> None:
     session_cm.__aexit__ = AsyncMock(return_value=None)
 
     monkeypatch.setattr(aiohttp, "ClientSession", MagicMock(return_value=session_cm))
-
-
-async def test_tournament_ocr_match_calls_tournament_verify(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An OCR match routes to verify_tournament_completion (NOT core verify) — SC-2 OCR path."""
-    service, _completions_repo, _tournament_repo, _reward = _make_service()
-    service.verify_tournament_completion = AsyncMock()  # type: ignore[attr-defined]
-    service.verify_completion_with_pool = AsyncMock()  # type: ignore[method-assign]
-
-    users = AsyncMock()
-    users.fetch_all_user_names.return_value = ["player"]
-    _mock_ocr_session(monkeypatch, _ocr_response("ABC123", 99.0, "PLAYER"))
-
-    await service.attempt_tournament_auto_verify_async(
-        tournament_completion_id=9002,
-        cycle_id=42,
-        user_id=123,
-        code="ABC123",
-        time=99.0,
-        screenshot="https://example.com/s.png",
-        users=users,
-        notifications=None,
-    )
-
-    service.verify_tournament_completion.assert_awaited_once_with(9002)
-    service.verify_completion_with_pool.assert_not_awaited()
-
-
-async def test_tournament_ocr_mismatch_publishes_tournament_created(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An OCR mismatch escalates to mod review via TournamentCompletionCreatedEvent (NOT core)."""
-    service, _completions_repo, _tournament_repo, _reward = _make_service()
-    service.verify_tournament_completion = AsyncMock()  # type: ignore[attr-defined]
-
-    users = AsyncMock()
-    users.fetch_all_user_names.return_value = ["player"]
-    # Time mismatch -> no three-way match.
-    _mock_ocr_session(monkeypatch, _ocr_response("ABC123", 12.34, "PLAYER"))
-
-    await service.attempt_tournament_auto_verify_async(
-        tournament_completion_id=9002,
-        cycle_id=42,
-        user_id=123,
-        code="ABC123",
-        time=99.0,
-        screenshot="https://example.com/s.png",
-        users=users,
-        notifications=None,
-    )
-
-    service.verify_tournament_completion.assert_not_awaited()
-    publish_kwargs = service.publish_message.await_args.kwargs  # type: ignore[union-attr]
-    assert publish_kwargs["routing_key"] == "api.tournament.completion.created"
-    assert isinstance(publish_kwargs["data"], TournamentCompletionCreatedEvent)
-    assert publish_kwargs["idempotency_key"] == "tournament:submission:123:9002"

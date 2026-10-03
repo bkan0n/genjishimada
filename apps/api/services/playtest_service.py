@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+from uuid import uuid4
 
 import msgspec
-from asyncpg import Pool
+from asyncpg import Connection, Pool
 from genjishimada_sdk.difficulties import (
     DIFFICULTY_MIDPOINTS,
     DifficultyAll,
@@ -26,6 +27,7 @@ from genjishimada_sdk.maps import (
     PlaytestVotesResponse,
     PlaytestVoteWithUser,
 )
+from genjishimada_sdk.queue_store import get_job
 from litestar.datastructures import Headers, State
 
 from repository.exceptions import CheckConstraintViolationError
@@ -38,6 +40,7 @@ from services.exceptions.playtest import (
     VoteConstraintError,
     VoteNotFoundError,
 )
+from utilities.transactions import transactional
 
 from .base import BaseService
 
@@ -93,6 +96,7 @@ class PlaytestService(BaseService):
 
         return PlaytestVotesResponse(player_votes, average)
 
+    @transactional
     async def cast_vote(
         self,
         thread_id: int,
@@ -106,7 +110,7 @@ class PlaytestService(BaseService):
             thread_id: Forum thread ID.
             user_id: Voter's user ID.
             data: Vote payload.
-            headers: Request headers for RabbitMQ idempotency.
+            headers: Request headers for PostgreSQL queue idempotency.
 
         Returns:
             Job status response.
@@ -130,12 +134,13 @@ class PlaytestService(BaseService):
             voter_id=user_id,
             difficulty_value=data.difficulty,
         )
-        return await self.publish_message(
+        return await self.enqueue(
             routing_key="api.playtest.vote.cast",
             data=payload,
             headers=headers,
         )
 
+    @transactional
     async def delete_vote(
         self,
         thread_id: int,
@@ -147,7 +152,7 @@ class PlaytestService(BaseService):
         Args:
             thread_id: Forum thread ID.
             user_id: Voter's user ID.
-            headers: Request headers for RabbitMQ idempotency.
+            headers: Request headers for PostgreSQL queue idempotency.
 
         Returns:
             Job status response.
@@ -162,7 +167,7 @@ class PlaytestService(BaseService):
         await self._playtest_repo.delete_vote(thread_id, user_id)
 
         payload = PlaytestVoteRemovedEvent(thread_id=thread_id, voter_id=user_id)
-        return await self.publish_message(
+        return await self.enqueue(
             routing_key="api.playtest.vote.remove",
             data=payload,
             headers=headers,
@@ -223,6 +228,7 @@ class PlaytestService(BaseService):
 
         return msgspec.convert(row, PlaytestResponse, from_attributes=True)
 
+    @transactional
     async def approve(
         self,
         thread_id: int,
@@ -237,7 +243,7 @@ class PlaytestService(BaseService):
         Args:
             thread_id: Forum thread ID.
             verifier_id: Verifier's user ID.
-            headers: Request headers for RabbitMQ idempotency.
+            headers: Request headers for PostgreSQL queue idempotency.
 
         Returns:
             Job status response.
@@ -253,6 +259,10 @@ class PlaytestService(BaseService):
             if map_id is None:
                 raise PlaytestNotFoundError(thread_id)
 
+            previous = await self._accepted_job(thread_id, cast("Connection", conn))
+            if previous is not None:
+                return previous
+
             difficulty = await self._playtest_repo.get_average_difficulty(
                 thread_id,
                 conn=conn,  # type: ignore[arg-type]
@@ -260,6 +270,7 @@ class PlaytestService(BaseService):
             if difficulty is None:
                 raise PlaytestStateError("Cannot approve playtest with no votes.")
 
+            difficulty = DIFFICULTY_MIDPOINTS[convert_raw_difficulty_to_difficulty_all(difficulty)]
             await self._playtest_repo.approve_playtest(
                 map_id,
                 thread_id,
@@ -288,14 +299,15 @@ class PlaytestService(BaseService):
             verifier_id=verifier_id,
             primary_creator_id=primary_creator_id,
         )
-        idempotency_key = f"playtest:approve:{thread_id}"
-        return await self.publish_message(
+        idempotency_key = f"playtest:approve:{thread_id}:{uuid4()}"
+        return await self.enqueue(
             routing_key="api.playtest.approve",
             data=payload,
             headers=headers,
             idempotency_key=idempotency_key,
         )
 
+    @transactional
     async def force_accept(
         self,
         thread_id: int,
@@ -309,7 +321,7 @@ class PlaytestService(BaseService):
             thread_id: Forum thread ID.
             difficulty: Custom difficulty rating.
             verifier_id: Verifier's user ID.
-            headers: Request headers for RabbitMQ idempotency.
+            headers: Request headers for PostgreSQL queue idempotency.
 
         Returns:
             Job status response.
@@ -325,6 +337,10 @@ class PlaytestService(BaseService):
             if map_id is None:
                 raise PlaytestNotFoundError(thread_id)
 
+            previous = await self._accepted_job(thread_id, cast("Connection", conn))
+            if previous is not None:
+                return previous
+
             raw_difficulty = DIFFICULTY_MIDPOINTS[difficulty]
 
             await self._playtest_repo.force_accept_playtest(
@@ -339,14 +355,34 @@ class PlaytestService(BaseService):
             difficulty=difficulty,
             verifier_id=verifier_id,
         )
-        idempotency_key = f"playtest:force_accept:{thread_id}"
-        return await self.publish_message(
+        idempotency_key = f"playtest:force_accept:{thread_id}:{uuid4()}"
+        return await self.enqueue(
             routing_key="api.playtest.force_accept",
             data=payload,
             headers=headers,
             idempotency_key=idempotency_key,
         )
 
+    async def _accepted_job(self, thread_id: int, conn: Connection) -> JobStatusResponse | None:
+        """Return the current acceptance while the caller holds both domain row locks."""
+        job_id = await conn.fetchval(
+            """SELECT j.id FROM public.jobs j
+            JOIN playtests.meta me ON me.thread_id=$1
+            JOIN core.maps ma ON ma.id=me.map_id
+            WHERE j.entity_key=$2 AND j.action IN ('api.playtest.approve','api.playtest.force_accept')
+              AND me.completed AND ma.playtesting='Approved'
+              AND NOT EXISTS (
+                SELECT 1 FROM public.jobs reset
+                WHERE reset.entity_key=j.entity_key AND reset.action='api.playtest.reset'
+                  AND reset.event_sequence>j.event_sequence
+              )
+            ORDER BY j.event_sequence DESC LIMIT 1""",
+            thread_id,
+            f"playtest:{thread_id}",
+        )
+        return await get_job(conn, job_id) if job_id is not None else None
+
+    @transactional
     async def force_deny(
         self,
         thread_id: int,
@@ -360,7 +396,7 @@ class PlaytestService(BaseService):
             thread_id: Forum thread ID.
             verifier_id: Verifier's user ID.
             reason: Denial reason.
-            headers: Request headers for RabbitMQ idempotency.
+            headers: Request headers for PostgreSQL queue idempotency.
 
         Returns:
             Job status response.
@@ -387,14 +423,15 @@ class PlaytestService(BaseService):
             verifier_id=verifier_id,
             reason=reason,
         )
-        idempotency_key = f"playtest:force_deny:{thread_id}"
-        return await self.publish_message(
+        idempotency_key = f"playtest:force_deny:{thread_id}:{uuid4()}"
+        return await self.enqueue(
             routing_key="api.playtest.force_deny",
             data=payload,
             headers=headers,
             idempotency_key=idempotency_key,
         )
 
+    @transactional
     async def reset(  # noqa: PLR0913
         self,
         thread_id: int,
@@ -414,12 +451,15 @@ class PlaytestService(BaseService):
             reason: Reset reason.
             remove_votes: Whether to delete votes.
             remove_completions: Whether to delete completions.
-            headers: Request headers for RabbitMQ idempotency.
+            headers: Request headers for PostgreSQL queue idempotency.
 
         Returns:
             Job status response.
         """
         async with self._pool.acquire() as conn, conn.transaction():
+            # A reset starts a new acceptance episode without changing the existing
+            # reset semantics for map/playtest state. Serialize its event with approvals.
+            await self._playtest_repo.get_map_id_from_thread(thread_id, conn=conn)  # type: ignore[arg-type]
             if remove_votes:
                 await self._playtest_repo.delete_all_votes(
                     thread_id,
@@ -439,8 +479,8 @@ class PlaytestService(BaseService):
             remove_votes=remove_votes,
             remove_completions=remove_completions,
         )
-        idempotency_key = f"playtest:reset:{thread_id}"
-        return await self.publish_message(
+        idempotency_key = f"playtest:reset:{thread_id}:{uuid4()}"
+        return await self.enqueue(
             routing_key="api.playtest.reset",
             data=payload,
             headers=headers,

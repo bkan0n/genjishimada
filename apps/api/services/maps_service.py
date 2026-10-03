@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 import datetime as dt
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Iterable, Literal, overload
-from uuid import UUID
+from uuid import uuid4
 
 import aiohttp
 import msgspec
@@ -50,6 +49,7 @@ from genjishimada_sdk.newsfeed import (
     NewsfeedBulkArchive,
     NewsfeedBulkUnarchive,
     NewsfeedEvent,
+    NewsfeedGuide,
     NewsfeedLinkedMap,
     NewsfeedNewMap,
     NewsfeedUnarchive,
@@ -85,8 +85,8 @@ from services.exceptions.maps import (
     PendingEditRequestExistsError,
     UnresolvedChangeRequestsError,
 )
-from utilities.jobs import wait_for_job_completion
 from utilities.map_search import MapSearchFilters
+from utilities.transactions import active_connection, transactional
 
 from .base import BaseService
 
@@ -123,6 +123,7 @@ class MapsService(BaseService):
         super().__init__(pool, state)
         self._maps_repo = maps_repo
 
+    @transactional
     async def create_map(  # noqa: PLR0912, PLR0915
         self,
         data: MapCreateRequest,
@@ -162,7 +163,7 @@ class MapsService(BaseService):
             "checkpoints": data.checkpoints,
             "official": data.official,
             "playtesting": data.playtesting,
-            "hidden": data.hidden,
+            "hidden": False if data.playtesting == "In Progress" else data.hidden,
             "archived": False,
             "difficulty": data.difficulty,
             "raw_difficulty": DIFFICULTY_MIDPOINTS[data.difficulty],
@@ -247,7 +248,7 @@ class MapsService(BaseService):
 
                     message_data = PlaytestCreatedEvent(data.code, playtest_id)
                     idempotency_key = f"map:submit:{map_id}"
-                    job_status = await self.publish_message(
+                    job_status = await self.enqueue(
                         routing_key="api.playtest.create",
                         data=message_data,
                         headers=headers,
@@ -548,6 +549,7 @@ class MapsService(BaseService):
             log.error(f"Unexpected error fetching guides for {code}: {e}", exc_info=True)
             raise
 
+    @transactional
     async def create_guide(
         self,
         code: OverwatchCode,
@@ -570,16 +572,23 @@ class MapsService(BaseService):
         if map_id is None:
             raise MapNotFoundError(code)
 
-        try:
-            await self._maps_repo.insert_guide(
-                map_id,
-                data.url,
-                data.user_id,
-            )
-        except UniqueConstraintViolationError as e:
-            if "guides_user_id_map_id_unique" in e.constraint_name:
-                raise DuplicateGuideError(code, data.user_id) from e
-            raise
+        conn = active_connection()
+        assert conn is not None
+        # Serialize creation even when there is no guide row to lock yet.
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", f"guide:{map_id}:{data.user_id}")
+        existing_url = await conn.fetchval(
+            "SELECT url FROM maps.guides WHERE map_id=$1 AND user_id=$2", map_id, data.user_id
+        )
+        created = existing_url is None
+        if existing_url is not None and existing_url != data.url:
+            raise DuplicateGuideError(code, data.user_id)
+        if created:
+            try:
+                await self._maps_repo.insert_guide(map_id, data.url, data.user_id)
+            except UniqueConstraintViolationError as exc:
+                if "guides_user_id_map_id_unique" in exc.constraint_name:
+                    raise DuplicateGuideError(code, data.user_id) from exc
+                raise
 
         map_data_result = await self._maps_repo.fetch_maps(single=True, code=code)
         map_data = msgspec.convert(map_data_result, MapResponse, from_attributes=True)
@@ -588,11 +597,41 @@ class MapsService(BaseService):
             data,
             {
                 "map_data": map_data,
+                "created": created,
                 "code": code,
                 "url": data.url,
                 "user_id": data.user_id,
             },
         )
+
+    @transactional
+    async def submit_guide(  # noqa: PLR0913
+        self,
+        code: OverwatchCode,
+        data: GuideResponse,
+        headers: Headers,
+        lootbox_service: LootboxService,
+        newsfeed_service: NewsfeedService,
+        users_service: UsersService,
+    ) -> GuideResponse:
+        """Persist a guide, its reward and announcement in one retry-safe transaction."""
+        guide, context = await self.create_guide(code, data)
+        if not context["created"]:
+            return guide
+        if context["map_data"].official:
+            await lootbox_service.grant_user_xp(headers, data.user_id, XpGrantRequest(XP_AMOUNTS["Guide"], "Guide"))
+        user = await users_service.get_user(user_id=data.user_id)
+        name = (user.coalesced_name or "Unknown User") if user else "Unknown User"
+        await newsfeed_service.create_and_publish(
+            event=NewsfeedEvent(
+                id=None,
+                timestamp=dt.datetime.now(dt.timezone.utc),
+                payload=NewsfeedGuide(code=code, guide_url=data.url, name=name),
+                event_type="guide",
+            ),
+            headers=headers,
+        )
+        return guide
 
     async def update_guide(
         self,
@@ -701,15 +740,24 @@ class MapsService(BaseService):
         rows = await self._maps_repo.fetch_map_mastery(user_id, map_name)
         return msgspec.convert(rows, list[MapMasteryResponse], from_attributes=True)
 
+    @transactional
     async def update_mastery(
         self,
         data: MapMasteryCreateRequest,
     ) -> MapMasteryCreateResponse | None:
-        """Update mastery for a user on a map."""
+        """Recompute mastery from current completions on the mutation transaction."""
+        conn = active_connection()
+        assert conn is not None
+        await conn.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", f"mastery:{data.user_id}:{data.map_name}"
+        )
+        current = await self.get_map_mastery_data(data.user_id, data.map_name)
+        level = current[0].level if current else "Placeholder"
+        assert level is not None
         result = await self._maps_repo.upsert_map_mastery(
             map_name=data.map_name,
             user_id=data.user_id,
-            level=data.level,
+            level=level,
         )
 
         if result is None:
@@ -717,6 +765,7 @@ class MapsService(BaseService):
 
         return msgspec.convert(result, MapMasteryCreateResponse, from_attributes=True)
 
+    @transactional
     async def set_archive_status(
         self,
         data: ArchivalStatusPatchRequest,
@@ -743,7 +792,7 @@ class MapsService(BaseService):
             affected_threads = await self._maps_repo.set_archive_status(data.codes, is_archiving)
 
             for affected in affected_threads:
-                await self.publish_message(
+                await self.enqueue(
                     routing_key="api.playtest.force_deny",
                     data=PlaytestForceDeniedEvent(
                         thread_id=affected["thread_id"],
@@ -923,6 +972,7 @@ class MapsService(BaseService):
         )
         return msgspec.convert(rows, list[TrendingMapResponse], from_attributes=True)
 
+    @transactional
     async def send_to_playtest(
         self,
         code: OverwatchCode,
@@ -932,7 +982,7 @@ class MapsService(BaseService):
         """Send a map back to playtest.
 
         Converts map to legacy status, creates playtest metadata, and publishes
-        RabbitMQ message to bot.
+        PostgreSQL queue message to bot.
 
         Args:
             code: Map code.
@@ -960,7 +1010,7 @@ class MapsService(BaseService):
                 await self._convert_to_legacy_internal(code, conn)
                 await self._maps_repo.update_core_map(
                     code,
-                    {"playtesting": "In Progress"},
+                    {"playtesting": "In Progress", "hidden": False},
                     conn=conn,  # type: ignore[arg-type]
                 )
 
@@ -972,7 +1022,7 @@ class MapsService(BaseService):
 
             message_data = PlaytestCreatedEvent(code, playtest_id)
             idempotency_key = f"map:send-to-playtest:{map_id}:{playtest_id}"
-            return await self.publish_message(
+            return await self.enqueue(
                 routing_key="api.playtest.create",
                 data=message_data,
                 headers=headers,
@@ -1027,6 +1077,7 @@ class MapsService(BaseService):
             custom_banner=map_data.map_banner,
         )
 
+    @transactional
     async def link_map_codes(
         self,
         data: LinkMapsCreateRequest,
@@ -1034,29 +1085,7 @@ class MapsService(BaseService):
         newsfeed_service: NewsfeedService,
         lootbox_service: LootboxService,
     ) -> JobStatusResponse | None:
-        """Link official and unofficial map codes, cloning as needed.
-
-        Determines which maps exist and performs the appropriate operation:
-        - Clone the official map if only it exists.
-        - Clone the unofficial map and initiate playtesting if only it exists.
-        - Link both directly if both exist.
-
-        If a playtest is created, spawns a background task to wait for the job
-        to complete before publishing the newsfeed event. Otherwise, publishes
-        immediately.
-
-        Args:
-            data: Link request with official and unofficial codes.
-            headers: Request headers for idempotency.
-            newsfeed_service: Newsfeed service for event publishing.
-            lootbox_service: Lootbox service for playtest creation.
-
-        Returns:
-            Job status if a clone operation was performed, None otherwise.
-
-        Raises:
-            LinkedMapError: If neither map exists or if maps are already linked.
-        """
+        """Link or clone maps and persist the newsfeed continuation with its dependency."""
         try:
             official_map_dict = await self._maps_repo.fetch_maps(single=True, code=data.official_code)
             unofficial_map_dict = await self._maps_repo.fetch_maps(single=True, code=data.unofficial_code)
@@ -1138,19 +1167,18 @@ class MapsService(BaseService):
                 event_type="linked_map",
             )
 
-            if in_playtest and job_status:
-                task = asyncio.create_task(
-                    self._wait_and_publish_linked_map_newsfeed(
-                        job_status=job_status,
-                        event=event,
-                        headers=headers,
-                        newsfeed_service=newsfeed_service,
-                        official_code=data.official_code,
-                    )
-                )
-                task.add_done_callback(lambda t: None)
-            else:
-                await newsfeed_service.create_and_publish(event=event, headers=headers)
+            await self.enqueue(
+                routing_key="map.linked.newsfeed.requested",
+                data={
+                    "official_code": data.official_code,
+                    "unofficial_code": data.unofficial_code,
+                    "in_playtest": in_playtest,
+                    "timestamp": event.timestamp.isoformat(),
+                },
+                idempotency_key=f"linked-map:{uuid4()}",
+                entity_key=f"map:{data.official_code}",
+                depends_on=job_status.id if in_playtest and job_status else None,
+            )
 
             return job_status
 
@@ -1160,73 +1188,7 @@ class MapsService(BaseService):
             log.error(f"Unexpected error linking maps: {e}", exc_info=True)
             raise
 
-    async def _wait_and_publish_linked_map_newsfeed(
-        self,
-        *,
-        job_status: JobStatusResponse,
-        event: NewsfeedEvent,
-        headers: Headers,
-        newsfeed_service: NewsfeedService,
-        official_code: OverwatchCode,
-    ) -> None:
-        """Wait for a job to complete, then publish a linked map newsfeed event.
-
-        Args:
-            job_status: The initial job status from map creation.
-            event: The newsfeed event to publish.
-            headers: HTTP headers for idempotency.
-            newsfeed_service: Newsfeed service for publishing.
-            official_code: The official map code (to fetch playtest info).
-        """
-        try:
-            final_status = await wait_for_job_completion(
-                job_id=job_status.id,
-                fetch_status=self._get_job_status_using_pool,
-                timeout=90.0,
-            )
-
-            if final_status.status == "succeeded":
-                async with self._pool.acquire() as conn:
-                    map_data_dict = await self._maps_repo.fetch_maps(single=True, code=official_code, conn=conn)  # type: ignore[arg-type]
-                    map_data = msgspec.convert(map_data_dict, MapResponse, from_attributes=True)
-
-                    if map_data.playtest:
-                        assert isinstance(event.payload, NewsfeedLinkedMap)
-                        event.payload.playtest_id = map_data.playtest.thread_id
-
-                    await newsfeed_service.create_and_publish(event=event, headers=headers)
-            else:
-                log.warning(
-                    "Skipping newsfeed publish for job %s (status=%s)",
-                    final_status.id,
-                    final_status.status,
-                )
-
-        except Exception:
-            log.exception("Error while waiting for job completion for linked map newsfeed")
-
-    async def _get_job_status_using_pool(self, job_id: UUID) -> JobStatusResponse | None:
-        """Fetch job status using the connection pool.
-
-        Args:
-            job_id: The UUID of the job.
-
-        Returns:
-            Job status response or None if not found.
-        """
-        async with self._pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT id, status, error_code, error_msg, created_at
-                FROM public.jobs
-                WHERE id = $1
-                """,
-                job_id,
-            )
-            if row:
-                return msgspec.convert(dict(row), JobStatusResponse, from_attributes=True)
-            return None
-
+    @transactional
     async def unlink_map_codes(
         self,
         data: UnlinkMapsCreateRequest,
@@ -1369,6 +1331,7 @@ class MapsService(BaseService):
             },
         )
 
+    @transactional
     async def create_edit_request(
         self,
         code: str,
@@ -1384,7 +1347,7 @@ class MapsService(BaseService):
             proposed_changes: Dict of field -> new_value.
             reason: Reason for the edit.
             created_by: User ID of submitter.
-            headers: Request headers for RabbitMQ idempotency.
+            headers: Request headers for PostgreSQL queue idempotency.
 
         Returns:
             Created edit request.
@@ -1416,7 +1379,7 @@ class MapsService(BaseService):
 
         edit_response = self._row_to_edit_response(row)
 
-        await self.publish_message(
+        await self.enqueue(
             routing_key="api.map_edit.created",
             data=MapEditCreatedEvent(edit_request_id=edit_response.id),
             headers=headers,
@@ -1529,6 +1492,7 @@ class MapsService(BaseService):
 
         await self._maps_repo.set_edit_request_message_id(edit_id, message_id)
 
+    @transactional
     async def resolve_edit_request(  # noqa: PLR0913
         self,
         edit_id: int,
@@ -1549,7 +1513,7 @@ class MapsService(BaseService):
         - Generates newsfeed for non-archive changes
         - Optionally sends to playtest
         - Sends notification to submitter
-        - Publishes RabbitMQ cleanup event
+        - Publishes PostgreSQL queue cleanup event
 
         Args:
             edit_id: Edit request ID.
@@ -1557,7 +1521,7 @@ class MapsService(BaseService):
             resolved_by: User ID of resolver.
             rejection_reason: Reason for rejection (if rejected).
             send_to_playtest: Whether to send map to playtest after accepting.
-            headers: Request headers for RabbitMQ idempotency.
+            headers: Request headers for PostgreSQL queue idempotency.
             newsfeed_service: Newsfeed service.
             notification_service: Notification service.
             user_service: User service.
@@ -1642,6 +1606,7 @@ class MapsService(BaseService):
                     f"Failed to send map {edit_request.code} to playtest after edit: {e}",
                     exc_info=True,
                 )
+                raise
 
         await self._send_edit_resolution_notification(
             notification_service,
@@ -1651,7 +1616,7 @@ class MapsService(BaseService):
             headers,
         )
 
-        await self.publish_message(
+        await self.enqueue(
             routing_key="api.map_edit.resolved",
             data=MapEditResolvedEvent(
                 edit_request_id=edit_id,
