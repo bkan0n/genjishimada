@@ -15,6 +15,51 @@ class MapContentRepository(BaseRepository):
     `OverwatchMap` Literal (phase 15). All queries use `$1` positional params.
     """
 
+    async def lock_names(self, *, exclusive: bool = False) -> None:
+        """Protect ownership changes, or keep a resolved reference stable until commit.
+
+        Call inside a service transaction. Readers/writers of map references use
+        the shared lock; canonical-name/banner writers use the exclusive lock.
+        """
+        function = "pg_advisory_xact_lock" if exclusive else "pg_advisory_xact_lock_shared"
+        await self._get_connection().execute(f"SELECT {function}(hashtextextended('maps.names ownership', 0))")
+
+    async def resolve_name(self, name: str) -> str:
+        """Resolve exact canonical names and aliases; leave unknown names for validation."""
+        value = await self._get_connection().fetchval(
+            """SELECT name FROM maps.names WHERE name=$1
+               UNION ALL SELECT canonical_name FROM maps.name_aliases WHERE previous_name=$1
+               LIMIT 1""",
+            name,
+        )
+        return value if value is not None else name
+
+    async def fetch_name_owners(self) -> dict[str, str]:
+        """Return canonical and compatibility names mapped to their current owner."""
+        rows = await self._get_connection().fetch(
+            """SELECT name AS spelling, name AS owner FROM maps.names
+               UNION ALL SELECT previous_name, canonical_name FROM maps.name_aliases"""
+        )
+        return {row["spelling"]: row["owner"] for row in rows}
+
+    async def rename_map_name(self, old_name: str, name: str) -> None:
+        """Rename one row, reserve its old spelling and update equipped mastery badges.
+
+        The caller owns the exclusive map-name lock and transaction. Removing
+        the destination alias first allows a map to reclaim its own old name.
+        """
+        conn = self._get_connection()
+        await conn.execute("DELETE FROM maps.name_aliases WHERE previous_name=$1 AND canonical_name=$2", name, old_name)
+        await conn.execute("UPDATE maps.names SET name=$2 WHERE name=$1", old_name, name)
+        await conn.execute("INSERT INTO maps.name_aliases(previous_name, canonical_name) VALUES($1,$2)", old_name, name)
+        for slot in range(1, 7):
+            await conn.execute(
+                f"""UPDATE rank_card.badges SET badge_name{slot}=$2
+                    WHERE badge_type{slot}='mastery' AND badge_name{slot}=$1""",
+                old_name,
+                name,
+            )
+
     async def insert_map_name(
         self,
         name: str,

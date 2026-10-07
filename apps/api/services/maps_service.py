@@ -66,6 +66,7 @@ from repository.exceptions import (
     ForeignKeyViolationError,
     UniqueConstraintViolationError,
 )
+from repository.map_content_repository import MapContentRepository
 from repository.maps_repository import MapsRepository
 from services.exceptions.maps import (
     AlreadyInPlaytestError,
@@ -122,6 +123,7 @@ class MapsService(BaseService):
         """Initialize service."""
         super().__init__(pool, state)
         self._maps_repo = maps_repo
+        self._map_names_repo = MapContentRepository(pool)
 
     @transactional
     async def create_map(  # noqa: PLR0912, PLR0915
@@ -153,6 +155,8 @@ class MapsService(BaseService):
             DuplicateCreatorError: If duplicate creator ID in request.
             CreatorNotFoundError: If creator user doesn't exist.
         """
+        await self._map_names_repo.lock_names()
+        data.map_name = await self._map_names_repo.resolve_name(data.map_name)
         if not data.official and data.playtesting != "Approved":
             data.playtesting = "Approved"
 
@@ -297,6 +301,7 @@ class MapsService(BaseService):
 
         return MapCreationJobResponse(job_status, map_response)
 
+    @transactional
     async def update_map(  # noqa: PLR0912, PLR0915
         self,
         code: OverwatchCode,
@@ -321,6 +326,9 @@ class MapsService(BaseService):
             DuplicateCreatorError: If duplicate creator ID in request.
             CreatorNotFoundError: If creator user doesn't exist.
         """
+        await self._map_names_repo.lock_names()
+        if data.map_name is not msgspec.UNSET:
+            data.map_name = await self._map_names_repo.resolve_name(data.map_name)
         original_map_result = await self._maps_repo.fetch_maps(single=True, code=code)
         if not original_map_result:
             raise MapNotFoundError(code)
@@ -465,6 +473,7 @@ class MapsService(BaseService):
     @overload
     async def fetch_maps(self, *, single: Literal[False], filters: MapSearchFilters) -> list[MapResponse]: ...
 
+    @transactional
     async def fetch_maps(
         self,
         *,
@@ -482,6 +491,11 @@ class MapsService(BaseService):
         Returns:
             Single MapResponse if single=True, otherwise list of MapResponse.
         """
+        if filters and filters.map_name:
+            await self._map_names_repo.lock_names()
+            filters = msgspec.structs.replace(
+                filters, map_name=[await self._map_names_repo.resolve_name(name) for name in filters.map_name]
+            )
         result = await self._maps_repo.fetch_maps(
             single=single,
             code=code,
@@ -748,14 +762,14 @@ class MapsService(BaseService):
         """Recompute mastery from current completions on the mutation transaction."""
         conn = active_connection()
         assert conn is not None
-        await conn.execute(
-            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", f"mastery:{data.user_id}:{data.map_name}"
-        )
-        current = await self.get_map_mastery_data(data.user_id, data.map_name)
+        await self._map_names_repo.lock_names()
+        name = await self._map_names_repo.resolve_name(data.map_name)
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", f"mastery:{data.user_id}:{name}")
+        current = await self.get_map_mastery_data(data.user_id, name)
         level = current[0].level if current else "Placeholder"
         assert level is not None
         result = await self._maps_repo.upsert_map_mastery(
-            map_name=data.map_name,
+            map_name=name,
             user_id=data.user_id,
             level=level,
         )
@@ -1530,6 +1544,7 @@ class MapsService(BaseService):
             EditRequestNotFoundError: If edit request doesn't exist.
             MapNotFoundError: If map doesn't exist.
         """
+        await self._map_names_repo.lock_names()
         edit_request = await self.get_edit_request(edit_id)
 
         if accepted:

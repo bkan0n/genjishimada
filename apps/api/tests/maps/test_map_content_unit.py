@@ -21,6 +21,8 @@ pytestmark = [pytest.mark.domain_maps, pytest.mark.unit]
 def service(mock_pool, mock_state, mocker):
     """MapContentService with mocked repo + mocked image storage service."""
     repo = mocker.AsyncMock(spec=MapContentRepository)
+    repo.fetch_name_owners.return_value = {}
+    repo.resolve_name.side_effect = lambda name: name
     image_svc = mocker.Mock(spec=ImageStorageService)
     svc = MapContentService(mock_pool, mock_state, repo, image_svc)
     return svc, repo, image_svc
