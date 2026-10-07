@@ -188,7 +188,8 @@ class CNTranslatedFilteredFormatter(FilteredFormatter):
         """
         if self.values.get("Map", None):
             assert self.values["Map"]
-            self.values["Map"] = CN_TRANSLATIONS_TEMP[self.values["Map"].replace("(", "").replace(")", "")]
+            name = self.values["Map"]
+            self.values["Map"] = CN_TRANSLATIONS_TEMP.get(name.replace("(", "").replace(")", ""), name)
         self.values = {CN_TRANSLATIONS_FIELDS_TEMP.get(key, key): value for key, value in self.values.items()}
 
         return super().format()

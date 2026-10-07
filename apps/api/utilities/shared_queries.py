@@ -31,7 +31,9 @@ async def get_map_mastery_data_raw(
             SELECT amn.name AS map_name, coalesce(mc.amount, 0) AS amount
             FROM maps.names amn
             LEFT JOIN map_counts mc ON mc.map_name = amn.name
-            WHERE ($2::text IS NULL OR amn.name = $2) AND amn.name != 'Adlersbrunn'
+            WHERE ($2::text IS NULL OR amn.name = COALESCE(
+                (SELECT canonical_name FROM maps.name_aliases WHERE previous_name=$2), $2))
+                AND amn.mastery_enabled
             ORDER BY amn.name; \
             """
     rows = await conn.fetch(query, user_id, map_name)
@@ -72,7 +74,9 @@ async def get_map_mastery_data(
             coalesce(mc.amount, 0) AS amount
         FROM maps.names amn
         LEFT JOIN map_counts mc ON mc.map_name = amn.name
-        WHERE ($2::text IS NULL OR amn.name = $2) AND amn.name != 'Adlersbrunn'
+        WHERE ($2::text IS NULL OR amn.name = COALESCE(
+                (SELECT canonical_name FROM maps.name_aliases WHERE previous_name=$2), $2))
+                AND amn.mastery_enabled
         ORDER BY amn.name;
     """
     rows = await conn.fetch(query, user_id, map_name)

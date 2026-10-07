@@ -38,6 +38,8 @@ __all__ = (
     "MapMasteryCreateRequest",
     "MapMasteryCreateResponse",
     "MapMasteryResponse",
+    "MapNameRenameRequest",
+    "MapNameRenameResponse",
     "MapPartialResponse",
     "MapPatchRequest",
     "MapPerDifficultyStatisticsResponse",
@@ -1080,3 +1082,18 @@ class MapEditResolvedEvent(Struct):
     accepted: bool
     resolved_by: int
     rejection_reason: str | None
+
+
+class MapNameRenameRequest(Struct, frozen=True):
+    """Rename an exact current Overwatch map name, preserving its references."""
+
+    old_name: str
+    name: str
+
+
+class MapNameRenameResponse(Struct, frozen=True):
+    """Confirmed current name and whether this request changed it."""
+
+    old_name: str
+    name: str
+    renamed: bool

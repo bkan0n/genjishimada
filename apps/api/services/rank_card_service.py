@@ -17,8 +17,10 @@ from genjishimada_sdk.skill import skill_tier_name
 from genjishimada_sdk.users import RankDetailResponse
 from litestar.datastructures import State
 
+from repository.map_content_repository import MapContentRepository
 from repository.rank_card_repository import RankCardRepository
 from utilities.shared_queries import get_map_mastery_data, get_user_rank_data
+from utilities.transactions import transactional
 
 from .base import BaseService
 from .exceptions.users import UserNotFoundError
@@ -37,6 +39,7 @@ class RankCardService(BaseService):
         """
         super().__init__(pool, state)
         self._rank_card_repo = rank_card_repo
+        self._map_names_repo = MapContentRepository(pool)
 
     async def _ensure_user_exists(self, user_id: int) -> None:
         """Verify user exists in database.
@@ -145,6 +148,7 @@ class RankCardService(BaseService):
         await self._rank_card_repo.upsert_avatar_pose(user_id, pose)
         return AvatarResponse(pose=pose)
 
+    @transactional
     async def get_badges(self, user_id: int) -> RankCardBadgeSettings:
         """Get user's badge settings with resolved URLs.
 
@@ -154,6 +158,7 @@ class RankCardService(BaseService):
         Returns:
             Badge settings with resolved URLs for mastery and spray badges.
         """
+        await self._map_names_repo.lock_names()
         row = await self._rank_card_repo.fetch_badges(user_id)
         if not row:
             return RankCardBadgeSettings()
@@ -165,6 +170,8 @@ class RankCardService(BaseService):
                 url_col = f"badge_url{num}"
 
                 if row[type_col] == "mastery":
+                    if row[name_col]:
+                        row[name_col] = await self._map_names_repo.resolve_name(row[name_col])
                     mastery = await get_map_mastery_data(conn, user_id, row[name_col])  # type: ignore[arg-type]
                     if mastery:
                         row[url_col] = mastery[0].icon_url
@@ -174,6 +181,7 @@ class RankCardService(BaseService):
 
         return RankCardBadgeSettings(**row)
 
+    @transactional
     async def set_badges(self, user_id: int, data: RankCardBadgeSettings) -> None:
         """Set user's badge settings.
 
@@ -185,6 +193,12 @@ class RankCardService(BaseService):
             UserNotFoundError: If user does not exist.
         """
         await self._ensure_user_exists(user_id)
+        await self._map_names_repo.lock_names()
+        for slot in range(1, 7):
+            field = f"badge_name{slot}"
+            name = getattr(data, field)
+            if getattr(data, f"badge_type{slot}") == "mastery" and name:
+                setattr(data, field, await self._map_names_repo.resolve_name(name))
         await self._rank_card_repo.upsert_badges(
             user_id,
             data.badge_name1,

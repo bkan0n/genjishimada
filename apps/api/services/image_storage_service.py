@@ -7,6 +7,11 @@ import re
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
+from genjishimada_sdk.helpers import sanitize_string
+from litestar.status_codes import HTTP_409_CONFLICT
+
+from utilities.errors import CustomHTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +70,59 @@ class ImageStorageService:
             },
         )
         return f"{S3_PUBLIC_URL}/{key}"
+
+    @staticmethod
+    def map_artwork_keys(name: str) -> list[str]:
+        """Return the existing SDK's banner and mastery reader paths."""
+        banner = re.sub(r"[^a-zA-Z0-9]", "", name).lower()
+        mastery = sanitize_string(name)
+        levels = ("placeholder", "rookie", "explorer", "trailblazer", "pathfinder", "specialist", "prodigy")
+        return [f"assets/map_banners/{banner}.png", *[f"assets/mastery/{mastery}_{level}.webp" for level in levels]]
+
+    def _read_optional_object(self, key: str) -> bytes | None:
+        try:
+            response = self.client.get_object(Bucket=S3_BUCKET_NAME, Key=key)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in {"NoSuchKey", "404", "NotFound"}:
+                return None
+            raise
+        body = response["Body"]
+        try:
+            return body.read()
+        finally:
+            body.close()
+
+    def preserve_map_artwork(self, old_name: str, name: str, own_names: set[str]) -> None:
+        """Preflight and copy optional artwork without deleting compatibility objects.
+
+        The caller holds the database's map ownership lock throughout. Existing
+        different bytes are replaceable only at keys already owned by this map.
+        All conflicts are checked before any copy; unexpected storage errors abort.
+        """
+        owned_keys = {key for spelling in own_names for key in self.map_artwork_keys(spelling)}
+        copies: list[tuple[str, str]] = []
+        for source, destination in zip(self.map_artwork_keys(old_name), self.map_artwork_keys(name), strict=True):
+            if source == destination:
+                continue
+            content = self._read_optional_object(source)
+            existing = self._read_optional_object(destination)
+            if content is None and existing is not None:
+                raise CustomHTTPException(
+                    detail=f"Artwork exists at '{destination}' but no source artwork can replace it.",
+                    status_code=HTTP_409_CONFLICT,
+                )
+            if content is None or existing == content:
+                continue
+            if existing is not None and destination not in owned_keys:
+                raise CustomHTTPException(
+                    detail=f"Artwork already exists at '{destination}' with different content.",
+                    status_code=HTTP_409_CONFLICT,
+                )
+            copies.append((source, destination))
+        for source, destination in copies:
+            self.client.copy_object(
+                Bucket=S3_BUCKET_NAME, Key=destination, CopySource={"Bucket": S3_BUCKET_NAME, "Key": source}
+            )
 
     def upload_map_banner(self, content: bytes, content_type: str, map_name: str) -> str:
         """Upload a map banner keyed by the stripped map name.

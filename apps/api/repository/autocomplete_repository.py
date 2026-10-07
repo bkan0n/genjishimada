@@ -66,7 +66,12 @@ class AutocompleteRepository(BaseRepository):
         """
         _conn = self._get_connection(conn)
 
-        query = "SELECT name FROM maps.names ORDER BY similarity(name, $1::text) DESC LIMIT 1;"
+        # An exact previous name must not be fuzzily rematched to a different map.
+        query = """SELECT COALESCE(
+            (SELECT name FROM maps.names WHERE name=$1),
+            (SELECT canonical_name FROM maps.name_aliases WHERE previous_name=$1),
+            (SELECT name FROM maps.names ORDER BY similarity(name, $1::text) DESC LIMIT 1)
+        )"""
         res = cast("OverwatchMap", await _conn.fetchval(query, search))
         if res is None:
             return None

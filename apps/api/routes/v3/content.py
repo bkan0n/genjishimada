@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 import msgspec
-from litestar import Controller, delete, get, post, put
+from genjishimada_sdk.maps import MapNameRenameRequest, MapNameRenameResponse
+from litestar import Controller, delete, get, patch, post, put
 from litestar.datastructures import UploadFile
 from litestar.di import Provide
 from litestar.enums import RequestEncodingType
@@ -768,3 +769,14 @@ class MapContentController(Controller):
         content_type = data.banner.content_type or "image/png"
         row = await map_content_service.create_map(data.name, content, content_type)
         return msgspec.convert(row, MapCreateResponse)
+
+    @patch(
+        path="/maps",
+        summary="Rename Overwatch Map",
+        opt={"required_scopes": {"content:admin"}},
+    )
+    async def rename_map(
+        self, data: MapNameRenameRequest, map_content_service: MapContentService
+    ) -> MapNameRenameResponse:
+        """Rename a canonical map while retaining aliases, references and artwork."""
+        return msgspec.convert(await map_content_service.rename_map(data.old_name, data.name), MapNameRenameResponse)

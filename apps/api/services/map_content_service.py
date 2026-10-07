@@ -9,16 +9,20 @@ that accept a free-form name (e.g. submission) — NOT used by `create_map`.
 
 from __future__ import annotations
 
+import asyncio
 import difflib
 import re
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from genjishimada_sdk.helpers import sanitize_string
 from litestar.datastructures import State
-from litestar.status_codes import HTTP_422_UNPROCESSABLE_ENTITY
+from litestar.status_codes import HTTP_404_NOT_FOUND, HTTP_409_CONFLICT, HTTP_422_UNPROCESSABLE_ENTITY
 
 from repository.map_content_repository import MapContentRepository
 from services.image_storage_service import ImageStorageService
 from utilities.errors import CustomHTTPException
+from utilities.transactions import transactional
 
 from .base import BaseService
 
@@ -64,55 +68,83 @@ class MapContentService(BaseService):
         self._map_content_repo = map_content_repo
         self._image_svc = image_svc
 
+    @transactional
     async def create_map(self, name: str, banner: bytes, content_type: str) -> dict:
-        """Add a new Overwatch map: guard, upload its banner, insert idempotently.
-
-        Ordering matters (RESEARCH Pitfall 1 — transaction-abort): all fallible
-        NON-DB work (empty guard, collision guard, S3 upload) runs BEFORE the DB
-        insert, and the `ON CONFLICT` insert is the only fallible DB statement.
-        Because the insert is a single statement it needs no explicit transaction.
-
-        Args:
-            name: The new map name.
-            banner: The banner image bytes.
-            content_type: The banner content type.
-
-        Returns:
-            dict: `{"name": name, "inserted": bool}` from the idempotent insert.
-
-        Raises:
-            CustomHTTPException: 422 if the name is empty/blank (REQ-05) or its
-                stripped key collides with a DIFFERENT existing map (REQ-06/D-07).
-        """
-        # (1) Empty/blank guard (REQ-05) — before any DB read or upload.
-        if not name.strip():
+        """Create a canonical name or replace its banner while reserving legacy keys."""
+        self._validate_name(name)
+        await self._map_content_repo.lock_names(exclusive=True)
+        existing = await self._map_content_repo.fetch_all_map_names()
+        owners = await self._map_content_repo.fetch_name_owners()
+        if name in owners and owners[name] != name:
             raise CustomHTTPException(
-                detail="Map name must not be empty.",
+                detail=f"'{name}' is a previous name of '{owners[name]}'. Use the current canonical name.",
+                status_code=HTTP_409_CONFLICT,
+            )
+        # Preserve POST's existing 422 collision contract for current names.
+        self._check_collisions(name, name, {other: other for other in existing}, HTTP_422_UNPROCESSABLE_ENTITY)
+        self._check_collisions(name, name, owners, HTTP_409_CONFLICT)
+        await self._storage_write(self._image_svc.upload_map_banner, banner, content_type, name)
+        return await self._map_content_repo.insert_map_name(name)
+
+    @transactional
+    async def rename_map(self, old_name: str, name: str) -> dict:
+        """Rename an exact current name while preserving references and artwork."""
+        self._validate_name(old_name)
+        self._validate_name(name)
+        await self._map_content_repo.lock_names(exclusive=True)
+        owners = await self._map_content_repo.fetch_name_owners()
+        if owners.get(old_name) != old_name:
+            raise CustomHTTPException(
+                detail=f"Current map '{old_name}' was not found. Refresh and select the existing map.",
+                status_code=HTTP_404_NOT_FOUND,
+            )
+        if old_name == name:
+            return {"old_name": old_name, "name": name, "renamed": False}
+        self._check_collisions(name, old_name, owners, HTTP_409_CONFLICT)
+        own_names = {spelling for spelling, owner in owners.items() if owner == old_name}
+        await self._storage_write(self._image_svc.preserve_map_artwork, old_name, name, own_names)
+        await self._map_content_repo.rename_map_name(old_name, name)
+        return {"old_name": old_name, "name": name, "renamed": True}
+
+    @staticmethod
+    async def _storage_write(operation: Callable[..., object], *args: object) -> None:
+        """Keep the ownership transaction alive until uncancellable S3 I/O finishes."""
+        task = asyncio.create_task(asyncio.to_thread(operation, *args))
+        cancelled = False
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                cancelled = True
+            except Exception:
+                if cancelled:
+                    raise asyncio.CancelledError from None
+                raise
+        if cancelled:
+            raise asyncio.CancelledError
+        task.result()
+
+    @staticmethod
+    def _validate_name(name: str) -> None:
+        if not name.strip() or not _strip_key(name):
+            raise CustomHTTPException(
+                detail="Map name must contain at least one ASCII letter or digit for its artwork key.",
                 status_code=HTTP_422_UNPROCESSABLE_ENTITY,
             )
 
-        # (2) Stripped-key collision guard (REQ-06/D-07). A DIFFERENT existing name
-        # whose stripped key matches would have its banner overwritten by this one.
-        existing = await self._map_content_repo.fetch_all_map_names()
-        target = _strip_key(name)
-        for other in existing:
-            if other != name and _strip_key(other) == target:
+    @staticmethod
+    def _check_collisions(name: str, owner: str, owners: dict[str, str], status_code: int) -> None:
+        banner_key, mastery_key = _strip_key(name), sanitize_string(name)
+        for spelling, existing_owner in owners.items():
+            if existing_owner == owner:
+                continue
+            if spelling == name or _strip_key(spelling) == banner_key or sanitize_string(spelling) == mastery_key:
                 raise CustomHTTPException(
-                    detail=(
-                        f"'{name}' collides with existing map '{other}' "
-                        f"(both reduce to the banner key '{target}'). "
-                        "Choose a name whose stripped key is unique."
-                    ),
-                    status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"'{name}' collides with reserved name or artwork for '{existing_owner}' ('{spelling}').",
+                    status_code=status_code,
                 )
 
-        # (3) Upload the banner (REQ-07) — still BEFORE the DB insert.
-        self._image_svc.upload_map_banner(banner, content_type, name)
-
-        # (4) Idempotent insert — the only fallible DB statement, single-statement
-        # so no explicit transaction needed.
-        return await self._map_content_repo.insert_map_name(name)
-
+    @transactional
     async def validate_map_name(self, name: str) -> str:
         """Validate a map name against `maps.names`, suggesting near matches (REQ-02).
 
@@ -130,6 +162,8 @@ class MapContentService(BaseService):
             CustomHTTPException: 422 if the name is unknown, with a difflib
                 "Did you mean: ..." hint when close matches exist.
         """
+        await self._map_content_repo.lock_names()
+        name = await self._map_content_repo.resolve_name(name)
         known = await self._map_content_repo.fetch_all_map_names()
         if name in known:
             return name
