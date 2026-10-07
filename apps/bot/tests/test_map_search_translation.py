@@ -9,16 +9,16 @@ from extensions.map_search import CNTranslatedFilteredFormatter
 
 
 class MapLabel:
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
 
-    def to_format_dict(self):
+    def to_format_dict(self) -> dict[str, str | None]:
         return {"Map": self.name}
 
 
-def test_known_map_uses_chinese_translation():
+def test_known_map_uses_chinese_translation() -> None:
     assert "花村" in CNTranslatedFilteredFormatter(MapLabel("Hanamura")).format()
 
 
-def test_new_map_keeps_its_name():
+def test_new_map_keeps_its_name() -> None:
     assert "Watchpoint: Grimsvötn" in CNTranslatedFilteredFormatter(MapLabel("Watchpoint: Grimsvötn")).format()
