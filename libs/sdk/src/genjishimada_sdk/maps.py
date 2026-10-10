@@ -161,6 +161,10 @@ SortKey = Literal[
     "title:desc",
     "code:asc",
     "code:desc",
+    "created_at:asc",
+    "created_at:desc",
+    "updated_at:asc",
+    "updated_at:desc",
 ]
 
 Tags = Literal[

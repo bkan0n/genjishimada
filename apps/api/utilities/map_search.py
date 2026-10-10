@@ -172,12 +172,15 @@ class MapSearchSQLSpecBuilder:
             "map_name": "m.map_name",
             "title": "m.title",
             "code": "m.code",
+            "created_at": "m.created_at",
+            "updated_at": "m.updated_at",
         }
         order_clauses: list[str] = []
         for item in self._filters.sort:
             field, direction = item.split(":", 1)
             column = sort_map[field]
-            order_clauses.append(f"{column} {direction.upper()} NULLS FIRST")
+            nulls = "LAST" if field in {"created_at", "updated_at"} else "FIRST"
+            order_clauses.append(f"{column} {direction.upper()} NULLS {nulls}")
 
         order_clauses.append("m.id ASC")
         query.order_by(*order_clauses)

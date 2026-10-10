@@ -3,6 +3,7 @@
 Tests the builder's validation rules, CTE generation, and query construction.
 """
 
+import msgspec
 import pytest
 
 from utilities.map_search import MapSearchFilters, MapSearchSQLSpecBuilder
@@ -104,6 +105,20 @@ class TestMapSearchSQLSpecBuilder:
         assert "DESC" in query_result.query
         assert "code" in query_result.query.lower() or "m.code" in query_result.query
         assert "ASC" in query_result.query
+
+    @pytest.mark.parametrize("field", ["created_at", "updated_at"])
+    @pytest.mark.parametrize("direction", ["asc", "desc"])
+    def test_date_sort_is_accepted(self, field, direction):
+        """Date sort values pass the shared request validation contract."""
+        sort = [f"{field}:{direction}"]
+        filters = msgspec.convert({"sort": sort}, type=MapSearchFilters)
+
+        assert filters.sort == sort
+
+    @pytest.mark.parametrize("sort", ["created_at", "created_at:newest", "submitted_at:desc"])
+    def test_invalid_date_sort_is_rejected(self, sort):
+        with pytest.raises(msgspec.ValidationError):
+            msgspec.convert({"sort": [sort]}, type=MapSearchFilters)
 
     def test_build_query_with_map_id(self):
         """Test that map_id filter produces an m.id equality clause and bypasses CTE filters."""
