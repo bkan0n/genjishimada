@@ -12,6 +12,7 @@ Test Coverage (12 tests):
 - Multiple filters combined (1 test)
 """
 
+import datetime as dt
 from typing import Any, get_args
 from uuid import uuid4
 
@@ -95,6 +96,8 @@ async def create_test_map(
         "description": None,
         "custom_banner": None,
         "title": None,
+        "created_at": dt.datetime.now(dt.timezone.utc),
+        "updated_at": dt.datetime.now(dt.timezone.utc),
     }
     defaults.update(kwargs)
 
@@ -104,9 +107,9 @@ async def create_test_map(
             INSERT INTO core.maps (
                 code, map_name, category, checkpoints, official,
                 playtesting, difficulty, raw_difficulty, hidden, archived,
-                description, custom_banner, title
+                description, custom_banner, title, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING id
             """,
             code,
@@ -122,6 +125,8 @@ async def create_test_map(
             defaults["description"],
             defaults["custom_banner"],
             defaults["title"],
+            defaults["created_at"],
+            defaults["updated_at"],
         )
     return map_id
 
@@ -385,6 +390,46 @@ class TestFetchMapsPagination:
 
 class TestFetchMapsSorting:
     """Test sorting functionality."""
+
+    @pytest.mark.parametrize("field", ["created_at", "updated_at"])
+    @pytest.mark.parametrize("direction", ["asc", "desc"])
+    async def test_date_sort_with_filter_and_pagination(self, maps_repo, db_pool, field, direction):
+        """Sort actual timestamps, break ties by ID, and leave missing dates last."""
+        older = dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc)
+        newer = dt.datetime(2025, 2, 1, tzinfo=dt.timezone.utc)
+        creator_id = 987654321012345678
+        await create_test_user(db_pool, creator_id, "DateSortCreator")
+        dates = [(None, None), (newer, older), (older, newer), (older, newer)]
+        map_ids = []
+        for index, (created_at, updated_at) in enumerate(dates):
+            map_id = await create_test_map(
+                db_pool,
+                f"DSRT{index}",
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+            await add_map_creator(db_pool, map_id, creator_id)
+            map_ids.append(map_id)
+
+        # This otherwise eligible map must remain outside the creator filter.
+        await create_test_map(db_pool, "DSRTX", created_at=older, updated_at=newer)
+        older_first = (field == "created_at") == (direction == "asc")
+        expected = [map_ids[2], map_ids[3], map_ids[1]] if older_first else [map_ids[1], map_ids[2], map_ids[3]]
+        expected.append(map_ids[0])
+        filters = {"creator_ids": [creator_id], "sort": [f"{field}:{direction}"]}
+
+        all_maps = await maps_repo.fetch_maps(filters=MapSearchFilters(**filters, return_all=True))
+        assert [row["id"] for row in all_maps] == expected
+
+        pages = []
+        for page_number in (1, 2):
+            page = await maps_repo.fetch_maps(
+                filters=MapSearchFilters(**filters, page_size=2, page_number=page_number)
+            )
+            assert len(page) == 2
+            assert all(row["total_results"] == 4 for row in page)
+            pages.extend(row["id"] for row in page)
+        assert pages == expected
 
     @pytest.mark.asyncio
     async def test_sort_by_code_ascending(

@@ -136,7 +136,15 @@ class MapsController(Controller):
         minimum_quality: Annotated[int | None, Parameter(description="Minimum average quality rating")] = None,
         page_size: Annotated[int, Parameter(description="Results per page")] = 10,
         page_number: Annotated[int, Parameter(description="Page number (1-indexed)")] = 1,
-        sort: Annotated[list[SortKey] | None, Parameter(description="List of 'field:direction' sort keys")] = None,
+        sort: Annotated[
+            list[SortKey] | None,
+            Parameter(
+                description="List of 'field:direction' sort keys, in priority order. "
+                "Use created_at for submission date or updated_at for last core map change; "
+                "asc is oldest first, desc is newest first. Missing dates sort last. "
+                "Defaults to difficulty ascending."
+            ),
+        ] = None,
         finalized_playtests: Annotated[bool | None, Parameter(description="Filter finalized playtests")] = None,
         return_all: Annotated[bool, Parameter(description="Return all results without pagination")] = False,
         force_filters: Annotated[bool, Parameter(description="Force filters even with code param")] = False,

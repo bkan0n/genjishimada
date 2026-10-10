@@ -81,6 +81,37 @@ an API-level reason to do so. It includes:
 Most computed columns are raw SQL fragments to keep the output stable and avoid
 sqlglot rewriting.
 
+## Sorting
+
+`GET /api/v3/maps/` accepts repeated `sort=field:direction` query parameters,
+applied in the order supplied. Directions are `asc` and `desc`. Supported fields
+are `difficulty`, `checkpoints`, `ratings`, `map_name`, `title`, `code`,
+`created_at`, and `updated_at`.
+
+| Date sort | Suggested label |
+|---|---|
+| `created_at:desc` | Newest submissions |
+| `created_at:asc` | Oldest submissions |
+| `updated_at:desc` | Recently changed |
+| `updated_at:asc` | Least recently changed |
+
+`created_at` is when the map record was added. `updated_at` is the existing
+timestamp for changes to the core map record; related records, such as guides,
+do not necessarily update it. Both fields already exist and require no migration.
+
+Examples:
+
+```text
+/api/v3/maps/?sort=created_at:desc
+/api/v3/maps/?sort=updated_at:desc
+/api/v3/maps/?sort=difficulty:asc&sort=created_at:desc&page_size=10&page_number=1
+```
+
+Missing dates sort last in either direction. Other sort fields retain their
+existing null ordering. Explicit sorts end with `m.id ASC` to break ties
+deterministically, including across pages. With no sort supplied, the default
+remains difficulty ascending. Invalid sort values return HTTP 400.
+
 ## Pagination
 
 Pagination uses SQLSpec's `paginate()` helper on the compiled SQL statement.

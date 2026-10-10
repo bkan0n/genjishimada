@@ -311,6 +311,31 @@ class TestSearchMaps:
         data = response.json()
         assert isinstance(data, list)
 
+    @pytest.mark.parametrize("field", ["created_at", "updated_at"])
+    @pytest.mark.parametrize("direction", ["asc", "desc"])
+    async def test_date_sort(self, test_client, create_test_map, field, direction):
+        """The public endpoint accepts each date sort and returns ordered maps."""
+        from datetime import datetime
+
+        await create_test_map(code="DAPI1")
+        await create_test_map(code="DAPI2")
+        response = await test_client.get(
+            "/api/v3/maps/",
+            params={"sort": [f"{field}:{direction}"], "return_all": True},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert {"DAPI1", "DAPI2"} <= {row["code"] for row in data}
+        dates = [datetime.fromisoformat(row[field]) for row in data]
+        assert dates == sorted(dates, reverse=direction == "desc")
+
+    @pytest.mark.parametrize("sort", ["created_at", "created_at:newest", "submitted_at:desc"])
+    async def test_invalid_date_sort(self, test_client, sort):
+        response = await test_client.get("/api/v3/maps/", params={"sort": [sort]})
+
+        assert response.status_code == 400
+
     async def test_return_all_flag(self, test_client):
         """Return all results without pagination."""
         response = await test_client.get(
