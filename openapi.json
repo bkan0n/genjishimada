@@ -10060,7 +10060,11 @@
                       "title:asc",
                       "title:desc",
                       "code:asc",
-                      "code:desc"
+                      "code:desc",
+                      "created_at:asc",
+                      "created_at:desc",
+                      "updated_at:asc",
+                      "updated_at:desc"
                     ]
                   },
                   "type": "array"
@@ -10069,9 +10073,9 @@
                   "type": "null"
                 }
               ],
-              "description": "List of 'field:direction' sort keys"
+              "description": "List of 'field:direction' sort keys, in priority order. Use created_at for submission date or updated_at for last core map change; asc is oldest first, desc is newest first. Missing dates sort last. Defaults to difficulty ascending."
             },
-            "description": "List of 'field:direction' sort keys",
+            "description": "List of 'field:direction' sort keys, in priority order. Use created_at for submission date or updated_at for last core map change; asc is oldest first, desc is newest first. Missing dates sort last. Defaults to difficulty ascending.",
             "required": false,
             "deprecated": false,
             "allowEmptyValue": false,

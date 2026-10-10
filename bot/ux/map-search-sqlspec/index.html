@@ -1634,6 +1634,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#sorting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sorting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pagination" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3253,6 +3264,49 @@ an API-level reason to do so. It includes:</p>
 </ul>
 <p>Most computed columns are raw SQL fragments to keep the output stable and avoid
 sqlglot rewriting.</p>
+<h2 id="sorting">Sorting<a class="headerlink" href="#sorting" title="Anchor link to this section">&para;</a></h2>
+<p><code>GET /api/v3/maps/</code> accepts repeated <code>sort=field:direction</code> query parameters,
+applied in the order supplied. Directions are <code>asc</code> and <code>desc</code>. Supported fields
+are <code>difficulty</code>, <code>checkpoints</code>, <code>ratings</code>, <code>map_name</code>, <code>title</code>, <code>code</code>,
+<code>created_at</code>, and <code>updated_at</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Date sort</th>
+<th>Suggested label</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>created_at:desc</code></td>
+<td>Newest submissions</td>
+</tr>
+<tr>
+<td><code>created_at:asc</code></td>
+<td>Oldest submissions</td>
+</tr>
+<tr>
+<td><code>updated_at:desc</code></td>
+<td>Recently changed</td>
+</tr>
+<tr>
+<td><code>updated_at:asc</code></td>
+<td>Least recently changed</td>
+</tr>
+</tbody>
+</table>
+<p><code>created_at</code> is when the map record was added. <code>updated_at</code> is the existing
+timestamp for changes to the core map record; related records, such as guides,
+do not necessarily update it. Both fields already exist and require no migration.</p>
+<p>Examples:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>/api/v3/maps/?sort=created_at:desc
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>/api/v3/maps/?sort=updated_at:desc
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>/api/v3/maps/?sort=difficulty:asc&amp;sort=created_at:desc&amp;page_size=10&amp;page_number=1
+</span></code></pre></div>
+<p>Missing dates sort last in either direction. Other sort fields retain their
+existing null ordering. Explicit sorts end with <code>m.id ASC</code> to break ties
+deterministically, including across pages. With no sort supplied, the default
+remains difficulty ascending. Invalid sort values return HTTP 400.</p>
 <h2 id="pagination">Pagination<a class="headerlink" href="#pagination" title="Anchor link to this section">&para;</a></h2>
 <p>Pagination uses SQLSpec's <code>paginate()</code> helper on the compiled SQL statement.</p>
 <ul>
@@ -3310,7 +3364,7 @@ other set-based filters.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="January 24, 2026 17:49:06 UTC"><span class="timeago" datetime="2026-01-24T17:49:06+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="January 24, 2026 17:49:06 UTC">2026-01-24</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-timeago" title="October 10, 2026 17:58:34 UTC"><span class="timeago" datetime="2026-10-10T17:58:34+00:00" locale="en"></span></span><span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-iso_date" title="October 10, 2026 17:58:34 UTC">2026-10-10</span>
   </span>
 
     
